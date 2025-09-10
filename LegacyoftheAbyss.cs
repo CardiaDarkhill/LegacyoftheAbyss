@@ -392,7 +392,12 @@ public class LegacyHelper : BaseUnityPlugin
                 if (c != null) comps += (i == 0 ? "" : ", ") + c.GetType().Name;
             }
 
-            bool applied = TryApplyDamage(other.gameObject, damage);
+            float dir = 0f;
+            var rb = GetComponent<Rigidbody2D>();
+            if (rb != null) dir = Mathf.Sign(rb.linearVelocity.x);
+            if (dir == 0f) dir = Mathf.Sign(other.transform.position.x - transform.position.x);
+
+            bool applied = TryApplyDamage(other.gameObject, damage, dir);
 
             Debug.Log($"[HelperMod] Projectile hit '{other.name}' (layer {other.gameObject.layer}) " +
                     $"appliedDamage={applied} comps=[{comps}]");
@@ -400,14 +405,14 @@ public class LegacyHelper : BaseUnityPlugin
             Destroy(gameObject);
         }
 
-        private bool TryApplyDamage(GameObject target, int dmg)
+        private bool TryApplyDamage(GameObject target, int dmg, float direction)
         {
             // Trigger hit reactions first via IHitResponder so enemies flinch like Hornet's spells
             var responder = FindComponentWithInterface(target, "IHitResponder");
             if (responder != null)
             {
                 var hitType = responder.GetType().Assembly.GetType("HitInstance");
-                var hit = CreateHitInstance(hitType, dmg, gameObject);
+                var hit = CreateHitInstance(hitType, dmg, gameObject, direction);
                 var m = responder.GetType().GetMethod("Hit");
                 if (hit != null && m != null)
                 {
@@ -437,7 +442,7 @@ public class LegacyHelper : BaseUnityPlugin
                     var pars = m.GetParameters();
                     if (pars.Length != 1) continue;
 
-                    var hit = CreateHitInstance(pars[0].ParameterType, dmg, gameObject);
+                    var hit = CreateHitInstance(pars[0].ParameterType, dmg, gameObject, direction);
                     if (hit != null)
                     {
                         try
@@ -633,7 +638,7 @@ public class LegacyHelper : BaseUnityPlugin
 
                         if (pt.Name == "HitInstance" || pt.FullName == "HitInstance")
                         {
-                            args[i] = CreateHitInstance(pt, 0, gameObject);
+                            args[i] = CreateHitInstance(pt, 0, gameObject, 0f);
                         }
                         else if (p.HasDefaultValue)
                         {
@@ -675,7 +680,7 @@ public class LegacyHelper : BaseUnityPlugin
 
                         if (pt.Name == "HitInstance" || pt.FullName == "HitInstance")
                         {
-                            args[i] = CreateHitInstance(pt, 0, gameObject);
+                            args[i] = CreateHitInstance(pt, 0, gameObject, 0f);
                         }
                         else if (p.HasDefaultValue)
                         {
@@ -694,7 +699,7 @@ public class LegacyHelper : BaseUnityPlugin
             hm.gameObject.SendMessage("OnHit", SendMessageOptions.DontRequireReceiver);
         }
 
-        private object CreateHitInstance(System.Type hitType, int dmg, GameObject source)
+        private object CreateHitInstance(System.Type hitType, int dmg, GameObject source, float direction)
         {
             object hit = null;
             try { hit = System.Activator.CreateInstance(hitType); } catch { return null; }
@@ -745,9 +750,9 @@ public class LegacyHelper : BaseUnityPlugin
 
             // Direction and magnitude
             var dirF = hitType.GetField("Direction") ?? hitType.GetField("direction");
-            if (dirF != null) dirF.SetValue(hit, 0f);
+            if (dirF != null) dirF.SetValue(hit, direction);
             var dirP = hitType.GetProperty("Direction") ?? hitType.GetProperty("direction");
-            if (dirP != null && dirP.CanWrite) dirP.SetValue(hit, 0f, null);
+            if (dirP != null && dirP.CanWrite) dirP.SetValue(hit, direction, null);
 
             var magF = hitType.GetField("MagnitudeMultiplier") ?? hitType.GetField("magnitudeMultiplier");
             if (magF != null) magF.SetValue(hit, 1f);
@@ -781,7 +786,7 @@ public class LegacyHelper : BaseUnityPlugin
 
         private Component FindComponentByName(GameObject go, string typeName)
         {
-            var comps = go.GetComponents<MonoBehaviour>();
+            var comps = go.GetComponentsInParent<MonoBehaviour>(true);
             foreach (var c in comps)
                 if (c != null && c.GetType().Name == typeName) return c;
             return null;
@@ -789,7 +794,7 @@ public class LegacyHelper : BaseUnityPlugin
 
         private Component FindComponentWithInterface(GameObject go, string interfaceName)
         {
-            var comps = go.GetComponents<MonoBehaviour>();
+            var comps = go.GetComponentsInParent<MonoBehaviour>(true);
             foreach (var c in comps)
                 if (c != null && c.GetType().GetInterfaces().Any(i => i.Name == interfaceName))
                     return c;
