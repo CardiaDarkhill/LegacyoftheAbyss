@@ -1,8 +1,6 @@
 using BepInEx;
 using HarmonyLib;
 using UnityEngine;
-using UnityEngine.SceneManagement;
-using System.Linq;
 using System.Collections;
 using System.Reflection;
 
@@ -18,8 +16,6 @@ public class LegacyHelper : BaseUnityPlugin
         Logger.LogInfo("Patching GameManager.BeginScene...");
         Harmony harmony = new Harmony("com.legacyoftheabyss.helper");
         harmony.PatchAll();
-        SceneManager.sceneLoaded += (s, m) => DisableStartupObjects(s);
-        DisableStartupObjects(SceneManager.GetActiveScene());
     }
 
     internal static void DisableStartup(GameManager gm)
@@ -51,33 +47,12 @@ public class LegacyHelper : BaseUnityPlugin
         }
     }
 
-    private static void DisableStartupObjects(Scene scene)
-    {
-        foreach (var go in scene.GetRootGameObjects())
-            DisableStartupRecursive(go);
-    }
-
-    private static void DisableStartupRecursive(GameObject go)
-    {
-        var lname = go.name.ToLower();
-        if (lname.Contains("team") && lname.Contains("cherry") ||
-            (lname.Contains("save") && lname.Contains("reminder")))
-        {
-            go.SetActive(false);
-            Debug.Log($"[HelperMod] Disabled startup object {go.name}");
-        }
-        foreach (Transform child in go.transform)
-            DisableStartupRecursive(child.gameObject);
-    }
-
     [HarmonyPatch(typeof(GameManager), "BeginScene")]
     class GameManager_BeginScene_Patch
     {
         static void Postfix(GameManager __instance)
         {
             DisableStartup(__instance);
-            DisableStartupObjects(SceneManager.GetActiveScene());
-
             bool gameplay = __instance.IsGameplayScene();
             if (!gameplay)
                 return;
@@ -131,7 +106,6 @@ public class LegacyHelper : BaseUnityPlugin
         static void Postfix(GameManager __instance)
         {
             DisableStartup(__instance);
-            DisableStartupObjects(SceneManager.GetActiveScene());
         }
     }
 
@@ -141,7 +115,6 @@ public class LegacyHelper : BaseUnityPlugin
         static void Postfix(GameManager __instance)
         {
             DisableStartup(__instance);
-            DisableStartupObjects(SceneManager.GetActiveScene());
         }
     }
 
@@ -263,9 +236,13 @@ public class LegacyHelper : BaseUnityPlugin
         private void PerformNailSlash()
         {
             var hc = HeroController.instance;
-            if (hc == null || hc.NormalSlashObject == null) return;
+            if (hc == null) return;
 
-            var slash = GameObject.Instantiate(hc.NormalSlashObject, transform.position, Quaternion.identity);
+            var field = hc.GetType().GetField("NormalSlashObject", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            var prefab = field?.GetValue(hc) as GameObject;
+            if (prefab == null) return;
+
+            var slash = GameObject.Instantiate(prefab, transform.position, Quaternion.identity);
             slash.transform.SetParent(transform, true);
 
             var nailSlash = slash.GetComponent<NailSlash>();
