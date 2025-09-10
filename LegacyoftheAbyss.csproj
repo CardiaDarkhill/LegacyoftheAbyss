@@ -27,6 +27,9 @@
     <Reference Include="UnityEngine.UI">
       <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.UI.dll</HintPath>
     </Reference>
+    <Reference Include="UnityEngine.UIModule">
+        <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.UIModule.dll</HintPath>
+    </Reference>
 
 
 

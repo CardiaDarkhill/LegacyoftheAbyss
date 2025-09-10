@@ -191,7 +191,7 @@ public class LegacyHelper : BaseUnityPlugin
             col.isTrigger = true;
 
             // ignore collisions with other ShadeProjectiles
-            var others = FindObjectsOfType<ShadeProjectile>();
+             var others = Object.FindObjectsByType<ShadeProjectile>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             foreach (var o in others)
             {
                 var oc = o.GetComponent<Collider2D>();
@@ -201,7 +201,7 @@ public class LegacyHelper : BaseUnityPlugin
             var rb = proj.AddComponent<Rigidbody2D>();
             rb.gravityScale = 0;
             rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
-            rb.velocity = dir.normalized * projectileSpeed;
+            rb.linearVelocity = dir.normalized * projectileSpeed;
 
             if (hornetTransform != null)
             {
@@ -229,7 +229,7 @@ public class LegacyHelper : BaseUnityPlugin
 
         private void DumpNearestEnemyHealthManager()
         {
-            var allMBs = GameObject.FindObjectsOfType<MonoBehaviour>();
+            var allMBs = Object.FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             MonoBehaviour nearestHM = null;
             float bestDist = float.PositiveInfinity;
 

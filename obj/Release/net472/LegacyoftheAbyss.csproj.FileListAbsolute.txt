@@ -104,3 +104,9 @@ E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyof
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\obj\Release\net472\LegacyoftheAbyss.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\obj\Release\net472\LegacyoftheAbyss.pdb
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.InputModule.dll
+E:\SteamProgram\steamapps\common\hollow knight silksong\bepinex\plugins\legacyoftheabyss\net472\Assembly-CSharp.dll
+E:\SteamProgram\steamapps\common\hollow knight silksong\bepinex\plugins\legacyoftheabyss\net472\BepInEx.dll
+E:\SteamProgram\steamapps\common\hollow knight silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.CoreModule.dll
+E:\SteamProgram\steamapps\common\hollow knight silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.dll
+E:\SteamProgram\steamapps\common\hollow knight silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.InputLegacyModule.dll
+E:\SteamProgram\steamapps\common\hollow knight silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.Physics2DModule.dll
