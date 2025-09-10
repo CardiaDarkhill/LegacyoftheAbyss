@@ -1,11 +1,13 @@
 using BepInEx;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.UI;
 
 [BepInPlugin("com.legacyoftheabyss.helper", "Legacy of the Abyss - Helper", "0.1.0")]
 public class LegacyHelper : BaseUnityPlugin
 {
     private static GameObject helper;
+    private static GameObject hud;
 
     void Awake()
     {
@@ -31,7 +33,6 @@ public class LegacyHelper : BaseUnityPlugin
                     var sc = helper.AddComponent<ShadeController>();
                     sc.Init(__instance.hero_ctrl.transform);
 
-
                     var sr = helper.AddComponent<SpriteRenderer>();
                     sr.sprite = GenerateDebugSprite();
                     sr.color = Color.black;
@@ -43,8 +44,14 @@ public class LegacyHelper : BaseUnityPlugin
                         sr.sortingOrder = hornetRenderer.sortingOrder + 1; //Render layers are weird, anything behind hornets layer seems to vanish entirely
                     }
 
-                    // ShadeController is the class handling all input for the shade object
                     helper.AddComponent<ShadeController>();
+                }
+
+                if (hud == null)
+                {
+                    hud = new GameObject("KnightHUDRoot");
+                    var kh = hud.AddComponent<KnightHUD>();
+                    kh.Init(__instance.hero_ctrl);
                 }
             }
         }
@@ -58,6 +65,35 @@ public class LegacyHelper : BaseUnityPlugin
 
             tex.Apply();
             return Sprite.Create(tex, new Rect(0, 0, 160, 160), new Vector2(0.5f, 0.5f));
+        }
+    }
+
+    [HarmonyPatch(typeof(GameManager), "Awake")]
+    class GameManager_Awake_Patch
+    {
+        static void Postfix(GameManager __instance)
+        {
+            DisableStartup(__instance);
+        }
+
+        static void DisableStartup(GameManager gm)
+        {
+            if (gm == null) return;
+            var t = gm.GetType();
+
+            string[] logoFlags = { "playTeamCherryLogo", "playLogo", "showTeamCherryLogo", "displayTeamCherryLogo", "teamCherryLogo" };
+            foreach (var n in logoFlags)
+            {
+                var f = t.GetField(n, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+                if (f != null && f.FieldType == typeof(bool)) f.SetValue(gm, false);
+            }
+
+            string[] saveFlags = { "playSaveReminder", "showSaveReminder", "displaySaveReminder", "saveReminder" };
+            foreach (var n in saveFlags)
+            {
+                var f = t.GetField(n, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+                if (f != null && f.FieldType == typeof(bool)) f.SetValue(gm, false);
+            }
         }
     }
 
@@ -296,6 +332,21 @@ public class LegacyHelper : BaseUnityPlugin
             {
                 var ht = hm.GetType();
 
+                // Attempt to call Hit/TakeHit with a HitInstance so enemy reacts like Hornet's needle
+                var methods = ht.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                foreach (var m in methods)
+                {
+                    if (m.Name != "Hit" && m.Name != "TakeHit") continue;
+                    var pars = m.GetParameters();
+                    if (pars.Length != 1) continue;
+
+                    var hit = CreateHitInstance(pars[0].ParameterType, dmg);
+                    if (hit != null)
+                    {
+                        try { m.Invoke(hm, new object[] { hit }); return true; } catch { }
+                    }
+                }
+
                 // Dump once so we can hard-wire the correct call in next pass
                 if (!dumpedHealthManagerInfo)
                 {
@@ -464,7 +515,7 @@ public class LegacyHelper : BaseUnityPlugin
 
                         if (pt.Name == "HitInstance" || pt.FullName == "HitInstance")
                         {
-                            args[i] = CreateHitInstance(pt);
+                            args[i] = CreateHitInstance(pt, 0);
                         }
                         else if (p.HasDefaultValue)
                         {
@@ -506,7 +557,7 @@ public class LegacyHelper : BaseUnityPlugin
 
                         if (pt.Name == "HitInstance" || pt.FullName == "HitInstance")
                         {
-                            args[i] = CreateHitInstance(pt);
+                            args[i] = CreateHitInstance(pt, 0);
                         }
                         else if (p.HasDefaultValue)
                         {
@@ -525,7 +576,7 @@ public class LegacyHelper : BaseUnityPlugin
             hm.gameObject.SendMessage("OnHit", SendMessageOptions.DontRequireReceiver);
         }
 
-        private object CreateHitInstance(System.Type hitType)
+        private object CreateHitInstance(System.Type hitType, int dmg)
         {
             object hit = null;
             try { hit = System.Activator.CreateInstance(hitType); } catch { return null; }
@@ -569,6 +620,12 @@ public class LegacyHelper : BaseUnityPlugin
                     dirP.SetValue(hit, Vector2.right, null);
             }
 
+            // Damage
+            var dmgF = hitType.GetField("Damage") ?? hitType.GetField("damage");
+            if (dmgF != null) dmgF.SetValue(hit, dmg);
+            var dmgP = hitType.GetProperty("Damage") ?? hitType.GetProperty("damage");
+            if (dmgP != null && dmgP.CanWrite) dmgP.SetValue(hit, dmg, null);
+
             return hit;
         }
 
@@ -597,5 +654,180 @@ public class LegacyHelper : BaseUnityPlugin
         }
 
         private object GetDefault(System.Type t) => t.IsValueType ? System.Activator.CreateInstance(t) : null;
+    }
+
+    public class KnightHUD : MonoBehaviour
+    {
+        private object heroController;
+        private Image[] masks;
+        private Image soulFill;
+
+        public void Init(object hero)
+        {
+            heroController = hero;
+        }
+
+        void Start()
+        {
+            DontDestroyOnLoad(gameObject);
+
+            var canvas = new GameObject("KnightHUDCanvas");
+            canvas.transform.SetParent(transform);
+            var c = canvas.AddComponent<Canvas>();
+            c.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.AddComponent<CanvasScaler>();
+            canvas.AddComponent<GraphicRaycaster>();
+
+            // Health masks
+            var healthRoot = new GameObject("HealthRoot");
+            healthRoot.transform.SetParent(canvas.transform);
+            var hr = healthRoot.AddComponent<RectTransform>();
+            hr.anchorMin = hr.anchorMax = new Vector2(1, 1);
+            hr.pivot = new Vector2(1, 1);
+            hr.anchoredPosition = new Vector2(-20, -20);
+
+            masks = new Image[10];
+            for (int i = 0; i < masks.Length; i++)
+            {
+                var m = new GameObject("Mask" + i).AddComponent<Image>();
+                m.transform.SetParent(healthRoot.transform);
+                m.sprite = GenerateMaskSprite();
+                var r = m.rectTransform;
+                r.anchorMin = r.anchorMax = new Vector2(1, 1);
+                r.pivot = new Vector2(1, 1);
+                r.sizeDelta = new Vector2(20, 20);
+                r.anchoredPosition = new Vector2(-i * 22, 0);
+                masks[i] = m;
+            }
+
+            // Soul meter
+            var soulRoot = new GameObject("SoulRoot");
+            soulRoot.transform.SetParent(canvas.transform);
+            var sr = soulRoot.AddComponent<RectTransform>();
+            sr.anchorMin = sr.anchorMax = new Vector2(1, 1);
+            sr.pivot = new Vector2(1, 1);
+            sr.anchoredPosition = new Vector2(-20, -50);
+
+            var bg = new GameObject("SoulBG").AddComponent<Image>();
+            bg.transform.SetParent(soulRoot.transform);
+            var bgrt = bg.rectTransform;
+            bgrt.sizeDelta = new Vector2(20, 40);
+
+            soulFill = new GameObject("SoulFill").AddComponent<Image>();
+            soulFill.transform.SetParent(bg.transform);
+            var frt = soulFill.rectTransform;
+            frt.anchorMin = new Vector2(0, 0);
+            frt.anchorMax = new Vector2(1, 1);
+            frt.pivot = new Vector2(0.5f, 0);
+            frt.anchoredPosition = Vector2.zero;
+            soulFill.color = Color.white;
+        }
+
+        void Update()
+        {
+            if (heroController == null)
+            {
+                var gm = GameManager.instance;
+                if (gm != null) heroController = gm.hero_ctrl;
+            }
+
+            object pd = null;
+            if (heroController != null)
+            {
+                var ht = heroController.GetType();
+                var pdField = ht.GetField("playerData", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+                if (pdField != null) pd = pdField.GetValue(heroController);
+            }
+
+            int health = GetInt(pd, new[] { "health", "currentHealth", "HP", "hp" });
+            int maxHealth = GetInt(pd, new[] { "maxHealth", "maxHP" });
+            float soul = GetFloat(pd, new[] { "soul", "SOUL", "mpCharge", "MPCharge" });
+            float maxSoul = GetFloat(pd, new[] { "maxSoul", "maxSOUL", "mpChargeMax", "MPChargeMax" });
+
+            if (maxHealth <= 0) maxHealth = masks.Length;
+            for (int i = 0; i < masks.Length; i++)
+            {
+                masks[i].enabled = i < maxHealth;
+                masks[i].color = i < health ? Color.white : new Color(0, 0, 0, 0.5f);
+            }
+
+            float ratio = maxSoul > 0 ? Mathf.Clamp01(soul / maxSoul) : 0f;
+            var rt = soulFill.rectTransform;
+            rt.localScale = new Vector3(1f, ratio, 1f);
+        }
+
+        private Sprite GenerateMaskSprite()
+        {
+            var tex = new Texture2D(20, 20);
+            for (int x = 0; x < 20; x++)
+                for (int y = 0; y < 20; y++)
+                {
+                    float dx = x - 10, dy = y - 10;
+                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
+                    tex.SetPixel(x, y, dist <= 9 ? Color.white : Color.clear);
+                }
+            tex.Apply();
+            return Sprite.Create(tex, new Rect(0, 0, 20, 20), new Vector2(0.5f, 0.5f));
+        }
+
+        private int GetInt(object obj, string[] names)
+        {
+            if (obj == null) return 0;
+            var t = obj.GetType();
+            foreach (var n in names)
+            {
+                var f = t.GetField(n, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+                if (f != null)
+                {
+                    try
+                    {
+                        if (f.FieldType == typeof(int)) return (int)f.GetValue(obj);
+                        if (f.FieldType == typeof(float)) return (int)(float)f.GetValue(obj);
+                    }
+                    catch { }
+                }
+                var p = t.GetProperty(n, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+                if (p != null && p.CanRead)
+                {
+                    try
+                    {
+                        if (p.PropertyType == typeof(int)) return (int)p.GetValue(obj, null);
+                        if (p.PropertyType == typeof(float)) return (int)(float)p.GetValue(obj, null);
+                    }
+                    catch { }
+                }
+            }
+            return 0;
+        }
+
+        private float GetFloat(object obj, string[] names)
+        {
+            if (obj == null) return 0f;
+            var t = obj.GetType();
+            foreach (var n in names)
+            {
+                var f = t.GetField(n, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+                if (f != null)
+                {
+                    try
+                    {
+                        if (f.FieldType == typeof(float)) return (float)f.GetValue(obj);
+                        if (f.FieldType == typeof(int)) return (int)f.GetValue(obj);
+                    }
+                    catch { }
+                }
+                var p = t.GetProperty(n, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+                if (p != null && p.CanRead)
+                {
+                    try
+                    {
+                        if (p.PropertyType == typeof(float)) return (float)p.GetValue(obj, null);
+                        if (p.PropertyType == typeof(int)) return (int)p.GetValue(obj, null);
+                    }
+                    catch { }
+                }
+            }
+            return 0f;
+        }
     }
 }

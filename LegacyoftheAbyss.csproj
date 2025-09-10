@@ -24,6 +24,10 @@
         <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.Physics2DModule.dll</HintPath>
     </Reference>
 
+    <Reference Include="UnityEngine.UI">
+      <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.UI.dll</HintPath>
+    </Reference>
+
 
 
 
