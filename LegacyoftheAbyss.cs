@@ -441,18 +441,92 @@ public class LegacyHelper : BaseUnityPlugin
         private void TryCallDeathIfZero(Component hm, int hpAfter)
         {
             if (hpAfter > 0) return;
-
             var t = hm.GetType();
-            foreach (var nm in new[] { "Die", "DoDeath", "Kill", "OnDeath", "Death" })
+            var methods = t.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+            foreach (var nm in new[] { "Die", "TakeDamage", "Hit", "DoDeath", "Kill", "OnDeath", "Death" })
             {
-                var m = t.GetMethod(nm, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                if (m != null) { try { m.Invoke(hm, null); return; } catch {} }
+                foreach (var m in methods)
+                {
+                    if (m.Name != nm) continue;
+
+                    var pars = m.GetParameters();
+                    object[] args = new object[pars.Length];
+
+                    for (int i = 0; i < pars.Length; i++)
+                    {
+                        var p = pars[i];
+                        var pt = p.ParameterType;
+
+                        if (pt.Name == "HitInstance" || pt.FullName == "HitInstance")
+                        {
+                            args[i] = CreateHitInstance(pt);
+                        }
+                        else if (p.HasDefaultValue)
+                        {
+                            args[i] = p.DefaultValue;
+                        }
+                        else
+                        {
+                            args[i] = GetDefault(pt);
+                        }
+                    }
+
+                    try { m.Invoke(hm, args); return; } catch { }
+                }
             }
 
-            // Nudge effects if no explicit death call
+            // Fall back to old behaviour if nothing matched
             var go = hm.gameObject;
             go.SendMessage("OnHit", SendMessageOptions.DontRequireReceiver);
             go.SendMessage("SpawnDeath", SendMessageOptions.DontRequireReceiver);
+        }
+
+        private object CreateHitInstance(System.Type hitType)
+        {
+            object hit = null;
+            try { hit = System.Activator.CreateInstance(hitType); } catch { return null; }
+
+            // Attack type
+            var atkTypes = hitType.Assembly.GetType("AttackTypes");
+            if (atkTypes != null)
+            {
+                object generic = null;
+                try { generic = System.Enum.Parse(atkTypes, "Generic"); } catch { }
+                if (generic != null)
+                {
+                    var f = hitType.GetField("AttackType") ?? hitType.GetField("attackType");
+                    if (f != null) f.SetValue(hit, generic);
+                    var p = hitType.GetProperty("AttackType") ?? hitType.GetProperty("attackType");
+                    if (p != null && p.CanWrite) p.SetValue(hit, generic, null);
+                }
+            }
+
+            // ignoreEvasion
+            var ieF = hitType.GetField("ignoreEvasion") ?? hitType.GetField("IgnoreEvasion");
+            if (ieF != null) ieF.SetValue(hit, false);
+            var ieP = hitType.GetProperty("ignoreEvasion") ?? hitType.GetProperty("IgnoreEvasion");
+            if (ieP != null && ieP.CanWrite) ieP.SetValue(hit, false, null);
+
+            // Attack direction (default)
+            var dirF = hitType.GetField("AttackDirection") ?? hitType.GetField("attackDirection") ?? hitType.GetField("Direction") ?? hitType.GetField("direction");
+            if (dirF != null)
+            {
+                if (dirF.FieldType == typeof(Vector3))
+                    dirF.SetValue(hit, Vector3.right);
+                else if (dirF.FieldType == typeof(Vector2))
+                    dirF.SetValue(hit, Vector2.right);
+            }
+            var dirP = hitType.GetProperty("AttackDirection") ?? hitType.GetProperty("attackDirection") ?? hitType.GetProperty("Direction") ?? hitType.GetProperty("direction");
+            if (dirP != null && dirP.CanWrite)
+            {
+                if (dirP.PropertyType == typeof(Vector3))
+                    dirP.SetValue(hit, Vector3.right, null);
+                else if (dirP.PropertyType == typeof(Vector2))
+                    dirP.SetValue(hit, Vector2.right, null);
+            }
+
+            return hit;
         }
 
         private void DumpTypeInfo(string label, System.Type ht)
