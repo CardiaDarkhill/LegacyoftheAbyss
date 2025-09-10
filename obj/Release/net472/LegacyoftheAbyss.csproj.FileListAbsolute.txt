@@ -17,7 +17,6 @@ E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyof
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.AndroidJNIModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.MarshallingModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.AccessibilityModule.dll
-E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.UIModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.UnityConnectModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.AIModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.AMDModule.dll
@@ -70,7 +69,6 @@ E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyof
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\TeamCherry.TK2D.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\TeamCherry.Localization.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\TeamCherry.SharedUtils.dll
-E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.UI.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\Unity.Addressables.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\PlayMaker.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\Unity.ResourceManager.dll
@@ -104,9 +102,3 @@ E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyof
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\obj\Release\net472\LegacyoftheAbyss.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\obj\Release\net472\LegacyoftheAbyss.pdb
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.InputModule.dll
-E:\SteamProgram\steamapps\common\hollow knight silksong\bepinex\plugins\legacyoftheabyss\net472\Assembly-CSharp.dll
-E:\SteamProgram\steamapps\common\hollow knight silksong\bepinex\plugins\legacyoftheabyss\net472\BepInEx.dll
-E:\SteamProgram\steamapps\common\hollow knight silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.CoreModule.dll
-E:\SteamProgram\steamapps\common\hollow knight silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.dll
-E:\SteamProgram\steamapps\common\hollow knight silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.InputLegacyModule.dll
-E:\SteamProgram\steamapps\common\hollow knight silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.Physics2DModule.dll

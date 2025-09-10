@@ -7,6 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="DummyDLLs/**" />
+    <EmbeddedResource Remove="DummyDLLs/**" />
+    <None Remove="DummyDLLs/**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Unity / Game Assemblies -->
     <Reference Include="UnityEngine">
       <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.dll</HintPath>
