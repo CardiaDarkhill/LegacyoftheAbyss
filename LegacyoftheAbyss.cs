@@ -149,9 +149,11 @@ public class LegacyHelper : BaseUnityPlugin
     {
         static void Prefix(StartManager __instance)
         {
-            if (__instance.startManagerAnimator != null)
+            var f = __instance.GetType().GetField("showIntroSequence", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (f != null)
             {
-                __instance.startManagerAnimator.gameObject.SetActive(false);
+                f.SetValue(__instance, false);
+                Debug.Log("[HelperMod] Forced StartManager.showIntroSequence=false");
             }
         }
 
