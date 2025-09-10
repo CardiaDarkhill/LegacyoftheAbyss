@@ -101,8 +101,6 @@ public class LegacyHelper : BaseUnityPlugin
                     sr.sortingLayerID = hornetRenderer.sortingLayerID;
                     sr.sortingOrder = hornetRenderer.sortingOrder + 1; //Render layers are weird, anything behind hornets layer seems to vanish entirely
                 }
-
-                helper.AddComponent<ShadeController>();
             }
 
             if (hud == null)
@@ -149,6 +147,14 @@ public class LegacyHelper : BaseUnityPlugin
     [HarmonyPatch(typeof(StartManager), "Start")]
     class StartManager_Start_Enumerator_Patch
     {
+        static void Prefix(StartManager __instance)
+        {
+            if (__instance.startManagerAnimator != null)
+            {
+                __instance.startManagerAnimator.gameObject.SetActive(false);
+            }
+        }
+
         static void Postfix(ref IEnumerator __result)
         {
             if (__result == null) return;
@@ -245,6 +251,7 @@ public class LegacyHelper : BaseUnityPlugin
         {
             var proj = new GameObject("ShadeProjectile");
             proj.transform.position = transform.position + (Vector3)new Vector2(muzzleOffset.x * facing, muzzleOffset.y);
+            proj.tag = "Hero Spell";
 
             var psr = proj.AddComponent<SpriteRenderer>();
             psr.sprite = MakeDotSprite();
@@ -394,7 +401,7 @@ public class LegacyHelper : BaseUnityPlugin
 
         private bool TryApplyDamage(GameObject target, int dmg)
         {
-            // First try a component implementing IHitResponder so enemies react properly
+            // Trigger hit reactions first via IHitResponder so enemies flinch like Hornet's spells
             var responder = FindComponentWithInterface(target, "IHitResponder");
             if (responder != null)
             {
@@ -407,21 +414,22 @@ public class LegacyHelper : BaseUnityPlugin
                     {
                         m.Invoke(responder, new object[] { hit });
                         TriggerHitEffects(responder);
-                        Debug.Log("[HelperMod] Damage via IHitResponder.Hit");
-                        return true;
+                        Debug.Log("[HelperMod] Called IHitResponder.Hit");
                     }
                     catch { }
                 }
             }
 
-            // Prefer a HealthManager on the same GO
+            bool applied = false;
+
+            // Prefer a HealthManager on the same GO for actual damage
             var hm = FindComponentByName(target, "HealthManager");
             if (hm != null)
             {
                 var ht = hm.GetType();
 
-                // Attempt to call Hit/TakeHit with a HitInstance so enemy reacts like Hornet's needle
-                var methods = ht.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                // Attempt to call Hit/TakeHit with a HitInstance
+                var methods = ht.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
                 foreach (var m in methods)
                 {
                     if (m.Name != "Hit" && m.Name != "TakeHit") continue;
@@ -436,44 +444,45 @@ public class LegacyHelper : BaseUnityPlugin
                             m.Invoke(hm, new object[] { hit });
                             TriggerHitEffects(hm);
                             Debug.Log($"[HelperMod] Damage via {m.Name}(HitInstance)");
-                            return true;
+                            applied = true;
+                            break;
                         }
                         catch { }
                     }
                 }
 
-                // Dump once so we can hard-wire the correct call in next pass
-                if (!dumpedHealthManagerInfo)
+                if (!applied)
                 {
-                    dumpedHealthManagerInfo = true;
-                    DumpTypeInfo("[HelperMod] HealthManager", ht);
-                }
-
-                // Try common damage-like methods with int param
-                string[] names = { "ApplyDamage", "DoDamage", "ReceiveHit", "TakeHit", "OnHit", "Damage" };
-                foreach (var nm in names)
-                {
-                    var m = ht.GetMethod(nm, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                    if (m == null) continue;
-                    var pars = m.GetParameters();
-
-                    if (pars.Length == 1 && pars[0].ParameterType == typeof(int))
+                    if (!dumpedHealthManagerInfo)
                     {
-                        try
-                        {
-                            m.Invoke(hm, new object[] { dmg });
-                            TriggerHitEffects(hm);
-                            Debug.Log($"[HelperMod] Damage via {nm}(int)");
-                            return true;
-                        }
-                        catch { }
+                        dumpedHealthManagerInfo = true;
+                        DumpTypeInfo("[HelperMod] HealthManager", ht);
                     }
 
-                    // First int anywhere
-                    for (int i = 0; i < pars.Length; i++)
+                    string[] names = { "ApplyDamage", "DoDamage", "ReceiveHit", "TakeHit", "OnHit", "Damage" };
+                    foreach (var nm in names)
                     {
-                        if (pars[i].ParameterType == typeof(int))
+                        var m = ht.GetMethod(nm, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                        if (m == null) continue;
+                        var pars = m.GetParameters();
+
+                        if (pars.Length == 1 && pars[0].ParameterType == typeof(int))
                         {
+                            try
+                            {
+                                m.Invoke(hm, new object[] { dmg });
+                                TriggerHitEffects(hm);
+                                Debug.Log($"[HelperMod] Damage via {nm}(int)");
+                                applied = true;
+                                break;
+                            }
+                            catch { }
+                        }
+
+                        for (int i = 0; i < pars.Length && !applied; i++)
+                        {
+                            if (pars[i].ParameterType != typeof(int)) continue;
+
                             var args = new object[pars.Length];
                             for (int j = 0; j < args.Length; j++)
                                 args[j] = pars[j].HasDefaultValue ? pars[j].DefaultValue : GetDefault(pars[j].ParameterType);
@@ -483,57 +492,40 @@ public class LegacyHelper : BaseUnityPlugin
                                 m.Invoke(hm, args);
                                 TriggerHitEffects(hm);
                                 Debug.Log($"[HelperMod] Damage via {nm}(mixed)");
-                                return true;
+                                applied = true;
                             }
                             catch { }
                         }
-                    }
-                }
 
-                // Fallback: direct HP adjust (fields)
-                if (DirectHpAdjust(hm, dmg))
-                    return true;
+                        if (applied) break;
+                    }
+
+                    if (!applied && DirectHpAdjust(hm, dmg))
+                        applied = true;
+                }
             }
 
-            // Try TagDamageTaker fallback
-            var taker = FindComponentByName(target, "TagDamageTaker");
-            if (taker != null)
+            if (!applied)
             {
-                var tt = taker.GetType();
-                foreach (var nm in new[] { "TakeDamage", "TryTakeDamage", "OnHit", "Hit" })
+                var taker = FindComponentByName(target, "TagDamageTaker");
+                if (taker != null)
                 {
-                    var m = tt.GetMethod(nm, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                    if (m == null) continue;
-                    var pars = m.GetParameters();
-
-                    // Simple int
-                    if (pars.Length == 1 && pars[0].ParameterType == typeof(int))
+                    var tt = taker.GetType();
+                    foreach (var nm in new[] { "TakeDamage", "TryTakeDamage", "OnHit", "Hit" })
                     {
-                        try
-                        {
-                            m.Invoke(taker, new object[] { dmg });
-                            TriggerHitEffects(taker);
-                            Debug.Log($"[HelperMod] Damage via TagDamageTaker.{nm}(int)");
-                            return true;
-                        }
-                        catch { }
-                    }
+                        var m = tt.GetMethod(nm, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                        if (m == null) continue;
+                        var pars = m.GetParameters();
 
-                    // Any int slot
-                    for (int i = 0; i < pars.Length; i++)
-                    {
-                        if (pars[i].ParameterType == typeof(int))
+                        if (pars.Length == 1 && pars[0].ParameterType == typeof(int))
                         {
-                            var args = new object[pars.Length];
-                            for (int j = 0; j < args.Length; j++)
-                                args[j] = pars[j].HasDefaultValue ? pars[j].DefaultValue : GetDefault(pars[j].ParameterType);
-                            args[i] = dmg;
                             try
                             {
-                                m.Invoke(taker, args);
+                                m.Invoke(taker, new object[] { dmg });
                                 TriggerHitEffects(taker);
-                                Debug.Log($"[HelperMod] Damage via TagDamageTaker.{nm}(mixed)");
-                                return true;
+                                Debug.Log($"[HelperMod] Damage via TagDamageTaker.{nm}(int)");
+                                applied = true;
+                                break;
                             }
                             catch { }
                         }
@@ -541,9 +533,10 @@ public class LegacyHelper : BaseUnityPlugin
                 }
             }
 
-            // Remove the SendMessage fallbacks (they were generating noise)
-            Debug.Log($"[HelperMod] Failed to apply damage to {target.name}");
-            return false;
+            if (!applied)
+                Debug.Log($"[HelperMod] Failed to apply damage to {target.name}");
+
+            return applied;
         }
 
         private bool DirectHpAdjust(Component hm, int dmg)
@@ -818,7 +811,6 @@ public class LegacyHelper : BaseUnityPlugin
             heroController = hero;
             Debug.Log($"[HelperMod] KnightHUD bound to hero controller {heroController?.GetType().FullName}");
             lastMaxHealth = -1;
-            RefreshMaskCount();
         }
 
         void Start()
@@ -895,6 +887,7 @@ public class LegacyHelper : BaseUnityPlugin
             frt.anchoredPosition = Vector2.zero;
             soulFill.color = Color.white;
             InvokeRepeating(nameof(RefreshMaskCount), 1f, 1f);
+            RefreshMaskCount();
         }
 
         private RectTransform FindHornetHealthRoot()
@@ -965,7 +958,7 @@ public class LegacyHelper : BaseUnityPlugin
 
         private void RefreshMaskCount()
         {
-            if (heroController == null)
+            if (heroController == null || masks == null)
                 return;
 
             var ht = heroController.GetType();
