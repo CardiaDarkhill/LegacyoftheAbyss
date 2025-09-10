@@ -2,38 +2,79 @@ using BepInEx;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 using System.Linq;
+using System.Reflection;
 
 [BepInPlugin("com.legacyoftheabyss.helper", "Legacy of the Abyss - Helper", "0.1.0")]
 public class LegacyHelper : BaseUnityPlugin
 {
     private static GameObject helper;
     private static GameObject hud;
+    private static bool loggedStartupFields;
 
     void Awake()
     {
         Logger.LogInfo("Patching GameManager.BeginScene...");
         Harmony harmony = new Harmony("com.legacyoftheabyss.helper");
         harmony.PatchAll();
+
+        SceneManager.sceneLoaded += (_, __) => DisableStartupObjects();
+        DisableStartupObjects();
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    static void EarlyDisable()
+    {
+        DisableStartup(GameManager.instance);
+        DisableStartupObjects();
     }
 
     internal static void DisableStartup(GameManager gm)
     {
         if (gm == null) return;
         var t = gm.GetType();
-
-        string[] logoFlags = { "playTeamCherryLogo", "playLogo", "showTeamCherryLogo", "displayTeamCherryLogo", "teamCherryLogo" };
-        foreach (var n in logoFlags)
+        var fields = t.GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+        bool log = !loggedStartupFields;
+        loggedStartupFields = true;
+        foreach (var f in fields)
         {
-            var f = t.GetField(n, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-            if (f != null && f.FieldType == typeof(bool)) f.SetValue(gm, false);
+            if (f.FieldType != typeof(bool)) continue;
+            if (log)
+            {
+                bool val = false;
+                try { val = (bool)f.GetValue(gm); } catch { }
+                Debug.Log($"[HelperMod] GameManager bool field {f.Name}={val}");
+            }
+            var name = f.Name.ToLower();
+            if (name.Contains("logo") || (name.Contains("save") && name.Contains("reminder")))
+            {
+                try
+                {
+                    f.SetValue(gm, false);
+                    Debug.Log($"[HelperMod] Disabled GameManager field {f.Name}");
+                }
+                catch { }
+            }
         }
+    }
 
-        string[] saveFlags = { "playSaveReminder", "showSaveReminder", "displaySaveReminder", "saveReminder" };
-        foreach (var n in saveFlags)
+    private static void DisableStartupObjects()
+    {
+        var scene = SceneManager.GetActiveScene();
+        int logged = 0;
+        foreach (var go in scene.GetRootGameObjects())
         {
-            var f = t.GetField(n, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-            if (f != null && f.FieldType == typeof(bool)) f.SetValue(gm, false);
+            if (logged < 20)
+                Debug.Log($"[HelperMod] Root object '{go.name}'");
+            logged++;
+            var lname = go.name.ToLower();
+            if (lname.Contains("team") && lname.Contains("cherry") ||
+                (lname.Contains("save") && lname.Contains("reminder")))
+            {
+                go.SetActive(false);
+                Debug.Log($"[HelperMod] Disabled startup object {go.name}");
+            }
         }
     }
 
@@ -42,6 +83,9 @@ public class LegacyHelper : BaseUnityPlugin
     {
         static void Postfix(GameManager __instance)
         {
+            DisableStartup(__instance);
+            DisableStartupObjects();
+
             bool gameplay = __instance.IsGameplayScene();
             if (hud != null)
                 hud.SetActive(gameplay);
@@ -74,15 +118,12 @@ public class LegacyHelper : BaseUnityPlugin
             }
 
             if (hud == null)
-            {
                 hud = new GameObject("KnightHUDRoot");
-                var kh = hud.AddComponent<KnightHUD>();
-                kh.Init(__instance.hero_ctrl);
-            }
-            else
-            {
-                hud.SetActive(true);
-            }
+
+            var kh = hud.GetComponent<KnightHUD>();
+            if (kh == null) kh = hud.AddComponent<KnightHUD>();
+            kh.Init(__instance.hero_ctrl);
+            hud.SetActive(true);
         }
 
         private static Sprite GenerateDebugSprite()
@@ -103,6 +144,7 @@ public class LegacyHelper : BaseUnityPlugin
         static void Postfix(GameManager __instance)
         {
             DisableStartup(__instance);
+            DisableStartupObjects();
         }
     }
 
@@ -112,6 +154,7 @@ public class LegacyHelper : BaseUnityPlugin
         static void Postfix(GameManager __instance)
         {
             DisableStartup(__instance);
+            DisableStartupObjects();
         }
     }
 
@@ -361,7 +404,14 @@ public class LegacyHelper : BaseUnityPlugin
                     var hit = CreateHitInstance(pars[0].ParameterType, dmg);
                     if (hit != null)
                     {
-                        try { m.Invoke(hm, new object[] { hit }); return true; } catch { }
+                        try
+                        {
+                            m.Invoke(hm, new object[] { hit });
+                            TriggerHitEffects(hm);
+                            Debug.Log($"[HelperMod] Damage via {m.Name}(HitInstance)");
+                            return true;
+                        }
+                        catch { }
                     }
                 }
 
@@ -382,7 +432,14 @@ public class LegacyHelper : BaseUnityPlugin
 
                     if (pars.Length == 1 && pars[0].ParameterType == typeof(int))
                     {
-                        try { m.Invoke(hm, new object[] { dmg }); return true; } catch { }
+                        try
+                        {
+                            m.Invoke(hm, new object[] { dmg });
+                            TriggerHitEffects(hm);
+                            Debug.Log($"[HelperMod] Damage via {nm}(int)");
+                            return true;
+                        }
+                        catch { }
                     }
 
                     // First int anywhere
@@ -394,7 +451,14 @@ public class LegacyHelper : BaseUnityPlugin
                             for (int j = 0; j < args.Length; j++)
                                 args[j] = pars[j].HasDefaultValue ? pars[j].DefaultValue : GetDefault(pars[j].ParameterType);
                             args[i] = dmg;
-                            try { m.Invoke(hm, args); return true; } catch { }
+                            try
+                            {
+                                m.Invoke(hm, args);
+                                TriggerHitEffects(hm);
+                                Debug.Log($"[HelperMod] Damage via {nm}(mixed)");
+                                return true;
+                            }
+                            catch { }
                         }
                     }
                 }
@@ -418,7 +482,14 @@ public class LegacyHelper : BaseUnityPlugin
                     // Simple int
                     if (pars.Length == 1 && pars[0].ParameterType == typeof(int))
                     {
-                        try { m.Invoke(taker, new object[] { dmg }); return true; } catch { }
+                        try
+                        {
+                            m.Invoke(taker, new object[] { dmg });
+                            TriggerHitEffects(taker);
+                            Debug.Log($"[HelperMod] Damage via TagDamageTaker.{nm}(int)");
+                            return true;
+                        }
+                        catch { }
                     }
 
                     // Any int slot
@@ -430,13 +501,21 @@ public class LegacyHelper : BaseUnityPlugin
                             for (int j = 0; j < args.Length; j++)
                                 args[j] = pars[j].HasDefaultValue ? pars[j].DefaultValue : GetDefault(pars[j].ParameterType);
                             args[i] = dmg;
-                            try { m.Invoke(taker, args); return true; } catch { }
+                            try
+                            {
+                                m.Invoke(taker, args);
+                                TriggerHitEffects(taker);
+                                Debug.Log($"[HelperMod] Damage via TagDamageTaker.{nm}(mixed)");
+                                return true;
+                            }
+                            catch { }
                         }
                     }
                 }
             }
 
             // Remove the SendMessage fallbacks (they were generating noise)
+            Debug.Log($"[HelperMod] Failed to apply damage to {target.name}");
             return false;
         }
 
@@ -603,14 +682,30 @@ public class LegacyHelper : BaseUnityPlugin
             var atkTypes = hitType.Assembly.GetType("AttackTypes");
             if (atkTypes != null)
             {
-                object generic = null;
-                try { generic = System.Enum.Parse(atkTypes, "Generic"); } catch { }
-                if (generic != null)
+                object atk = null;
+                try { atk = System.Enum.Parse(atkTypes, "Spell"); } catch { }
+                if (atk == null) { try { atk = System.Enum.Parse(atkTypes, "Generic"); } catch { } }
+                if (atk != null)
                 {
                     var f = hitType.GetField("AttackType") ?? hitType.GetField("attackType");
-                    if (f != null) f.SetValue(hit, generic);
+                    if (f != null) f.SetValue(hit, atk);
                     var p = hitType.GetProperty("AttackType") ?? hitType.GetProperty("attackType");
-                    if (p != null && p.CanWrite) p.SetValue(hit, generic, null);
+                    if (p != null && p.CanWrite) p.SetValue(hit, atk, null);
+                }
+            }
+
+            // Damage source
+            var srcEnum = hitType.Assembly.GetType("DamageSource") ?? hitType.Assembly.GetType("HitSource");
+            if (srcEnum != null)
+            {
+                object src = null;
+                try { src = System.Enum.Parse(srcEnum, "Spell"); } catch { }
+                if (src != null)
+                {
+                    var sf = hitType.GetField("Source") ?? hitType.GetField("source") ?? hitType.GetField("DamageSource") ?? hitType.GetField("damageSource");
+                    if (sf != null) sf.SetValue(hit, src);
+                    var sp = hitType.GetProperty("Source") ?? hitType.GetProperty("source") ?? hitType.GetProperty("DamageSource") ?? hitType.GetProperty("damageSource");
+                    if (sp != null && sp.CanWrite) sp.SetValue(hit, src, null);
                 }
             }
 
@@ -680,10 +775,17 @@ public class LegacyHelper : BaseUnityPlugin
         private Image[] masks;
         private Image soulFill;
         private Canvas canvas;
+        private int lastMaxHealth = -1;
+        private int lastHealth = -1;
+        private float lastSoul = -1f;
+        private float lastMaxSoul = -1f;
 
         public void Init(object hero)
         {
             heroController = hero;
+            Debug.Log($"[HelperMod] KnightHUD bound to hero controller {heroController?.GetType().FullName}");
+            lastMaxHealth = -1;
+            RefreshMaskCount();
         }
 
         void Start()
@@ -706,6 +808,11 @@ public class LegacyHelper : BaseUnityPlugin
                 var refMask = hornetHealth.GetComponentsInChildren<Image>(true).FirstOrDefault(i => i.name.ToLower().StartsWith("mask"));
                 if (refMask != null) maskSprite = refMask.sprite;
             }
+            else
+            {
+                LogHealthUITypes();
+            }
+            Debug.Log($"[HelperMod] HUD anchor {anchorPos} maskSprite={(maskSprite != null ? maskSprite.name : "generated")}");
 
             // Health masks
             var healthRoot = new GameObject("HealthRoot");
@@ -754,14 +861,76 @@ public class LegacyHelper : BaseUnityPlugin
 
         private RectTransform FindHornetHealthRoot()
         {
-            foreach (var img in Resources.FindObjectsOfTypeAll<Image>())
+            var imgs = Resources.FindObjectsOfTypeAll<Image>();
+            int logged = 0;
+            foreach (var img in imgs)
             {
                 if (img == null) continue;
-                if (!img.name.ToLower().StartsWith("mask")) continue;
-                var parent = img.transform.parent as RectTransform;
-                if (parent != null) return parent;
+                var lname = img.name.ToLower();
+                if (lname.Contains("mask") || lname.Contains("health"))
+                {
+                    if (logged < 100)
+                        Debug.Log($"[HelperMod] Image '{img.name}' path='{GetPath(img.transform)}' active={img.gameObject.activeInHierarchy}");
+                    logged++;
+                    if (lname.StartsWith("mask"))
+                    {
+                        var parent = img.transform.parent as RectTransform;
+                        if (parent != null)
+                        {
+                            var comps = string.Join(", ", parent.GetComponents<Component>().Select(c => c.GetType().Name));
+                            Debug.Log($"[HelperMod] Found mask '{img.name}' parent '{parent.name}' comps [{comps}]");
+                            return parent;
+                        }
+                    }
+                }
             }
+
+            var srs = Resources.FindObjectsOfTypeAll<SpriteRenderer>();
+            logged = 0;
+            foreach (var sr in srs)
+            {
+                if (sr == null) continue;
+                var lname = sr.name.ToLower();
+                if (lname.Contains("mask") || lname.Contains("health"))
+                {
+                    if (logged < 100)
+                        Debug.Log($"[HelperMod] SpriteRenderer '{sr.name}' path='{GetPath(sr.transform)}' sprite={sr.sprite?.name}");
+                    logged++;
+                }
+            }
+            Debug.Log($"[HelperMod] Enumerated {imgs.Length} Images and {srs.Length} SpriteRenderers.");
+            Debug.Log("[HelperMod] Hornet health UI root not located.");
             return null;
+        }
+
+        private static bool loggedHealthTypes;
+        private void LogHealthUITypes()
+        {
+            if (loggedHealthTypes) return;
+            loggedHealthTypes = true;
+            var asm = typeof(GameManager).Assembly;
+            var types = asm.GetTypes().Where(t =>
+                t.Name.IndexOf("health", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                t.Name.IndexOf("mask", System.StringComparison.OrdinalIgnoreCase) >= 0).Take(100);
+            foreach (var t in types)
+            {
+                var methods = t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                               .Select(m => m.Name).Take(10);
+                Debug.Log($"[HelperMod] Type {t.FullName} methods: {string.Join(", ", methods)}");
+            }
+        }
+
+        private string GetPath(Transform t)
+        {
+            if (t == null) return "";
+            var names = new System.Collections.Generic.List<string>();
+            while (t != null)
+            {
+                names.Add(t.name);
+                t = t.parent;
+            }
+            names.Reverse();
+            return string.Join("/", names);
         }
 
         void Update()
@@ -770,15 +939,21 @@ public class LegacyHelper : BaseUnityPlugin
             {
                 var gm = GameManager.instance;
                 if (gm != null) heroController = gm.hero_ctrl;
+                if (heroController == null) return;
             }
 
+            RefreshMaskCount();
+        }
+
+        private void RefreshMaskCount()
+        {
+            if (heroController == null)
+                return;
+
+            var ht = heroController.GetType();
             object pd = null;
-            if (heroController != null)
-            {
-                var ht = heroController.GetType();
-                var pdField = ht.GetField("playerData", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-                if (pdField != null) pd = pdField.GetValue(heroController);
-            }
+            var pdField = ht.GetField("playerData", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+            if (pdField != null) pd = pdField.GetValue(heroController);
 
             int health = GetInt(pd, new[] { "health", "currentHealth", "HP", "hp" });
             int maxHealth = GetInt(pd, new[] { "maxHealth", "maxHP" });
@@ -788,6 +963,19 @@ public class LegacyHelper : BaseUnityPlugin
             float maxSoul = GetFloat(pd, new[] { "maxSoul", "maxSOUL", "mpChargeMax", "MPChargeMax" });
 
             if (maxHealth <= 0) maxHealth = masks.Length;
+
+            if (health == lastHealth && maxHealth == lastMaxHealth &&
+                Mathf.Approximately(soul, lastSoul) && Mathf.Approximately(maxSoul, lastMaxSoul))
+                return;
+
+            if (maxHealth != lastMaxHealth)
+            {
+                Debug.Log($"[HelperMod] Shade max health now {maxHealth}");
+            }
+            lastHealth = health;
+            lastMaxHealth = maxHealth;
+            lastSoul = soul;
+            lastMaxSoul = maxSoul;
             for (int i = 0; i < masks.Length; i++)
             {
                 masks[i].enabled = i < maxHealth;
