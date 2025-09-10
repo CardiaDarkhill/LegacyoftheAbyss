@@ -1,7 +1,6 @@
 using BepInEx;
 using HarmonyLib;
 using UnityEngine;
-using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using System.Linq;
 using System.Collections;
@@ -11,7 +10,6 @@ using System.Reflection;
 public class LegacyHelper : BaseUnityPlugin
 {
     private static GameObject helper;
-    private static GameObject hud;
     private static bool loggedStartupFields;
 
     void Awake()
@@ -75,9 +73,6 @@ public class LegacyHelper : BaseUnityPlugin
             DisableStartupObjects(SceneManager.GetActiveScene());
 
             bool gameplay = __instance.IsGameplayScene();
-            if (hud != null)
-                hud.SetActive(gameplay);
-
             if (!gameplay)
                 return;
 
@@ -102,14 +97,6 @@ public class LegacyHelper : BaseUnityPlugin
                     sr.sortingOrder = hornetRenderer.sortingOrder + 1; //Render layers are weird, anything behind hornets layer seems to vanish entirely
                 }
             }
-
-            if (hud == null)
-                hud = new GameObject("KnightHUDRoot");
-
-            var kh = hud.GetComponent<KnightHUD>();
-            if (kh == null) kh = hud.AddComponent<KnightHUD>();
-            kh.Init(__instance.hero_ctrl);
-            hud.SetActive(true);
         }
 
         private static Sprite GenerateDebugSprite()
@@ -380,28 +367,29 @@ public class LegacyHelper : BaseUnityPlugin
             if (hornetRoot != null && other.transform.IsChildOf(hornetRoot)) return;
             if (other.transform == transform || other.transform.IsChildOf(transform)) return;
 
+            var rb = GetComponent<Rigidbody2D>();
+            float angle = rb != null
+                ? (rb.linearVelocity.x > 0f ? 180f : 0f)
+                : (other.transform.position.x > transform.position.x ? 180f : 0f);
+
+            var hit = new HitInstance
+            {
+                Source = gameObject,
+                AttackType = AttackTypes.Spell,
+                DamageDealt = damage,
+                Direction = angle,
+                MagnitudeMultiplier = 1f,
+                IsHeroDamage = true,
+                IsFirstHit = true
+            };
+
+            var responder = other.GetComponentInParent<IHitResponder>();
+            if (responder != null)
+                responder.Hit(hit);
+
             var hm = other.GetComponentInParent<HealthManager>();
             if (hm != null)
-            {
-                var rb = GetComponent<Rigidbody2D>();
-                float angle;
-                if (rb != null)
-                    angle = rb.linearVelocity.x > 0f ? 180f : 0f;
-                else
-                    angle = other.transform.position.x > transform.position.x ? 180f : 0f;
-
-                var hit = new HitInstance
-                {
-                    Source = gameObject,
-                    AttackType = AttackTypes.Spell,
-                    DamageDealt = damage,
-                    Direction = angle,
-                    MagnitudeMultiplier = 1f,
-                    IsHeroDamage = true,
-                    IsFirstHit = true
-                };
                 hm.Hit(hit);
-            }
 
             Destroy(gameObject);
         }
