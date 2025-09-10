@@ -15,41 +15,41 @@
   <ItemGroup>
     <!-- Unity / Game Assemblies -->
     <Reference Include="UnityEngine">
-      <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.dll</HintPath>
+      <HintPath>..\\..\\..\\Hollow Knight Silksong_Data\\Managed\\UnityEngine.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.CoreModule">
-      <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <HintPath>..\\..\\..\\Hollow Knight Silksong_Data\\Managed\\UnityEngine.CoreModule.dll</HintPath>
     </Reference>
     <Reference Include="Assembly-CSharp">
-      <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\Assembly-CSharp.dll</HintPath>
+      <HintPath>..\\..\\..\\Hollow Knight Silksong_Data\\Managed\\Assembly-CSharp.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.InputLegacyModule">
-        <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
+        <HintPath>..\\..\\..\\Hollow Knight Silksong_Data\\Managed\\UnityEngine.InputLegacyModule.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.Physics2DModule">
-        <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.Physics2DModule.dll</HintPath>
+        <HintPath>..\\..\\..\\Hollow Knight Silksong_Data\\Managed\\UnityEngine.Physics2DModule.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.AnimationModule">
-        <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.AnimationModule.dll</HintPath>
+        <HintPath>..\\..\\..\\Hollow Knight Silksong_Data\\Managed\\UnityEngine.AnimationModule.dll</HintPath>
     </Reference>
-
     <Reference Include="UnityEngine.UI">
-      <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.UI.dll</HintPath>
+      <HintPath>..\\..\\..\\Hollow Knight Silksong_Data\\Managed\\UnityEngine.UI.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.UIModule">
-        <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.UIModule.dll</HintPath>
+        <HintPath>..\\..\\..\\Hollow Knight Silksong_Data\\Managed\\UnityEngine.UIModule.dll</HintPath>
     </Reference>
-
-
-
+    <Reference Include="UnityEngine.TextRenderingModule">
+        <HintPath>..\\..\\..\\Hollow Knight Silksong_Data\\Managed\\UnityEngine.TextRenderingModule.dll</HintPath>
+    </Reference>
 
     <!-- BepInEx Core -->
     <Reference Include="BepInEx">
-      <HintPath>..\..\core\BepInEx.dll</HintPath>
+      <HintPath>DummyDLLs/BepInEx.dll</HintPath>
     </Reference>
     <Reference Include="HarmonyLib">
-      <HintPath>..\..\core\0Harmony.dll</HintPath>
+      <HintPath>DummyDLLs/0Harmony.dll</HintPath>
     </Reference>
   </ItemGroup>
 
 </Project>
+
