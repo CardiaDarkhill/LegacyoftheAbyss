@@ -3,6 +3,8 @@ using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
 using System.Linq;
+using System.Collections;
+using System.Reflection;
 
 [BepInPlugin("com.legacyoftheabyss.helper", "Legacy of the Abyss - Helper", "0.1.0")]
 public class LegacyHelper : BaseUnityPlugin
@@ -47,28 +49,12 @@ public class LegacyHelper : BaseUnityPlugin
         }
     }
 
-    private static void DisableStartupObjects()
-    {
-        var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
-        foreach (var go in scene.GetRootGameObjects())
-        {
-            var lname = go.name.ToLower();
-            if (lname.Contains("team") && lname.Contains("cherry") ||
-                (lname.Contains("save") && lname.Contains("reminder")))
-            {
-                go.SetActive(false);
-                Debug.Log($"[HelperMod] Disabled startup object {go.name}");
-            }
-        }
-    }
-
     [HarmonyPatch(typeof(GameManager), "BeginScene")]
     class GameManager_BeginScene_Patch
     {
         static void Postfix(GameManager __instance)
         {
             DisableStartup(__instance);
-            DisableStartupObjects();
 
             bool gameplay = __instance.IsGameplayScene();
             if (hud != null)
@@ -128,7 +114,6 @@ public class LegacyHelper : BaseUnityPlugin
         static void Postfix(GameManager __instance)
         {
             DisableStartup(__instance);
-            DisableStartupObjects();
         }
     }
 
@@ -138,7 +123,38 @@ public class LegacyHelper : BaseUnityPlugin
         static void Postfix(GameManager __instance)
         {
             DisableStartup(__instance);
-            DisableStartupObjects();
+        }
+    }
+
+    [HarmonyPatch(typeof(StartManager), "Awake")]
+    class StartManager_Awake_Patch
+    {
+        static void Postfix(StartManager __instance)
+        {
+            if (__instance.startManagerAnimator != null)
+            {
+                __instance.startManagerAnimator.gameObject.SetActive(false);
+                Debug.Log("[HelperMod] Disabled startup animator");
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(StartManager), "Start")]
+    class StartManager_Start_Enumerator_Patch
+    {
+        static void Postfix(IEnumerator __result)
+        {
+            if (__result == null) return;
+            var fields = __result.GetType().GetFields(BindingFlags.Instance | BindingFlags.NonPublic);
+            foreach (var f in fields)
+            {
+                if (f.FieldType == typeof(bool) && f.Name.Contains("showIntroSequence"))
+                {
+                    f.SetValue(__result, false);
+                    Debug.Log("[HelperMod] Skipping intro sequence");
+                    break;
+                }
+            }
         }
     }
 
@@ -766,7 +782,6 @@ public class LegacyHelper : BaseUnityPlugin
             heroController = hero;
             Debug.Log($"[HelperMod] KnightHUD bound to hero controller {heroController?.GetType().FullName}");
             lastMaxHealth = -1;
-            RefreshMaskCount();
         }
 
         void Start()
@@ -905,7 +920,7 @@ public class LegacyHelper : BaseUnityPlugin
 
         private void RefreshMaskCount()
         {
-            if (heroController == null)
+            if (heroController == null || masks == null || soulFill == null)
                 return;
 
             var ht = heroController.GetType();
