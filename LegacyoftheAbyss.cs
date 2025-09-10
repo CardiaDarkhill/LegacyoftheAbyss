@@ -2,6 +2,7 @@ using BepInEx;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
+using System.Linq;
 
 [BepInPlugin("com.legacyoftheabyss.helper", "Legacy of the Abyss - Helper", "0.1.0")]
 public class LegacyHelper : BaseUnityPlugin
@@ -16,43 +17,71 @@ public class LegacyHelper : BaseUnityPlugin
         harmony.PatchAll();
     }
 
+    internal static void DisableStartup(GameManager gm)
+    {
+        if (gm == null) return;
+        var t = gm.GetType();
+
+        string[] logoFlags = { "playTeamCherryLogo", "playLogo", "showTeamCherryLogo", "displayTeamCherryLogo", "teamCherryLogo" };
+        foreach (var n in logoFlags)
+        {
+            var f = t.GetField(n, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+            if (f != null && f.FieldType == typeof(bool)) f.SetValue(gm, false);
+        }
+
+        string[] saveFlags = { "playSaveReminder", "showSaveReminder", "displaySaveReminder", "saveReminder" };
+        foreach (var n in saveFlags)
+        {
+            var f = t.GetField(n, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+            if (f != null && f.FieldType == typeof(bool)) f.SetValue(gm, false);
+        }
+    }
+
     [HarmonyPatch(typeof(GameManager), "BeginScene")]
     class GameManager_BeginScene_Patch
     {
         static void Postfix(GameManager __instance)
         {
-            if (__instance.IsGameplayScene())
+            bool gameplay = __instance.IsGameplayScene();
+            if (hud != null)
+                hud.SetActive(gameplay);
+
+            if (!gameplay)
+                return;
+
+            Debug.Log("[HelperMod] Gameplay scene detected, spawning helper.");
+
+            if (helper == null)
             {
-                Debug.Log("[HelperMod] Gameplay scene detected, spawning helper.");
+                helper = new GameObject("HelperShade");
+                helper.transform.position = __instance.hero_ctrl.transform.position;
 
-                if (helper == null)
+                var sc = helper.AddComponent<ShadeController>();
+                sc.Init(__instance.hero_ctrl.transform);
+
+                var sr = helper.AddComponent<SpriteRenderer>();
+                sr.sprite = GenerateDebugSprite();
+                sr.color = Color.black;
+
+                var hornetRenderer = __instance.hero_ctrl.GetComponentInChildren<SpriteRenderer>();
+                if (hornetRenderer != null)
                 {
-                    helper = new GameObject("HelperShade");
-                    helper.transform.position = __instance.hero_ctrl.transform.position;
-
-                    var sc = helper.AddComponent<ShadeController>();
-                    sc.Init(__instance.hero_ctrl.transform);
-
-                    var sr = helper.AddComponent<SpriteRenderer>();
-                    sr.sprite = GenerateDebugSprite();
-                    sr.color = Color.black;
-
-                    var hornetRenderer = __instance.hero_ctrl.GetComponentInChildren<SpriteRenderer>();
-                    if (hornetRenderer != null)
-                    {
-                        sr.sortingLayerID = hornetRenderer.sortingLayerID;
-                        sr.sortingOrder = hornetRenderer.sortingOrder + 1; //Render layers are weird, anything behind hornets layer seems to vanish entirely
-                    }
-
-                    helper.AddComponent<ShadeController>();
+                    sr.sortingLayerID = hornetRenderer.sortingLayerID;
+                    sr.sortingOrder = hornetRenderer.sortingOrder + 1; //Render layers are weird, anything behind hornets layer seems to vanish entirely
                 }
 
-                if (hud == null)
-                {
-                    hud = new GameObject("KnightHUDRoot");
-                    var kh = hud.AddComponent<KnightHUD>();
-                    kh.Init(__instance.hero_ctrl);
-                }
+                helper.AddComponent<ShadeController>();
+            }
+
+            if (hud == null)
+            {
+                hud = new GameObject("KnightHUDRoot");
+                var kh = hud.AddComponent<KnightHUD>();
+                kh.Init(__instance.hero_ctrl);
+            }
+            else
+            {
+                hud.SetActive(true);
             }
         }
 
@@ -75,25 +104,14 @@ public class LegacyHelper : BaseUnityPlugin
         {
             DisableStartup(__instance);
         }
+    }
 
-        static void DisableStartup(GameManager gm)
+    [HarmonyPatch(typeof(GameManager), "Start")]
+    class GameManager_Start_Patch
+    {
+        static void Postfix(GameManager __instance)
         {
-            if (gm == null) return;
-            var t = gm.GetType();
-
-            string[] logoFlags = { "playTeamCherryLogo", "playLogo", "showTeamCherryLogo", "displayTeamCherryLogo", "teamCherryLogo" };
-            foreach (var n in logoFlags)
-            {
-                var f = t.GetField(n, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-                if (f != null && f.FieldType == typeof(bool)) f.SetValue(gm, false);
-            }
-
-            string[] saveFlags = { "playSaveReminder", "showSaveReminder", "displaySaveReminder", "saveReminder" };
-            foreach (var n in saveFlags)
-            {
-                var f = t.GetField(n, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-                if (f != null && f.FieldType == typeof(bool)) f.SetValue(gm, false);
-            }
+            DisableStartup(__instance);
         }
     }
 
@@ -661,6 +679,7 @@ public class LegacyHelper : BaseUnityPlugin
         private object heroController;
         private Image[] masks;
         private Image soulFill;
+        private Canvas canvas;
 
         public void Init(object hero)
         {
@@ -671,12 +690,22 @@ public class LegacyHelper : BaseUnityPlugin
         {
             DontDestroyOnLoad(gameObject);
 
-            var canvas = new GameObject("KnightHUDCanvas");
-            canvas.transform.SetParent(transform);
-            var c = canvas.AddComponent<Canvas>();
-            c.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.AddComponent<CanvasScaler>();
-            canvas.AddComponent<GraphicRaycaster>();
+            var canvasGO = new GameObject("KnightHUDCanvas");
+            canvasGO.transform.SetParent(transform);
+            canvas = canvasGO.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvasGO.AddComponent<CanvasScaler>();
+            canvasGO.AddComponent<GraphicRaycaster>();
+
+            var hornetHealth = FindHornetHealthRoot();
+            Vector2 anchorPos = new Vector2(20, -20);
+            Sprite maskSprite = null;
+            if (hornetHealth != null)
+            {
+                anchorPos = hornetHealth.anchoredPosition;
+                var refMask = hornetHealth.GetComponentsInChildren<Image>(true).FirstOrDefault(i => i.name.ToLower().StartsWith("mask"));
+                if (refMask != null) maskSprite = refMask.sprite;
+            }
 
             // Health masks
             var healthRoot = new GameObject("HealthRoot");
@@ -684,14 +713,14 @@ public class LegacyHelper : BaseUnityPlugin
             var hr = healthRoot.AddComponent<RectTransform>();
             hr.anchorMin = hr.anchorMax = new Vector2(1, 1);
             hr.pivot = new Vector2(1, 1);
-            hr.anchoredPosition = new Vector2(-20, -20);
+            hr.anchoredPosition = new Vector2(-anchorPos.x, anchorPos.y);
 
             masks = new Image[10];
             for (int i = 0; i < masks.Length; i++)
             {
                 var m = new GameObject("Mask" + i).AddComponent<Image>();
                 m.transform.SetParent(healthRoot.transform);
-                m.sprite = GenerateMaskSprite();
+                m.sprite = maskSprite != null ? maskSprite : GenerateMaskSprite();
                 var r = m.rectTransform;
                 r.anchorMin = r.anchorMax = new Vector2(1, 1);
                 r.pivot = new Vector2(1, 1);
@@ -706,7 +735,7 @@ public class LegacyHelper : BaseUnityPlugin
             var sr = soulRoot.AddComponent<RectTransform>();
             sr.anchorMin = sr.anchorMax = new Vector2(1, 1);
             sr.pivot = new Vector2(1, 1);
-            sr.anchoredPosition = new Vector2(-20, -50);
+            sr.anchoredPosition = new Vector2(-anchorPos.x, anchorPos.y - 30);
 
             var bg = new GameObject("SoulBG").AddComponent<Image>();
             bg.transform.SetParent(soulRoot.transform);
@@ -721,6 +750,18 @@ public class LegacyHelper : BaseUnityPlugin
             frt.pivot = new Vector2(0.5f, 0);
             frt.anchoredPosition = Vector2.zero;
             soulFill.color = Color.white;
+        }
+
+        private RectTransform FindHornetHealthRoot()
+        {
+            foreach (var img in Resources.FindObjectsOfTypeAll<Image>())
+            {
+                if (img == null) continue;
+                if (!img.name.ToLower().StartsWith("mask")) continue;
+                var parent = img.transform.parent as RectTransform;
+                if (parent != null) return parent;
+            }
+            return null;
         }
 
         void Update()
@@ -741,6 +782,8 @@ public class LegacyHelper : BaseUnityPlugin
 
             int health = GetInt(pd, new[] { "health", "currentHealth", "HP", "hp" });
             int maxHealth = GetInt(pd, new[] { "maxHealth", "maxHP" });
+            health = (health + 1) / 2;
+            maxHealth = (maxHealth + 1) / 2;
             float soul = GetFloat(pd, new[] { "soul", "SOUL", "mpCharge", "MPCharge" });
             float maxSoul = GetFloat(pd, new[] { "maxSoul", "maxSOUL", "mpChargeMax", "MPChargeMax" });
 
