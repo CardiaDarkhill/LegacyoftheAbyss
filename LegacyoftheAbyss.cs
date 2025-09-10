@@ -149,15 +149,12 @@ public class LegacyHelper : BaseUnityPlugin
     {
         static void Prefix(StartManager __instance)
         {
-            var f = __instance.GetType().GetField("showIntroSequence", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (f != null)
-            {
-                f.SetValue(__instance, false);
-                Debug.Log("[HelperMod] Forced StartManager.showIntroSequence=false");
-            }
+            // ensure animator does not queue logo sequence
+            if (__instance.startManagerAnimator != null)
+                __instance.startManagerAnimator.SetBool("WillShowQuote", false);
         }
 
-        static void Postfix(ref IEnumerator __result)
+        static void Postfix(StartManager __instance, ref IEnumerator __result)
         {
             if (__result == null) return;
             var fields = __result.GetType().GetFields(BindingFlags.Instance | BindingFlags.NonPublic);
@@ -166,6 +163,8 @@ public class LegacyHelper : BaseUnityPlugin
                 if (f.FieldType == typeof(bool) && f.Name.Contains("showIntroSequence"))
                 {
                     f.SetValue(__result, false);
+                    if (__instance.startManagerAnimator != null)
+                        __instance.startManagerAnimator.Play("LoadingIcon", 0, 1f);
                     Debug.Log("[HelperMod] Skipping intro sequence");
                     break;
                 }
@@ -408,7 +407,7 @@ public class LegacyHelper : BaseUnityPlugin
             if (responder != null)
             {
                 var hitType = responder.GetType().Assembly.GetType("HitInstance");
-                var hit = CreateHitInstance(hitType, dmg);
+                var hit = CreateHitInstance(hitType, dmg, gameObject);
                 var m = responder.GetType().GetMethod("Hit");
                 if (hit != null && m != null)
                 {
@@ -438,7 +437,7 @@ public class LegacyHelper : BaseUnityPlugin
                     var pars = m.GetParameters();
                     if (pars.Length != 1) continue;
 
-                    var hit = CreateHitInstance(pars[0].ParameterType, dmg);
+                    var hit = CreateHitInstance(pars[0].ParameterType, dmg, gameObject);
                     if (hit != null)
                     {
                         try
@@ -634,7 +633,7 @@ public class LegacyHelper : BaseUnityPlugin
 
                         if (pt.Name == "HitInstance" || pt.FullName == "HitInstance")
                         {
-                            args[i] = CreateHitInstance(pt, 0);
+                            args[i] = CreateHitInstance(pt, 0, gameObject);
                         }
                         else if (p.HasDefaultValue)
                         {
@@ -676,7 +675,7 @@ public class LegacyHelper : BaseUnityPlugin
 
                         if (pt.Name == "HitInstance" || pt.FullName == "HitInstance")
                         {
-                            args[i] = CreateHitInstance(pt, 0);
+                            args[i] = CreateHitInstance(pt, 0, gameObject);
                         }
                         else if (p.HasDefaultValue)
                         {
@@ -695,7 +694,7 @@ public class LegacyHelper : BaseUnityPlugin
             hm.gameObject.SendMessage("OnHit", SendMessageOptions.DontRequireReceiver);
         }
 
-        private object CreateHitInstance(System.Type hitType, int dmg)
+        private object CreateHitInstance(System.Type hitType, int dmg, GameObject source)
         {
             object hit = null;
             try { hit = System.Activator.CreateInstance(hitType); } catch { return null; }
@@ -716,19 +715,26 @@ public class LegacyHelper : BaseUnityPlugin
                 }
             }
 
-            // Damage source
-            var srcEnum = hitType.Assembly.GetType("DamageSource") ?? hitType.Assembly.GetType("HitSource");
-            if (srcEnum != null)
+            // Set source object
+            var srcF = hitType.GetField("Source") ?? hitType.GetField("source");
+            if (srcF != null) srcF.SetValue(hit, source);
+            var srcP = hitType.GetProperty("Source") ?? hitType.GetProperty("source");
+            if (srcP != null && srcP.CanWrite) srcP.SetValue(hit, source, null);
+
+            // Damage source enum if present
+            var dmgSrcF = hitType.GetField("DamageSource") ?? hitType.GetField("damageSource") ?? hitType.GetField("HitSource");
+            if (dmgSrcF != null)
             {
-                object src = null;
-                try { src = System.Enum.Parse(srcEnum, "Spell"); } catch { }
-                if (src != null)
-                {
-                    var sf = hitType.GetField("Source") ?? hitType.GetField("source") ?? hitType.GetField("DamageSource") ?? hitType.GetField("damageSource");
-                    if (sf != null) sf.SetValue(hit, src);
-                    var sp = hitType.GetProperty("Source") ?? hitType.GetProperty("source") ?? hitType.GetProperty("DamageSource") ?? hitType.GetProperty("damageSource");
-                    if (sp != null && sp.CanWrite) sp.SetValue(hit, src, null);
-                }
+                var enumType = dmgSrcF.FieldType;
+                object val = null; try { val = System.Enum.Parse(enumType, "Spell"); } catch { }
+                if (val != null) dmgSrcF.SetValue(hit, val);
+            }
+            var dmgSrcP = hitType.GetProperty("DamageSource") ?? hitType.GetProperty("damageSource") ?? hitType.GetProperty("HitSource");
+            if (dmgSrcP != null && dmgSrcP.CanWrite)
+            {
+                var enumType = dmgSrcP.PropertyType;
+                object val = null; try { val = System.Enum.Parse(enumType, "Spell"); } catch { }
+                if (val != null) dmgSrcP.SetValue(hit, val, null);
             }
 
             // ignoreEvasion
@@ -737,28 +743,21 @@ public class LegacyHelper : BaseUnityPlugin
             var ieP = hitType.GetProperty("ignoreEvasion") ?? hitType.GetProperty("IgnoreEvasion");
             if (ieP != null && ieP.CanWrite) ieP.SetValue(hit, false, null);
 
-            // Attack direction (default)
-            var dirF = hitType.GetField("AttackDirection") ?? hitType.GetField("attackDirection") ?? hitType.GetField("Direction") ?? hitType.GetField("direction");
-            if (dirF != null)
-            {
-                if (dirF.FieldType == typeof(Vector3))
-                    dirF.SetValue(hit, Vector3.right);
-                else if (dirF.FieldType == typeof(Vector2))
-                    dirF.SetValue(hit, Vector2.right);
-            }
-            var dirP = hitType.GetProperty("AttackDirection") ?? hitType.GetProperty("attackDirection") ?? hitType.GetProperty("Direction") ?? hitType.GetProperty("direction");
-            if (dirP != null && dirP.CanWrite)
-            {
-                if (dirP.PropertyType == typeof(Vector3))
-                    dirP.SetValue(hit, Vector3.right, null);
-                else if (dirP.PropertyType == typeof(Vector2))
-                    dirP.SetValue(hit, Vector2.right, null);
-            }
+            // Direction and magnitude
+            var dirF = hitType.GetField("Direction") ?? hitType.GetField("direction");
+            if (dirF != null) dirF.SetValue(hit, 0f);
+            var dirP = hitType.GetProperty("Direction") ?? hitType.GetProperty("direction");
+            if (dirP != null && dirP.CanWrite) dirP.SetValue(hit, 0f, null);
 
-            // Damage
-            var dmgF = hitType.GetField("Damage") ?? hitType.GetField("damage");
+            var magF = hitType.GetField("MagnitudeMultiplier") ?? hitType.GetField("magnitudeMultiplier");
+            if (magF != null) magF.SetValue(hit, 1f);
+            var magP = hitType.GetProperty("MagnitudeMultiplier") ?? hitType.GetProperty("magnitudeMultiplier");
+            if (magP != null && magP.CanWrite) magP.SetValue(hit, 1f, null);
+
+            // Damage amount
+            var dmgF = hitType.GetField("DamageDealt") ?? hitType.GetField("damageDealt");
             if (dmgF != null) dmgF.SetValue(hit, dmg);
-            var dmgP = hitType.GetProperty("Damage") ?? hitType.GetProperty("damage");
+            var dmgP = hitType.GetProperty("DamageDealt") ?? hitType.GetProperty("damageDealt");
             if (dmgP != null && dmgP.CanWrite) dmgP.SetValue(hit, dmg, null);
 
             return hit;
