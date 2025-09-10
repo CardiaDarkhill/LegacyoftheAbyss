@@ -287,7 +287,7 @@ public class LegacyHelper : BaseUnityPlugin
             }
 
             var sp = proj.AddComponent<ShadeProjectile>();
-            sp.damage = 1;
+            sp.damage = 20;
             sp.hornetRoot = hornetTransform;
             sp.lifeSeconds = 1.5f;
         }
@@ -369,7 +369,7 @@ public class LegacyHelper : BaseUnityPlugin
     }
     public class ShadeProjectile : MonoBehaviour
     {
-        public int damage = 1;
+        public int damage = 20;
         public Transform hornetRoot;
         public float lifeSeconds = 1.5f;
 
