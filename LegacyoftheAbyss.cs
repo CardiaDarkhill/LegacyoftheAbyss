@@ -9,6 +9,7 @@ public class LegacyHelper : BaseUnityPlugin
 {
     private static GameObject helper;
     private static GameObject hud;
+    private static bool loggedStartupFields;
 
     void Awake()
     {
@@ -22,9 +23,17 @@ public class LegacyHelper : BaseUnityPlugin
         if (gm == null) return;
         var t = gm.GetType();
         var fields = t.GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+        bool log = !loggedStartupFields;
+        loggedStartupFields = true;
         foreach (var f in fields)
         {
             if (f.FieldType != typeof(bool)) continue;
+            if (log)
+            {
+                bool val = false;
+                try { val = (bool)f.GetValue(gm); } catch { }
+                Debug.Log($"[HelperMod] GameManager bool field {f.Name}={val}");
+            }
             var name = f.Name.ToLower();
             if (name.Contains("logo") || (name.Contains("save") && name.Contains("reminder")))
             {
@@ -639,14 +648,15 @@ public class LegacyHelper : BaseUnityPlugin
             var atkTypes = hitType.Assembly.GetType("AttackTypes");
             if (atkTypes != null)
             {
-                object generic = null;
-                try { generic = System.Enum.Parse(atkTypes, "Generic"); } catch { }
-                if (generic != null)
+                object atk = null;
+                try { atk = System.Enum.Parse(atkTypes, "Spell"); } catch { }
+                if (atk == null) { try { atk = System.Enum.Parse(atkTypes, "Generic"); } catch { } }
+                if (atk != null)
                 {
                     var f = hitType.GetField("AttackType") ?? hitType.GetField("attackType");
-                    if (f != null) f.SetValue(hit, generic);
+                    if (f != null) f.SetValue(hit, atk);
                     var p = hitType.GetProperty("AttackType") ?? hitType.GetProperty("attackType");
-                    if (p != null && p.CanWrite) p.SetValue(hit, generic, null);
+                    if (p != null && p.CanWrite) p.SetValue(hit, atk, null);
                 }
             }
 
@@ -792,9 +802,16 @@ public class LegacyHelper : BaseUnityPlugin
 
         private RectTransform FindHornetHealthRoot()
         {
-            foreach (var img in Resources.FindObjectsOfTypeAll<Image>())
+            var imgs = Resources.FindObjectsOfTypeAll<Image>();
+            int i = 0;
+            foreach (var img in imgs)
             {
                 if (img == null) continue;
+                if (i < 100)
+                {
+                    Debug.Log($"[HelperMod] Image[{i}] '{img.name}' path='{GetPath(img.transform)}' active={img.gameObject.activeInHierarchy}");
+                }
+                i++;
                 if (!img.name.ToLower().StartsWith("mask")) continue;
                 var parent = img.transform.parent as RectTransform;
                 if (parent != null)
@@ -804,8 +821,34 @@ public class LegacyHelper : BaseUnityPlugin
                     return parent;
                 }
             }
+
+            var srs = Resources.FindObjectsOfTypeAll<SpriteRenderer>();
+            i = 0;
+            foreach (var sr in srs)
+            {
+                if (sr == null) continue;
+                if (i < 100)
+                {
+                    Debug.Log($"[HelperMod] SpriteRenderer[{i}] '{sr.name}' path='{GetPath(sr.transform)}' sprite={sr.sprite?.name}");
+                }
+                i++;
+            }
+            Debug.Log($"[HelperMod] Enumerated {imgs.Length} Images and {srs.Length} SpriteRenderers.");
             Debug.Log("[HelperMod] Hornet health UI root not located.");
             return null;
+        }
+
+        private string GetPath(Transform t)
+        {
+            if (t == null) return "";
+            var names = new System.Collections.Generic.List<string>();
+            while (t != null)
+            {
+                names.Add(t.name);
+                t = t.parent;
+            }
+            names.Reverse();
+            return string.Join("/", names);
         }
 
         void Update()
