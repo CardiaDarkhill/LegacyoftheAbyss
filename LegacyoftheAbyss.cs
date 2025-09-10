@@ -11,6 +11,7 @@ public class LegacyHelper : BaseUnityPlugin
 {
     private static GameObject helper;
     private static bool loggedStartupFields;
+    private static SimpleHUD hud;
 
     void Awake()
     {
@@ -96,6 +97,14 @@ public class LegacyHelper : BaseUnityPlugin
                     sr.sortingLayerID = hornetRenderer.sortingLayerID;
                     sr.sortingOrder = hornetRenderer.sortingOrder + 1; //Render layers are weird, anything behind hornets layer seems to vanish entirely
                 }
+            }
+
+            if (hud == null)
+            {
+                var hudGO = new GameObject("SimpleHUD");
+                GameObject.DontDestroyOnLoad(hudGO);
+                hud = hudGO.AddComponent<SimpleHUD>();
+                hud.Init(__instance.playerData);
             }
         }
 
@@ -240,6 +249,8 @@ public class LegacyHelper : BaseUnityPlugin
             var proj = new GameObject("ShadeProjectile");
             proj.transform.position = transform.position + (Vector3)new Vector2(muzzleOffset.x * facing, muzzleOffset.y);
             proj.tag = "Hero Spell";
+            int atkLayer = LayerMask.NameToLayer("Hero Attack");
+            if (atkLayer >= 0) proj.layer = atkLayer;
 
             var psr = proj.AddComponent<SpriteRenderer>();
             psr.sprite = MakeDotSprite();
