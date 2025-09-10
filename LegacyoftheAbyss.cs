@@ -386,18 +386,20 @@ public class LegacyHelper : BaseUnityPlugin
                         if (f.FieldType == typeof(int))
                         {
                             int hp = (int)f.GetValue(hm);
-                            int newHp = Mathf.Max(0, hp - damage);
+                            int newHp = Mathf.Max(0, hp - dmg);
                             f.SetValue(hm, newHp);
                             if (hp != newHp) Debug.Log($"[HelperMod] HM.{fname}: {hp}→{newHp}");
+                            TriggerHitEffects(hm);
                             TryCallDeathIfZero(hm, newHp);
                             return true;
                         }
                         else
                         {
                             float hp = (float)f.GetValue(hm);
-                            float newHp = Mathf.Max(0f, hp - damage);
+                            float newHp = Mathf.Max(0f, hp - dmg);
                             f.SetValue(hm, newHp);
                             if (Mathf.Abs(hp - newHp) > 0.001f) Debug.Log($"[HelperMod] HM.{fname}: {hp}→{newHp}");
+                            TriggerHitEffects(hm);
                             TryCallDeathIfZero(hm, newHp <= 0.001f ? 0 : 1);
                             return true;
                         }
@@ -416,18 +418,20 @@ public class LegacyHelper : BaseUnityPlugin
                         if (p.PropertyType == typeof(int))
                         {
                             int hp = (int)p.GetValue(hm, null);
-                            int newHp = Mathf.Max(0, hp - damage);
+                            int newHp = Mathf.Max(0, hp - dmg);
                             p.SetValue(hm, newHp, null);
                             if (hp != newHp) Debug.Log($"[HelperMod] HM.{pname}: {hp}→{newHp}");
+                            TriggerHitEffects(hm);
                             TryCallDeathIfZero(hm, newHp);
                             return true;
                         }
                         else if (p.PropertyType == typeof(float))
                         {
                             float hp = (float)p.GetValue(hm, null);
-                            float newHp = Mathf.Max(0f, hp - damage);
+                            float newHp = Mathf.Max(0f, hp - dmg);
                             p.SetValue(hm, newHp, null);
                             if (Mathf.Abs(hp - newHp) > 0.001f) Debug.Log($"[HelperMod] HM.{pname}: {hp}→{newHp}");
+                            TriggerHitEffects(hm);
                             TryCallDeathIfZero(hm, newHp <= 0.001f ? 0 : 1);
                             return true;
                         }
@@ -478,8 +482,47 @@ public class LegacyHelper : BaseUnityPlugin
 
             // Fall back to old behaviour if nothing matched
             var go = hm.gameObject;
-            go.SendMessage("OnHit", SendMessageOptions.DontRequireReceiver);
             go.SendMessage("SpawnDeath", SendMessageOptions.DontRequireReceiver);
+        }
+
+        private void TriggerHitEffects(Component hm)
+        {
+            var t = hm.GetType();
+            var methods = t.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+            foreach (var nm in new[] { "Hit", "OnHit", "TakeDamage" })
+            {
+                foreach (var m in methods)
+                {
+                    if (m.Name != nm) continue;
+
+                    var pars = m.GetParameters();
+                    object[] args = new object[pars.Length];
+
+                    for (int i = 0; i < pars.Length; i++)
+                    {
+                        var p = pars[i];
+                        var pt = p.ParameterType;
+
+                        if (pt.Name == "HitInstance" || pt.FullName == "HitInstance")
+                        {
+                            args[i] = CreateHitInstance(pt);
+                        }
+                        else if (p.HasDefaultValue)
+                        {
+                            args[i] = p.DefaultValue;
+                        }
+                        else
+                        {
+                            args[i] = GetDefault(pt);
+                        }
+                    }
+
+                    try { m.Invoke(hm, args); return; } catch { }
+                }
+            }
+
+            hm.gameObject.SendMessage("OnHit", SendMessageOptions.DontRequireReceiver);
         }
 
         private object CreateHitInstance(System.Type hitType)
