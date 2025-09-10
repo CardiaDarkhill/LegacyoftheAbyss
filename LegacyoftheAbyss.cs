@@ -369,8 +369,8 @@ public class LegacyHelper : BaseUnityPlugin
 
             var rb = GetComponent<Rigidbody2D>();
             float angle = rb != null
-                ? (rb.linearVelocity.x > 0f ? 180f : 0f)
-                : (other.transform.position.x > transform.position.x ? 180f : 0f);
+                ? (rb.linearVelocity.x > 0f ? 0f : 180f)
+                : (other.transform.position.x > transform.position.x ? 0f : 180f);
 
             var hit = new HitInstance
             {
@@ -383,13 +383,7 @@ public class LegacyHelper : BaseUnityPlugin
                 IsFirstHit = true
             };
 
-            var responder = other.GetComponentInParent<IHitResponder>();
-            if (responder != null)
-                responder.Hit(hit);
-
-            var hm = other.GetComponentInParent<HealthManager>();
-            if (hm != null)
-                hm.Hit(hit);
+            HitTaker.Hit(other.gameObject, hit);
 
             Destroy(gameObject);
         }
