@@ -54,15 +54,20 @@ public class LegacyHelper : BaseUnityPlugin
     private static void DisableStartupObjects(Scene scene)
     {
         foreach (var go in scene.GetRootGameObjects())
+            DisableStartupRecursive(go);
+    }
+
+    private static void DisableStartupRecursive(GameObject go)
+    {
+        var lname = go.name.ToLower();
+        if (lname.Contains("team") && lname.Contains("cherry") ||
+            (lname.Contains("save") && lname.Contains("reminder")))
         {
-            var lname = go.name.ToLower();
-            if (lname.Contains("team") && lname.Contains("cherry") ||
-                (lname.Contains("save") && lname.Contains("reminder")))
-            {
-                go.SetActive(false);
-                Debug.Log($"[HelperMod] Disabled startup object {go.name}");
-            }
+            go.SetActive(false);
+            Debug.Log($"[HelperMod] Disabled startup object {go.name}");
         }
+        foreach (Transform child in go.transform)
+            DisableStartupRecursive(child.gameObject);
     }
 
     [HarmonyPatch(typeof(GameManager), "BeginScene")]
@@ -175,12 +180,14 @@ public class LegacyHelper : BaseUnityPlugin
 
         public float projectileSpeed = 22f;
         public float fireCooldown = 0.25f;
+        public float nailCooldown = 0.3f;
         public Vector2 muzzleOffset = new Vector2(0.9f, 0.0f); // spawn slightly in front
 
         private Transform hornetTransform;
         private float fireTimer;
         private SpriteRenderer sr;
         private int facing = 1; // 1 = right, -1 = left
+        private float nailTimer;
         private const KeyCode FireKey = KeyCode.Space;
 
         public void Init(Transform hornet) { hornetTransform = hornet; }
@@ -206,6 +213,7 @@ public class LegacyHelper : BaseUnityPlugin
 
             HandleMovementAndFacing();
             HandleFire();
+            HandleNailAttack();
 
             if (Input.GetKeyDown(KeyCode.F9))
             DumpNearestEnemyHealthManager();
@@ -244,6 +252,31 @@ public class LegacyHelper : BaseUnityPlugin
             SpawnProjectile(dir);
         }
 
+        private void HandleNailAttack()
+        {
+            nailTimer -= Time.deltaTime;
+            if (!Input.GetMouseButtonDown(0) || nailTimer > 0f) return;
+            nailTimer = nailCooldown;
+            PerformNailSlash();
+        }
+
+        private void PerformNailSlash()
+        {
+            var hc = HeroController.instance;
+            if (hc == null || hc.NormalSlashObject == null) return;
+
+            var slash = GameObject.Instantiate(hc.NormalSlashObject, transform.position, Quaternion.identity);
+            slash.transform.SetParent(transform, true);
+
+            var nailSlash = slash.GetComponent<NailSlash>();
+            if (nailSlash != null)
+            {
+                var f = typeof(NailAttackBase).GetField("hc", BindingFlags.Instance | BindingFlags.NonPublic);
+                f?.SetValue(nailSlash, hc);
+                nailSlash.StartSlash();
+            }
+        }
+
         private void SpawnProjectile(Vector2 dir)
         {
             var proj = new GameObject("ShadeProjectile");
@@ -262,7 +295,7 @@ public class LegacyHelper : BaseUnityPlugin
             }
 
             var col = proj.AddComponent<CircleCollider2D>();
-            col.isTrigger = true;
+            col.isTrigger = false;
 
             // ignore collisions with other ShadeProjectiles
              var others = Object.FindObjectsByType<ShadeProjectile>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
@@ -373,15 +406,20 @@ public class LegacyHelper : BaseUnityPlugin
 
         void Start() => Destroy(gameObject, lifeSeconds);
 
-        void OnTriggerEnter2D(Collider2D other)
+        void OnTriggerEnter2D(Collider2D other) => HandleHit(other);
+
+        void OnCollisionEnter2D(Collision2D collision) => HandleHit(collision.collider);
+
+        private void HandleHit(Collider2D other)
         {
+            if (other == null) return;
             if (hornetRoot != null && other.transform.IsChildOf(hornetRoot)) return;
             if (other.transform == transform || other.transform.IsChildOf(transform)) return;
 
             var rb = GetComponent<Rigidbody2D>();
-            float angle = rb != null
-                ? (rb.linearVelocity.x > 0f ? 0f : 180f)
-                : (other.transform.position.x > transform.position.x ? 0f : 180f);
+            Vector2 vel = rb ? rb.linearVelocity : (other.transform.position - transform.position);
+            float angle = Mathf.Atan2(vel.y, vel.x) * Mathf.Rad2Deg;
+            if (angle < 0f) angle += 360f;
 
             var hit = new HitInstance
             {
