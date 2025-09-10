@@ -379,11 +379,16 @@ public class LegacyHelper : BaseUnityPlugin
                 DamageDealt = damage,
                 Direction = angle,
                 MagnitudeMultiplier = 1f,
+                Multiplier = 1f,
                 IsHeroDamage = true,
                 IsFirstHit = true
             };
 
             HitTaker.Hit(other.gameObject, hit);
+            if (HitTaker.TryGetHealthManager(other.gameObject, out var hm))
+            {
+                hm.Hit(hit);
+            }
 
             Destroy(gameObject);
         }
