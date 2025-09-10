@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "E:\\SteamProgram\\steamapps\\common\\Hollow Knight Silksong\\bepinex\\plugins\\legacyoftheabyss\\LegacyoftheAbyss.csproj": {}
+    "E:\\SteamProgram\\steamapps\\common\\hollow knight silksong\\bepinex\\plugins\\legacyoftheabyss\\LegacyoftheAbyss.csproj": {}
   },
   "projects": {
-    "E:\\SteamProgram\\steamapps\\common\\Hollow Knight Silksong\\bepinex\\plugins\\legacyoftheabyss\\LegacyoftheAbyss.csproj": {
+    "E:\\SteamProgram\\steamapps\\common\\hollow knight silksong\\bepinex\\plugins\\legacyoftheabyss\\LegacyoftheAbyss.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "E:\\SteamProgram\\steamapps\\common\\Hollow Knight Silksong\\bepinex\\plugins\\legacyoftheabyss\\LegacyoftheAbyss.csproj",
+        "projectUniqueName": "E:\\SteamProgram\\steamapps\\common\\hollow knight silksong\\bepinex\\plugins\\legacyoftheabyss\\LegacyoftheAbyss.csproj",
         "projectName": "LegacyoftheAbyss",
-        "projectPath": "E:\\SteamProgram\\steamapps\\common\\Hollow Knight Silksong\\bepinex\\plugins\\legacyoftheabyss\\LegacyoftheAbyss.csproj",
+        "projectPath": "E:\\SteamProgram\\steamapps\\common\\hollow knight silksong\\bepinex\\plugins\\legacyoftheabyss\\LegacyoftheAbyss.csproj",
         "packagesPath": "C:\\Users\\Liam\\.nuget\\packages\\",
-        "outputPath": "E:\\SteamProgram\\steamapps\\common\\Hollow Knight Silksong\\bepinex\\plugins\\legacyoftheabyss\\obj\\",
+        "outputPath": "E:\\SteamProgram\\steamapps\\common\\hollow knight silksong\\bepinex\\plugins\\legacyoftheabyss\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
