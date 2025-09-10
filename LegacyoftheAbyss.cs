@@ -3,6 +3,8 @@ using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
 using System.Linq;
+using System.Collections;
+using System.Reflection;
 
 [BepInPlugin("com.legacyoftheabyss.helper", "Legacy of the Abyss - Helper", "0.1.0")]
 public class LegacyHelper : BaseUnityPlugin
@@ -139,6 +141,25 @@ public class LegacyHelper : BaseUnityPlugin
         {
             DisableStartup(__instance);
             DisableStartupObjects();
+        }
+    }
+
+    [HarmonyPatch(typeof(StartManager), "Start")]
+    class StartManager_Start_Enumerator_Patch
+    {
+        static void Postfix(ref IEnumerator __result)
+        {
+            if (__result == null) return;
+            var fields = __result.GetType().GetFields(BindingFlags.Instance | BindingFlags.NonPublic);
+            foreach (var f in fields)
+            {
+                if (f.FieldType == typeof(bool) && f.Name.Contains("showIntroSequence"))
+                {
+                    f.SetValue(__result, false);
+                    Debug.Log("[HelperMod] Skipping intro sequence");
+                    break;
+                }
+            }
         }
     }
 
