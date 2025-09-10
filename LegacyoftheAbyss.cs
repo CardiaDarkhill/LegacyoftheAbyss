@@ -2,6 +2,7 @@ using BepInEx;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 using System.Linq;
 using System.Collections;
 using System.Reflection;
@@ -18,6 +19,8 @@ public class LegacyHelper : BaseUnityPlugin
         Logger.LogInfo("Patching GameManager.BeginScene...");
         Harmony harmony = new Harmony("com.legacyoftheabyss.helper");
         harmony.PatchAll();
+        SceneManager.sceneLoaded += (s, m) => DisableStartupObjects(s);
+        DisableStartupObjects(SceneManager.GetActiveScene());
     }
 
     internal static void DisableStartup(GameManager gm)
@@ -49,9 +52,8 @@ public class LegacyHelper : BaseUnityPlugin
         }
     }
 
-    private static void DisableStartupObjects()
+    private static void DisableStartupObjects(Scene scene)
     {
-        var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
         foreach (var go in scene.GetRootGameObjects())
         {
             var lname = go.name.ToLower();
@@ -70,7 +72,7 @@ public class LegacyHelper : BaseUnityPlugin
         static void Postfix(GameManager __instance)
         {
             DisableStartup(__instance);
-            DisableStartupObjects();
+            DisableStartupObjects(SceneManager.GetActiveScene());
 
             bool gameplay = __instance.IsGameplayScene();
             if (hud != null)
@@ -130,7 +132,7 @@ public class LegacyHelper : BaseUnityPlugin
         static void Postfix(GameManager __instance)
         {
             DisableStartup(__instance);
-            DisableStartupObjects();
+            DisableStartupObjects(SceneManager.GetActiveScene());
         }
     }
 
@@ -140,7 +142,7 @@ public class LegacyHelper : BaseUnityPlugin
         static void Postfix(GameManager __instance)
         {
             DisableStartup(__instance);
-            DisableStartupObjects();
+            DisableStartupObjects(SceneManager.GetActiveScene());
         }
     }
 
@@ -392,6 +394,26 @@ public class LegacyHelper : BaseUnityPlugin
 
         private bool TryApplyDamage(GameObject target, int dmg)
         {
+            // First try a component implementing IHitResponder so enemies react properly
+            var responder = FindComponentWithInterface(target, "IHitResponder");
+            if (responder != null)
+            {
+                var hitType = responder.GetType().Assembly.GetType("HitInstance");
+                var hit = CreateHitInstance(hitType, dmg);
+                var m = responder.GetType().GetMethod("Hit");
+                if (hit != null && m != null)
+                {
+                    try
+                    {
+                        m.Invoke(responder, new object[] { hit });
+                        TriggerHitEffects(responder);
+                        Debug.Log("[HelperMod] Damage via IHitResponder.Hit");
+                        return true;
+                    }
+                    catch { }
+                }
+            }
+
             // Prefer a HealthManager on the same GO
             var hm = FindComponentByName(target, "HealthManager");
             if (hm != null)
@@ -771,6 +793,15 @@ public class LegacyHelper : BaseUnityPlugin
             return null;
         }
 
+        private Component FindComponentWithInterface(GameObject go, string interfaceName)
+        {
+            var comps = go.GetComponents<MonoBehaviour>();
+            foreach (var c in comps)
+                if (c != null && c.GetType().GetInterfaces().Any(i => i.Name == interfaceName))
+                    return c;
+            return null;
+        }
+
         private object GetDefault(System.Type t) => t.IsValueType ? System.Activator.CreateInstance(t) : null;
     }
 
@@ -803,35 +834,43 @@ public class LegacyHelper : BaseUnityPlugin
 
             var hornetHealth = FindHornetHealthRoot();
             Vector2 anchorPos = new Vector2(20, -20);
-            Sprite maskSprite = null;
+            if (hornetHealth != null)
+                anchorPos = hornetHealth.anchoredPosition;
+
+            GameObject healthRoot;
             if (hornetHealth != null)
             {
-                anchorPos = hornetHealth.anchoredPosition;
-                var refMask = hornetHealth.GetComponentsInChildren<Image>(true).FirstOrDefault(i => i.name.ToLower().StartsWith("mask"));
-                if (refMask != null) maskSprite = refMask.sprite;
+                healthRoot = Instantiate(hornetHealth.gameObject, canvas.transform);
+                var hr = healthRoot.GetComponent<RectTransform>();
+                hr.anchorMin = hr.anchorMax = new Vector2(1, 1);
+                hr.pivot = new Vector2(1, 1);
+                hr.anchoredPosition = new Vector2(-anchorPos.x, anchorPos.y);
+                masks = healthRoot.GetComponentsInChildren<Image>(true).Where(i => i.name.ToLower().StartsWith("mask")).ToArray();
+                Debug.Log($"[HelperMod] HUD cloned mask UI with {masks.Length} masks");
             }
-            Debug.Log($"[HelperMod] HUD anchor {anchorPos} maskSprite={(maskSprite != null ? maskSprite.name : "generated")}");
-
-            // Health masks
-            var healthRoot = new GameObject("HealthRoot");
-            healthRoot.transform.SetParent(canvas.transform);
-            var hr = healthRoot.AddComponent<RectTransform>();
-            hr.anchorMin = hr.anchorMax = new Vector2(1, 1);
-            hr.pivot = new Vector2(1, 1);
-            hr.anchoredPosition = new Vector2(-anchorPos.x, anchorPos.y);
-
-            masks = new Image[10];
-            for (int i = 0; i < masks.Length; i++)
+            else
             {
-                var m = new GameObject("Mask" + i).AddComponent<Image>();
-                m.transform.SetParent(healthRoot.transform);
-                m.sprite = maskSprite != null ? maskSprite : GenerateMaskSprite();
-                var r = m.rectTransform;
-                r.anchorMin = r.anchorMax = new Vector2(1, 1);
-                r.pivot = new Vector2(1, 1);
-                r.sizeDelta = new Vector2(20, 20);
-                r.anchoredPosition = new Vector2(-i * 22, 0);
-                masks[i] = m;
+                Debug.Log("[HelperMod] Hornet health UI not found, generating masks");
+                healthRoot = new GameObject("HealthRoot");
+                healthRoot.transform.SetParent(canvas.transform);
+                var hr = healthRoot.AddComponent<RectTransform>();
+                hr.anchorMin = hr.anchorMax = new Vector2(1, 1);
+                hr.pivot = new Vector2(1, 1);
+                hr.anchoredPosition = new Vector2(-anchorPos.x, anchorPos.y);
+
+                masks = new Image[10];
+                for (int i = 0; i < masks.Length; i++)
+                {
+                    var m = new GameObject("Mask" + i).AddComponent<Image>();
+                    m.transform.SetParent(healthRoot.transform);
+                    m.sprite = GenerateMaskSprite();
+                    var r = m.rectTransform;
+                    r.anchorMin = r.anchorMax = new Vector2(1, 1);
+                    r.pivot = new Vector2(1, 1);
+                    r.sizeDelta = new Vector2(20, 20);
+                    r.anchoredPosition = new Vector2(-i * 22, 0);
+                    masks[i] = m;
+                }
             }
 
             // Soul meter
