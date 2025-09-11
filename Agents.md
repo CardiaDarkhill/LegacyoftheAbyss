@@ -10,7 +10,7 @@
 
 ## Project Goals
 - The ultimate goal of this project is to create a mod that creates a shade companion for Hollow Knight: Silksong that assists the player in combat
-- This shade functions using the keyboard while the Hornet player uses the keyboard
+- This shade functions using the keyboard while the Hornet player uses the controller
 - Ultimately the plan is to use a tool like "Steam play anything together" to enable online co-op, though if a more elegent online solution can be found, that would be ideal
 - The shade is to be a powerful and helpful companion, that looks polished and appropriate for the environment, but ideally will both be fun to play and not totally break the game progression (Though some amount of that will be inevitable)
 
@@ -18,18 +18,18 @@
 ## To Do:
 - At time of writing the following features still need to be implemented:
 
-The shade should have a hitbox, which should allow it to be harmed by enemies and used by Hornet to "pogo" (Which should not damage the shade)
-The shades melee attack currently provides silk to Hornet, which it shouldn't do.
-Shade melee attack seems to heal it to full health for some reason, it shouldn't do this.
-When the shade collides with terrain hazards, such as those that would normally teleport hornet to the previous safe ground she was standing on, the shade should be teleported to Hornet.
+The shades hitbox should be able to be used by Hornet to "pogo" (Which should not damage the shade)
 The shade, when reduced to 0 life, should enter an inactive state, it can still move in this state but nothing else. It can be revived either by being near Hornet when she uses her Bind, or by Hornet dying or sitting at a bench.
 The shade still needs two additional spells, Descending Dark and Abyss Shriek.
 Each of the shades spells needs two versions, their "Soul" variant and "Abyss" varient, like in the first hollow knight game. They will unlock these are the same time that Hornet unlocks certain things.
 The shade needs a "Focus" ability, which lets it spend soul to heal, if Hornet is near the shade when it does this, she will also heal for the same amount.
-The shades spells and nail damage should scale with Hornets. (Nail deals the same as hornets, Abyss Shriek deals 4X, Descending Dark deals 3X and Shade Soul deals 2.5X)
+The shades spells and nail damage should scale with Hornets. (Nail deals the same as hornets, Abyss Shriek deals 4X, Descending Dark deals 3X and Shade Soul deals 2.5X, the "soul" variants of these spells should deal 30% less.)
 The shade needs its own sprite sheet/animations, currently it's just a black square. All of it's spells and attacks also need animations (Some of these can use assets and code already in Silksong, others will need assets taken from the first game).
 Sound effects need to be set up for all of the Shades attacks, spells and focus abilities.
 The shades "Leash" system is currently quite basic, it should pull the shade slowly toward hornet when it gets too far from her, when the shade gets very far from hornet, it should disable control and collision for the shade and pull it to hornet at a much faster speed. If for some reason even this isn't enough to get the Shade within an acceptable distance of Hornet within a few seconds, the shade should just be teleported to Hornet.
+There seems to be a bug that's causing hornet to instantly leave a zone when walking in from the right, immediately running back out the left side exit that she just entered from. This makes certain zone transitions impossible and needs to be fixed.
+The shades health and soul currently reset on each area transition, these should be persistant across zone transitions. The shade should only get a "free" heal from Hornet sitting at a bench.
+Currently when entering an area the shades starting position seems to be a bit random, the shade should appear in a zone about half a second after the player gains control of Hornet, spawning in exactly where she was when the player gained control of her.
 
 
 ## Testing:

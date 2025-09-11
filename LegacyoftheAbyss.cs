@@ -200,6 +200,10 @@ public class LegacyHelper : BaseUnityPlugin
 
         private SimpleHUD cachedHud;
 
+        // Basic hurt window to prevent instant re-hits from enemy attacks
+        private float hurtCooldown;
+        private const float HurtIFrameSeconds = 1.35f;
+
         public void Init(Transform hornet) { hornetTransform = hornet; }
 
         void Start()
@@ -248,6 +252,7 @@ public class LegacyHelper : BaseUnityPlugin
             if (hornetTransform == null) return;
 
             if (hazardCooldown > 0f) hazardCooldown = Mathf.Max(0f, hazardCooldown - Time.deltaTime);
+            if (hurtCooldown > 0f) hurtCooldown = Mathf.Max(0f, hurtCooldown - Time.deltaTime);
 
             HandleMovementAndFacing();
             HandleFire();
@@ -315,18 +320,6 @@ public class LegacyHelper : BaseUnityPlugin
             shadeSoul = Mathf.Max(0, shadeSoul - projectileSoulCost);
             PushSoulToHud();
             CheckHazardOverlap();
-            // Initialize Shade HP from PlayerData
-            try
-            {
-                var pd = GameManager.instance != null ? GameManager.instance.playerData : null;
-                if (pd != null)
-                {
-                    shadeMaxHP = Mathf.Max(1, (pd.maxHealth + 1) / 2);
-                    shadeHP = Mathf.Clamp((pd.health + 1) / 2, 0, shadeMaxHP);
-                    PushShadeStatsToHud();
-                }
-            }
-            catch { }
 
             Vector2 dir = new Vector2(facing, 0f);
             SpawnProjectile(dir);
@@ -524,44 +517,48 @@ public class LegacyHelper : BaseUnityPlugin
                     var onlyEnemiesField = typeof(DamageEnemies).GetField("onlyDamageEnemies", BindingFlags.Instance | BindingFlags.NonPublic);
                     var setOnlyEnemies = typeof(DamageEnemies).GetMethod("setOnlyDamageEnemies", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                     var silkGenField = typeof(DamageEnemies).GetField("silkGeneration", BindingFlags.Instance | BindingFlags.NonPublic);
+                    var doesNotGenSilkField = typeof(DamageEnemies).GetField("doesNotGenerateSilk", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                    var attackTypeField = typeof(DamageEnemies).GetField("attackType", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                     int patched = 0;
-                    foreach (var d in damagers)
-                    {
-                        if (!d) continue;
-                        try { srcField?.SetValue(d, false); } catch { }
-                        try { ihField?.SetValue(d, false); } catch { }
-                        try { isNailAttackField?.SetValue(d, false); } catch { }
-                        // Force slash direction based on Shade input/facing
-                        try
+                        foreach (var d in damagers)
                         {
-                            float dir = 0f;
-                            if (v > 0.35f) dir = 90f; // up
-                            else if (v < -0.35f) dir = 270f; // down
-                            else dir = (facing >= 0 ? 0f : 180f); // side (right=0, left=180)
-                            dirField?.SetValue(d, dir);
-                            moveDirField?.SetValue(d, false);
-                            flipBehindField?.SetValue(d, false);
-                            fwdVecField?.SetValue(d, Vector2.zero);
-                        }
-                        catch { }
-                        // Ensure terrain can be hit
-                        try
-                        {
-                            if (setOnlyEnemies != null) setOnlyEnemies.Invoke(d, new object[] { false });
-                            else onlyEnemiesField?.SetValue(d, false);
-                        }
-                        catch { }
-                        // Explicitly prevent any silk generation flags
-                        try {
-                            if (silkGenField != null)
+                            if (!d) continue;
+                            try { srcField?.SetValue(d, false); } catch { }
+                            try { ihField?.SetValue(d, false); } catch { }
+                            try { isNailAttackField?.SetValue(d, false); } catch { }
+                            try { attackTypeField?.SetValue(d, AttackTypes.Generic); } catch { }
+                            // Force slash direction based on Shade input/facing
+                            try
                             {
-                                var enumType = silkGenField.FieldType;
-                                var noneVal = System.Enum.ToObject(enumType, 0); // None is usually 0
-                                silkGenField.SetValue(d, noneVal);
+                                float dir = 0f;
+                                if (v > 0.35f) dir = 90f; // up
+                                else if (v < -0.35f) dir = 270f; // down
+                                else dir = (facing >= 0 ? 0f : 180f); // side (right=0, left=180)
+                                dirField?.SetValue(d, dir);
+                                moveDirField?.SetValue(d, false);
+                                flipBehindField?.SetValue(d, false);
+                                fwdVecField?.SetValue(d, Vector2.zero);
                             }
-                        } catch { }
-                        patched++;
-                    }
+                            catch { }
+                            // Ensure terrain can be hit
+                            try
+                            {
+                                if (setOnlyEnemies != null) setOnlyEnemies.Invoke(d, new object[] { false });
+                                else onlyEnemiesField?.SetValue(d, false);
+                            }
+                            catch { }
+                            // Explicitly prevent any silk generation flags
+                            try {
+                                if (silkGenField != null)
+                                {
+                                    var enumType = silkGenField.FieldType;
+                                    var noneVal = System.Enum.ToObject(enumType, 0); // None is usually 0
+                                    silkGenField.SetValue(d, noneVal);
+                                }
+                            } catch { }
+                            try { doesNotGenSilkField?.SetValue(d, true); } catch { }
+                            patched++;
+                        }
                     Debug.Log($"[HelperMod] PerformNailSlash: Patched DamageEnemies hero flags on {patched} component(s).");
                 }
                 catch { }
@@ -653,19 +650,8 @@ public class LegacyHelper : BaseUnityPlugin
                             Debug.Log("[HelperMod] DamagedEnemy: +11 soul.");
                             shadeSoul = Mathf.Min(shadeSoulMax, shadeSoul + soulGainPerHit);
                             PushSoulToHud();
-            CheckHazardOverlap();
-            // Initialize Shade HP from PlayerData
-            try
-            {
-                var pd = GameManager.instance != null ? GameManager.instance.playerData : null;
-                if (pd != null)
-                {
-                    shadeMaxHP = Mathf.Max(1, (pd.maxHealth + 1) / 2);
-                    shadeHP = Mathf.Clamp((pd.health + 1) / 2, 0, shadeMaxHP);
-                    PushShadeStatsToHud();
-                }
-            }
-            catch { }
+                            // Do not modify shade HP on melee hits
+                            CheckHazardOverlap();
                         };
                         primaryDamager.DamagedEnemy += onDamaged;
 
@@ -715,6 +701,9 @@ public class LegacyHelper : BaseUnityPlugin
                 var onlyEnemiesField = typeof(DamageEnemies).GetField("onlyDamageEnemies", BindingFlags.Instance | BindingFlags.NonPublic);
                 var setOnlyEnemies = typeof(DamageEnemies).GetMethod("setOnlyDamageEnemies", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                 var ignoreNailPosField = typeof(DamageEnemies).GetField("ignoreNailPosition", BindingFlags.Instance | BindingFlags.NonPublic);
+                var silkGenField = typeof(DamageEnemies).GetField("silkGeneration", BindingFlags.Instance | BindingFlags.NonPublic);
+                var doesNotGenSilkField = typeof(DamageEnemies).GetField("doesNotGenerateSilk", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                var attackTypeField = typeof(DamageEnemies).GetField("attackType", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
                 float dir = 0f;
                 if (v > 0.35f) dir = 90f; // up
@@ -726,12 +715,15 @@ public class LegacyHelper : BaseUnityPlugin
                     if (!d) continue;
                     try { srcField?.SetValue(d, false); } catch { }
                     try { ihField?.SetValue(d, false); } catch { }
+                    try { attackTypeField?.SetValue(d, AttackTypes.Generic); } catch { }
                     try { dirField?.SetValue(d, dir); } catch { }
                     try { moveDirField?.SetValue(d, false); } catch { }
                     try { flipBehindField?.SetValue(d, false); } catch { }
                     try { fwdVecField?.SetValue(d, Vector2.zero); } catch { }
                     try { if (setOnlyEnemies != null) setOnlyEnemies.Invoke(d, new object[] { false }); else onlyEnemiesField?.SetValue(d, false); } catch { }
                     try { ignoreNailPosField?.SetValue(d, true); } catch { }
+                    try { if (silkGenField != null) { var enumType = silkGenField.FieldType; var noneVal = System.Enum.ToObject(enumType, 0); silkGenField.SetValue(d, noneVal);} } catch { }
+                    try { doesNotGenSilkField?.SetValue(d, true); } catch { }
                 }
 
                 // Keep ignoring Hornet collisions (handles extra damagers that enabled late)
@@ -900,15 +892,15 @@ public class LegacyHelper : BaseUnityPlugin
 
         private void OnCollisionEnter2D(Collision2D collision)
         {
-            TryHazardTeleport(collision.collider);
+            TryProcessDamageHero(collision.collider);
         }
 
         private void OnTriggerEnter2D(Collider2D other)
         {
-            TryHazardTeleport(other);
+            TryProcessDamageHero(other);
         }
 
-        private void TryHazardTeleport(Collider2D col)
+        private void TryProcessDamageHero(Collider2D col)
         {
             if (!col) return;
             try
@@ -921,6 +913,8 @@ public class LegacyHelper : BaseUnityPlugin
                 {
                     var hz = GetHazardType(dh);
                     if (IsTerrainHazard(hz)) { OnShadeHitHazard(); return; }
+                    // Non-hazard DamageHero => enemy attack
+                    OnShadeHitEnemy(dh);
                 }
             }
             catch { }
@@ -958,6 +952,8 @@ public class LegacyHelper : BaseUnityPlugin
                 {
                     var hz = GetHazardType(dh);
                     if (IsTerrainHazard(hz)) { OnShadeHitHazard(); return; }
+                    OnShadeHitEnemy(dh);
+                    return;
                 }
             }
         }
@@ -981,6 +977,16 @@ public class LegacyHelper : BaseUnityPlugin
             shadeHP = Mathf.Max(0, shadeHP - 1);
             PushShadeStatsToHud();
             hazardCooldown = 0.25f;
+        }
+
+        private void OnShadeHitEnemy(DamageHero dh)
+        {
+            if (hurtCooldown > 0f) return;
+            int dmg = 1;
+            try { if (dh != null) dmg = Mathf.Max(1, dh.damageDealt); } catch { }
+            shadeHP = Mathf.Max(0, shadeHP - dmg);
+            PushShadeStatsToHud();
+            hurtCooldown = HurtIFrameSeconds;
         }
 
         private static bool IsTerrainHazard(GlobalEnums.HazardType hz)
