@@ -3,7 +3,8 @@
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <LangVersion>latest</LangVersion>
-    <OutputPath>.\</OutputPath> <!-- Output .dll into this folder -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>..\</OutputPath> <!-- Output .dll into this folder -->
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,34 +16,34 @@
   <ItemGroup>
     <!-- Unity / Game Assemblies -->
     <Reference Include="UnityEngine">
-      <HintPath>..\\..\\..\\Hollow Knight Silksong_Data\\Managed\\UnityEngine.dll</HintPath>
+      <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.CoreModule">
-      <HintPath>..\\..\\..\\Hollow Knight Silksong_Data\\Managed\\UnityEngine.CoreModule.dll</HintPath>
+      <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
     </Reference>
     <Reference Include="Assembly-CSharp">
-      <HintPath>..\\..\\..\\Hollow Knight Silksong_Data\\Managed\\Assembly-CSharp.dll</HintPath>
+      <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\Assembly-CSharp.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.InputLegacyModule">
-        <HintPath>..\\..\\..\\Hollow Knight Silksong_Data\\Managed\\UnityEngine.InputLegacyModule.dll</HintPath>
+      <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.Physics2DModule">
-        <HintPath>..\\..\\..\\Hollow Knight Silksong_Data\\Managed\\UnityEngine.Physics2DModule.dll</HintPath>
+      <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.Physics2DModule.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.AnimationModule">
-        <HintPath>..\\..\\..\\Hollow Knight Silksong_Data\\Managed\\UnityEngine.AnimationModule.dll</HintPath>
-    </Reference>
-    <Reference Include="UnityEngine.ImageConversionModule">
-      <HintPath>..\\..\\..\\Hollow Knight Silksong_Data\\Managed\\UnityEngine.ImageConversionModule.dll</HintPath>
+      <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.AnimationModule.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.UI">
-      <HintPath>..\\..\\..\\Hollow Knight Silksong_Data\\Managed\\UnityEngine.UI.dll</HintPath>
+      <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.UI.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.UIModule">
-        <HintPath>..\\..\\..\\Hollow Knight Silksong_Data\\Managed\\UnityEngine.UIModule.dll</HintPath>
+      <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.UIModule.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.TextRenderingModule">
-        <HintPath>..\\..\\..\\Hollow Knight Silksong_Data\\Managed\\UnityEngine.TextRenderingModule.dll</HintPath>
+      <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.TextRenderingModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.AudioModule.dll</HintPath>
     </Reference>
 
     <!-- BepInEx Core -->
@@ -54,5 +55,11 @@
     </Reference>
   </ItemGroup>
 
-</Project>
+  <ItemGroup>
+    <Reference Include="netstandard">
+      <HintPath>DummyDLLs/netstandard.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
 
+</Project>

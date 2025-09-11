@@ -1,0 +1,10 @@
+E:\SteamProgram\steamapps\common\Hollow Knight Silksong\BepInEx\plugins\LegacyoftheAbyss\obj\Debug\LegacyoftheAbyss.csproj.AssemblyReference.cache
+E:\SteamProgram\steamapps\common\Hollow Knight Silksong\BepInEx\plugins\LegacyoftheAbyss\obj\Debug\LegacyoftheAbyss.GeneratedMSBuildEditorConfig.editorconfig
+E:\SteamProgram\steamapps\common\Hollow Knight Silksong\BepInEx\plugins\LegacyoftheAbyss\obj\Debug\LegacyoftheAbyss.AssemblyInfoInputs.cache
+E:\SteamProgram\steamapps\common\Hollow Knight Silksong\BepInEx\plugins\LegacyoftheAbyss\obj\Debug\LegacyoftheAbyss.AssemblyInfo.cs
+E:\SteamProgram\steamapps\common\Hollow Knight Silksong\BepInEx\plugins\LegacyoftheAbyss\obj\Debug\LegacyoftheAbyss.csproj.CoreCompileInputs.cache
+E:\SteamProgram\steamapps\common\Hollow Knight Silksong\BepInEx\plugins\LegacyoftheAbyss\obj\Debug\LegacyoftheAbyss.csproj.CopyComplete
+E:\SteamProgram\steamapps\common\Hollow Knight Silksong\BepInEx\plugins\LegacyoftheAbyss\obj\Debug\LegacyoftheAbyss.dll
+E:\SteamProgram\steamapps\common\Hollow Knight Silksong\BepInEx\plugins\LegacyoftheAbyss\obj\Debug\LegacyoftheAbyss.pdb
+E:\SteamProgram\steamapps\common\Hollow Knight Silksong\BepInEx\plugins\LegacyoftheAbyss.dll
+E:\SteamProgram\steamapps\common\Hollow Knight Silksong\BepInEx\plugins\LegacyoftheAbyss.pdb

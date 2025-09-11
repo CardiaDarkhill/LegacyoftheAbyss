@@ -5,7 +5,6 @@ E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyof
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\obj\Release\net472\LegacyoftheAbyss.csproj.CoreCompileInputs.cache
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\LegacyoftheAbyss.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\LegacyoftheAbyss.pdb
-E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\netstandard.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.DSPGraphModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.AudioModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.UnityCurlModule.dll
@@ -22,11 +21,9 @@ E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyof
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.AMDModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.UnityAnalyticsModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.PerformanceReportingModule.dll
-E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.AnimationModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.PhysicsModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.AssetBundleModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.SharedInternalsModule.dll
-E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.TextRenderingModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.ClothModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.ClusterInputModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.ClusterRendererModule.dll
@@ -38,7 +35,6 @@ E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyof
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.VideoModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.VRModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.GridModule.dll
-E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.ImageConversionModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.InputForUIModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.SubsystemsModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.JSONSerializeModule.dll
@@ -102,3 +98,4 @@ E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyof
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\obj\Release\net472\LegacyoftheAbyss.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\obj\Release\net472\LegacyoftheAbyss.pdb
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.InputModule.dll
+E:\SteamProgram\steamapps\common\Hollow Knight Silksong\BepInEx\plugins\LegacyoftheAbyss\net472\UnityEngine.ImageConversionModule.dll

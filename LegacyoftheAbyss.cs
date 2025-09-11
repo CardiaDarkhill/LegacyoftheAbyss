@@ -66,6 +66,11 @@ public class LegacyHelper : BaseUnityPlugin
         {
             DisableStartup(__instance);
             bool gameplay = __instance.IsGameplayScene();
+            // Toggle HUD visibility based on scene type
+            if (hud != null)
+            {
+                try { hud.SetVisible(gameplay); } catch { }
+            }
             if (!gameplay)
                 return;
 
@@ -97,6 +102,10 @@ public class LegacyHelper : BaseUnityPlugin
                 GameObject.DontDestroyOnLoad(hudGO);
                 hud = hudGO.AddComponent<SimpleHUD>();
                 hud.Init(__instance.playerData);
+            }
+            else
+            {
+                try { hud.SetPlayerData(__instance.playerData); } catch { }
             }
         }
 
