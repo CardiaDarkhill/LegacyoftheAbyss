@@ -1,4 +1,4 @@
-using BepInEx;
+﻿using BepInEx;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -172,6 +172,11 @@ public class LegacyHelper : BaseUnityPlugin
         // Movement and leash
         public float moveSpeed = 8f;
         public float maxDistance = 14f;
+        private Rigidbody2D rb;
+        private Collider2D bodyCol;
+        private int shadeMaxHP;
+        private int shadeHP;
+        private float hazardCooldown;
 
         // Ranged attack
         public float projectileSpeed = 22f;
@@ -199,6 +204,7 @@ public class LegacyHelper : BaseUnityPlugin
 
         void Start()
         {
+            SetupPhysics();
             if (hornetTransform == null)
             {
                 var hornet = GameObject.FindWithTag("Player");
@@ -222,11 +228,26 @@ public class LegacyHelper : BaseUnityPlugin
             // Cache HUD for shade soul updates
             cachedHud = Object.FindObjectOfType<SimpleHUD>();
             PushSoulToHud();
+            CheckHazardOverlap();
+            // Initialize Shade HP from PlayerData
+            try
+            {
+                var pd = GameManager.instance != null ? GameManager.instance.playerData : null;
+                if (pd != null)
+                {
+                    shadeMaxHP = Mathf.Max(1, (pd.maxHealth + 1) / 2);
+                    shadeHP = Mathf.Clamp((pd.health + 1) / 2, 0, shadeMaxHP);
+                    PushShadeStatsToHud();
+                }
+            }
+            catch { }
         }
 
         void Update()
         {
             if (hornetTransform == null) return;
+
+            if (hazardCooldown > 0f) hazardCooldown = Mathf.Max(0f, hazardCooldown - Time.deltaTime);
 
             HandleMovementAndFacing();
             HandleFire();
@@ -238,13 +259,21 @@ public class LegacyHelper : BaseUnityPlugin
             // Keep HUD in sync (cheap check)
             if (!cachedHud) cachedHud = Object.FindObjectOfType<SimpleHUD>();
             PushSoulToHud();
+            CheckHazardOverlap();
         }
-
         private void PushSoulToHud()
         {
             if (cachedHud)
             {
                 try { cachedHud.SetShadeSoul(shadeSoul, shadeSoulMax); } catch { }
+            }
+        }
+
+        private void PushShadeStatsToHud()
+        {
+            if (cachedHud)
+            {
+                try { cachedHud.SetShadeStats(shadeHP, shadeMaxHP); } catch { }
             }
         }
 
@@ -255,7 +284,7 @@ public class LegacyHelper : BaseUnityPlugin
             Vector2 input = new Vector2(h, v);
             if (input.sqrMagnitude > 1f) input.Normalize();
 
-            transform.position += (Vector3)(input * moveSpeed * Time.deltaTime);
+            if (rb){ rb.MovePosition(rb.position + input * moveSpeed * Time.deltaTime); } else { transform.position += (Vector3)(input * moveSpeed * Time.deltaTime); }
 
             // Update facing if player pressed left/right
             if (h > 0.1f) facing = 1;
@@ -285,6 +314,19 @@ public class LegacyHelper : BaseUnityPlugin
             fireTimer = fireCooldown;
             shadeSoul = Mathf.Max(0, shadeSoul - projectileSoulCost);
             PushSoulToHud();
+            CheckHazardOverlap();
+            // Initialize Shade HP from PlayerData
+            try
+            {
+                var pd = GameManager.instance != null ? GameManager.instance.playerData : null;
+                if (pd != null)
+                {
+                    shadeMaxHP = Mathf.Max(1, (pd.maxHealth + 1) / 2);
+                    shadeHP = Mathf.Clamp((pd.health + 1) / 2, 0, shadeMaxHP);
+                    PushShadeStatsToHud();
+                }
+            }
+            catch { }
 
             Vector2 dir = new Vector2(facing, 0f);
             SpawnProjectile(dir);
@@ -611,6 +653,19 @@ public class LegacyHelper : BaseUnityPlugin
                             Debug.Log("[HelperMod] DamagedEnemy: +11 soul.");
                             shadeSoul = Mathf.Min(shadeSoulMax, shadeSoul + soulGainPerHit);
                             PushSoulToHud();
+            CheckHazardOverlap();
+            // Initialize Shade HP from PlayerData
+            try
+            {
+                var pd = GameManager.instance != null ? GameManager.instance.playerData : null;
+                if (pd != null)
+                {
+                    shadeMaxHP = Mathf.Max(1, (pd.maxHealth + 1) / 2);
+                    shadeHP = Mathf.Clamp((pd.health + 1) / 2, 0, shadeMaxHP);
+                    PushShadeStatsToHud();
+                }
+            }
+            catch { }
                         };
                         primaryDamager.DamagedEnemy += onDamaged;
 
@@ -787,7 +842,7 @@ public class LegacyHelper : BaseUnityPlugin
                 return;
             }
 
-            // Reuse projectile’s dumper (make it static if you want to call it directly)
+            // Reuse projectileâ€™s dumper (make it static if you want to call it directly)
             var ht = nearestHM.GetType();
             var methods = ht.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             var fields  = ht.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
@@ -802,9 +857,152 @@ public class LegacyHelper : BaseUnityPlugin
             Debug.Log($"[HelperMod] F9 HealthManager fields : {flist}");
             Debug.Log($"[HelperMod] F9 HealthManager props  : {plist}");
         }
+        private void SetupPhysics()
+        {
+            rb = GetComponent<Rigidbody2D>();
+            if (!rb)
+            {
+                rb = gameObject.AddComponent<Rigidbody2D>();
+            }
+            rb.bodyType = RigidbodyType2D.Dynamic;
+            rb.gravityScale = 0f;
+            rb.freezeRotation = true;
+            rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
 
+            bodyCol = GetComponent<Collider2D>();
+            if (!bodyCol)
+            {
+                var cap = gameObject.AddComponent<CapsuleCollider2D>();
+                cap.direction = CapsuleDirection2D.Vertical;
+                cap.size = new Vector2(0.9f, 1.4f);
+                bodyCol = cap;
+            }
+            else
+            {
+                bodyCol.isTrigger = false;
+            }
+
+            try
+            {
+                var hc = HeroController.instance;
+                if (hc)
+                {
+                    gameObject.layer = hc.gameObject.layer;
+                    var myCols = GetComponentsInChildren<Collider2D>(true);
+                    var hornetCols = hc.GetComponentsInChildren<Collider2D>(true);
+                    foreach (var mc in myCols)
+                        foreach (var hcCol in hornetCols)
+                            if (mc && hcCol) Physics2D.IgnoreCollision(mc, hcCol, true);
+                }
+            }
+            catch { }
+        }
+
+        private void OnCollisionEnter2D(Collision2D collision)
+        {
+            TryHazardTeleport(collision.collider);
+        }
+
+        private void OnTriggerEnter2D(Collider2D other)
+        {
+            TryHazardTeleport(other);
+        }
+
+        private void TryHazardTeleport(Collider2D col)
+        {
+            if (!col) return;
+            try
+            {
+                if (bodyCol && col && !bodyCol.IsTouching(col)) return;
+                if (col.transform == transform || col.transform.IsChildOf(transform)) return;
+                if (hornetTransform && (col.transform == hornetTransform || col.transform.IsChildOf(hornetTransform))) return;
+                var dh = col.GetComponentInParent<DamageHero>();
+                if (dh != null)
+                {
+                    var hz = GetHazardType(dh);
+                    if (IsTerrainHazard(hz)) { OnShadeHitHazard(); return; }
+                }
+            }
+            catch { }
+        }
+
+        private void TeleportToHornet()
+        {
+            if (!hornetTransform) return;
+            bool hadSim = rb ? rb.simulated : false;
+            if (rb) rb.simulated = false;
+            transform.position = hornetTransform.position;
+            if (rb)
+            {
+                rb.linearVelocity = Vector2.zero;
+                rb.simulated = hadSim;
+            }
+        }
+
+        
+                private void CheckHazardOverlap()
+        {
+            if (hazardCooldown > 0f) return;
+            if (!bodyCol) return;
+            var filter = new ContactFilter2D();filter.useTriggers = true;
+            Collider2D[] results = new Collider2D[16];
+            int count = bodyCol.OverlapCollider(filter, results);
+            for (int i = 0; i < count; i++)
+            {
+                var c = results[i];
+                if (!c) continue;
+                if (c.transform == transform || c.transform.IsChildOf(transform)) continue;
+                if (hornetTransform && (c.transform == hornetTransform || c.transform.IsChildOf(hornetTransform))) continue;
+                var dh = c.GetComponentInParent<DamageHero>();
+                if (dh != null)
+                {
+                    var hz = GetHazardType(dh);
+                    if (IsTerrainHazard(hz)) { OnShadeHitHazard(); return; }
+                }
+            }
+        }
+
+        private static GlobalEnums.HazardType GetHazardType(DamageHero dh)
+        {
+            try
+            {
+                var tf = typeof(DamageHero).GetField("hazardType", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (tf != null)
+                    return (GlobalEnums.HazardType)tf.GetValue(dh);
+            }
+            catch { }
+            return GlobalEnums.HazardType.NON_HAZARD;
+        }
+
+        private void OnShadeHitHazard()
+        {
+            if (hazardCooldown > 0f) return;
+            TeleportToHornet();
+            shadeHP = Mathf.Max(0, shadeHP - 1);
+            PushShadeStatsToHud();
+            hazardCooldown = 0.25f;
+        }
+
+        private static bool IsTerrainHazard(GlobalEnums.HazardType hz)
+        {
+            switch (hz)
+            {
+                case GlobalEnums.HazardType.SPIKES:
+                case GlobalEnums.HazardType.ACID:
+                case GlobalEnums.HazardType.LAVA:
+                case GlobalEnums.HazardType.PIT:
+                case GlobalEnums.HazardType.COAL:
+                case GlobalEnums.HazardType.ZAP:
+                case GlobalEnums.HazardType.SINK:
+                case GlobalEnums.HazardType.STEAM:
+                case GlobalEnums.HazardType.COAL_SPIKES:
+                case GlobalEnums.HazardType.RESPAWN_PIT:
+                    return true;
+                default:
+                    return false;
+            }
+        }
     }
-
     public class SlashForwardFilter : MonoBehaviour
     {
         private Transform shade;
@@ -864,7 +1062,7 @@ public class LegacyHelper : BaseUnityPlugin
     {
         static bool Prefix()
         {
-            Debug.Log("[HelperMod] Prevented rebinding of Hornet’s keyboard controls.");
+            Debug.Log("[HelperMod] Prevented rebinding of Hornetâ€™s keyboard controls.");
             return false; // skip the whole rebinding method
         }
     }
@@ -927,3 +1125,15 @@ public class LegacyHelper : BaseUnityPlugin
     }
 
 }
+
+
+
+
+
+
+
+
+
+
+
+

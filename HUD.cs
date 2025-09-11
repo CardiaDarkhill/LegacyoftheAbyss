@@ -1,4 +1,4 @@
-
+﻿
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
@@ -474,6 +474,20 @@ public class SimpleHUD : MonoBehaviour
         shadeSoulMax = Mathf.Max(1, max);
     }
 
+    // Allow ShadeController to drive Shade HP and max
+        // Allow ShadeController to drive Shade HP and max
+    public void SetShadeStats(int current, int max)
+    {
+        int newMax = Mathf.Max(1, max);
+        int newCur = Mathf.Clamp(current, 0, newMax);
+        bool maxChanged = (newMax != shadeMax);
+        shadeMax = newMax;
+        shadeHealth = newCur;
+        if (maxChanged) RebuildMasks();
+        RefreshHealth();
+    }
+
+
     // Allow turning off shade soul override (fallback to Hornet's silk)
     public void ClearShadeSoulOverride()
     {
@@ -759,3 +773,6 @@ public class SimpleHUD : MonoBehaviour
         return false;
     }
 }
+
+
+
