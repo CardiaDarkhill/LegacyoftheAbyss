@@ -1,8 +1,10 @@
 using BepInEx;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using System.Collections;
 using System.Reflection;
+using InControl;
 
 [BepInPlugin("com.legacyoftheabyss.helper", "Legacy of the Abyss - Helper", "0.1.0")]
 public class LegacyHelper : BaseUnityPlugin
@@ -16,6 +18,16 @@ public class LegacyHelper : BaseUnityPlugin
         Logger.LogInfo("Patching GameManager.BeginScene...");
         Harmony harmony = new Harmony("com.legacyoftheabyss.helper");
         harmony.PatchAll();
+
+        SceneManager.sceneLoaded += (scene, mode) =>
+        {
+            foreach (var go in scene.GetRootGameObjects())
+            {
+                var name = go.name.ToLowerInvariant();
+                if (name.Contains("team cherry") || (name.Contains("save") && name.Contains("reminder")))
+                    go.SetActive(false);
+            }
+        };
     }
 
     internal static void DisableStartup(GameManager gm)
@@ -231,7 +243,13 @@ public class LegacyHelper : BaseUnityPlugin
             nailTimer -= Time.deltaTime;
             if (nailTimer > 0f) return;
 
-            if (Input.GetMouseButtonDown(0) || Input.GetKeyDown(NailKey))
+            bool pressed = Input.GetMouseButtonDown(0) || Input.GetKeyDown(NailKey);
+            var ih = HeroController.instance ? HeroController.instance.inputHandler : null;
+            if (!pressed && ih != null)
+            {
+                try { pressed = ih.inputActions.Attack.WasPressed; } catch { }
+            }
+            if (pressed)
             {
                 nailTimer = nailCooldown;
                 PerformNailSlash();
@@ -264,8 +282,10 @@ public class LegacyHelper : BaseUnityPlugin
             var proj = new GameObject("ShadeProjectile");
             proj.transform.position = transform.position + (Vector3)new Vector2(muzzleOffset.x * facing, muzzleOffset.y);
             proj.tag = "Hero Spell";
+            int spellLayer = LayerMask.NameToLayer("Hero Spell");
             int atkLayer = LayerMask.NameToLayer("Hero Attack");
-            if (atkLayer >= 0) proj.layer = atkLayer;
+            if (spellLayer >= 0) proj.layer = spellLayer;
+            else if (atkLayer >= 0) proj.layer = atkLayer;
 
             var psr = proj.AddComponent<SpriteRenderer>();
             psr.sprite = MakeDotSprite();
@@ -385,16 +405,17 @@ public class LegacyHelper : BaseUnityPlugin
         public int damage = 20;
         public Transform hornetRoot;
         public float lifeSeconds = 1.5f;
+        bool hasHit;
 
         void Start() => Destroy(gameObject, lifeSeconds);
 
-        void OnTriggerEnter2D(Collider2D other) => HandleHit(other);
-
-        private void HandleHit(Collider2D other)
+        void OnTriggerEnter2D(Collider2D other)
         {
+            if (hasHit) return;
             if (other == null) return;
             if (hornetRoot != null && other.transform.IsChildOf(hornetRoot)) return;
             if (other.transform == transform || other.transform.IsChildOf(transform)) return;
+            hasHit = true;
 
             var rb = GetComponent<Rigidbody2D>();
             Vector2 vel = rb ? rb.linearVelocity : (other.transform.position - transform.position);
@@ -415,10 +436,14 @@ public class LegacyHelper : BaseUnityPlugin
 
             HitTaker.Hit(other.gameObject, hit);
             if (HitTaker.TryGetHealthManager(other.gameObject, out var hm))
-            {
                 hm.Hit(hit);
-            }
 
+            StartCoroutine(DestroyNextFrame());
+        }
+
+        IEnumerator DestroyNextFrame()
+        {
+            yield return null;
             Destroy(gameObject);
         }
     }
