@@ -395,16 +395,7 @@ public class SimpleHUD : MonoBehaviour
         int newMax = (newHornetMax + 1) / 2;
         if (newMax != shadeMax)
         { shadeMax = newMax; RebuildMasks(); previousShadeHealth = Mathf.Min(previousShadeHealth, shadeMax); shadeHealth = Mathf.Min(shadeHealth, shadeMax); }
-        if (newHornet > prevHornetHealth)
-        {
-            Transform hornet = GameManager.instance != null && GameManager.instance.hero_ctrl != null ? GameManager.instance.hero_ctrl.transform : null;
-            Transform shade = GameObject.Find("HelperShade") != null ? GameObject.Find("HelperShade").transform : null;
-            if (hornet != null && shade != null)
-            {
-                float dist = Vector2.Distance(hornet.position, shade.position);
-                if (dist <= 3.5f) shadeHealth = Mathf.Min(shadeHealth + 2, shadeMax);
-            }
-        }
+        // HUD is read-only: do not modify Shade health here.
         prevHornetHealth = newHornet; prevHornetMax = newHornetMax;
     }
 

@@ -13,6 +13,19 @@ public class LegacyHelper : BaseUnityPlugin
     private static bool loggedStartupFields;
     private static SimpleHUD hud;
 
+    // Persist shade state across scene transitions
+    internal static int savedShadeHP = -1;
+    internal static int savedShadeMax = -1;
+    internal static int savedShadeSoul = -1;
+    internal static bool HasSavedShadeState => savedShadeMax > 0;
+
+    internal static void SaveShadeState(int curHp, int maxHp, int soul)
+    {
+        savedShadeMax = Mathf.Max(1, maxHp);
+        savedShadeHP = Mathf.Clamp(curHp, 0, savedShadeMax);
+        savedShadeSoul = Mathf.Max(0, soul);
+    }
+
     void Awake()
     {
         Logger.LogInfo("Patching GameManager.BeginScene...");
@@ -83,6 +96,11 @@ public class LegacyHelper : BaseUnityPlugin
 
                 var sc = helper.AddComponent<ShadeController>();
                 sc.Init(__instance.hero_ctrl.transform);
+                // Restore persisted state if available
+                if (HasSavedShadeState)
+                {
+                    sc.RestorePersistentState(savedShadeHP, savedShadeMax, savedShadeSoul);
+                }
 
                 var sr = helper.AddComponent<SpriteRenderer>();
                 sr.sprite = GenerateDebugSprite();
@@ -167,6 +185,29 @@ public class LegacyHelper : BaseUnityPlugin
         }
     }
 
+    // Heal Shade to full when Hornet sits at a bench
+    [HarmonyPatch(typeof(RestBenchHelper), "SetOnBench")]
+    class RestBenchHelper_SetOnBench_Patch
+    {
+        static void Postfix(bool onBench)
+        {
+            if (!onBench) return;
+            try
+            {
+                if (helper != null)
+                {
+                    var sc = helper.GetComponent<ShadeController>();
+                    if (sc != null)
+                    {
+                        sc.FullHealFromBench();
+                        SaveShadeState(sc.GetCurrentHP(), sc.GetMaxHP(), sc.GetShadeSoul());
+                    }
+                }
+            }
+            catch { }
+        }
+    }
+
     public class ShadeController : MonoBehaviour
     {
         // Movement and leash
@@ -204,6 +245,28 @@ public class LegacyHelper : BaseUnityPlugin
         private float hurtCooldown;
         private const float HurtIFrameSeconds = 1.35f;
 
+        private int lastSavedHP;
+        private int lastSavedMax;
+        private int lastSavedSoul;
+
+        public void RestorePersistentState(int hp, int max, int soul)
+        {
+            // Apply saved values now; will be clamped after Start() computes PD-based max
+            shadeMaxHP = Mathf.Max(1, max);
+            shadeHP = Mathf.Clamp(hp, 0, shadeMaxHP);
+            shadeSoul = Mathf.Clamp(soul, 0, shadeSoulMax);
+        }
+
+        public void FullHealFromBench()
+        {
+            shadeHP = Mathf.Max(shadeHP, shadeMaxHP);
+            PushShadeStatsToHud();
+        }
+
+        public int GetCurrentHP() => shadeHP;
+        public int GetMaxHP() => shadeMaxHP;
+        public int GetShadeSoul() => shadeSoul;
+
         public void Init(Transform hornet) { hornetTransform = hornet; }
 
         void Start()
@@ -239,12 +302,26 @@ public class LegacyHelper : BaseUnityPlugin
                 var pd = GameManager.instance != null ? GameManager.instance.playerData : null;
                 if (pd != null)
                 {
-                    shadeMaxHP = Mathf.Max(1, (pd.maxHealth + 1) / 2);
-                    shadeHP = Mathf.Clamp((pd.health + 1) / 2, 0, shadeMaxHP);
+                    // Compute max from Hornet, then merge with any pre-applied persistent state
+                    int computedMax = Mathf.Max(1, (pd.maxHealth + 1) / 2);
+                    if (shadeMaxHP <= 0) shadeMaxHP = computedMax; // from persistent state or default
+                    else shadeMaxHP = computedMax; // always follow Hornet scaling for max
+
+                    // Default starting HP if none persisted
+                    if (!LegacyHelper.HasSavedShadeState && shadeHP <= 0)
+                        shadeHP = Mathf.Clamp((pd.health + 1) / 2, 0, shadeMaxHP);
+                    shadeHP = Mathf.Clamp(shadeHP, 0, shadeMaxHP);
                     PushShadeStatsToHud();
+                    // No HUD-driven healing; bind healing handled via event patch.
                 }
             }
             catch { }
+
+            // Snapshot for change-detection saves
+            lastSavedHP = -999;
+            lastSavedMax = -999;
+            lastSavedSoul = -999;
+            PersistIfChanged();
         }
 
         void Update()
@@ -265,6 +342,38 @@ public class LegacyHelper : BaseUnityPlugin
             if (!cachedHud) cachedHud = Object.FindObjectOfType<SimpleHUD>();
             PushSoulToHud();
             CheckHazardOverlap();
+
+            // Save persistent state when values change
+            PersistIfChanged();
+        }
+
+        public void ApplyBindHealFromHornet(Transform hornet)
+        {
+            try
+            {
+                var h = hornet != null ? hornet : hornetTransform;
+                if (h == null) return;
+                float dist = Vector2.Distance(h.position, transform.position);
+                if (dist <= 3.5f)
+                {
+                    int before = shadeHP;
+                    shadeHP = Mathf.Min(shadeHP + 2, shadeMaxHP);
+                    if (shadeHP != before)
+                    {
+                        PushShadeStatsToHud();
+                        PersistIfChanged();
+                    }
+                }
+            }
+            catch { }
+        }
+        private void PersistIfChanged()
+        {
+            if (lastSavedHP != shadeHP || lastSavedMax != shadeMaxHP || lastSavedSoul != shadeSoul)
+            {
+                LegacyHelper.SaveShadeState(shadeHP, shadeMaxHP, shadeSoul);
+                lastSavedHP = shadeHP; lastSavedMax = shadeMaxHP; lastSavedSoul = shadeSoul;
+            }
         }
         private void PushSoulToHud()
         {
@@ -977,6 +1086,7 @@ public class LegacyHelper : BaseUnityPlugin
             shadeHP = Mathf.Max(0, shadeHP - 1);
             PushShadeStatsToHud();
             hazardCooldown = 0.25f;
+            PersistIfChanged();
         }
 
         private void OnShadeHitEnemy(DamageHero dh)
@@ -987,6 +1097,7 @@ public class LegacyHelper : BaseUnityPlugin
             shadeHP = Mathf.Max(0, shadeHP - dmg);
             PushShadeStatsToHud();
             hurtCooldown = HurtIFrameSeconds;
+            PersistIfChanged();
         }
 
         private static bool IsTerrainHazard(GlobalEnums.HazardType hz)
@@ -1007,6 +1118,27 @@ public class LegacyHelper : BaseUnityPlugin
                 default:
                     return false;
             }
+        }
+    }
+
+    // Trigger shade heal on explicit Bind completion event
+    [HarmonyPatch(typeof(HeroController), "BindCompleted")]
+    class HeroController_BindCompleted_Patch
+    {
+        static void Postfix(HeroController __instance)
+        {
+            try
+            {
+                if (helper != null)
+                {
+                    var sc = helper.GetComponent<ShadeController>();
+                    if (sc != null)
+                    {
+                        sc.ApplyBindHealFromHornet(__instance != null ? __instance.transform : null);
+                    }
+                }
+            }
+            catch { }
         }
     }
     public class SlashForwardFilter : MonoBehaviour
