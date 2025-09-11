@@ -162,6 +162,7 @@ public class LegacyHelper : BaseUnityPlugin
         private int facing = 1; // 1 = right, -1 = left
         private float nailTimer;
         private const KeyCode FireKey = KeyCode.Space;
+        private const KeyCode NailKey = KeyCode.J;
 
         public void Init(Transform hornet) { hornetTransform = hornet; }
 
@@ -228,9 +229,13 @@ public class LegacyHelper : BaseUnityPlugin
         private void HandleNailAttack()
         {
             nailTimer -= Time.deltaTime;
-            if (!Input.GetMouseButtonDown(0) || nailTimer > 0f) return;
-            nailTimer = nailCooldown;
-            PerformNailSlash();
+            if (nailTimer > 0f) return;
+
+            if (Input.GetMouseButtonDown(0) || Input.GetKeyDown(NailKey))
+            {
+                nailTimer = nailCooldown;
+                PerformNailSlash();
+            }
         }
 
         private void PerformNailSlash()
@@ -272,7 +277,7 @@ public class LegacyHelper : BaseUnityPlugin
             }
 
             var col = proj.AddComponent<CircleCollider2D>();
-            col.isTrigger = false;
+            col.isTrigger = true;
 
             // ignore collisions with other ShadeProjectiles
              var others = Object.FindObjectsByType<ShadeProjectile>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
@@ -384,8 +389,6 @@ public class LegacyHelper : BaseUnityPlugin
         void Start() => Destroy(gameObject, lifeSeconds);
 
         void OnTriggerEnter2D(Collider2D other) => HandleHit(other);
-
-        void OnCollisionEnter2D(Collision2D collision) => HandleHit(collision.collider);
 
         private void HandleHit(Collider2D other)
         {
