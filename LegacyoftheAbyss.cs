@@ -244,7 +244,7 @@ public class LegacyHelper : BaseUnityPlugin
             if (nailTimer > 0f) return;
 
             bool pressed = Input.GetMouseButtonDown(0) || Input.GetKeyDown(NailKey);
-            var ih = HeroController.instance ? HeroController.instance.inputHandler : null;
+            var ih = GameManager.instance ? GameManager.instance.inputHandler : null;
             if (!pressed && ih != null)
             {
                 try { pressed = ih.inputActions.Attack.WasPressed; } catch { }
