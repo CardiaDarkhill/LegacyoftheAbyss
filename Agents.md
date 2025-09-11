@@ -19,7 +19,7 @@
 - At time of writing the following features still need to be implemented:
 
 The shade should have a hitbox, which should allow it to be harmed by enemies and used by Hornet to "pogo" (Which should not damage the shade)
-The shade needs to have a standard melee attack (Currently only partially implemented)
+The shades melee attack currently provides silk to Hornet, which it shouldn't do. It also can't destroy destructible terrain objects or hit non-enemy hittable objects like vines and fruit, it should be able to do this.
 The shade should be able to gain soul through its melee attack and spend it through using it's spells (Like the already mostly implemented shade projectile). The shade should not be able to use spells without any soul.
 The shade can currently pass through all terrain, it should collide with all the same terrain that hornet does. When the shade collides with terrain hazards, such as those that would normally teleport hornet to the previous safe ground she was standing on, the shade should be teleported to Hornet.
 The shade, when reduced to 0 life, should enter an inactive state, it can still move in this state but nothing else. It can be revived either by being near Hornet when she uses her Bind, or by Hornet dying or sitting at a bench.
