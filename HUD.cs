@@ -121,7 +121,7 @@ public class SimpleHUD : MonoBehaviour
         if (!File.Exists(path)) return null;
         var bytes = File.ReadAllBytes(path);
         var tex = new Texture2D(2, 2, TextureFormat.ARGB32, false);
-        tex.LoadImage(bytes);
+        ImageConversion.LoadImage(tex, bytes);
         tex.filterMode = FilterMode.Point;
         return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
     }
@@ -131,7 +131,7 @@ public class SimpleHUD : MonoBehaviour
         if (!File.Exists(path)) return new Sprite[0];
         var bytes = File.ReadAllBytes(path);
         var tex = new Texture2D(2, 2, TextureFormat.ARGB32, false);
-        tex.LoadImage(bytes);
+        ImageConversion.LoadImage(tex, bytes);
         tex.filterMode = FilterMode.Point;
         int w = tex.width / cols;
         int h = tex.height / rows;
