@@ -22,11 +22,9 @@ E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyof
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.AMDModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.UnityAnalyticsModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.PerformanceReportingModule.dll
-E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.AnimationModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.PhysicsModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.AssetBundleModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.SharedInternalsModule.dll
-E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.TextRenderingModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.ClothModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.ClusterInputModule.dll
 E:\SteamProgram\steamapps\common\Hollow Knight Silksong\bepinex\plugins\legacyoftheabyss\net472\UnityEngine.ClusterRendererModule.dll
