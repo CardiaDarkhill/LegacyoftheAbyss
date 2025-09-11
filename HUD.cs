@@ -51,6 +51,11 @@ public class SimpleHUD : MonoBehaviour
     private bool debugUseCustomSilk;
     private float debugSilk;
 
+    // Shade soul override (driven by ShadeController)
+    private bool shadeSoulOverride;
+    private float shadeSoul;
+    private float shadeSoulMax;
+
     // Slightly shrink masks
     private const float MaskScale = 0.88f;
 
@@ -255,20 +260,69 @@ public class SimpleHUD : MonoBehaviour
         float step = Mathf.Max(1f, sMax * 0.1f);
         if (Input.GetKeyDown(DebugSoulIncKey))
         {
-            float baseVal = debugUseCustomSilk ? debugSilk : playerData.silk;
-            debugUseCustomSilk = true;
-            debugSilk = Mathf.Min(baseVal + step, sMax);
+            if (shadeSoulOverride)
+            {
+                // Drive Shade's soul directly to aid testing
+                try
+                {
+                    var sc = UnityEngine.Object.FindFirstObjectByType<LegacyHelper.ShadeController>();
+                    if (sc != null)
+                    {
+                        sc.shadeSoul = Mathf.Min(sc.shadeSoul + 11, sc.shadeSoulMax);
+                    }
+                }
+                catch { }
+                shadeSoul = Mathf.Min(shadeSoul + 11f, Mathf.Max(1f, shadeSoulMax));
+            }
+            else
+            {
+                float baseVal = debugUseCustomSilk ? debugSilk : playerData.silk;
+                debugUseCustomSilk = true;
+                debugSilk = Mathf.Min(baseVal + step, sMax);
+            }
         }
         if (Input.GetKeyDown(DebugSoulDecKey))
         {
-            float baseVal = debugUseCustomSilk ? debugSilk : playerData.silk;
-            debugUseCustomSilk = true;
-            debugSilk = Mathf.Max(baseVal - step, 0f);
+            if (shadeSoulOverride)
+            {
+                try
+                {
+                    var sc = UnityEngine.Object.FindFirstObjectByType<LegacyHelper.ShadeController>();
+                    if (sc != null)
+                    {
+                        sc.shadeSoul = Mathf.Max(sc.shadeSoul - 11, 0);
+                    }
+                }
+                catch { }
+                shadeSoul = Mathf.Max(shadeSoul - 11f, 0f);
+            }
+            else
+            {
+                float baseVal = debugUseCustomSilk ? debugSilk : playerData.silk;
+                debugUseCustomSilk = true;
+                debugSilk = Mathf.Max(baseVal - step, 0f);
+            }
         }
         if (Input.GetKeyDown(DebugSoulResetKey))
         {
-            debugUseCustomSilk = false;
-            debugSilk = playerData.silk;
+            if (shadeSoulOverride)
+            {
+                try
+                {
+                    var sc = UnityEngine.Object.FindFirstObjectByType<LegacyHelper.ShadeController>();
+                    if (sc != null)
+                    {
+                        sc.shadeSoul = 0;
+                    }
+                }
+                catch { }
+                shadeSoul = 0f;
+            }
+            else
+            {
+                debugUseCustomSilk = false;
+                debugSilk = playerData.silk;
+            }
         }
 
         SyncShadeFromPlayer();
@@ -393,8 +447,9 @@ public class SimpleHUD : MonoBehaviour
     private void RefreshSoul()
     {
         if (soulOrbRoot == null) return;
-        float max = Mathf.Max(1f, playerData.silkMax);
-        float silkVal = debugUseCustomSilk ? debugSilk : playerData.silk;
+        // Prefer shade soul override when provided, otherwise use Hornet's silk
+        float max = shadeSoulOverride ? Mathf.Max(1f, shadeSoulMax) : Mathf.Max(1f, playerData.silkMax);
+        float silkVal = shadeSoulOverride ? Mathf.Clamp(shadeSoul, 0f, max) : (debugUseCustomSilk ? debugSilk : playerData.silk);
         float fill = Mathf.Clamp01(silkVal / max);
         // Drive image vertical fill
         if (soulImage != null) soulImage.fillAmount = fill;
@@ -409,6 +464,20 @@ public class SimpleHUD : MonoBehaviour
             lastLoggedFill = fill;
             try { Debug.Log($"[HelperMod] Soul fill: silk={silkVal}/{max} fill={fill:F2} maskH={size.y:F1} rootH={fullH:F1}"); } catch { }
         }
+    }
+
+    // ShadeController drives this to show Shade's soul pool in the HUD
+    public void SetShadeSoul(int current, int max)
+    {
+        shadeSoulOverride = true;
+        shadeSoul = Mathf.Max(0, current);
+        shadeSoulMax = Mathf.Max(1, max);
+    }
+
+    // Allow turning off shade soul override (fallback to Hornet's silk)
+    public void ClearShadeSoulOverride()
+    {
+        shadeSoulOverride = false;
     }
 
     public void SetVisible(bool visible)

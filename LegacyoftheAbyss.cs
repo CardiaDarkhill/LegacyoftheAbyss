@@ -169,9 +169,11 @@ public class LegacyHelper : BaseUnityPlugin
 
     public class ShadeController : MonoBehaviour
     {
+        // Movement and leash
         public float moveSpeed = 8f;
         public float maxDistance = 14f;
 
+        // Ranged attack
         public float projectileSpeed = 22f;
         public float fireCooldown = 0.25f;
         public float nailCooldown = 0.3f;
@@ -185,6 +187,14 @@ public class LegacyHelper : BaseUnityPlugin
         private const KeyCode FireKey = KeyCode.Space;
         private const KeyCode NailKey = KeyCode.J;
 
+        // Shade Soul resource (gain via melee, spend via spells)
+        public int shadeSoulMax = 99;
+        public int shadeSoul = 0;
+        public int soulGainPerHit = 11;      // per enemy hit by a slash
+        public int projectileSoulCost = 33;  // cost per projectile
+
+        private SimpleHUD cachedHud;
+
         public void Init(Transform hornet) { hornetTransform = hornet; }
 
         void Start()
@@ -192,7 +202,15 @@ public class LegacyHelper : BaseUnityPlugin
             if (hornetTransform == null)
             {
                 var hornet = GameObject.FindWithTag("Player");
-                if (hornet != null) hornetTransform = hornet.transform;
+                if (hornet != null)
+                {
+                    hornetTransform = hornet.transform;
+                    Debug.Log("[HelperMod] ShadeController.Start: Found Player tag -> set hornetTransform.");
+                }
+                else
+                {
+                    Debug.Log("[HelperMod] ShadeController.Start: Could not find Player by tag.");
+                }
             }
 
             sr = GetComponent<SpriteRenderer>();
@@ -200,6 +218,10 @@ public class LegacyHelper : BaseUnityPlugin
             {
                 var c = sr.color; c.a = 0.9f; sr.color = c;
             }
+
+            // Cache HUD for shade soul updates
+            cachedHud = Object.FindObjectOfType<SimpleHUD>();
+            PushSoulToHud();
         }
 
         void Update()
@@ -212,6 +234,18 @@ public class LegacyHelper : BaseUnityPlugin
 
             if (Input.GetKeyDown(KeyCode.F9))
             DumpNearestEnemyHealthManager();
+
+            // Keep HUD in sync (cheap check)
+            if (!cachedHud) cachedHud = Object.FindObjectOfType<SimpleHUD>();
+            PushSoulToHud();
+        }
+
+        private void PushSoulToHud()
+        {
+            if (cachedHud)
+            {
+                try { cachedHud.SetShadeSoul(shadeSoul, shadeSoulMax); } catch { }
+            }
         }
 
         private void HandleMovementAndFacing()
@@ -241,7 +275,16 @@ public class LegacyHelper : BaseUnityPlugin
         {
             fireTimer -= Time.deltaTime;
             if (!Input.GetKey(FireKey) || fireTimer > 0f) return;
+            // Require soul to cast
+            if (shadeSoul < projectileSoulCost)
+            {
+                // Not enough soul: small feedback can be added here later
+                Debug.Log($"[HelperMod] Fire blocked: need {projectileSoulCost}, have {shadeSoul}.");
+                return;
+            }
             fireTimer = fireCooldown;
+            shadeSoul = Mathf.Max(0, shadeSoul - projectileSoulCost);
+            PushSoulToHud();
 
             Vector2 dir = new Vector2(facing, 0f);
             SpawnProjectile(dir);
@@ -252,15 +295,12 @@ public class LegacyHelper : BaseUnityPlugin
             nailTimer -= Time.deltaTime;
             if (nailTimer > 0f) return;
 
+            // Shade has independent input; do NOT mirror Hornet's Attack
             bool pressed = Input.GetMouseButtonDown(0) || Input.GetKeyDown(NailKey);
-            var ih = GameManager.instance ? GameManager.instance.inputHandler : null;
-            if (!pressed && ih != null)
-            {
-                try { pressed = ih.inputActions.Attack.WasPressed; } catch { }
-            }
             if (pressed)
             {
                 nailTimer = nailCooldown;
+                Debug.Log("[HelperMod] HandleNailAttack: Trigger PerformNailSlash().");
                 PerformNailSlash();
             }
         }
@@ -270,21 +310,397 @@ public class LegacyHelper : BaseUnityPlugin
             var hc = HeroController.instance;
             if (hc == null) return;
 
-            var field = hc.GetType().GetField("NormalSlashObject", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            var prefab = field?.GetValue(hc) as GameObject;
-            if (prefab == null) return;
+            // Choose slash variant based on input: up / down / normal
+            Debug.Log("[HelperMod] PerformNailSlash: Begin.");
+            GameObject source = null;
+            float v = (Input.GetKey(KeyCode.S) ? -1f : 0f) + (Input.GetKey(KeyCode.W) ? 1f : 0f);
+            var upField = hc.GetType().GetField("UpSlashObject", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            var downField = hc.GetType().GetField("DownSlashObject", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            var normalField = hc.GetType().GetField("NormalSlashObject", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            var altField = hc.GetType().GetField("AlternateSlashObject", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            var upObj = upField?.GetValue(hc) as GameObject;
+            var downObj = downField?.GetValue(hc) as GameObject;
+            var normalObj = normalField?.GetValue(hc) as GameObject;
+            var altObj = altField?.GetValue(hc) as GameObject;
+            // Fallback to properties if fields are null
+            NailSlash upProp = null, downProp = null, normalProp = null, altProp = null;
+            try { upProp = hc.GetType().GetProperty("UpSlash", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(hc, null) as NailSlash; } catch { }
+            try { downProp = hc.GetType().GetProperty("DownSlash", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(hc, null) as NailSlash; } catch { }
+            try { normalProp = hc.GetType().GetProperty("NormalSlash", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(hc, null) as NailSlash; } catch { }
+            try { altProp = hc.GetType().GetProperty("AlternateSlash", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(hc, null) as NailSlash; } catch { }
+            var upGO2 = upProp ? upProp.gameObject : null;
+            var downGO2 = downProp ? downProp.gameObject : null;
+            var normalGO2 = normalProp ? normalProp.gameObject : null;
+            var altGO2 = altProp ? altProp.gameObject : null;
+            // Prefer field-based objects; use property-based objects as fallback
+            var upGO = upObj ?? upGO2;
+            var downGO = downObj ?? downGO2;
+            var normalGO = normalObj ?? normalGO2;
+            var altGO = altObj ?? altGO2;
+            Debug.Log($"[HelperMod] PerformNailSlash: v={v:F2} up={(upGO?upGO.name:"null")} down={(downGO?downGO.name:"null")} normal={(normalGO?normalGO.name:"null")} alt={(altGO?altGO.name:"null")}.");
+            if (v > 0.35f && upGO)
+                source = upGO;
+            else if (v < -0.35f && downGO)
+                source = downGO;
+            else
+            {
+                // Side slash: prefer Alternate for facing right, Normal for facing left
+                if (facing >= 0)
+                    source = altGO ?? normalGO;
+                else
+                    source = normalGO ?? altGO;
+            }
 
-            var slash = GameObject.Instantiate(prefab, transform.position, Quaternion.identity);
+            if (source == null)
+            {
+                // Fallback: search under Hero for any NailSlash prefabs to clone
+                try
+                {
+                    var allHeroSlashes = hc.GetComponentsInChildren<NailSlash>(true);
+                    Debug.Log($"[HelperMod] PerformNailSlash: Fallback search found {allHeroSlashes?.Length ?? 0} NailSlash components under Hero.");
+                    NailSlash pick = null;
+                    if (allHeroSlashes == null || allHeroSlashes.Length == 0)
+                    {
+                        // Global search as a last resort (includes inactive assets)
+                        var all = Resources.FindObjectsOfTypeAll<NailSlash>();
+                        Debug.Log($"[HelperMod] PerformNailSlash: Global search found {all?.Length ?? 0} NailSlash assets.");
+                        allHeroSlashes = all;
+                    }
+
+                    if (allHeroSlashes != null && allHeroSlashes.Length > 0)
+                    {
+                        // Try to pick by direction hint and side-facing name if Alternate not available
+                        bool MatchUp(NailSlash ns) { return ns && (((ns.name ?? "").ToLowerInvariant().Contains("up")) || ((ns.animName ?? "").ToLowerInvariant().Contains("up"))); }
+                        bool MatchDown(NailSlash ns) { return ns && (((ns.name ?? "").ToLowerInvariant().Contains("down")) || ((ns.animName ?? "").ToLowerInvariant().Contains("down"))); }
+                        bool MatchNormal(NailSlash ns) { return ns && !MatchUp(ns) && !MatchDown(ns); }
+                        bool MatchRight(NailSlash ns) { if (!ns) return false; var n=(ns.name??"").ToLowerInvariant(); var a=(ns.animName??"").ToLowerInvariant(); return n.Contains("alt")||n.Contains("right")||a.Contains("alt")||a.Contains("right"); }
+                        bool MatchLeft(NailSlash ns) { if (!ns) return false; var n=(ns.name??"").ToLowerInvariant(); var a=(ns.animName??"").ToLowerInvariant(); return n.Contains("left")||a.Contains("left"); }
+                        if (v > 0.35f) pick = System.Array.Find(allHeroSlashes, s => MatchUp(s));
+                        else if (v < -0.35f) pick = System.Array.Find(allHeroSlashes, s => MatchDown(s));
+                        else
+                        {
+                            if (facing >= 0)
+                            {
+                                pick = System.Array.Find(allHeroSlashes, s => MatchNormal(s) && MatchRight(s)) ?? System.Array.Find(allHeroSlashes, s => MatchRight(s));
+                            }
+                            else
+                            {
+                                pick = System.Array.Find(allHeroSlashes, s => MatchNormal(s) && MatchLeft(s)) ?? System.Array.Find(allHeroSlashes, s => MatchLeft(s));
+                            }
+                        }
+                        if (pick == null) pick = System.Array.Find(allHeroSlashes, s => MatchNormal(s));
+                        if (pick == null) pick = allHeroSlashes[0];
+                        source = pick ? pick.gameObject : null;
+                        Debug.Log($"[HelperMod] PerformNailSlash: Fallback chose '{(pick?pick.name:"<none>")}'.");
+                    }
+                }
+                catch { }
+
+                if (source == null)
+                {
+                    Debug.Log("[HelperMod] PerformNailSlash: No slash source found.");
+                    return;
+                }
+            }
+
+            // Instantiate under Hero so NailSlash.Awake finds HeroController, then immediately reparent to Shade
+            var slash = GameObject.Instantiate(source, hc.transform);
+            slash.transform.position = transform.position;
             slash.transform.SetParent(transform, true);
+
+            // Temporarily disable all colliders and damagers to prevent any early collisions before patching
+            Collider2D[] tempCols = slash.GetComponentsInChildren<Collider2D>(true);
+            foreach (var c in tempCols) if (c) c.enabled = false;
+            var tempDamagers = slash.GetComponentsInChildren<DamageEnemies>(true);
+            foreach (var d in tempDamagers) if (d) d.enabled = false;
+
+            // Ensure correct layer/tag for terrain/destructible interaction
+            try
+            {
+                int desiredLayer = source.layer;
+                foreach (var t in slash.GetComponentsInChildren<Transform>(true))
+                {
+                    if (!t) continue;
+                    t.gameObject.layer = desiredLayer;
+                    // Use Untagged so DamageEnemies doesn't treat it as hero nail in Start()
+                    t.gameObject.tag = "Untagged";
+                }
+            }
+            catch { }
+            Debug.Log($"[HelperMod] PerformNailSlash: Instantiated slash clone '{slash.name}' under Hero then reparented to Shade (pre-patched).");
+
+            // Align facing to Shade
+            try
+            {
+                var tr = slash.transform;
+                var ls = tr.localScale;
+                ls.x = Mathf.Abs(ls.x) * (facing >= 0 ? 1f : -1f);
+                tr.localScale = ls;
+                Debug.Log($"[HelperMod] PerformNailSlash: Set facing={facing}.");
+            }
+            catch { }
 
             var nailSlash = slash.GetComponent<NailSlash>();
             if (nailSlash != null)
             {
                 var f = typeof(NailAttackBase).GetField("hc", BindingFlags.Instance | BindingFlags.NonPublic);
                 f?.SetValue(nailSlash, hc);
+                Debug.Log("[HelperMod] PerformNailSlash: Wired NailSlash.hc.");
+
+                // Also set HeroController reference used by NailSlashTravel if present
+                try
+                {
+                    var travel = slash.GetComponent<NailSlashTravel>();
+                    if (travel != null)
+                    {
+                        var tf = typeof(NailSlashTravel).GetField("hc", BindingFlags.Instance | BindingFlags.NonPublic);
+                        tf?.SetValue(travel, hc);
+                        Debug.Log("[HelperMod] PerformNailSlash: Wired NailSlashTravel.hc.");
+                    }
+                }
+                catch { }
+                // Prevent Hornet recoil (remove NailSlashRecoil components)
+                try
+                {
+                    var recoils = slash.GetComponentsInChildren<NailSlashRecoil>(true);
+                    foreach (var r in recoils) if (r) Destroy(r);
+                    Debug.Log($"[HelperMod] PerformNailSlash: Removed {recoils?.Length ?? 0} NailSlashRecoil components.");
+                }
+                catch { }
+
+                // Ensure hits are not treated as Hornet damage (stop silk gain)
+                try
+                {
+                    var damagers = slash.GetComponentsInChildren<DamageEnemies>(true);
+                    var srcField = typeof(DamageEnemies).GetField("sourceIsHero", BindingFlags.Instance | BindingFlags.NonPublic);
+                    var ihField  = typeof(DamageEnemies).GetField("isHeroDamage", BindingFlags.Instance | BindingFlags.NonPublic);
+                    var dirField = typeof(DamageEnemies).GetField("direction", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    var moveDirField = typeof(DamageEnemies).GetField("moveDirection", BindingFlags.Instance | BindingFlags.NonPublic);
+                    var flipBehindField = typeof(DamageEnemies).GetField("flipDirectionIfBehind", BindingFlags.Instance | BindingFlags.NonPublic);
+                    var fwdVecField = typeof(DamageEnemies).GetField("forwardVector", BindingFlags.Instance | BindingFlags.NonPublic);
+                    var isNailAttackField = typeof(DamageEnemies).GetField("isNailAttack", BindingFlags.Instance | BindingFlags.NonPublic);
+                    var onlyEnemiesField = typeof(DamageEnemies).GetField("onlyDamageEnemies", BindingFlags.Instance | BindingFlags.NonPublic);
+                    var setOnlyEnemies = typeof(DamageEnemies).GetMethod("setOnlyDamageEnemies", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    var silkGenField = typeof(DamageEnemies).GetField("silkGeneration", BindingFlags.Instance | BindingFlags.NonPublic);
+                    int patched = 0;
+                    foreach (var d in damagers)
+                    {
+                        if (!d) continue;
+                        try { srcField?.SetValue(d, false); } catch { }
+                        try { ihField?.SetValue(d, false); } catch { }
+                        try { isNailAttackField?.SetValue(d, false); } catch { }
+                        // Force slash direction based on Shade input/facing
+                        try
+                        {
+                            float dir = 0f;
+                            if (v > 0.35f) dir = 90f; // up
+                            else if (v < -0.35f) dir = 270f; // down
+                            else dir = (facing >= 0 ? 0f : 180f); // side (right=0, left=180)
+                            dirField?.SetValue(d, dir);
+                            moveDirField?.SetValue(d, false);
+                            flipBehindField?.SetValue(d, false);
+                            fwdVecField?.SetValue(d, Vector2.zero);
+                        }
+                        catch { }
+                        // Ensure terrain can be hit
+                        try
+                        {
+                            if (setOnlyEnemies != null) setOnlyEnemies.Invoke(d, new object[] { false });
+                            else onlyEnemiesField?.SetValue(d, false);
+                        }
+                        catch { }
+                        // Explicitly prevent any silk generation flags
+                        try {
+                            if (silkGenField != null)
+                            {
+                                var enumType = silkGenField.FieldType;
+                                var noneVal = System.Enum.ToObject(enumType, 0); // None is usually 0
+                                silkGenField.SetValue(d, noneVal);
+                            }
+                        } catch { }
+                        patched++;
+                    }
+                    Debug.Log($"[HelperMod] PerformNailSlash: Patched DamageEnemies hero flags on {patched} component(s).");
+                }
+                catch { }
+
+                // Ignore collisions with Hornet to prevent parry/recoil interactions
+                try
+                {
+                    var shadeCols = slash.GetComponentsInChildren<Collider2D>(true);
+                    var hornetCols = hc.GetComponentsInChildren<Collider2D>(true);
+                    foreach (var sc in shadeCols)
+                        foreach (var hcCol in hornetCols)
+                            if (sc && hcCol) Physics2D.IgnoreCollision(sc, hcCol, true);
+                }
+                catch { }
+
+                // Remove hero-specific helpers that may get added
+                try
+                {
+                    var extras = slash.GetComponentsInChildren<HeroExtraNailSlash>(true);
+                    foreach (var e in extras) if (e) Destroy(e);
+                    var travels = slash.GetComponentsInChildren<NailSlashTravel>(true);
+                    foreach (var tv in travels) if (tv) Destroy(tv);
+                    var thunkers = slash.GetComponentsInChildren<NailSlashTerrainThunk>(true);
+                    foreach (var t in thunkers) if (t) Destroy(t);
+
+                    // Disable Extra Damager child and any additional DamageEnemies beyond the first
+                    var extraDamager = slash.transform.Find("Extra Damager");
+                    if (extraDamager) extraDamager.gameObject.SetActive(false);
+                    var allDamagers = slash.GetComponentsInChildren<DamageEnemies>(true);
+                    bool firstKept = false;
+                    foreach (var d in allDamagers)
+                    {
+                        if (!d) continue;
+                        if (!firstKept) { firstKept = true; continue; }
+                        d.enabled = false;
+                    }
+                }
+                catch { }
+
+                // If this is a side slash, and facing right, prefer using AlternateSlash's animation clip
+                try
+                {
+                    if (Mathf.Abs(v) < 0.35f && facing >= 0)
+                    {
+                        var altSlashProp = hc.GetType().GetProperty("AlternateSlash", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(hc, null) as NailSlash;
+                        if (altSlashProp != null && !string.IsNullOrEmpty(altSlashProp.animName))
+                        {
+                            nailSlash.animName = altSlashProp.animName;
+                            Debug.Log($"[HelperMod] PerformNailSlash: Using AlternateSlash anim '{nailSlash.animName}' for right-facing side slash.");
+                        }
+                    }
+                }
+                catch { }
+
+                // Re-enable damagers now that they've been patched
+                foreach (var d in tempDamagers) if (d) d.enabled = true;
+
+                // Re-allow colliders; NailSlash animator will toggle hitboxes appropriately
+                foreach (var c in tempCols) if (c) c.enabled = true;
+
+                // Attach forward-filter for side slashes to prevent any rear-stage colliders from hitting
+                try
+                {
+                    if (Mathf.Abs(v) < 0.35f)
+                    {
+                        var filt = slash.AddComponent<SlashForwardFilter>();
+                        Vector2 fwd = (facing >= 0 ? Vector2.right : Vector2.left);
+                        filt.Init(this.transform, fwd, 0.25f);
+                    }
+                }
+                catch { }
+
+                // For side slashes, cut trailing visual after brief forward window to remove backward swing look
+                // No visual culling; prefer correct prefab variant per facing
+
+                Debug.Log("[HelperMod] PerformNailSlash: Calling StartSlash().");
                 nailSlash.StartSlash();
+
+                // Award soul on each enemy damaged by this slash
+                try
+                {
+                    var primaryDamager = nailSlash.EnemyDamager;
+                    if (primaryDamager != null)
+                    {
+                        Debug.Log("[HelperMod] PerformNailSlash: Hook DamagedEnemy for soul gain.");
+                        System.Action onDamaged = null; System.Action<bool> onEnded = null;
+                        onDamaged = () =>
+                        {
+                            Debug.Log("[HelperMod] DamagedEnemy: +11 soul.");
+                            shadeSoul = Mathf.Min(shadeSoulMax, shadeSoul + soulGainPerHit);
+                            PushSoulToHud();
+                        };
+                        primaryDamager.DamagedEnemy += onDamaged;
+
+                        // Unsubscribe when damage window ends
+                        onEnded = (didHit) =>
+                        {
+                            try { primaryDamager.DamagedEnemy -= onDamaged; } catch { }
+                            try { nailSlash.EndedDamage -= onEnded; } catch { }
+                            Debug.Log("[HelperMod] EndedDamage: unsubscribed handlers.");
+                        };
+                        nailSlash.EndedDamage += onEnded;
+                    }
+                    else
+                    {
+                        Debug.Log("[HelperMod] PerformNailSlash: EnemyDamager was null.");
+                    }
+                }
+                catch { }
             }
+            else
+            {
+                Debug.Log("[HelperMod] PerformNailSlash: NailSlash component not found on clone.");
+            }
+
+            // Post-configure one frame later to override any Start() defaults the prefab sets
+            StartCoroutine(PostConfigureSlash(slash, v, facing, hc));
         }
+
+        private IEnumerator PostConfigureSlash(GameObject slash, float v, int facingSign, HeroController hc)
+        {
+            yield return null; // wait one frame for Start() on components
+            if (!slash) yield break;
+            try
+            {
+                // Remove any recoil components that got added/activated
+                var recoils = slash.GetComponentsInChildren<NailSlashRecoil>(true);
+                foreach (var r in recoils) if (r) Destroy(r);
+
+                // Patch damagers again to ensure hero flags are off and directions set
+                var damagers = slash.GetComponentsInChildren<DamageEnemies>(true);
+                var srcField = typeof(DamageEnemies).GetField("sourceIsHero", BindingFlags.Instance | BindingFlags.NonPublic);
+                var ihField  = typeof(DamageEnemies).GetField("isHeroDamage", BindingFlags.Instance | BindingFlags.NonPublic);
+                var dirField = typeof(DamageEnemies).GetField("direction", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                var moveDirField = typeof(DamageEnemies).GetField("moveDirection", BindingFlags.Instance | BindingFlags.NonPublic);
+                var flipBehindField = typeof(DamageEnemies).GetField("flipDirectionIfBehind", BindingFlags.Instance | BindingFlags.NonPublic);
+                var fwdVecField = typeof(DamageEnemies).GetField("forwardVector", BindingFlags.Instance | BindingFlags.NonPublic);
+                var onlyEnemiesField = typeof(DamageEnemies).GetField("onlyDamageEnemies", BindingFlags.Instance | BindingFlags.NonPublic);
+                var setOnlyEnemies = typeof(DamageEnemies).GetMethod("setOnlyDamageEnemies", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                var ignoreNailPosField = typeof(DamageEnemies).GetField("ignoreNailPosition", BindingFlags.Instance | BindingFlags.NonPublic);
+
+                float dir = 0f;
+                if (v > 0.35f) dir = 90f; // up
+                else if (v < -0.35f) dir = 270f; // down
+                else dir = (facingSign >= 0 ? 0f : 180f); // side (right=0, left=180)
+
+                foreach (var d in damagers)
+                {
+                    if (!d) continue;
+                    try { srcField?.SetValue(d, false); } catch { }
+                    try { ihField?.SetValue(d, false); } catch { }
+                    try { dirField?.SetValue(d, dir); } catch { }
+                    try { moveDirField?.SetValue(d, false); } catch { }
+                    try { flipBehindField?.SetValue(d, false); } catch { }
+                    try { fwdVecField?.SetValue(d, Vector2.zero); } catch { }
+                    try { if (setOnlyEnemies != null) setOnlyEnemies.Invoke(d, new object[] { false }); else onlyEnemiesField?.SetValue(d, false); } catch { }
+                    try { ignoreNailPosField?.SetValue(d, true); } catch { }
+                }
+
+                // Keep ignoring Hornet collisions (handles extra damagers that enabled late)
+                var shadeCols = slash.GetComponentsInChildren<Collider2D>(true);
+                Collider2D[] hornetCols = new Collider2D[0];
+                if (hc)
+                {
+                    hornetCols = hc.GetComponentsInChildren<Collider2D>(true);
+                }
+                foreach (var sc in shadeCols)
+                    foreach (var hcCol in hornetCols)
+                        if (sc && hcCol) Physics2D.IgnoreCollision(sc, hcCol, true);
+
+                // Re-apply visual facing (in case animation flipped it)
+                try
+                {
+                    var tr = slash.transform; var ls = tr.localScale; ls.x = Mathf.Abs(ls.x) * (facingSign >= 0 ? -1f : 1f); tr.localScale = ls;
+                }
+                catch { }
+            }
+            catch { }
+        }
+
+        // Removed trailing visual culling; we pick proper slash variant instead
 
         private void SpawnProjectile(Vector2 dir)
         {
@@ -387,6 +803,59 @@ public class LegacyHelper : BaseUnityPlugin
             Debug.Log($"[HelperMod] F9 HealthManager props  : {plist}");
         }
 
+    }
+
+    public class SlashForwardFilter : MonoBehaviour
+    {
+        private Transform shade;
+        private Vector2 forward;
+        private float timeLeft;
+        private int lastEnabledCount;
+
+        public void Init(Transform shadeTransform, Vector2 fwd, float duration)
+        {
+            shade = shadeTransform;
+            forward = fwd.normalized;
+            timeLeft = duration;
+            lastEnabledCount = -1;
+        }
+
+        void Update()
+        {
+            timeLeft -= Time.deltaTime;
+            if (timeLeft <= 0f) { Destroy(this); return; }
+            var cols = GetComponentsInChildren<Collider2D>(true);
+            int enabledCount = 0;
+            foreach (var c in cols) if (c && c.enabled) enabledCount++;
+            if (enabledCount == 0) return;
+            if (enabledCount != lastEnabledCount)
+            {
+                lastEnabledCount = enabledCount;
+                FilterForward(cols);
+            }
+            else
+            {
+                // keep enforcing within the short window
+                FilterForward(cols);
+            }
+        }
+
+        private void FilterForward(Collider2D[] cols)
+        {
+            if (!shade) return;
+            Vector2 origin = shade.position;
+            foreach (var c in cols)
+            {
+                if (!c || !c.enabled) continue;
+                Vector2 center = c.bounds.center;
+                Vector2 to = (center - origin).normalized;
+                float dot = Vector2.Dot(forward, to);
+                if (dot < 0f)
+                {
+                    c.enabled = false;
+                }
+            }
+        }
     }
 
 
