@@ -1,7 +1,6 @@
 # AGENTS.md file
 
 ## Dev environment tips
-- The environment you're working in doesn't appear to have the ability to run the build command. When you're finished I run the "dotnet build -c Release" to build in my local environment
 - This project is a mod for the newly released "Hollow Knight: Silksong", there is very little documentation available for modding this game due to it's new release.
 - To assist with the above, I have decompiled much of the games code, which you can find at: "\DummyDLLs\DLLDecompiles\Assembly-CSharp\Assembly-CSharp". Make extensive use of this code to inform your work.
 - Keep in mind that in the above folder, there are child folders that contain more code potentially several folders deep, if you can't find what you need for your task, you might need to look around.
