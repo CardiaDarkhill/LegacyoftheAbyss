@@ -580,6 +580,7 @@ public partial class LegacyHelper
                 if (!h.collider) continue;
                 if (h.collider.isTrigger) continue;
                 if (h.collider.transform == transform || h.collider.transform.IsChildOf(transform)) continue;
+                if (hornetTransform && (h.collider.transform == hornetTransform || h.collider.transform.IsChildOf(hornetTransform))) continue;
                 pick = h; break;
             }
 
