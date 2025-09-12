@@ -41,7 +41,9 @@ public partial class LegacyHelper : BaseUnityPlugin
                     go.SetActive(false);
             }
         };
+
     }
+    
 
     private static void HandleFinishedEnteringScene()
     {
@@ -82,6 +84,7 @@ public partial class LegacyHelper : BaseUnityPlugin
 
         // Create fresh helper at the captured position
         helper = new GameObject("HelperShade");
+        try { helper.tag = "Recoiler"; } catch { }
         helper.transform.position = pos;
 
         var scNew = helper.AddComponent<ShadeController>();
@@ -130,4 +133,3 @@ public partial class LegacyHelper : BaseUnityPlugin
         }
     }
 }
-

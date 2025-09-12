@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Reflection;
 using HarmonyLib;
+using UnityEngine;
 
 public partial class LegacyHelper
 {
@@ -38,6 +39,34 @@ public partial class LegacyHelper
             {
                 try { hud.SetPlayerData(__instance.playerData); } catch { }
             }
+        }
+    }
+
+    // Revive shade (at least 1 HP) when Hornet dies
+    [HarmonyPatch(typeof(GameManager), nameof(GameManager.PlayerDead))]
+    private class GameManager_PlayerDead_Patch
+    {
+        private static void Postfix(GameManager __instance)
+        {
+            try
+            {
+                if (helper != null)
+                {
+                    var sc = helper.GetComponent<ShadeController>();
+                    if (sc != null)
+                    {
+                        sc.ReviveToAtLeast(1);
+                        SaveShadeState(sc.GetCurrentHP(), sc.GetMaxHP(), sc.GetShadeSoul());
+                        return;
+                    }
+                }
+                // Fallback: ensure saved state revives next spawn
+                if (savedShadeMax > 0)
+                {
+                    savedShadeHP = Mathf.Max(savedShadeHP, 1);
+                }
+            }
+            catch { }
         }
     }
 
@@ -134,4 +163,3 @@ public partial class LegacyHelper
         private static bool Prefix() => false; // skip
     }
 }
-

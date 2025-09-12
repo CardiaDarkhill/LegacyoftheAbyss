@@ -191,12 +191,15 @@ public partial class LegacyHelper
                     var silkGenField = typeof(DamageEnemies).GetField("silkGeneration", BindingFlags.Instance | BindingFlags.NonPublic);
                     var doesNotGenSilkField = typeof(DamageEnemies).GetField("doesNotGenerateSilk", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
                     var attackTypeField = typeof(DamageEnemies).GetField("attackType", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    var useNailDmgField = typeof(DamageEnemies).GetField("useNailDamage", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    var damageDealtField = typeof(DamageEnemies).GetField("damageDealt", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
                     float dir = 0f;
                     if (v > 0.35f) dir = 90f;
                     else if (v < -0.35f) dir = 270f;
                     else dir = (facing >= 0 ? 0f : 180f);
 
+                    int nailDmg = Mathf.Max(1, GetHornetNailDamage());
                     foreach (var d in damagers)
                     {
                         if (!d) continue;
@@ -212,6 +215,8 @@ public partial class LegacyHelper
                         try { ignoreNailPosField?.SetValue(d, true); } catch { }
                         try { if (silkGenField != null) { var enumType = silkGenField.FieldType; var noneVal = System.Enum.ToObject(enumType, 0); silkGenField.SetValue(d, noneVal);} } catch { }
                         try { doesNotGenSilkField?.SetValue(d, true); } catch { }
+                        try { useNailDmgField?.SetValue(d, false); } catch { }
+                        try { damageDealtField?.SetValue(d, nailDmg); } catch { }
                     }
 
                 }
@@ -403,7 +408,7 @@ public partial class LegacyHelper
             }
 
             var sp = proj.AddComponent<ShadeProjectile>();
-            sp.damage = 20;
+            sp.damage = Mathf.RoundToInt(Mathf.Max(1, GetHornetNailDamage()) * 2.5f);
             sp.hornetRoot = hornetTransform;
             sp.lifeSeconds = 1.5f;
         }

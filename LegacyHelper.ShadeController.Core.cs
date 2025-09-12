@@ -42,6 +42,17 @@ public partial class LegacyHelper
         private float nailTimer;
         private const KeyCode FireKey = KeyCode.Space;
         private const KeyCode NailKey = KeyCode.J;
+        private const KeyCode TeleportKey = KeyCode.K;
+
+        // Teleport channel
+        private bool isChannelingTeleport;
+        private float teleportChannelTimer;
+        public float teleportChannelTime = 0.6f;
+        private float teleportCooldownTimer;
+        public float teleportCooldown = 1.5f;
+
+        // Inactive state (at 0 HP)
+        private bool isInactive;
 
         // Shade Soul resource
         public int shadeSoulMax = 99;
@@ -53,6 +64,7 @@ public partial class LegacyHelper
         private float hurtCooldown;
         private const float HurtIFrameSeconds = 1.35f;
         private float ignoreRefreshTimer;
+        private float hornetIgnoreRefreshTimer;
 
         private int lastSavedHP;
         private int lastSavedMax;
@@ -69,6 +81,15 @@ public partial class LegacyHelper
         {
             shadeHP = Mathf.Max(shadeHP, shadeMaxHP);
             PushShadeStatsToHud();
+        }
+
+        public void ReviveToAtLeast(int hp)
+        {
+            int target = Mathf.Max(1, hp);
+            shadeHP = Mathf.Max(shadeHP, target);
+            if (shadeHP > 0) isInactive = false;
+            PushShadeStatsToHud();
+            PersistIfChanged();
         }
 
         public int GetCurrentHP() => shadeHP;
@@ -95,10 +116,16 @@ public partial class LegacyHelper
                 var c = sr.color; c.a = 0.9f; sr.color = c;
             }
 
+            // Ensure the shade can act as a pogo surface for Hornet
+            try { gameObject.tag = "Recoiler"; } catch { }
+
             SetupShadeLight();
             cachedHud = Object.FindFirstObjectByType<SimpleHUD>();
             PushSoulToHud();
             CheckHazardOverlap();
+            // Ensure pogo target is present for Hornet downslash bounces
+            // Add a dedicated pogo target with HitResponse so hero slashes can register even when OnlyDamageEnemies is true
+            EnsurePogoTarget();
             try
             {
                 var pd = GameManager.instance != null ? GameManager.instance.playerData : null;
@@ -118,6 +145,46 @@ public partial class LegacyHelper
             PersistIfChanged();
         }
 
+        private void EnsurePogoTarget()
+        {
+            try
+            {
+                var pogo = transform.Find("PogoTarget")?.gameObject;
+                if (pogo == null)
+                {
+                    pogo = new GameObject("PogoTarget");
+                    pogo.transform.SetParent(transform, false);
+                    pogo.transform.localPosition = Vector3.zero;
+                }
+
+                // Ensure collider present (trigger) so slash damager trigger can overlap
+                var col = pogo.GetComponent<Collider2D>();
+                if (!col)
+                {
+                    var cap = pogo.AddComponent<CapsuleCollider2D>();
+                    cap.direction = CapsuleDirection2D.Vertical;
+                    cap.size = new Vector2(0.95f, 1.45f);
+                    cap.isTrigger = true;
+                    col = cap;
+                }
+                else col.isTrigger = true;
+
+                // Put on INTERACTIVE_OBJECT (or Default) so DownAttack's HitResponded path will process and allow bounce
+                int interactiveLayer = LayerMask.NameToLayer("Interactive Object");
+                if (interactiveLayer < 0) interactiveLayer = LayerMask.NameToLayer("Default");
+                if (interactiveLayer < 0) interactiveLayer = 0;
+                pogo.layer = interactiveLayer;
+
+                // Attach HitResponse and configure to accept hero nail hits downward only
+                // Optional puff-on-collision helper
+                if (!pogo.GetComponent<ShadePogoPuff>()) pogo.AddComponent<ShadePogoPuff>();
+
+                // Make sure shade's own rigidbody exists for trigger events
+                if (rb) { /* already present */ }
+            }
+            catch { }
+        }
+
         private void Update()
         {
             if (hornetTransform == null) return;
@@ -131,8 +198,20 @@ public partial class LegacyHelper
                 ignoreRefreshTimer = 1f;
             }
 
+            hornetIgnoreRefreshTimer -= Time.deltaTime;
+            if (hornetIgnoreRefreshTimer <= 0f)
+            {
+                EnsureIgnoreHornetCollisions();
+                hornetIgnoreRefreshTimer = 0.5f;
+            }
+
+            // Track inactive flag
+            isInactive = (shadeHP <= 0);
+
+            HandleTeleportChannel();
+
             HandleMovementAndFacing();
-            if (!inHardLeash)
+            if (!inHardLeash && !isChannelingTeleport && !isInactive)
             {
                 HandleFire();
                 HandleNailAttack();
@@ -158,6 +237,7 @@ public partial class LegacyHelper
                     shadeHP = Mathf.Min(shadeHP + 2, shadeMaxHP);
                     if (shadeHP != before)
                     {
+                        if (shadeHP > 0) isInactive = false;
                         PushShadeStatsToHud();
                         PersistIfChanged();
                     }
@@ -197,6 +277,9 @@ public partial class LegacyHelper
             float v = (Input.GetKey(KeyCode.S) ? -1f : 0f) + (Input.GetKey(KeyCode.W) ? 1f : 0f);
             Vector2 input = new Vector2(h, v);
             if (input.sqrMagnitude > 1f) input.Normalize();
+
+            // Freeze manual input while channeling teleport
+            if (isChannelingTeleport) input = Vector2.zero;
 
             Vector2 to = (Vector2)(hornetTransform.position - transform.position);
             float dist = to.magnitude;
@@ -297,6 +380,22 @@ public partial class LegacyHelper
                 bodyCol.isTrigger = false;
             }
 
+            // Add an additional trigger collider to interact with Hornet's attack triggers (for pogo)
+            try
+            {
+                var existingTriggers = GetComponents<Collider2D>();
+                bool hasTrigger = false;
+                foreach (var c in existingTriggers) if (c && c.isTrigger) { hasTrigger = true; break; }
+                if (!hasTrigger)
+                {
+                    var trigger = gameObject.AddComponent<CapsuleCollider2D>();
+                    trigger.direction = CapsuleDirection2D.Vertical;
+                    trigger.size = new Vector2(0.95f, 1.5f);
+                    trigger.isTrigger = true;
+                }
+            }
+            catch { }
+
             try
             {
                 var hc = HeroController.instance;
@@ -321,12 +420,8 @@ public partial class LegacyHelper
                         t.gameObject.layer = desiredLayer;
                     }
 
-                    // Still ignore collisions with Hornet
-                    var myCols = GetComponentsInChildren<Collider2D>(true);
-                    var hornetCols = hc.GetComponentsInChildren<Collider2D>(true);
-                    foreach (var mc in myCols)
-                        foreach (var hcCol in hornetCols)
-                            if (mc && hcCol) Physics2D.IgnoreCollision(mc, hcCol, true);
+                    // Still ignore collisions with Hornet (handled in a helper so we can call it later too)
+                    EnsureIgnoreHornetCollisions();
 
                     // Initial enemy ignore pass
                     RefreshCollisionIgnores();
@@ -357,6 +452,34 @@ public partial class LegacyHelper
                             if (!ec || ec.isTrigger) continue; // don't ignore triggers to still receive hazard/damage events
                             foreach (var mc in myCols) if (mc) Physics2D.IgnoreCollision(mc, ec, true);
                         }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private void EnsureIgnoreHornetCollisions()
+        {
+            try
+            {
+                var hc = HeroController.instance;
+                if (!hc) return;
+                var myCols = GetComponentsInChildren<Collider2D>(true);
+                var hornetCols = hc.GetComponentsInChildren<Collider2D>(true);
+                int heroAttackLayer = LayerMask.NameToLayer("Hero Attack");
+                foreach (var mc in myCols)
+                {
+                    if (!mc) continue;
+                    foreach (var hcCol in hornetCols)
+                    {
+                        if (!hcCol) continue;
+                        if (mc.isTrigger || hcCol.isTrigger) continue;
+                        if (hcCol.gameObject.layer == heroAttackLayer) continue; // allow hero attack contact
+                        // Allow slashes (which may not be on Hero Attack layer) by checking their components
+                        bool isSlash = false;
+                        try { if (hcCol.GetComponentInParent<NailSlashTerrainThunk>()) isSlash = true; } catch { }
+                        if (isSlash) continue;
+                        Physics2D.IgnoreCollision(mc, hcCol, true);
                     }
                 }
             }
@@ -520,6 +643,7 @@ public partial class LegacyHelper
             if (hazardCooldown > 0f) return;
             TeleportToHornet();
             shadeHP = Mathf.Max(0, shadeHP - 1);
+            if (shadeHP <= 0) isInactive = true;
             PushShadeStatsToHud();
             hazardCooldown = 0.25f;
             PersistIfChanged();
@@ -531,6 +655,7 @@ public partial class LegacyHelper
             int dmg = 1;
             try { if (dh != null) dmg = Mathf.Max(1, dh.damageDealt); } catch { }
             shadeHP = Mathf.Max(0, shadeHP - dmg);
+            if (shadeHP <= 0) isInactive = true;
             PushShadeStatsToHud();
             hurtCooldown = HurtIFrameSeconds;
             PersistIfChanged();
@@ -658,6 +783,68 @@ public partial class LegacyHelper
                 default:
                     return false;
             }
+        }
+
+        private void HandleTeleportChannel()
+        {
+            teleportCooldownTimer = Mathf.Max(0f, teleportCooldownTimer - Time.deltaTime);
+
+            // Start channel
+            if (!isChannelingTeleport && teleportCooldownTimer <= 0f && Input.GetKeyDown(TeleportKey))
+            {
+                isChannelingTeleport = true;
+                teleportChannelTimer = teleportChannelTime;
+            }
+
+            if (!isChannelingTeleport) return;
+
+            // Visual hint: fade sprite slightly while channeling
+            try
+            {
+                if (sr)
+                {
+                    var c = sr.color; c.a = 0.6f; sr.color = c;
+                }
+            }
+            catch { }
+
+            teleportChannelTimer -= Time.deltaTime;
+            if (teleportChannelTimer <= 0f)
+            {
+                TeleportToHornet();
+                teleportCooldownTimer = teleportCooldown;
+                isChannelingTeleport = false;
+                // restore sprite alpha
+                try { if (sr) { var c = sr.color; c.a = 0.9f; sr.color = c; } } catch { }
+            }
+
+            // Cancel on movement or attack input
+            if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(0) || Input.GetKeyDown(NailKey) || Input.GetKeyDown(FireKey))
+            {
+                isChannelingTeleport = false;
+                try { if (sr) { var c = sr.color; c.a = 0.9f; sr.color = c; } } catch { }
+            }
+        }
+
+        private int GetHornetNailDamage()
+        {
+            try
+            {
+                var gm = GameManager.instance;
+                var pd = gm != null ? gm.playerData : null;
+                if (pd == null) return 5;
+                int baseDmg = Mathf.Max(1, pd.nailDamage);
+                bool bound = false;
+                try { bound = BossSequenceController.BoundNail; } catch { bound = false; }
+                if (bound)
+                {
+                    int boundVal = 0;
+                    try { boundVal = BossSequenceController.BoundNailDamage; } catch { boundVal = baseDmg; }
+                    return Mathf.Min(baseDmg, Mathf.Max(1, boundVal));
+                }
+                return baseDmg;
+            }
+            catch { return 5; }
         }
     }
 }
