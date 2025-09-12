@@ -34,6 +34,10 @@ public partial class LegacyHelper
         private Transform hornetTransform;
         private float fireTimer;
         private SpriteRenderer sr;
+        private Sprite[] floatAnimFrames;
+        private int floatAnimFrameIndex;
+        private float floatAnimTimer;
+        private const float FloatAnimFrameTime = 0.1f;
         private Renderer[] shadeLightRenderers;
         public float simpleLightSize = 14f;
         private static Texture2D s_simpleLightTex;
@@ -137,8 +141,11 @@ public partial class LegacyHelper
             }
 
             sr = GetComponent<SpriteRenderer>();
+            LoadShadeSprites();
             if (sr != null)
             {
+                if (floatAnimFrames != null && floatAnimFrames.Length > 0)
+                    sr.sprite = floatAnimFrames[0];
                 var c = sr.color; c.a = 0.9f; sr.color = c;
             }
 
@@ -170,6 +177,64 @@ public partial class LegacyHelper
             lastSavedHP = lastSavedMax = lastSavedSoul = -999;
             PersistIfChanged();
             lastSoulForReady = shadeSoul;
+        }
+
+        private void LoadShadeSprites()
+        {
+            try
+            {
+                var dir = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Assets", "Knight_Shade_Sprites");
+                var sheet = Path.Combine(dir, "KnightShadeSprites.png");
+                floatAnimFrames = LoadSpriteSheet(sheet, 16, 16);
+            }
+            catch { floatAnimFrames = System.Array.Empty<Sprite>(); }
+        }
+
+        private Sprite[] LoadSpriteSheet(string path, int cols, int rows)
+        {
+            if (!File.Exists(path)) return System.Array.Empty<Sprite>();
+            var bytes = File.ReadAllBytes(path);
+            var tex = new Texture2D(2, 2, TextureFormat.ARGB32, false);
+            TryLoadImage(tex, bytes);
+            tex.filterMode = FilterMode.Point;
+            int w = tex.width / cols;
+            int h = tex.height / rows;
+            var sprites = new Sprite[cols * rows];
+            int idx = 0;
+            for (int y = rows - 1; y >= 0; y--)
+                for (int x = 0; x < cols; x++)
+                    sprites[idx++] = Sprite.Create(tex, new Rect(x * w, y * h, w, h), new Vector2(0.5f, 0.5f));
+            return sprites;
+        }
+
+        private static bool TryLoadImage(Texture2D tex, byte[] bytes)
+        {
+            try
+            {
+                var t = System.Type.GetType("UnityEngine.ImageConversion, UnityEngine.ImageConversionModule");
+                if (t != null)
+                {
+                    var m = t.GetMethod("LoadImage", BindingFlags.Public | BindingFlags.Static, null, new System.Type[] { typeof(Texture2D), typeof(byte[]), typeof(bool) }, null);
+                    if (m != null) { m.Invoke(null, new object[] { tex, bytes, false }); return true; }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private void HandleAnimation()
+        {
+            if (floatAnimFrames == null || floatAnimFrames.Length == 0 || sr == null) return;
+            int count = floatAnimFrames.Length;
+            if (count > 8) count = 8;
+            if (count <= 0) return;
+            floatAnimTimer += Time.deltaTime;
+            if (floatAnimTimer >= FloatAnimFrameTime)
+            {
+                floatAnimTimer -= FloatAnimFrameTime;
+                floatAnimFrameIndex = (floatAnimFrameIndex + 1) % count;
+                sr.sprite = floatAnimFrames[floatAnimFrameIndex];
+            }
         }
 
         private void EnsurePogoTarget()
@@ -257,6 +322,7 @@ public partial class LegacyHelper
             SyncShadeLight();
             PersistIfChanged();
             CheckFocusReadySfx();
+            HandleAnimation();
         }
 
         public void ApplyBindHealFromHornet(Transform hornet)
