@@ -162,4 +162,15 @@ public partial class LegacyHelper
     {
         private static bool Prefix() => false; // skip
     }
+
+    // When a SpellGetOrb completes collection (appears during spell acquisition sequences),
+    // advance shade spell progression.
+    [HarmonyPatch(typeof(SpellGetOrb), "Collect")]
+    private class SpellGetOrb_Collect_Patch
+    {
+        private static void Postfix()
+        {
+            try { NotifyHornetSpellUnlocked(); } catch { }
+        }
+    }
 }

@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public partial class LegacyHelper
@@ -48,6 +49,49 @@ public partial class LegacyHelper
         {
             yield return null;
             Destroy(gameObject);
+        }
+    }
+
+    public class ShadeAoE : MonoBehaviour
+    {
+        public int damage = 20;
+        public Transform hornetRoot;
+        public float lifeSeconds = 0.25f;
+        private HashSet<Collider2D> hitSet;
+
+        void Awake()
+        {
+            hitSet = new HashSet<Collider2D>();
+        }
+
+        void Start()
+        {
+            Destroy(gameObject, lifeSeconds);
+        }
+
+        void OnTriggerEnter2D(Collider2D other)
+        {
+            if (other == null) return;
+            if (hornetRoot != null && other.transform.IsChildOf(hornetRoot)) return;
+            if (other.transform == transform || other.transform.IsChildOf(transform)) return;
+            if (hitSet.Contains(other)) return;
+            hitSet.Add(other);
+
+            var hit = new HitInstance
+            {
+                Source = gameObject,
+                AttackType = AttackTypes.Spell,
+                DamageDealt = damage,
+                Direction = 90f,
+                MagnitudeMultiplier = 1f,
+                Multiplier = 1f,
+                IsHeroDamage = true,
+                IsFirstHit = true
+            };
+
+            HitTaker.Hit(other.gameObject, hit);
+            if (HitTaker.TryGetHealthManager(other.gameObject, out var hm))
+                hm.Hit(hit);
         }
     }
 }

@@ -18,6 +18,7 @@ public partial class LegacyHelper : BaseUnityPlugin
     internal static int savedShadeHP = -1;
     internal static int savedShadeMax = -1;
     internal static int savedShadeSoul = -1;
+    internal static int savedShadeSpellProgress = 0; // 0..6 progression
     internal static bool HasSavedShadeState => savedShadeMax > 0;
 
     internal static void SaveShadeState(int curHp, int maxHp, int soul)
@@ -25,6 +26,12 @@ public partial class LegacyHelper : BaseUnityPlugin
         savedShadeMax = Mathf.Max(1, maxHp);
         savedShadeHP = Mathf.Clamp(curHp, 0, savedShadeMax);
         savedShadeSoul = Mathf.Max(0, soul);
+    }
+
+    // Called when Hornet gains a new spell. Advances Shade's unlock/upgrade track.
+    internal static void NotifyHornetSpellUnlocked()
+    {
+        savedShadeSpellProgress = Mathf.Clamp(savedShadeSpellProgress + 1, 0, 6);
     }
 
     private void Awake()

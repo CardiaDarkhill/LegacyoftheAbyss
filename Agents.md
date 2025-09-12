@@ -18,14 +18,11 @@
 ## To Do:
 - At time of writing the following features still need to be implemented:
 
-- The shade still needs two additional spells, Descending Dark and Abyss Shriek.
-- Each of the shades spells needs two versions, their "Soul" variant and "Abyss" varient, like in the first hollow knight game. They will unlock these are the same time that Hornet unlocks certain things.
+
 - The shade needs a "Focus" ability, which lets it spend soul to heal, if Hornet is near the shade when it does this, she will also heal for the same amount.
-- The shades spells and nail damage should scale with Hornets. (Nail deals the same as hornets, Abyss Shriek deals 4X, Descending Dark deals 3X and Shade Soul deals 2.5X, the "soul" variants of these spells should deal 30% less.) This is already done for the spells and attacks that are already implemented, just keeping this here for when we add the remaining spells.
-- The shade needs its own sprite sheet/animations, currently it's just a black square. All of it's spells and attacks also need animations (Some of these can use assets and code already in Silksong, others will need assets taken from the first game).
+- The shade needs its own sprite sheet/animations, currently it's just a black square. All of it's spells and the focus ability also need animations (Some of these can use assets and code already in Silksong, others will need assets taken from the first game, I've added some sprite sheets to the assets folder that should help with this).
 - Sound effects need to be set up for all of the Shades attacks, spells and focus abilities.
 - The shade is failing to spawn in after having loaded into the game, quiting out to the main menu, and then reloading the game. At which point the shade stops ever respawning.
-- The shades left/right attacks appear to always attack in the direction of Hornet unless a left/right key is being actively held. The shade should remember it's facing from whatever direction is was moving last (Under it's own power, not counting the leash pull or something like knockback) and attack in that direction.
 
 
 ## Testing:

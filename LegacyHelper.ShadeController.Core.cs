@@ -43,6 +43,7 @@ public partial class LegacyHelper
         private const KeyCode FireKey = KeyCode.Space;
         private const KeyCode NailKey = KeyCode.J;
         private const KeyCode TeleportKey = KeyCode.K;
+        // Spells use FireKey + W (Shriek) or FireKey + S (Descending Dark)
 
         // Teleport channel
         private bool isChannelingTeleport;
@@ -59,12 +60,19 @@ public partial class LegacyHelper
         public int shadeSoul;
         public int soulGainPerHit = 11;
         public int projectileSoulCost = 33;
+        public int shriekSoulCost = 33;
+        public int quakeSoulCost = 33;
+        private float shriekTimer;
+        private float quakeTimer;
+        public float shriekCooldown = 1.2f;
+        public float quakeCooldown = 1.1f;
 
         private SimpleHUD cachedHud;
         private float hurtCooldown;
         private const float HurtIFrameSeconds = 1.35f;
         private float ignoreRefreshTimer;
         private float hornetIgnoreRefreshTimer;
+        private bool isCastingSpell;
 
         private int lastSavedHP;
         private int lastSavedMax;
@@ -211,10 +219,12 @@ public partial class LegacyHelper
             HandleTeleportChannel();
 
             HandleMovementAndFacing();
-            if (!inHardLeash && !isChannelingTeleport && !isInactive)
+            if (!inHardLeash && !isChannelingTeleport && !isInactive && !isCastingSpell)
             {
                 HandleFire();
                 HandleNailAttack();
+                HandleShriek();
+                HandleDescendingDark();
             }
 
             if (!cachedHud) cachedHud = Object.FindFirstObjectByType<SimpleHUD>();
@@ -330,9 +340,10 @@ public partial class LegacyHelper
             if (rb) rb.MovePosition(proposed);
             else transform.position = proposed;
 
+            // Update facing only from player's horizontal input.
+            // Do not auto-face Hornet when idle; preserve last manual facing.
             if (h > 0.1f) facing = 1;
             else if (h < -0.1f) facing = -1;
-            else if (Mathf.Abs(to.x) > 0.1f) facing = (to.x >= 0f ? 1 : -1);
 
             if (sr != null) sr.flipX = (facing == -1);
 
@@ -347,6 +358,9 @@ public partial class LegacyHelper
         {
             fireTimer -= Time.deltaTime;
             if (!Input.GetKey(FireKey) || fireTimer > 0f) return;
+            // If aiming a spell with up/down, don't fire projectile
+            if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.S)) return;
+            if (!IsProjectileUnlocked()) return;
             if (shadeSoul < projectileSoulCost) return;
             fireTimer = fireCooldown;
             shadeSoul = Mathf.Max(0, shadeSoul - projectileSoulCost);
@@ -355,6 +369,296 @@ public partial class LegacyHelper
 
             Vector2 dir = new Vector2(facing, 0f);
             SpawnProjectile(dir);
+        }
+
+        private void HandleShriek()
+        {
+            shriekTimer -= Time.deltaTime;
+            // Trigger on FireKey + Up
+            if (!Input.GetKeyDown(FireKey) || !Input.GetKey(KeyCode.W)) return;
+            if (!IsShriekUnlocked()) return; // locked until 3rd unlock
+            if (shriekTimer > 0f) return;
+            if (shadeSoul < shriekSoulCost) return;
+            shriekTimer = shriekCooldown;
+            shadeSoul = Mathf.Max(0, shadeSoul - shriekSoulCost);
+            PushSoulToHud();
+            CheckHazardOverlap();
+
+            int dmg = ComputeSpellDamageMultiplier(4f, IsShriekUpgraded()); // Abyss Shriek base 4x
+            float life = 0.18f;
+            // 12-unit high, 95-degree cone centered on torso
+            Vector2 localOffset = new Vector2(0f, 0.8f);
+            SpawnShriekCone(12f, 95f, dmg, life, localOffset);
+        }
+
+        private void HandleDescendingDark()
+        {
+            quakeTimer -= Time.deltaTime;
+            // Trigger on FireKey + Down
+            if (!Input.GetKeyDown(FireKey) || !Input.GetKey(KeyCode.S)) return;
+            if (!IsDescendingDarkUnlocked()) return; // locked until 2nd unlock
+            if (quakeTimer > 0f) return;
+            if (shadeSoul < quakeSoulCost) return;
+            quakeTimer = quakeCooldown;
+            shadeSoul = Mathf.Max(0, shadeSoul - quakeSoulCost);
+            PushSoulToHud();
+            CheckHazardOverlap();
+
+            int dmg = ComputeSpellDamageMultiplier(3f, IsDescendingDarkUpgraded()); // Descending Dark base 3x
+            StartCoroutine(DescendingDarkRoutine(dmg));
+        }
+
+        // Spell progression helpers
+        private int ShadeSpellProgress
+        {
+            get
+            {
+                try
+                {
+                    var pd = GameManager.instance != null ? GameManager.instance.playerData : null;
+                    if (pd == null) return 0;
+                    int c = 0;
+                    if (pd.hasNeedleThrow) c++;
+                    if (pd.hasThreadSphere) c++;
+                    if (pd.hasSilkCharge) c++;
+                    if (pd.hasParry) c++;
+                    if (pd.hasSilkBomb) c++;
+                    if (pd.hasSilkBossNeedle) c++;
+                    return Mathf.Clamp(c, 0, 6);
+                }
+                catch { return 0; }
+            }
+        }
+        private bool IsProjectileUnlocked() => ShadeSpellProgress >= 1;
+        private bool IsDescendingDarkUnlocked() => ShadeSpellProgress >= 2;
+        private bool IsShriekUnlocked() => ShadeSpellProgress >= 3;
+        private bool IsProjectileUpgraded() => ShadeSpellProgress >= 4;
+        private bool IsDescendingDarkUpgraded() => ShadeSpellProgress >= 5;
+        private bool IsShriekUpgraded() => ShadeSpellProgress >= 6;
+
+        private int ComputeSpellDamageMultiplier(float baseMult, bool upgraded)
+        {
+            int nail = Mathf.Max(1, GetHornetNailDamage());
+            float mult = upgraded ? baseMult : baseMult * 0.7f; // Soul variant = 30% less
+            int dmg = Mathf.RoundToInt(nail * mult);
+            return Mathf.Max(1, dmg);
+        }
+
+        private void SpawnAoE(string name, Vector3 worldPos, float radius, int damage, float lifeSeconds)
+        {
+            var go = new GameObject(name);
+            go.transform.position = worldPos;
+            go.tag = "Hero Spell";
+            int spellLayer = LayerMask.NameToLayer("Hero Spell");
+            int atkLayer = LayerMask.NameToLayer("Hero Attack");
+            if (spellLayer >= 0) go.layer = spellLayer; else if (atkLayer >= 0) go.layer = atkLayer;
+
+            var col = go.AddComponent<CircleCollider2D>();
+            col.isTrigger = true;
+            col.radius = radius;
+
+            var aoe = go.AddComponent<ShadeAoE>();
+            aoe.damage = damage;
+            aoe.hornetRoot = hornetTransform;
+            aoe.lifeSeconds = lifeSeconds;
+
+            // Optional visual hint
+            try
+            {
+                var sr2 = go.AddComponent<SpriteRenderer>();
+                sr2.sprite = MakeDotSprite();
+                var c = new Color(0f, 0f, 0f, 0.25f);
+                sr2.color = c;
+                sr2.sortingLayerID = sr ? sr.sortingLayerID : 0;
+                sr2.sortingOrder = sr ? (sr.sortingOrder - 1) : -1;
+                go.transform.localScale = Vector3.one * (radius * 2.2f);
+            }
+            catch { }
+
+            IgnoreHornetForCollider(col);
+        }
+
+        private void IgnoreHornetForCollider(Collider2D col)
+        {
+            try
+            {
+                if (!col || !hornetTransform) return;
+                var hornetCols = hornetTransform.GetComponentsInChildren<Collider2D>(true);
+                foreach (var hc in hornetCols)
+                    if (hc) Physics2D.IgnoreCollision(col, hc, true);
+            }
+            catch { }
+        }
+
+        private void SpawnShriekCone(float height, float degrees, int damage, float lifeSeconds, Vector2 localOffset)
+        {
+            var go = new GameObject("ShadeShriekCone");
+            go.transform.position = transform.position + (Vector3)localOffset;
+            go.tag = "Hero Spell";
+            int spellLayer = LayerMask.NameToLayer("Hero Spell");
+            int atkLayer = LayerMask.NameToLayer("Hero Attack");
+            if (spellLayer >= 0) go.layer = spellLayer; else if (atkLayer >= 0) go.layer = atkLayer;
+
+            var poly = go.AddComponent<PolygonCollider2D>();
+            poly.isTrigger = true;
+            // Build wedge polygon with apex at (0,0) and arc up
+            int segments = 8;
+            float half = degrees * 0.5f;
+            List<Vector2> pts = new List<Vector2>();
+            pts.Add(Vector2.zero);
+            for (int i = 0; i <= segments; i++)
+            {
+                float a = Mathf.Lerp(-half, half, i / (float)segments);
+                float ang = (90f + a) * Mathf.Deg2Rad; // around up axis
+                Vector2 p = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * height;
+                pts.Add(p);
+            }
+            poly.SetPath(0, pts.ToArray());
+
+            var aoe = go.AddComponent<ShadeAoE>();
+            aoe.damage = damage;
+            aoe.hornetRoot = hornetTransform;
+            aoe.lifeSeconds = lifeSeconds;
+
+            IgnoreHornetForCollider(poly);
+        }
+
+        private IEnumerator DescendingDarkRoutine(int totalDamage)
+        {
+            isCastingSpell = true;
+            // Cast time ~0.25s
+            float castTime = 0.25f;
+            float prevVelY = rb ? rb.linearVelocity.y : 0f;
+            if (rb) rb.linearVelocity = Vector2.zero;
+            float t = 0f;
+            while (t < castTime)
+            {
+                t += Time.deltaTime;
+                yield return null;
+            }
+
+            // Enemy i-frames during descent (not hazards)
+            hurtCooldown = Mathf.Max(hurtCooldown, 0.6f);
+
+            // Find ground below
+            Vector2 start = transform.position;
+            float maxDist = 60f;
+            var hits = Physics2D.RaycastAll(start, Vector2.down, maxDist);
+            RaycastHit2D? pick = null;
+            foreach (var h in hits)
+            {
+                if (!h.collider) continue;
+                if (h.collider.isTrigger) continue;
+                if (h.collider.transform == transform || h.collider.transform.IsChildOf(transform)) continue;
+                pick = h; break;
+            }
+
+            Vector3 targetPos = transform.position + Vector3.down * 8f; // fallback
+            float groundY = targetPos.y;
+            float extY = bodyCol ? bodyCol.bounds.extents.y : 0.7f;
+            if (pick.HasValue)
+            {
+                groundY = pick.Value.point.y;
+                targetPos = new Vector3(transform.position.x, groundY + extY + 0.02f, transform.position.z);
+            }
+
+            // Quick drop over 0.12s
+            float dropTime = 0.12f;
+            Vector3 from = transform.position;
+            float elapsed = 0f;
+            while (elapsed < dropTime)
+            {
+                elapsed += Time.deltaTime;
+                float u = Mathf.Clamp01(elapsed / dropTime);
+                Vector3 p = Vector3.Lerp(from, targetPos, u*u); // ease in
+                TeleportToPosition(p);
+                yield return null;
+            }
+            TeleportToPosition(targetPos);
+
+            // If landing area is a hazard, skip the impact
+            if (IsHazardAtPosition(new Vector2(targetPos.x, groundY + 0.2f), 0.8f))
+            {
+                isCastingSpell = false;
+                yield break;
+            }
+
+            // Spawn two hitboxes: ground strip (10 units wide), and teardrop (6x8) above
+            int half = Mathf.Max(1, Mathf.RoundToInt(totalDamage * 0.5f));
+            SpawnQuakeImpact(groundY, half);
+            SpawnQuakeTeardrop(groundY, half);
+
+            // Small delay to keep i-frames briefly after impact
+            yield return new WaitForSeconds(0.1f);
+            if (rb) rb.linearVelocity = new Vector2(rb.linearVelocity.x, prevVelY);
+            isCastingSpell = false;
+        }
+
+        private bool IsHazardAtPosition(Vector2 pos, float radius)
+        {
+            try
+            {
+                var hits = Physics2D.OverlapCircleAll(pos, radius, ~0, -Mathf.Infinity, Mathf.Infinity);
+                foreach (var c in hits)
+                {
+                    if (!c) continue;
+                    if (c.transform == transform || c.transform.IsChildOf(transform)) continue;
+                    var dh = c.GetComponentInParent<DamageHero>();
+                    if (dh != null)
+                    {
+                        var hz = GetHazardType(dh);
+                        if (IsTerrainHazard(hz)) return true;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private void SpawnQuakeImpact(float groundY, int damage)
+        {
+            var go = new GameObject("ShadeQuakeStrip");
+            go.transform.position = new Vector3(transform.position.x, groundY + 0.5f, transform.position.z);
+            go.tag = "Hero Spell";
+            int spellLayer = LayerMask.NameToLayer("Hero Spell");
+            int atkLayer = LayerMask.NameToLayer("Hero Attack");
+            if (spellLayer >= 0) go.layer = spellLayer; else if (atkLayer >= 0) go.layer = atkLayer;
+
+            var box = go.AddComponent<BoxCollider2D>();
+            box.isTrigger = true;
+            box.size = new Vector2(10f, 1.0f);
+
+            var aoe = go.AddComponent<ShadeAoE>();
+            aoe.damage = damage;
+            aoe.hornetRoot = hornetTransform;
+            aoe.lifeSeconds = 0.25f;
+
+            IgnoreHornetForCollider(box);
+        }
+
+        private void SpawnQuakeTeardrop(float groundY, int damage)
+        {
+            var go = new GameObject("ShadeQuakeTear");
+            // Place center so bottom is at ground contact near the shade's position.
+            float height = 8f; float width = 6f;
+            float centerY = groundY + (height * 0.5f);
+            go.transform.position = new Vector3(transform.position.x, centerY, transform.position.z);
+            go.tag = "Hero Spell";
+            int spellLayer = LayerMask.NameToLayer("Hero Spell");
+            int atkLayer = LayerMask.NameToLayer("Hero Attack");
+            if (spellLayer >= 0) go.layer = spellLayer; else if (atkLayer >= 0) go.layer = atkLayer;
+
+            var cap = go.AddComponent<CapsuleCollider2D>();
+            cap.isTrigger = true;
+            cap.direction = CapsuleDirection2D.Vertical;
+            cap.size = new Vector2(width, height);
+
+            var aoe = go.AddComponent<ShadeAoE>();
+            aoe.damage = damage;
+            aoe.hornetRoot = hornetTransform;
+            aoe.lifeSeconds = 0.25f;
+
+            IgnoreHornetForCollider(cap);
         }
 
         private void SetupPhysics()

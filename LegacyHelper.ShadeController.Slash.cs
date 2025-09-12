@@ -408,7 +408,9 @@ public partial class LegacyHelper
             }
 
             var sp = proj.AddComponent<ShadeProjectile>();
-            sp.damage = Mathf.RoundToInt(Mathf.Max(1, GetHornetNailDamage()) * 2.5f);
+            // Use spell progression for damage (2.5x upgraded, 30% less when unupgraded)
+            int dmg = ComputeSpellDamageMultiplier(2.5f, IsProjectileUpgraded());
+            sp.damage = Mathf.Max(1, dmg);
             sp.hornetRoot = hornetTransform;
             sp.lifeSeconds = 1.5f;
         }
