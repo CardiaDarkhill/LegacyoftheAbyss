@@ -27,6 +27,7 @@
 - The shade needs its own sprite sheet/animations, currently it's just a black square. All of it's spells and attacks also need animations (Some of these can use assets and code already in Silksong, others will need assets taken from the first game).
 - Sound effects need to be set up for all of the Shades attacks, spells and focus abilities.
 - The shade can become stuck inside walls due to the leash mechanic, the easiest fix here seems like just giving the shade the ability to channel for a brief moment to teleport to Hornet, though I'm open to a better solution that's more automatic.
+- The shade is failing to spawn in after having loaded into the game, quiting out to the main menu, and then reloading the game. At which point the shade stops ever respawning.
 
 
 ## Testing:
