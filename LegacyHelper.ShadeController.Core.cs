@@ -583,8 +583,12 @@ public partial class LegacyHelper
                 var ht = h.collider.transform;
                 // ignore self (any part of the shade hierarchy)
                 if (ht == transform || ht.IsChildOf(transform) || transform.IsChildOf(ht)) continue;
-                // ignore hornet using root comparison
-                if (hornetRoot && ht.root == hornetRoot) continue;
+                // ignore hornet using hierarchy checks
+                if (hornetTransform)
+                {
+                    if (ht == hornetTransform || ht.IsChildOf(hornetTransform) || (hornetRoot && ht.root == hornetRoot))
+                        continue;
+                }
                 // ignore enemies/hazards (anything that damages hero)
                 try { if (h.collider.GetComponentInParent<DamageHero>() != null) continue; } catch { }
                 // otherwise this is acceptable ground
