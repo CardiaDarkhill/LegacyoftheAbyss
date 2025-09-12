@@ -52,6 +52,7 @@ public partial class LegacyHelper
         private SimpleHUD cachedHud;
         private float hurtCooldown;
         private const float HurtIFrameSeconds = 1.35f;
+        private float ignoreRefreshTimer;
 
         private int lastSavedHP;
         private int lastSavedMax;
@@ -123,6 +124,12 @@ public partial class LegacyHelper
 
             if (hazardCooldown > 0f) hazardCooldown = Mathf.Max(0f, hazardCooldown - Time.deltaTime);
             if (hurtCooldown > 0f) hurtCooldown = Mathf.Max(0f, hurtCooldown - Time.deltaTime);
+            ignoreRefreshTimer -= Time.deltaTime;
+            if (ignoreRefreshTimer <= 0f)
+            {
+                RefreshCollisionIgnores();
+                ignoreRefreshTimer = 1f;
+            }
 
             HandleMovementAndFacing();
             if (!inHardLeash)
@@ -232,8 +239,13 @@ public partial class LegacyHelper
             if (!inHardLeash)
                 moveDelta += input * moveSpeed * Time.deltaTime;
 
-            if (rb) rb.MovePosition(rb.position + moveDelta);
-            else transform.position += (Vector3)moveDelta;
+            // Compute proposed next position and clamp against transition gates at map edges
+            Vector2 curPos = rb ? rb.position : (Vector2)transform.position;
+            Vector2 proposed = curPos + moveDelta;
+            proposed = ClampAgainstTransitionGates(proposed);
+
+            if (rb) rb.MovePosition(proposed);
+            else transform.position = proposed;
 
             if (h > 0.1f) facing = 1;
             else if (h < -0.1f) facing = -1;
@@ -277,6 +289,7 @@ public partial class LegacyHelper
                 var cap = gameObject.AddComponent<CapsuleCollider2D>();
                 cap.direction = CapsuleDirection2D.Vertical;
                 cap.size = new Vector2(0.9f, 1.4f);
+                cap.isTrigger = false;
                 bodyCol = cap;
             }
             else
@@ -289,12 +302,62 @@ public partial class LegacyHelper
                 var hc = HeroController.instance;
                 if (hc)
                 {
-                    gameObject.layer = hc.gameObject.layer;
+                    // Place shade on a non-hero layer to avoid triggering transitions and interactables
+                    int heroLayer = hc.gameObject.layer; // typically 9
+                    int desiredLayer = LayerMask.NameToLayer("Default");
+                    if (desiredLayer < 0 || desiredLayer == heroLayer)
+                    {
+                        // Fallback to a safe built-in layer that is not the hero layer
+                        int ignoreRaycast = LayerMask.NameToLayer("Ignore Raycast");
+                        desiredLayer = (ignoreRaycast >= 0 && ignoreRaycast != heroLayer) ? ignoreRaycast : 0;
+                    }
+
+                    gameObject.layer = desiredLayer;
+                    // Apply to immediate children we control
+                    var allTransforms = GetComponentsInChildren<Transform>(true);
+                    foreach (var t in allTransforms)
+                    {
+                        if (!t) continue;
+                        t.gameObject.layer = desiredLayer;
+                    }
+
+                    // Still ignore collisions with Hornet
                     var myCols = GetComponentsInChildren<Collider2D>(true);
                     var hornetCols = hc.GetComponentsInChildren<Collider2D>(true);
                     foreach (var mc in myCols)
                         foreach (var hcCol in hornetCols)
                             if (mc && hcCol) Physics2D.IgnoreCollision(mc, hcCol, true);
+
+                    // Initial enemy ignore pass
+                    RefreshCollisionIgnores();
+                }
+            }
+            catch { }
+        }
+
+        private void RefreshCollisionIgnores()
+        {
+            try
+            {
+                var myCols = GetComponentsInChildren<Collider2D>(true);
+                if (myCols == null || myCols.Length == 0) return;
+
+                // Ignore physical collisions with enemies (objects with HealthManager) but keep triggers for damage/hazards
+                HealthManager[] enemies = null;
+                try { enemies = Object.FindObjectsOfType<HealthManager>(); }
+                catch { enemies = null; }
+                if (enemies != null)
+                {
+                    foreach (var hm in enemies)
+                    {
+                        if (!hm) continue;
+                        var cols = hm.GetComponentsInChildren<Collider2D>(true);
+                        foreach (var ec in cols)
+                        {
+                            if (!ec || ec.isTrigger) continue; // don't ignore triggers to still receive hazard/damage events
+                            foreach (var mc in myCols) if (mc) Physics2D.IgnoreCollision(mc, ec, true);
+                        }
+                    }
                 }
             }
             catch { }
@@ -363,6 +426,57 @@ public partial class LegacyHelper
                 rb.linearVelocity = Vector2.zero;
                 rb.simulated = hadSim;
             }
+        }
+
+        private Vector2 ClampAgainstTransitionGates(Vector2 proposed)
+        {
+            try
+            {
+                if (!bodyCol) return proposed;
+                // Approximate shade bounds at proposed position using current extents
+                var ext = bodyCol.bounds.extents;
+                Vector2 min = proposed - (Vector2)ext;
+                Vector2 max = proposed + (Vector2)ext;
+
+                var hits = Physics2D.OverlapAreaAll(min, max);
+                if (hits == null || hits.Length == 0) return proposed;
+
+                foreach (var h in hits)
+                {
+                    if (!h) continue;
+                    var tp = h.GetComponentInParent<TransitionPoint>();
+                    if (tp == null) continue;
+                    bool isDoor = false;
+                    try { isDoor = tp.isADoor; } catch { }
+                    if (isDoor) continue; // block only edge-of-map gates
+
+                    var gb = h.bounds;
+                    var gatePos = tp.GetGatePosition();
+                    switch (gatePos)
+                    {
+                        case GlobalEnums.GatePosition.right:
+                            if (proposed.x > gb.min.x - ext.x)
+                                proposed.x = gb.min.x - ext.x;
+                            break;
+                        case GlobalEnums.GatePosition.left:
+                            if (proposed.x < gb.max.x + ext.x)
+                                proposed.x = gb.max.x + ext.x;
+                            break;
+                        case GlobalEnums.GatePosition.top:
+                            if (proposed.y > gb.min.y - ext.y)
+                                proposed.y = gb.min.y - ext.y;
+                            break;
+                        case GlobalEnums.GatePosition.bottom:
+                            if (proposed.y < gb.max.y + ext.y)
+                                proposed.y = gb.max.y + ext.y;
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+            catch { }
+            return proposed;
         }
 
         private void CheckHazardOverlap()
@@ -547,4 +661,3 @@ public partial class LegacyHelper
         }
     }
 }
-
