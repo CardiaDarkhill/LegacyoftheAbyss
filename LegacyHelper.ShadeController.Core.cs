@@ -513,7 +513,7 @@ public partial class LegacyHelper
             try
             {
                 if (!col || !hornetTransform) return;
-                var hornetCols = hornetTransform.GetComponentsInChildren<Collider2D>(true);
+                var hornetCols = hornetTransform.root.GetComponentsInChildren<Collider2D>(true);
                 foreach (var hc in hornetCols)
                     if (hc) Physics2D.IgnoreCollision(col, hc, true);
             }
@@ -575,15 +575,16 @@ public partial class LegacyHelper
             float maxDist = 60f;
             var hits = Physics2D.RaycastAll(start, Vector2.down, maxDist);
             RaycastHit2D? pick = null;
+            Transform hornetRoot = hornetTransform ? hornetTransform.root : null;
             foreach (var h in hits)
             {
                 if (!h.collider) continue;
                 if (h.collider.isTrigger) continue;
                 var ht = h.collider.transform;
-                // ignore self
-                if (ht == transform || ht.IsChildOf(transform)) continue;
-                // ignore hornet
-                if (hornetTransform && (ht == hornetTransform || ht.IsChildOf(hornetTransform))) continue;
+                // ignore self (any part of the shade hierarchy)
+                if (ht == transform || ht.IsChildOf(transform) || transform.IsChildOf(ht)) continue;
+                // ignore hornet using root comparison
+                if (hornetRoot && ht.root == hornetRoot) continue;
                 // ignore enemies/hazards (anything that damages hero)
                 try { if (h.collider.GetComponentInParent<DamageHero>() != null) continue; } catch { }
                 // otherwise this is acceptable ground
@@ -637,10 +638,12 @@ public partial class LegacyHelper
             try
             {
                 var hits = Physics2D.OverlapCircleAll(pos, radius, ~0, -Mathf.Infinity, Mathf.Infinity);
+                Transform hornetRoot = hornetTransform ? hornetTransform.root : null;
                 foreach (var c in hits)
                 {
                     if (!c) continue;
                     if (c.transform == transform || c.transform.IsChildOf(transform)) continue;
+                    if (hornetRoot && c.transform.root == hornetRoot) continue;
                     var dh = c.GetComponentInParent<DamageHero>();
                     if (dh != null)
                     {
@@ -807,7 +810,7 @@ public partial class LegacyHelper
                 var hc = HeroController.instance;
                 if (!hc) return;
                 var myCols = GetComponentsInChildren<Collider2D>(true);
-                var hornetCols = hc.GetComponentsInChildren<Collider2D>(true);
+                var hornetCols = hc.transform.root.GetComponentsInChildren<Collider2D>(true);
                 int heroAttackLayer = LayerMask.NameToLayer("Hero Attack");
                 foreach (var mc in myCols)
                 {
@@ -856,7 +859,12 @@ public partial class LegacyHelper
             {
                 if (bodyCol && col && !bodyCol.IsTouching(col)) return;
                 if (col.transform == transform || col.transform.IsChildOf(transform)) return;
-                if (hornetTransform && (col.transform == hornetTransform || col.transform.IsChildOf(hornetTransform))) return;
+                if (hornetTransform)
+                {
+                    var hornetRoot = hornetTransform.root;
+                    if (col.transform == hornetTransform || col.transform.IsChildOf(hornetTransform) || col.transform.root == hornetRoot)
+                        return;
+                }
                 var dh = col.GetComponentInParent<DamageHero>();
                 if (dh != null)
                 {
@@ -957,7 +965,7 @@ public partial class LegacyHelper
                 var c = results[i];
                 if (!c) continue;
                 if (c.transform == transform || c.transform.IsChildOf(transform)) continue;
-                if (hornetTransform && (c.transform == hornetTransform || c.transform.IsChildOf(hornetTransform))) continue;
+                if (hornetTransform && c.transform.root == hornetTransform.root) continue;
                 var dh = c.GetComponentInParent<DamageHero>();
                 if (dh != null)
                 {
