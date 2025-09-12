@@ -21,7 +21,7 @@
 
 
 - The shade needs its own sprite sheet/animations, currently it's just a black square. All of it's spells and the focus ability also need animations (Some of these can use assets and code already in Silksong, others will need assets taken from the first game, I've added some sprite sheets to the assets folder that should help with this).
-- Desolate Dive/Descending Dark seems to stop it's dive when impacting Hornet or any enemy hitbox, it shouldn't stop for until it hits the ground (The easiest way to target it should be using it from directly above an enemy and abusing the iframes it gives to dive directly into them and then quickly run out)
+- Desolate Dive/Descending Dark seems to stop it's dive when impacting specifically the top of Hornet's hitbox, it shouldn't stop until it hits the ground (The easiest way to target it should be using it from directly above an enemy and abusing the iframes it gives to dive directly into them and then quickly run out)
 
 
 
