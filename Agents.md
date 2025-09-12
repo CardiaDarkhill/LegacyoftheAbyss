@@ -26,10 +26,7 @@
 - The shades spells and nail damage should scale with Hornets. (Nail deals the same as hornets, Abyss Shriek deals 4X, Descending Dark deals 3X and Shade Soul deals 2.5X, the "soul" variants of these spells should deal 30% less.)
 - The shade needs its own sprite sheet/animations, currently it's just a black square. All of it's spells and attacks also need animations (Some of these can use assets and code already in Silksong, others will need assets taken from the first game).
 - Sound effects need to be set up for all of the Shades attacks, spells and focus abilities.
-- The shades "Leash" system is currently quite basic, it should pull the shade slowly toward hornet when it gets too far from her, when the shade gets very far from hornet, it should disable control and collision for the shade and pull it to hornet at a much faster speed. If for some reason even this isn't enough to get the Shade within an acceptable distance of Hornet within a few seconds, the shade should just be teleported to Hornet.
-- There seems to be a bug that's causing hornet to instantly leave a zone when walking in from the right, immediately running back out the left side exit that she just entered from. This makes certain zone transitions impossible and needs to be fixed.
-- Currently when entering an area the shades starting position seems to be a bit random, the shade should appear in a zone about half a second after the player gains control of Hornet, spawning in exactly where she was when the player gained control of her.
-- The shade should be a light source, the same way that Hornet is.
+- The shade can become stuck inside walls due to the leash mechanic, the easiest fix here seems like just giving the shade the ability to channel for a brief moment to teleport to Hornet, though I'm open to a better solution that's more automatic.
 
 
 ## Testing:

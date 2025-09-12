@@ -504,7 +504,7 @@ public class SimpleHUD : MonoBehaviour
     }
 
     private AudioSource sfxSource;
-    private AudioClip hornetDamageClip;
+    // Removed unused hornetDamageClip to silence compiler warning
     private List<AudioClip> shadeHurtCandidates;
     private int shadeHurtIdx;
     private AudioClip pinnedHurtSingle;

@@ -12,6 +12,7 @@ public class LegacyHelper : BaseUnityPlugin
     private static GameObject helper;
     private static bool loggedStartupFields;
     private static SimpleHUD hud;
+    private static bool registeredEnterSceneHandler;
 
     // Persist shade state across scene transitions
     internal static int savedShadeHP = -1;
@@ -41,6 +42,79 @@ public class LegacyHelper : BaseUnityPlugin
                     go.SetActive(false);
             }
         };
+    }
+
+    // Spawn shade a short delay after Hornet regains control, exactly at that moment's position
+    private static void HandleFinishedEnteringScene()
+    {
+        try
+        {
+            var gm = GameManager.instance;
+            if (gm == null || gm.hero_ctrl == null) return;
+            Vector3 spawnPosAtControl = gm.hero_ctrl.transform.position;
+            // Start coroutine on GameManager to avoid requiring plugin instance
+            gm.StartCoroutine(SpawnShadeAfterDelay(spawnPosAtControl, 0.5f));
+        }
+        catch { }
+    }
+
+    private static IEnumerator SpawnShadeAfterDelay(Vector3 pos, float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        var gm = GameManager.instance;
+        if (gm == null || gm.hero_ctrl == null) yield break;
+
+        // If shade already exists, just reposition and zero velocity
+        if (helper != null)
+        {
+            try
+            {
+                var sc = helper.GetComponent<ShadeController>();
+                if (sc != null)
+                {
+                    sc.TeleportToPosition(pos);
+                    SaveShadeState(sc.GetCurrentHP(), sc.GetMaxHP(), sc.GetShadeSoul());
+                }
+                else
+                {
+                    helper.transform.position = pos;
+                }
+            }
+            catch { }
+            yield break;
+        }
+
+        // Create fresh helper at the captured position
+        helper = new GameObject("HelperShade");
+        helper.transform.position = pos;
+
+        var scNew = helper.AddComponent<ShadeController>();
+        scNew.Init(gm.hero_ctrl.transform);
+        if (HasSavedShadeState)
+        {
+            scNew.RestorePersistentState(savedShadeHP, savedShadeMax, savedShadeSoul);
+        }
+
+        var sr = helper.AddComponent<SpriteRenderer>();
+        sr.sprite = GenerateDebugSprite();
+        sr.color = Color.black;
+
+        var hornetRenderer = gm.hero_ctrl.GetComponentInChildren<SpriteRenderer>();
+        if (hornetRenderer != null)
+        {
+            sr.sortingLayerID = hornetRenderer.sortingLayerID;
+            sr.sortingOrder = hornetRenderer.sortingOrder + 1;
+        }
+    }
+
+    private static Sprite GenerateDebugSprite()
+    {
+        var tex = new Texture2D(160, 160);
+        for (int x = 0; x < 160; x++)
+            for (int y = 0; y < 160; y++)
+                tex.SetPixel(x, y, Color.white);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, 160, 160), new Vector2(0.5f, 0.5f));
     }
 
     internal static void DisableStartup(GameManager gm)
@@ -87,31 +161,17 @@ public class LegacyHelper : BaseUnityPlugin
             if (!gameplay)
                 return;
 
-            Debug.Log("[HelperMod] Gameplay scene detected, spawning helper.");
+            Debug.Log("[HelperMod] Gameplay scene detected; scheduling shade spawn on control regain.");
 
-            if (helper == null)
+            // Register for control regain event once
+            if (!registeredEnterSceneHandler)
             {
-                helper = new GameObject("HelperShade");
-                helper.transform.position = __instance.hero_ctrl.transform.position;
-
-                var sc = helper.AddComponent<ShadeController>();
-                sc.Init(__instance.hero_ctrl.transform);
-                // Restore persisted state if available
-                if (HasSavedShadeState)
+                try
                 {
-                    sc.RestorePersistentState(savedShadeHP, savedShadeMax, savedShadeSoul);
+                    __instance.OnFinishedEnteringScene += HandleFinishedEnteringScene;
+                    registeredEnterSceneHandler = true;
                 }
-
-                var sr = helper.AddComponent<SpriteRenderer>();
-                sr.sprite = GenerateDebugSprite();
-                sr.color = Color.black;
-
-                var hornetRenderer = __instance.hero_ctrl.GetComponentInChildren<SpriteRenderer>();
-                if (hornetRenderer != null)
-                {
-                    sr.sortingLayerID = hornetRenderer.sortingLayerID;
-                    sr.sortingOrder = hornetRenderer.sortingOrder + 1; //Render layers are weird, anything behind hornets layer seems to vanish entirely
-                }
+                catch { }
             }
 
             if (hud == null)
@@ -125,17 +185,6 @@ public class LegacyHelper : BaseUnityPlugin
             {
                 try { hud.SetPlayerData(__instance.playerData); } catch { }
             }
-        }
-
-        private static Sprite GenerateDebugSprite()
-        {
-            var tex = new Texture2D(160, 160);
-            for (int x = 0; x < 160; x++)
-                for (int y = 0; y < 160; y++)
-                    tex.SetPixel(x, y, Color.white);
-
-            tex.Apply();
-            return Sprite.Create(tex, new Rect(0, 0, 160, 160), new Vector2(0.5f, 0.5f));
         }
     }
 
@@ -212,7 +261,15 @@ public class LegacyHelper : BaseUnityPlugin
     {
         // Movement and leash
         public float moveSpeed = 8f;
-        public float maxDistance = 14f;
+        public float maxDistance = 14f; // legacy hard clamp (kept as safety)
+        public float softLeashRadius = 10f;   // gentle pull begins
+        public float hardLeashRadius = 22f;   // disable control + fast pull
+        public float snapLeashRadius = 38f;   // immediate teleport if exceeded
+        public float softPullSpeed = 6f;      // units/sec at start of soft leash
+        public float hardPullSpeed = 30f;     // units/sec during hard leash
+        public float hardLeashTimeout = 2.5f; // seconds before snap if stuck
+        private bool inHardLeash;
+        private float hardLeashTimer;
         private Rigidbody2D rb;
         private Collider2D bodyCol;
         private int shadeMaxHP;
@@ -228,6 +285,11 @@ public class LegacyHelper : BaseUnityPlugin
         private Transform hornetTransform;
         private float fireTimer;
         private SpriteRenderer sr;
+        private Renderer[] shadeLightRenderers;
+        public float simpleLightSize = 14f; // approx. twice current radius
+        private static Texture2D s_simpleLightTex;
+        private static Material s_simpleAdditiveMat;
+        private static Mesh s_simpleQuadMesh;
         private int facing = 1; // 1 = right, -1 = left
         private float nailTimer;
         private const KeyCode FireKey = KeyCode.Space;
@@ -292,8 +354,10 @@ public class LegacyHelper : BaseUnityPlugin
                 var c = sr.color; c.a = 0.9f; sr.color = c;
             }
 
+            SetupShadeLight();
+
             // Cache HUD for shade soul updates
-            cachedHud = Object.FindObjectOfType<SimpleHUD>();
+            cachedHud = Object.FindFirstObjectByType<SimpleHUD>();
             PushSoulToHud();
             CheckHazardOverlap();
             // Initialize Shade HP from PlayerData
@@ -332,16 +396,22 @@ public class LegacyHelper : BaseUnityPlugin
             if (hurtCooldown > 0f) hurtCooldown = Mathf.Max(0f, hurtCooldown - Time.deltaTime);
 
             HandleMovementAndFacing();
-            HandleFire();
-            HandleNailAttack();
+            if (!inHardLeash)
+            {
+                HandleFire();
+                HandleNailAttack();
+            }
 
             if (Input.GetKeyDown(KeyCode.F9))
             DumpNearestEnemyHealthManager();
 
             // Keep HUD in sync (cheap check)
-            if (!cachedHud) cachedHud = Object.FindObjectOfType<SimpleHUD>();
+            if (!cachedHud) cachedHud = Object.FindFirstObjectByType<SimpleHUD>();
             PushSoulToHud();
             CheckHazardOverlap();
+
+            // Keep shade light synced to Hornet's light settings
+            SyncShadeLight();
 
             // Save persistent state when values change
             PersistIfChanged();
@@ -398,20 +468,72 @@ public class LegacyHelper : BaseUnityPlugin
             Vector2 input = new Vector2(h, v);
             if (input.sqrMagnitude > 1f) input.Normalize();
 
-            if (rb){ rb.MovePosition(rb.position + input * moveSpeed * Time.deltaTime); } else { transform.position += (Vector3)(input * moveSpeed * Time.deltaTime); }
+            // Distance to Hornet
+            Vector2 to = (Vector2)(hornetTransform.position - transform.position);
+            float dist = to.magnitude;
+
+            // Emergency snap if ridiculously far
+            if (dist > snapLeashRadius)
+            {
+                TeleportToHornet();
+                inHardLeash = false; hardLeashTimer = 0f; EnableCollisions(true);
+                return;
+            }
+
+            // Gentle pull when beyond soft radius
+            Vector2 moveDelta = Vector2.zero;
+            if (dist > softLeashRadius && dist <= hardLeashRadius)
+            {
+                float t = Mathf.InverseLerp(softLeashRadius, hardLeashRadius, dist);
+                Vector2 pullDir = to.normalized;
+                moveDelta += pullDir * (Mathf.Lerp(softPullSpeed, softPullSpeed * 1.5f, t)) * Time.deltaTime;
+                inHardLeash = false; hardLeashTimer = 0f; EnableCollisions(true);
+            }
+
+            // Enter hard leash if beyond hard radius
+            if (dist > hardLeashRadius)
+            {
+                inHardLeash = true;
+                hardLeashTimer += Time.deltaTime;
+                EnableCollisions(false);
+                Vector2 dir = to.normalized;
+                moveDelta = dir * hardPullSpeed * Time.deltaTime;
+                if (hardLeashTimer >= hardLeashTimeout)
+                {
+                    TeleportToHornet();
+                    inHardLeash = false; hardLeashTimer = 0f; EnableCollisions(true);
+                    return;
+                }
+            }
+            else if (inHardLeash)
+            {
+                // Exit hard leash once back within threshold
+                inHardLeash = false; hardLeashTimer = 0f; EnableCollisions(true);
+            }
+
+            // Player input only when not in hard leash
+            if (!inHardLeash)
+            {
+                moveDelta += input * moveSpeed * Time.deltaTime;
+            }
+
+            if (rb) { rb.MovePosition(rb.position + moveDelta); }
+            else { transform.position += (Vector3)moveDelta; }
 
             // Update facing if player pressed left/right
             if (h > 0.1f) facing = 1;
             else if (h < -0.1f) facing = -1;
+            else if (Mathf.Abs(to.x) > 0.1f) facing = (to.x >= 0f ? 1 : -1);
 
             // Flip sprite to match facing
             if (sr != null) sr.flipX = (facing == -1);
 
-            // Leash to Hornet
-            Vector3 toShade = transform.position - hornetTransform.position;
-            float dist = toShade.magnitude;
+            // Legacy final clamp safety
             if (dist > maxDistance)
+            {
+                Vector3 toShade = transform.position - hornetTransform.position;
                 transform.position = hornetTransform.position + toShade.normalized * maxDistance;
+            }
         }
 
         private void HandleFire()
@@ -999,6 +1121,17 @@ public class LegacyHelper : BaseUnityPlugin
             catch { }
         }
 
+        private void EnableCollisions(bool enable)
+        {
+            try
+            {
+                if (bodyCol) bodyCol.enabled = enable;
+                var extraCols = GetComponentsInChildren<Collider2D>(true);
+                foreach (var c in extraCols) if (c && c != bodyCol) c.enabled = enable;
+            }
+            catch { }
+        }
+
         private void OnCollisionEnter2D(Collision2D collision)
         {
             TryProcessDamageHero(collision.collider);
@@ -1042,6 +1175,18 @@ public class LegacyHelper : BaseUnityPlugin
             }
         }
 
+        public void TeleportToPosition(Vector3 position)
+        {
+            bool hadSim = rb ? rb.simulated : false;
+            if (rb) rb.simulated = false;
+            transform.position = position;
+            if (rb)
+            {
+                rb.linearVelocity = Vector2.zero;
+                rb.simulated = hadSim;
+            }
+        }
+
         
                 private void CheckHazardOverlap()
         {
@@ -1049,7 +1194,7 @@ public class LegacyHelper : BaseUnityPlugin
             if (!bodyCol) return;
             var filter = new ContactFilter2D();filter.useTriggers = true;
             Collider2D[] results = new Collider2D[16];
-            int count = bodyCol.OverlapCollider(filter, results);
+            int count = bodyCol.Overlap(filter, results);
             for (int i = 0; i < count; i++)
             {
                 var c = results[i];
@@ -1098,6 +1243,115 @@ public class LegacyHelper : BaseUnityPlugin
             PushShadeStatsToHud();
             hurtCooldown = HurtIFrameSeconds;
             PersistIfChanged();
+        }
+
+        private void SetupShadeLight()
+        {
+            try
+            {
+                // Create a simple additive light quad as a reliable fallback
+                var lightGO = new GameObject("ShadeLightSimple");
+                lightGO.transform.SetParent(transform, false);
+                lightGO.transform.localPosition = Vector3.zero;
+                lightGO.transform.localRotation = Quaternion.identity;
+                EnsureSimpleLightResources();
+
+                var mf = lightGO.AddComponent<MeshFilter>();
+                mf.sharedMesh = s_simpleQuadMesh;
+                var mr = lightGO.AddComponent<MeshRenderer>();
+                mr.sharedMaterial = s_simpleAdditiveMat;
+                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                mr.receiveShadows = false;
+                // Place behind shade sprite for a softer look
+                var shadeSR = GetComponent<SpriteRenderer>();
+                mr.sortingLayerID = shadeSR ? shadeSR.sortingLayerID : 0;
+                mr.sortingOrder = shadeSR ? (shadeSR.sortingOrder - 1) : -1;
+                lightGO.transform.localScale = new Vector3(simpleLightSize, simpleLightSize, 1f);
+                shadeLightRenderers = new Renderer[] { mr };
+                try { Debug.Log($"[HelperMod] ShadeLight simple setup: size={simpleLightSize} layer={mr.sortingLayerID} order={mr.sortingOrder}"); } catch { }
+            }
+            catch { }
+        }
+
+        private void SyncShadeLight()
+        {
+            try
+            {
+                if (shadeLightRenderers == null) return;
+                var shadeSR = GetComponent<SpriteRenderer>();
+                int baseLayer = shadeSR ? shadeSR.sortingLayerID : 0;
+                int baseOrder = shadeSR ? shadeSR.sortingOrder : 0;
+                foreach (var r in shadeLightRenderers)
+                {
+                    if (!r) continue;
+                    r.enabled = true;
+                    r.sortingLayerID = baseLayer;
+                    r.sortingOrder = baseOrder - 1; // keep glow behind shade sprite
+                }
+            }
+            catch { }
+        }
+
+        private IEnumerator EnableShadeLightNextFrame()
+        {
+            yield return null; // retained for future, not used in simple light
+        }
+
+        private static void EnsureSimpleLightResources()
+        {
+            try
+            {
+                if (s_simpleQuadMesh == null)
+                {
+                    s_simpleQuadMesh = new Mesh();
+                    s_simpleQuadMesh.name = "ShadeLightQuad";
+                    s_simpleQuadMesh.vertices = new Vector3[] {
+                        new Vector3(-0.5f, -0.5f, 0f),
+                        new Vector3( 0.5f, -0.5f, 0f),
+                        new Vector3(-0.5f,  0.5f, 0f),
+                        new Vector3( 0.5f,  0.5f, 0f)
+                    };
+                    s_simpleQuadMesh.uv = new Vector2[] {
+                        new Vector2(0,0), new Vector2(1,0), new Vector2(0,1), new Vector2(1,1)
+                    };
+                    s_simpleQuadMesh.triangles = new int[] { 0, 2, 1, 2, 3, 1 };
+                    s_simpleQuadMesh.RecalculateNormals();
+                }
+                if (s_simpleLightTex == null)
+                {
+                    int size = 128;
+                    s_simpleLightTex = new Texture2D(size, size, TextureFormat.ARGB32, false);
+                    s_simpleLightTex.filterMode = FilterMode.Bilinear;
+                    for (int y = 0; y < size; y++)
+                    {
+                        for (int x = 0; x < size; x++)
+                        {
+                            float nx = (x + 0.5f) / size * 2f - 1f;
+                            float ny = (y + 0.5f) / size * 2f - 1f;
+                            float r = Mathf.Sqrt(nx * nx + ny * ny);
+                            // Gentle center, very dim edges
+                            float a = Mathf.Clamp01(1f - r);
+                            a = Mathf.Pow(a, 3.5f) * 0.55f; // soften + reduce brightness
+                            s_simpleLightTex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+                        }
+                    }
+                    s_simpleLightTex.Apply();
+                }
+                if (s_simpleAdditiveMat == null)
+                {
+                    // Prefer Sprites/Default for alpha blending and depth testing (gentler look)
+                    var shader = Shader.Find("Sprites/Default");
+                    if (shader == null) shader = Shader.Find("Unlit/Transparent");
+                    s_simpleAdditiveMat = new Material(shader);
+                    s_simpleAdditiveMat.name = "ShadeLightAdditiveMat";
+                    s_simpleAdditiveMat.mainTexture = s_simpleLightTex;
+                    s_simpleAdditiveMat.renderQueue = 3000;
+                    // Dim overall tint for gentler glow (alpha blended)
+                    var c = new Color(1f, 1f, 1f, 0.35f);
+                    try { s_simpleAdditiveMat.SetColor("_Color", c); } catch { }
+                }
+            }
+            catch { }
         }
 
         private static bool IsTerrainHazard(GlobalEnums.HazardType hz)
