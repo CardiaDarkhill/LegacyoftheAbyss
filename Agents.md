@@ -28,8 +28,21 @@
 - Sound effects need to be set up for all of the Shades attacks, spells and focus abilities.
 - The shade can become stuck inside walls due to the leash mechanic, the easiest fix here seems like just giving the shade the ability to channel for a brief moment to teleport to Hornet, though I'm open to a better solution that's more automatic.
 - The shade is failing to spawn in after having loaded into the game, quiting out to the main menu, and then reloading the game. At which point the shade stops ever respawning.
+- The shade appears to be able to walk through zone transitions, but only in some cases? Hornet should be the only one able to walk through a zone exit.
+- It seems like if the shade is standing next to a door/NPC, that gives the hornet player the option to interact with that door or NPC. NPC's and Doors should not care about the shade.
 
 
 ## Testing:
 
 - The program must compile with the "dotnet build -c Release" command
+
+## Scripts
+- LegacyHelper.Core.cs: Plugin entry, scene events, shade spawn, state persistence.
+- LegacyHelper.Patches.cs: Harmony patches (scene flow, bench/bind heals, input mapping).
+- LegacyHelper.ShadeController.Core.cs: Shade movement/leash, hazards, HUD sync, light.
+- LegacyHelper.ShadeController.Slash.cs: Shade nail slash + projectile spawning (no forward filter).
+- LegacyHelper.Projectile.cs: Projectile hit logic (HitInstance/HitTaker).
+- HUD.Core.cs: HUD lifecycle, debug keys (HP/Soul) with minimal logs.
+- HUD.UI.cs: Canvas, soul orb, health masks, refresh logic.
+- HUD.Assets.cs: Asset loading and sprite helpers.
+- HUD.Audio.cs: Hurt SFX selection and playback.

@@ -1,0 +1,137 @@
+using System.Collections;
+using System.Reflection;
+using HarmonyLib;
+
+public partial class LegacyHelper
+{
+    [HarmonyPatch(typeof(GameManager), "BeginScene")]
+    private class GameManager_BeginScene_Patch
+    {
+        private static void Postfix(GameManager __instance)
+        {
+            DisableStartup(__instance);
+            bool gameplay = __instance.IsGameplayScene();
+            if (hud != null)
+            {
+                try { hud.SetVisible(gameplay); } catch { }
+            }
+            if (!gameplay) return;
+
+            if (!registeredEnterSceneHandler)
+            {
+                try
+                {
+                    __instance.OnFinishedEnteringScene += HandleFinishedEnteringScene;
+                    registeredEnterSceneHandler = true;
+                }
+                catch { }
+            }
+
+            if (hud == null)
+            {
+                var hudGO = new UnityEngine.GameObject("SimpleHUD");
+                UnityEngine.Object.DontDestroyOnLoad(hudGO);
+                hud = hudGO.AddComponent<SimpleHUD>();
+                hud.Init(__instance.playerData);
+            }
+            else
+            {
+                try { hud.SetPlayerData(__instance.playerData); } catch { }
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(GameManager), "Awake")]
+    private class GameManager_Awake_Patch
+    {
+        private static void Postfix(GameManager __instance) => DisableStartup(__instance);
+    }
+
+    [HarmonyPatch(typeof(GameManager), "Start")]
+    private class GameManager_Start_Patch
+    {
+        private static void Postfix(GameManager __instance) => DisableStartup(__instance);
+    }
+
+    [HarmonyPatch(typeof(StartManager), "Start")]
+    private class StartManager_Start_Enumerator_Patch
+    {
+        private static void Prefix(StartManager __instance)
+        {
+            if (__instance.startManagerAnimator != null)
+                __instance.startManagerAnimator.SetBool("WillShowQuote", false);
+        }
+
+        private static void Postfix(StartManager __instance, ref IEnumerator __result)
+        {
+            if (__result == null) return;
+            var fields = __result.GetType().GetFields(BindingFlags.Instance | BindingFlags.NonPublic);
+            foreach (var f in fields)
+            {
+                if (f.FieldType == typeof(bool) && f.Name.Contains("showIntroSequence"))
+                {
+                    f.SetValue(__result, false);
+                    if (__instance.startManagerAnimator != null)
+                        __instance.startManagerAnimator.Play("LoadingIcon", 0, 1f);
+                    break;
+                }
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(RestBenchHelper), "SetOnBench")]
+    private class RestBenchHelper_SetOnBench_Patch
+    {
+        private static void Postfix(bool onBench)
+        {
+            if (!onBench) return;
+            try
+            {
+                if (helper != null)
+                {
+                    var sc = helper.GetComponent<ShadeController>();
+                    if (sc != null)
+                    {
+                        sc.FullHealFromBench();
+                        SaveShadeState(sc.GetCurrentHP(), sc.GetMaxHP(), sc.GetShadeSoul());
+                    }
+                }
+            }
+            catch { }
+        }
+    }
+
+    // Trigger shade heal on explicit Bind completion event
+    [HarmonyPatch(typeof(HeroController), "BindCompleted")]
+    private class HeroController_BindCompleted_Patch
+    {
+        private static void Postfix(HeroController __instance)
+        {
+            try
+            {
+                if (helper != null)
+                {
+                    var sc = helper.GetComponent<ShadeController>();
+                    if (sc != null)
+                    {
+                        sc.ApplyBindHealFromHornet(__instance != null ? __instance.transform : null);
+                    }
+                }
+            }
+            catch { }
+        }
+    }
+
+    [HarmonyPatch(typeof(InputHandler), "MapKeyboardLayoutFromGameSettings")]
+    private class BlockKeyboardRebinding
+    {
+        private static bool Prefix() => false; // skip
+    }
+
+    [HarmonyPatch(typeof(InputHandler), "MapDefaultKeyboardLayout")]
+    private class BlockDefaultKeyboardMap
+    {
+        private static bool Prefix() => false; // skip
+    }
+}
+

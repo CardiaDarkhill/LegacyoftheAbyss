@@ -11,6 +11,12 @@
     <Compile Remove="DummyDLLs/**" />
     <EmbeddedResource Remove="DummyDLLs/**" />
     <None Remove="DummyDLLs/**" />
+    <Compile Remove="decompiled_src/**" />
+    <EmbeddedResource Remove="decompiled_src/**" />
+    <None Remove="decompiled_src/**" />
+    <Compile Remove="decomp_fix/**" />
+    <EmbeddedResource Remove="decomp_fix/**" />
+    <None Remove="decomp_fix/**" />
   </ItemGroup>
 
   <ItemGroup>
