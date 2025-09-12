@@ -1,0 +1,170 @@
+            for (int i = 0; i < count; i++)
+            {
+                var c = results[i];
+                if (!c) continue;
+                if (c.transform == transform || c.transform.IsChildOf(transform)) continue;
+                if (hornetTransform && (c.transform == hornetTransform || c.transform.IsChildOf(hornetTransform))) continue;
+                var dh = c.GetComponentInParent<DamageHero>();
+                if (dh != null)
+                {
+                    var hz = GetHazardType(dh);
+                    if (IsTerrainHazard(hz)) { OnShadeHitHazard(); return; }
+                    OnShadeHitEnemy(dh);
+                    return;
+                }
+            }
+        }
+
+        private static GlobalEnums.HazardType GetHazardType(DamageHero dh)
+        {
+            try
+            {
+                var tf = typeof(DamageHero).GetField("hazardType", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (tf != null) return (GlobalEnums.HazardType)tf.GetValue(dh);
+            }
+            catch { }
+            return GlobalEnums.HazardType.NON_HAZARD;
+        }
+
+        private void OnShadeHitHazard()
+        {
+            if (hazardCooldown > 0f) return;
+            TeleportToHornet();
+            shadeHP = Mathf.Max(0, shadeHP - 1);
+            if (shadeHP <= 0) isInactive = true;
+            PushShadeStatsToHud();
+            hazardCooldown = 0.25f;
+            CancelFocus();
+            PersistIfChanged();
+        }
+
+        private void OnShadeHitEnemy(DamageHero dh)
+        {
+            if (hurtCooldown > 0f) return;
+            int dmg = 1;
+            try { if (dh != null) dmg = Mathf.Max(1, dh.damageDealt); } catch { }
+            shadeHP = Mathf.Max(0, shadeHP - dmg);
+            if (shadeHP <= 0) isInactive = true;
+            PushShadeStatsToHud();
+            hurtCooldown = HurtIFrameSeconds;
+            CancelFocus();
+            PersistIfChanged();
+        }
+
+        private void HandleFocus()
+        {
+            // Already channeling
+            if (isFocusing)
+            {
+                // Cancel if key released or interrupted by teleport
+                if (!Input.GetKey(FocusKey) || isChannelingTeleport || inHardLeash || isInactive)
+                {
+                    CancelFocus();
+                    return;
+                }
+
+                focusTimer -= Time.deltaTime;
+                if (focusTimer > 0f) return;
+
+                // Complete focus
+                int canHeal = (shadeHP < shadeMaxHP) ? 1 : 0;
+                bool haveSoul = shadeSoul >= focusSoulCost;
+                if (canHeal > 0 && haveSoul)
+                {
+                    shadeSoul = Mathf.Max(0, shadeSoul - focusSoulCost);
+                    PushSoulToHud();
+
+                    int before = shadeHP;
+                    shadeHP = Mathf.Min(shadeHP + canHeal, shadeMaxHP);
+                    if (shadeHP != before)
+                    {
+                        if (shadeHP > 0) isInactive = false;
+                        PushShadeStatsToHud();
+                    }
+
+                    // Heal Hornet if close
+                    try
+                    {
+                        var hc = HeroController.instance;
+                        var pd = GameManager.instance != null ? GameManager.instance.playerData : null;
+                        if (hc != null && hc.transform != null)
+                        {
+                            float dist = Vector2.Distance(hc.transform.position, transform.position);
+                            if (dist <= focusHealRange)
+                            {
+                                // Avoid exceeding max via AddHealth handling
+                                hc.AddHealth(1);
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                // End channel regardless of success
+                isFocusing = false;
+                isCastingSpell = false;
+                try { if (sr) { var c = sr.color; c.a = 0.9f; sr.color = c; } } catch { }
+                PersistIfChanged();
+                return;
+            }
+
+            // Start focus when holding key with enough soul and missing HP
+            if (!Input.GetKey(FocusKey)) return;
+            if (isCastingSpell || isChannelingTeleport || inHardLeash || isInactive) return;
+            if (shadeHP >= shadeMaxHP) return; // already full
+            if (shadeSoul < focusSoulCost) return; // not enough soul
+
+            isFocusing = true;
+            isCastingSpell = true;
+            focusTimer = Mathf.Max(0.05f, focusChannelTime);
+            try { if (sr) { var c = sr.color; c.a = focusAlphaWhileChannel; sr.color = c; } } catch { }
+        }
+
+        private void CancelFocus()
+        {
+            if (!isFocusing) return;
+            isFocusing = false;
+            isCastingSpell = false;
+            try { if (sr) { var c = sr.color; c.a = 0.9f; sr.color = c; } } catch { }
+        }
+
+        private void SetupShadeLight()
+        {
+            try
+            {
+                var lightGO = new GameObject("ShadeLightSimple");
+                lightGO.transform.SetParent(transform, false);
+                lightGO.transform.localPosition = Vector3.zero;
+                lightGO.transform.localRotation = Quaternion.identity;
+                EnsureSimpleLightResources();
+
+                var mf = lightGO.AddComponent<MeshFilter>();
+                mf.sharedMesh = s_simpleQuadMesh;
+                var mr = lightGO.AddComponent<MeshRenderer>();
+                mr.sharedMaterial = s_simpleAdditiveMat;
+                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                mr.receiveShadows = false;
+                var shadeSR = GetComponent<SpriteRenderer>();
+                mr.sortingLayerID = shadeSR ? shadeSR.sortingLayerID : 0;
+                mr.sortingOrder = shadeSR ? (shadeSR.sortingOrder - 1) : -1;
+                lightGO.transform.localScale = new Vector3(simpleLightSize, simpleLightSize, 1f);
+                shadeLightRenderers = new Renderer[] { mr };
+            }
+            catch { }
+        }
+
+        private void SyncShadeLight()
+        {
+            try
+            {
+                if (shadeLightRenderers == null) return;
+                var shadeSR = GetComponent<SpriteRenderer>();
+                int baseLayer = shadeSR ? shadeSR.sortingLayerID : 0;
+                int baseOrder = shadeSR ? shadeSR.sortingOrder : 0;
+                foreach (var r in shadeLightRenderers)
+                {
+                    if (!r) continue;
+                    r.enabled = true;
+                    r.sortingLayerID = baseLayer;
+                    r.sortingOrder = baseOrder - 1;
+                }

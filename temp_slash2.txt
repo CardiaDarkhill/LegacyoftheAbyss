@@ -1,0 +1,29 @@
+            rb.linearVelocity = dir.normalized * projectileSpeed;
+
+            if (hornetTransform != null)
+            {
+                var hornetCols = hornetTransform.GetComponentsInChildren<Collider2D>(true);
+                foreach (var hc in hornetCols)
+                    if (hc && col) Physics2D.IgnoreCollision(col, hc, true);
+            }
+
+            var sp = proj.AddComponent<ShadeProjectile>();
+            // Use spell progression for damage (2.5x upgraded, 30% less when unupgraded)
+            int dmg = ComputeSpellDamageMultiplier(2.5f, IsProjectileUpgraded());
+            sp.damage = Mathf.Max(1, dmg);
+            sp.hornetRoot = hornetTransform;
+            sp.lifeSeconds = 1.5f;
+        }
+
+        private Sprite MakeDotSprite()
+        {
+            var tex = new Texture2D(6, 6);
+            for (int x = 0; x < tex.width; x++)
+                for (int y = 0; y < tex.height; y++)
+                    tex.SetPixel(x, y, Color.black);
+            tex.Apply();
+            return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 16f);
+        }
+    }
+}
+

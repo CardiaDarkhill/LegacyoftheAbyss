@@ -1,0 +1,60 @@
+        public int soulGainPerHit = 11;
+        public int projectileSoulCost = 33;
+        public int shriekSoulCost = 33;
+        public int quakeSoulCost = 33;
+        private float shriekTimer;
+        private float quakeTimer;
+        public float shriekCooldown = 1.2f;
+        public float quakeCooldown = 1.1f;
+        
+        // Focus (heal) ability
+        private const KeyCode FocusKey = KeyCode.H; // hold to focus
+        public int focusSoulCost = 33;
+        public float focusChannelTime = 1.25f;
+        private bool isFocusing;
+        private float focusTimer;
+        private float focusAlphaWhileChannel = 0.75f;
+        private float focusHealRange = 3.5f;
+
+        private SimpleHUD cachedHud;
+        private float hurtCooldown;
+        private const float HurtIFrameSeconds = 1.35f;
+        private float ignoreRefreshTimer;
+        private float hornetIgnoreRefreshTimer;
+        private bool isCastingSpell;
+
+        private int lastSavedHP;
+        private int lastSavedMax;
+        private int lastSavedSoul;
+
+        public void RestorePersistentState(int hp, int max, int soul)
+        {
+            shadeMaxHP = Mathf.Max(1, max);
+            shadeHP = Mathf.Clamp(hp, 0, shadeMaxHP);
+            shadeSoul = Mathf.Clamp(soul, 0, shadeSoulMax);
+        }
+
+        public void FullHealFromBench()
+        {
+            shadeHP = Mathf.Max(shadeHP, shadeMaxHP);
+            PushShadeStatsToHud();
+        }
+
+        public void ReviveToAtLeast(int hp)
+        {
+            int target = Mathf.Max(1, hp);
+            shadeHP = Mathf.Max(shadeHP, target);
+            if (shadeHP > 0) isInactive = false;
+            PushShadeStatsToHud();
+            PersistIfChanged();
+        }
+
+        public int GetCurrentHP() => shadeHP;
+        public int GetMaxHP() => shadeMaxHP;
+        public int GetShadeSoul() => shadeSoul;
+
+        public void Init(Transform hornet) { hornetTransform = hornet; }
+
+        private void Start()
+        {
+            SetupPhysics();

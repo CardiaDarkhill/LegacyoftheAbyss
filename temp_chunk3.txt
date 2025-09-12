@@ -1,0 +1,250 @@
+                    {
+                        if (!hm) continue;
+                        var cols = hm.GetComponentsInChildren<Collider2D>(true);
+                        foreach (var ec in cols)
+                        {
+                            if (!ec || ec.isTrigger) continue; // don't ignore triggers to still receive hazard/damage events
+                            foreach (var mc in myCols) if (mc) Physics2D.IgnoreCollision(mc, ec, true);
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private void EnsureIgnoreHornetCollisions()
+        {
+            try
+            {
+                var hc = HeroController.instance;
+                if (!hc) return;
+                var myCols = GetComponentsInChildren<Collider2D>(true);
+                var hornetCols = hc.GetComponentsInChildren<Collider2D>(true);
+                int heroAttackLayer = LayerMask.NameToLayer("Hero Attack");
+                foreach (var mc in myCols)
+                {
+                    if (!mc) continue;
+                    foreach (var hcCol in hornetCols)
+                    {
+                        if (!hcCol) continue;
+                        if (mc.isTrigger || hcCol.isTrigger) continue;
+                        if (hcCol.gameObject.layer == heroAttackLayer) continue; // allow hero attack contact
+                        // Allow slashes (which may not be on Hero Attack layer) by checking their components
+                        bool isSlash = false;
+                        try { if (hcCol.GetComponentInParent<NailSlashTerrainThunk>()) isSlash = true; } catch { }
+                        if (isSlash) continue;
+                        Physics2D.IgnoreCollision(mc, hcCol, true);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private void EnableCollisions(bool enable)
+        {
+            try
+            {
+                if (bodyCol) bodyCol.enabled = enable;
+                var extraCols = GetComponentsInChildren<Collider2D>(true);
+                foreach (var c in extraCols) if (c && c != bodyCol) c.enabled = enable;
+            }
+            catch { }
+        }
+
+        private void OnCollisionEnter2D(Collision2D collision)
+        {
+            TryProcessDamageHero(collision.collider);
+        }
+
+        private void OnTriggerEnter2D(Collider2D other)
+        {
+            TryProcessDamageHero(other);
+        }
+
+        private void TryProcessDamageHero(Collider2D col)
+        {
+            if (!col) return;
+            try
+            {
+                if (bodyCol && col && !bodyCol.IsTouching(col)) return;
+                if (col.transform == transform || col.transform.IsChildOf(transform)) return;
+                if (hornetTransform && (col.transform == hornetTransform || col.transform.IsChildOf(hornetTransform))) return;
+                var dh = col.GetComponentInParent<DamageHero>();
+                if (dh != null)
+                {
+                    var hz = GetHazardType(dh);
+                    if (IsTerrainHazard(hz)) { OnShadeHitHazard(); return; }
+                    OnShadeHitEnemy(dh);
+                }
+            }
+            catch { }
+        }
+
+        private void TeleportToHornet()
+        {
+            if (!hornetTransform) return;
+            bool hadSim = rb ? rb.simulated : false;
+            if (rb) rb.simulated = false;
+            transform.position = hornetTransform.position;
+            if (rb)
+            {
+                rb.linearVelocity = Vector2.zero;
+                rb.simulated = hadSim;
+            }
+        }
+
+        public void TeleportToPosition(Vector3 position)
+        {
+            bool hadSim = rb ? rb.simulated : false;
+            if (rb) rb.simulated = false;
+            transform.position = position;
+            if (rb)
+            {
+                rb.linearVelocity = Vector2.zero;
+                rb.simulated = hadSim;
+            }
+        }
+
+        private Vector2 ClampAgainstTransitionGates(Vector2 proposed)
+        {
+            try
+            {
+                if (!bodyCol) return proposed;
+                // Approximate shade bounds at proposed position using current extents
+                var ext = bodyCol.bounds.extents;
+                Vector2 min = proposed - (Vector2)ext;
+                Vector2 max = proposed + (Vector2)ext;
+
+                var hits = Physics2D.OverlapAreaAll(min, max);
+                if (hits == null || hits.Length == 0) return proposed;
+
+                foreach (var h in hits)
+                {
+                    if (!h) continue;
+                    var tp = h.GetComponentInParent<TransitionPoint>();
+                    if (tp == null) continue;
+                    bool isDoor = false;
+                    try { isDoor = tp.isADoor; } catch { }
+                    if (isDoor) continue; // block only edge-of-map gates
+
+                    var gb = h.bounds;
+                    var gatePos = tp.GetGatePosition();
+                    switch (gatePos)
+                    {
+                        case GlobalEnums.GatePosition.right:
+                            if (proposed.x > gb.min.x - ext.x)
+                                proposed.x = gb.min.x - ext.x;
+                            break;
+                        case GlobalEnums.GatePosition.left:
+                            if (proposed.x < gb.max.x + ext.x)
+                                proposed.x = gb.max.x + ext.x;
+                            break;
+                        case GlobalEnums.GatePosition.top:
+                            if (proposed.y > gb.min.y - ext.y)
+                                proposed.y = gb.min.y - ext.y;
+                            break;
+                        case GlobalEnums.GatePosition.bottom:
+                            if (proposed.y < gb.max.y + ext.y)
+                                proposed.y = gb.max.y + ext.y;
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+            catch { }
+            return proposed;
+        }
+
+        private void CheckHazardOverlap()
+        {
+            if (hazardCooldown > 0f) return;
+            if (!bodyCol) return;
+            var filter = new ContactFilter2D();
+            filter.useTriggers = true;
+            Collider2D[] results = new Collider2D[16];
+            int count = bodyCol.Overlap(filter, results);
+            for (int i = 0; i < count; i++)
+            {
+                var c = results[i];
+                if (!c) continue;
+                if (c.transform == transform || c.transform.IsChildOf(transform)) continue;
+                if (hornetTransform && (c.transform == hornetTransform || c.transform.IsChildOf(hornetTransform))) continue;
+                var dh = c.GetComponentInParent<DamageHero>();
+                if (dh != null)
+                {
+                    var hz = GetHazardType(dh);
+                    if (IsTerrainHazard(hz)) { OnShadeHitHazard(); return; }
+                    OnShadeHitEnemy(dh);
+                    return;
+                }
+            }
+        }
+
+        private static GlobalEnums.HazardType GetHazardType(DamageHero dh)
+        {
+            try
+            {
+                var tf = typeof(DamageHero).GetField("hazardType", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (tf != null) return (GlobalEnums.HazardType)tf.GetValue(dh);
+            }
+            catch { }
+            return GlobalEnums.HazardType.NON_HAZARD;
+        }
+
+        private void OnShadeHitHazard()
+        {
+            if (hazardCooldown > 0f) return;
+            TeleportToHornet();
+            shadeHP = Mathf.Max(0, shadeHP - 1);
+            if (shadeHP <= 0) isInactive = true;
+            PushShadeStatsToHud();
+            hazardCooldown = 0.25f;
+            PersistIfChanged();
+        }
+
+        private void OnShadeHitEnemy(DamageHero dh)
+        {
+            if (hurtCooldown > 0f) return;
+            int dmg = 1;
+            try { if (dh != null) dmg = Mathf.Max(1, dh.damageDealt); } catch { }
+            shadeHP = Mathf.Max(0, shadeHP - dmg);
+            if (shadeHP <= 0) isInactive = true;
+            PushShadeStatsToHud();
+            hurtCooldown = HurtIFrameSeconds;
+            PersistIfChanged();
+        }
+
+        private void SetupShadeLight()
+        {
+            try
+            {
+                var lightGO = new GameObject("ShadeLightSimple");
+                lightGO.transform.SetParent(transform, false);
+                lightGO.transform.localPosition = Vector3.zero;
+                lightGO.transform.localRotation = Quaternion.identity;
+                EnsureSimpleLightResources();
+
+                var mf = lightGO.AddComponent<MeshFilter>();
+                mf.sharedMesh = s_simpleQuadMesh;
+                var mr = lightGO.AddComponent<MeshRenderer>();
+                mr.sharedMaterial = s_simpleAdditiveMat;
+                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                mr.receiveShadows = false;
+                var shadeSR = GetComponent<SpriteRenderer>();
+                mr.sortingLayerID = shadeSR ? shadeSR.sortingLayerID : 0;
+                mr.sortingOrder = shadeSR ? (shadeSR.sortingOrder - 1) : -1;
+                lightGO.transform.localScale = new Vector3(simpleLightSize, simpleLightSize, 1f);
+                shadeLightRenderers = new Renderer[] { mr };
+            }
+            catch { }
+        }
+
+        private void SyncShadeLight()
+        {
+            try
+            {
+                if (shadeLightRenderers == null) return;
+                var shadeSR = GetComponent<SpriteRenderer>();
+                int baseLayer = shadeSR ? shadeSR.sortingLayerID : 0;
+                int baseOrder = shadeSR ? shadeSR.sortingOrder : 0;

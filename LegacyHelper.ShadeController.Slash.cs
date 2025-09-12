@@ -265,9 +265,14 @@ public partial class LegacyHelper
                             System.Action onDamaged = null; System.Action<bool> onEnded = null;
                             onDamaged = () =>
                             {
+                                int prevSoul = shadeSoul;
                                 shadeSoul = Mathf.Min(shadeSoulMax, shadeSoul + soulGainPerHit);
                                 PushSoulToHud();
                                 CheckHazardOverlap();
+                                if (prevSoul < focusSoulCost && shadeSoul >= focusSoulCost)
+                                {
+                                    try { EnsureFocusSfx(); if (focusSfx != null && sfxFocusReady != null) focusSfx.PlayOneShot(sfxFocusReady); } catch { }
+                                }
                             };
                             primaryDamager.DamagedEnemy += onDamaged;
 
@@ -413,6 +418,9 @@ public partial class LegacyHelper
             sp.damage = Mathf.Max(1, dmg);
             sp.hornetRoot = hornetTransform;
             sp.lifeSeconds = 1.5f;
+
+            // SFX
+            TryPlayFireballSfx();
         }
 
         private Sprite MakeDotSprite()

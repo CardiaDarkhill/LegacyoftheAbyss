@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using UnityEngine;
 
@@ -66,6 +67,23 @@ public partial class LegacyHelper
         private float quakeTimer;
         public float shriekCooldown = 1.2f;
         public float quakeCooldown = 1.1f;
+        
+        // Focus (heal) ability
+        private const KeyCode FocusKey = KeyCode.H; // hold to focus
+        public int focusSoulCost = 33;
+        public float focusChannelTime = 1.25f;
+        private bool isFocusing;
+        private float focusTimer;
+        private float focusAlphaWhileChannel = 0.75f;
+        private float focusHealRange = 3.5f;
+        private float focusSoulAccumulator;
+        private Renderer focusAuraRenderer;
+        private float focusAuraBaseSize = 7f;
+        private AudioSource focusSfx;
+        private AudioClip sfxFocusCharge;
+        private AudioClip sfxFocusComplete;
+        private AudioClip sfxFocusReady;
+        private int lastSoulForReady = -1;
 
         private SimpleHUD cachedHud;
         private float hurtCooldown;
@@ -151,6 +169,7 @@ public partial class LegacyHelper
 
             lastSavedHP = lastSavedMax = lastSavedSoul = -999;
             PersistIfChanged();
+            lastSoulForReady = shadeSoul;
         }
 
         private void EnsurePogoTarget()
@@ -219,12 +238,17 @@ public partial class LegacyHelper
             HandleTeleportChannel();
 
             HandleMovementAndFacing();
-            if (!inHardLeash && !isChannelingTeleport && !isInactive && !isCastingSpell)
+            // Allow starting focus even when not casting other spells; focusing itself sets isCastingSpell
+            if (!inHardLeash && !isChannelingTeleport && !isInactive)
             {
-                HandleFire();
-                HandleNailAttack();
-                HandleShriek();
-                HandleDescendingDark();
+                HandleFocus();
+                if (!isCastingSpell)
+                {
+                    HandleFire();
+                    HandleNailAttack();
+                    HandleShriek();
+                    HandleDescendingDark();
+                }
             }
 
             if (!cachedHud) cachedHud = Object.FindFirstObjectByType<SimpleHUD>();
@@ -232,6 +256,7 @@ public partial class LegacyHelper
             CheckHazardOverlap();
             SyncShadeLight();
             PersistIfChanged();
+            CheckFocusReadySfx();
         }
 
         public void ApplyBindHealFromHornet(Transform hornet)
@@ -289,7 +314,7 @@ public partial class LegacyHelper
             if (input.sqrMagnitude > 1f) input.Normalize();
 
             // Freeze manual input while channeling teleport
-            if (isChannelingTeleport) input = Vector2.zero;
+            if (isChannelingTeleport || isFocusing) input = Vector2.zero;
 
             Vector2 to = (Vector2)(hornetTransform.position - transform.position);
             float dist = to.magnitude;
@@ -366,6 +391,7 @@ public partial class LegacyHelper
             shadeSoul = Mathf.Max(0, shadeSoul - projectileSoulCost);
             PushSoulToHud();
             CheckHazardOverlap();
+            TryPlayFireballSfx();
 
             Vector2 dir = new Vector2(facing, 0f);
             SpawnProjectile(dir);
@@ -384,7 +410,9 @@ public partial class LegacyHelper
             PushSoulToHud();
             CheckHazardOverlap();
 
-            int dmg = ComputeSpellDamageMultiplier(4f, IsShriekUpgraded()); // Abyss Shriek base 4x
+            bool upgraded = IsShriekUpgraded();
+            int dmg = ComputeSpellDamageMultiplier(4f, upgraded); // Abyss Shriek base 4x
+            TryPlayShriekSfx(upgraded);
             float life = 0.18f;
             // 12-unit high, 95-degree cone centered on torso
             Vector2 localOffset = new Vector2(0f, 0.8f);
@@ -404,8 +432,10 @@ public partial class LegacyHelper
             PushSoulToHud();
             CheckHazardOverlap();
 
-            int dmg = ComputeSpellDamageMultiplier(3f, IsDescendingDarkUpgraded()); // Descending Dark base 3x
-            StartCoroutine(DescendingDarkRoutine(dmg));
+            bool upgraded = IsDescendingDarkUpgraded();
+            TryPlayQuakePrepareSfx();
+            int dmg = ComputeSpellDamageMultiplier(3f, upgraded); // Descending Dark base 3x
+            StartCoroutine(DescendingDarkRoutine(dmg, upgraded));
         }
 
         // Spell progression helpers
@@ -523,7 +553,7 @@ public partial class LegacyHelper
             IgnoreHornetForCollider(poly);
         }
 
-        private IEnumerator DescendingDarkRoutine(int totalDamage)
+        private IEnumerator DescendingDarkRoutine(int totalDamage, bool upgraded)
         {
             isCastingSpell = true;
             // Cast time ~0.25s
@@ -584,6 +614,7 @@ public partial class LegacyHelper
             }
 
             // Spawn two hitboxes: ground strip (10 units wide), and teardrop (6x8) above
+            TryPlayQuakeImpactSfx(upgraded);
             int half = Mathf.Max(1, Mathf.RoundToInt(totalDamage * 0.5f));
             SpawnQuakeImpact(groundY, half);
             SpawnQuakeTeardrop(groundY, half);
@@ -950,6 +981,7 @@ public partial class LegacyHelper
             if (shadeHP <= 0) isInactive = true;
             PushShadeStatsToHud();
             hazardCooldown = 0.25f;
+            CancelFocus();
             PersistIfChanged();
         }
 
@@ -962,7 +994,499 @@ public partial class LegacyHelper
             if (shadeHP <= 0) isInactive = true;
             PushShadeStatsToHud();
             hurtCooldown = HurtIFrameSeconds;
+            CancelFocus();
             PersistIfChanged();
+        }
+
+        private void HandleFocus()
+        {
+            // Already channeling
+            if (isFocusing)
+            {
+                // Cancel if key released or interrupted by teleport
+                if (!Input.GetKey(FocusKey) || isChannelingTeleport || inHardLeash || isInactive)
+                {
+                    CancelFocus();
+                    return;
+                }
+
+                // Show/update aura
+                EnsureFocusAura();
+                try
+                {
+                    if (focusAuraRenderer)
+                    {
+                        focusAuraRenderer.enabled = true;
+                        var t = focusAuraRenderer.transform;
+                        float pulse = 1f + 0.12f * Mathf.Sin(Time.time * 15f);
+                        float size = focusAuraBaseSize * pulse;
+                        t.localScale = new Vector3(size, size, 1f);
+                    }
+                }
+                catch { }
+
+                // Drain soul over time while channeling
+                float drainRate = Mathf.Max(0.01f, (float)focusSoulCost / Mathf.Max(0.05f, focusChannelTime)); // soul per second
+                focusSoulAccumulator += drainRate * Time.deltaTime;
+                int drainThisFrame = Mathf.FloorToInt(focusSoulAccumulator);
+                if (drainThisFrame > 0)
+                {
+                    focusSoulAccumulator -= drainThisFrame;
+                    int beforeSoul = shadeSoul;
+                    shadeSoul = Mathf.Max(0, shadeSoul - drainThisFrame);
+                    if (shadeSoul != beforeSoul)
+                    {
+                        PushSoulToHud();
+                    }
+                    if (shadeSoul <= 0)
+                    {
+                        // Ran out of soul mid-channel; cancel with no benefit
+                        CancelFocus();
+                        return;
+                    }
+                }
+
+                focusTimer -= Time.deltaTime;
+                if (focusTimer > 0f) return;
+
+                // Complete focus
+                int canHeal = (shadeHP < shadeMaxHP) ? 1 : 0;
+                if (canHeal > 0)
+                {
+                    int before = shadeHP;
+                    shadeHP = Mathf.Min(shadeHP + canHeal, shadeMaxHP);
+                    if (shadeHP != before)
+                    {
+                        if (shadeHP > 0) isInactive = false;
+                        PushShadeStatsToHud();
+                    }
+
+                    // Heal Hornet if close
+                    try
+                    {
+                        var hc = HeroController.instance;
+                        if (hc != null && hc.transform != null)
+                        {
+                            float dist = Vector2.Distance(hc.transform.position, transform.position);
+                            if (dist <= focusHealRange)
+                            {
+                                // Avoid exceeding max via AddHealth handling
+                                hc.AddHealth(1);
+                            }
+                        }
+                    }
+                    catch { }
+
+                    // Play complete SFX
+                    TryPlayFocusCompleteSfx();
+                }
+
+                // End channel regardless of success
+                isFocusing = false;
+                isCastingSpell = false;
+                try { if (sr) { var c = sr.color; c.a = 0.9f; sr.color = c; } } catch { }
+                try { if (focusAuraRenderer) focusAuraRenderer.enabled = false; } catch { }
+                StopFocusChargeSfx();
+                focusSoulAccumulator = 0f;
+                PersistIfChanged();
+                return;
+            }
+
+            // Start focus when holding key with enough soul and missing HP
+            if (!Input.GetKey(FocusKey)) return;
+            if (isCastingSpell || isChannelingTeleport || inHardLeash || isInactive) return;
+            if (shadeHP >= shadeMaxHP) return; // already full
+            if (shadeSoul < focusSoulCost) return; // not enough soul
+
+            isFocusing = true;
+            isCastingSpell = true;
+            focusTimer = Mathf.Max(0.05f, focusChannelTime);
+            try { if (sr) { var c = sr.color; c.a = focusAlphaWhileChannel; sr.color = c; } } catch { }
+            focusSoulAccumulator = 0f;
+            EnsureFocusAura();
+            try { if (focusAuraRenderer) focusAuraRenderer.enabled = true; } catch { }
+            StartFocusChargeSfx();
+        }
+
+        private void CancelFocus()
+        {
+            if (!isFocusing) return;
+            isFocusing = false;
+            isCastingSpell = false;
+            try { if (sr) { var c = sr.color; c.a = 0.9f; sr.color = c; } } catch { }
+            try { if (focusAuraRenderer) focusAuraRenderer.enabled = false; } catch { }
+            StopFocusChargeSfx();
+            focusSoulAccumulator = 0f;
+        }
+
+        private void EnsureFocusAura()
+        {
+            try
+            {
+                if (focusAuraRenderer && focusAuraRenderer.gameObject)
+                    return;
+                // Create aura
+                var go = new GameObject("ShadeFocusAura");
+                go.transform.SetParent(transform, false);
+                go.transform.localPosition = Vector3.zero;
+                go.transform.localRotation = Quaternion.identity;
+                EnsureSimpleLightResources();
+                var mf = go.AddComponent<MeshFilter>();
+                mf.sharedMesh = s_simpleQuadMesh;
+                var mr = go.AddComponent<MeshRenderer>();
+                mr.sharedMaterial = s_simpleAdditiveMat;
+                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                mr.receiveShadows = false;
+                var shadeSR = GetComponent<SpriteRenderer>();
+                mr.sortingLayerID = shadeSR ? shadeSR.sortingLayerID : 0;
+                mr.sortingOrder = shadeSR ? (shadeSR.sortingOrder - 2) : -2;
+                go.transform.localScale = new Vector3(focusAuraBaseSize, focusAuraBaseSize, 1f);
+                focusAuraRenderer = mr;
+                mr.enabled = false;
+            }
+            catch { }
+        }
+
+        private void EnsureFocusSfx()
+        {
+            try
+            {
+                if (focusSfx == null)
+                {
+                    var go = new GameObject("ShadeFocusSFX");
+                    go.transform.SetParent(transform, false);
+                    go.transform.localPosition = Vector3.zero;
+                    focusSfx = go.AddComponent<AudioSource>();
+                    focusSfx.playOnAwake = false;
+                    focusSfx.spatialBlend = 0f; // 2D; set to small 3D if desired
+                    focusSfx.volume = 1f;
+                }
+
+                // Prefer HK1 SFX dropped into the mod Assets folder (wav)
+                // Primary (per your filenames), with fallback aliases
+                if (sfxFocusCharge == null)
+                    sfxFocusCharge = TryLoadAudioFromAssets("focus_health_charging.wav") ?? TryLoadAudioFromAssets("focus_charge.wav");
+                if (sfxFocusComplete == null)
+                    sfxFocusComplete = TryLoadAudioFromAssets("focus_health_heal.wav") ?? TryLoadAudioFromAssets("focus_complete.wav");
+                if (sfxFocusReady == null)
+                    sfxFocusReady = TryLoadAudioFromAssets("focus_ready.wav");
+
+                if (sfxFocusCharge == null || sfxFocusComplete == null || sfxFocusReady == null)
+                {
+                    var all = Resources.FindObjectsOfTypeAll<AudioClip>();
+                    AudioClip bestCharge = null; int bestChargeScore = int.MinValue;
+                    AudioClip bestComplete = null; int bestCompleteScore = int.MinValue;
+                    AudioClip bestReady = null; int bestReadyScore = int.MinValue;
+                    foreach (var c in all)
+                    {
+                        if (!c) continue; string n = c.name ?? string.Empty; string lname = n.ToLowerInvariant();
+                        int chargeScore = 0;
+                        if (lname.Contains("focus")) chargeScore += 5;
+                        if (lname.Contains("charge") || lname.Contains("loop") || lname.Contains("start")) chargeScore += 3;
+                        if (lname.Contains("spell")) chargeScore += 1;
+                        if (lname.Contains("bind")) chargeScore += 1; // fallback to Silksong bind if no focus
+                        if (chargeScore > bestChargeScore) { bestChargeScore = chargeScore; bestCharge = c; }
+
+                        int completeScore = 0;
+                        if (lname.Contains("focus")) completeScore += 4;
+                        if (lname.Contains("heal") || lname.Contains("end") || lname.Contains("complete") || lname.Contains("release")) completeScore += 4;
+                        if (lname.Contains("spell")) completeScore += 1;
+                        if (lname.Contains("bind")) completeScore += 1; // fallback
+                        if (completeScore > bestCompleteScore) { bestCompleteScore = completeScore; bestComplete = c; }
+
+                        int readyScore = 0;
+                        if (lname.Contains("focus")) readyScore += 3;
+                        if (lname.Contains("ready") || lname.Contains("available") || lname.Contains("charge_complete") || lname.Contains("full")) readyScore += 3;
+                        if (lname.Contains("bind")) readyScore += 1;
+                        if (readyScore > bestReadyScore) { bestReadyScore = readyScore; bestReady = c; }
+                    }
+                    if (bestChargeScore > 0 && sfxFocusCharge == null) sfxFocusCharge = bestCharge;
+                    if (bestCompleteScore > 0 && sfxFocusComplete == null) sfxFocusComplete = bestComplete;
+                    if (bestReadyScore > 0 && sfxFocusReady == null) sfxFocusReady = bestReady;
+                }
+            }
+            catch { }
+        }
+
+        private static AudioClip TryLoadAudioFromAssets(string fileName)
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                string assets = Path.Combine(dir, "Assets");
+                string path = Path.Combine(assets, fileName);
+                if (!File.Exists(path)) return null;
+                // WAV only for now (16-bit PCM). Keep simple and dependency-free.
+                if (path.EndsWith(".wav", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    return LoadPcmWav(path);
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private static AudioClip LoadPcmWav(string path)
+        {
+            try
+            {
+                using (var fs = File.OpenRead(path))
+                using (var br = new BinaryReader(fs))
+                {
+                    // RIFF header
+                    if (new string(br.ReadChars(4)) != "RIFF") return null;
+                    br.ReadInt32(); // Chunk size
+                    if (new string(br.ReadChars(4)) != "WAVE") return null;
+
+                    int channels = 1;
+                    int sampleRate = 44100;
+                    int bitsPerSample = 16;
+                    int dataSize = 0;
+                    long dataPos = 0;
+
+                    // Read chunks
+                    while (br.BaseStream.Position + 8 <= br.BaseStream.Length)
+                    {
+                        string chunkId = new string(br.ReadChars(4));
+                        int chunkSize = br.ReadInt32();
+                        long next = br.BaseStream.Position + chunkSize;
+
+                        if (chunkId == "fmt ")
+                        {
+                            int audioFormat = br.ReadInt16();
+                            channels = br.ReadInt16();
+                            sampleRate = br.ReadInt32();
+                            br.ReadInt32(); // byteRate
+                            br.ReadInt16(); // blockAlign
+                            bitsPerSample = br.ReadInt16();
+                            if (chunkSize > 16)
+                            {
+                                // skip any extra bytes in fmt chunk
+                                br.BaseStream.Position = next;
+                            }
+                            if (audioFormat != 1) return null; // PCM only
+                        }
+                        else if (chunkId == "data")
+                        {
+                            dataPos = br.BaseStream.Position;
+                            dataSize = chunkSize;
+                            br.BaseStream.Position = next;
+                        }
+                        else
+                        {
+                            // Skip unknown chunks
+                            br.BaseStream.Position = next;
+                        }
+                    }
+
+                    if (dataPos == 0 || dataSize <= 0) return null;
+
+                    // Read samples
+                    fs.Position = dataPos;
+                    int bytesPerSample = bitsPerSample / 8;
+                    int totalSamples = dataSize / bytesPerSample;
+                    int sampleCountPerChannel = totalSamples / channels;
+                    float[] data = new float[sampleCountPerChannel * channels];
+
+                    if (bitsPerSample == 16)
+                    {
+                        for (int i = 0; i < totalSamples; i++)
+                        {
+                            short s = br.ReadInt16();
+                            data[i] = Mathf.Clamp(s / 32768f, -1f, 1f);
+                        }
+                    }
+                    else if (bitsPerSample == 8)
+                    {
+                        for (int i = 0; i < totalSamples; i++)
+                        {
+                            byte b = br.ReadByte();
+                            data[i] = (b - 128) / 128f;
+                        }
+                    }
+                    else
+                    {
+                        return null;
+                    }
+
+                    // Avoid SetData to keep compatibility with some UnityEngine builds.
+                    // Use streaming clip with a PCM reader callback.
+                    string name = Path.GetFileNameWithoutExtension(path);
+                    int pos = 0;
+                    var clip = AudioClip.Create(name, sampleCountPerChannel, channels, sampleRate, true,
+                        (float[] outData) =>
+                        {
+                            int len = outData.Length;
+                            for (int i = 0; i < len; i++)
+                            {
+                                outData[i] = (pos < data.Length) ? data[pos++] : 0f;
+                            }
+                        },
+                        (int newPosition) =>
+                        {
+                            // newPosition is per-channel sample index
+                            pos = Mathf.Clamp(newPosition * channels, 0, data.Length);
+                        }
+                    );
+                    return clip;
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private void StartFocusChargeSfx()
+        {
+            try
+            {
+                EnsureFocusSfx();
+                if (focusSfx != null && sfxFocusCharge != null)
+                {
+                    focusSfx.loop = true;
+                    focusSfx.clip = sfxFocusCharge;
+                    focusSfx.Play();
+                }
+            }
+            catch { }
+        }
+
+        private void StopFocusChargeSfx()
+        {
+            try
+            {
+                if (focusSfx != null)
+                {
+                    focusSfx.loop = false;
+                    focusSfx.Stop();
+                }
+            }
+            catch { }
+        }
+
+        private void TryPlayFocusCompleteSfx()
+        {
+            try
+            {
+                EnsureFocusSfx();
+                if (focusSfx != null && sfxFocusComplete != null)
+                {
+                    focusSfx.PlayOneShot(sfxFocusComplete);
+                }
+            }
+            catch { }
+        }
+
+        private void CheckFocusReadySfx()
+        {
+            try
+            {
+                if (lastSoulForReady < 0) { lastSoulForReady = shadeSoul; return; }
+                if (lastSoulForReady < focusSoulCost && shadeSoul >= focusSoulCost)
+                {
+                    EnsureFocusSfx();
+                    if (focusSfx != null && sfxFocusReady != null)
+                        focusSfx.PlayOneShot(sfxFocusReady);
+                }
+                lastSoulForReady = shadeSoul;
+            }
+            catch { }
+        }
+
+        // ========== Spell SFX (Projectile, Shriek, Quake) ==========
+        private AudioSource spellSfx;
+        private AudioClip sfxFireball;
+        private AudioClip sfxQuakePrepare;
+        private AudioClip sfxQuakeImpact;
+        private AudioClip sfxVoidQuakeImpact;
+        private AudioClip sfxScream;
+        private AudioClip sfxVoidScream;
+
+        private void EnsureSpellSfx()
+        {
+            try
+            {
+                if (spellSfx == null)
+                {
+                    var go = new GameObject("ShadeSpellSFX");
+                    go.transform.SetParent(transform, false);
+                    go.transform.localPosition = Vector3.zero;
+                    spellSfx = go.AddComponent<AudioSource>();
+                    spellSfx.playOnAwake = false;
+                    spellSfx.spatialBlend = 0f;
+                    spellSfx.volume = 1f;
+                }
+                if (sfxFireball == null) sfxFireball = TryLoadAudioFromAssets("hero_fireball.wav");
+                if (sfxQuakePrepare == null) sfxQuakePrepare = TryLoadAudioFromAssets("hero_quake_spell_prepare.wav");
+                if (sfxQuakeImpact == null) sfxQuakeImpact = TryLoadAudioFromAssets("hero_quake_spell_impact.wav");
+                if (sfxVoidQuakeImpact == null) sfxVoidQuakeImpact = TryLoadAudioFromAssets("hero_void_quake_impact.wav");
+                if (sfxScream == null) sfxScream = TryLoadAudioFromAssets("hero_scream_spell.wav");
+                if (sfxVoidScream == null) sfxVoidScream = TryLoadAudioFromAssets("hero_void_scream_spell.wav");
+
+                if (sfxFireball == null || sfxQuakePrepare == null || sfxQuakeImpact == null || sfxVoidQuakeImpact == null || sfxScream == null || sfxVoidScream == null)
+                {
+                    var all = Resources.FindObjectsOfTypeAll<AudioClip>();
+                    AudioClip best(string[] keys)
+                    {
+                        AudioClip pick = null; int scoreBest = int.MinValue;
+                        foreach (var c in all)
+                        {
+                            if (!c) continue; string n = (c.name ?? string.Empty).ToLowerInvariant();
+                            int sc = 0; foreach (var k in keys) if (n.Contains(k)) sc += 2; // favor multiple matches
+                            if (sc > scoreBest) { scoreBest = sc; pick = c; }
+                        }
+                        return pick;
+                    }
+                    if (sfxFireball == null) sfxFireball = best(new[] { "fireball", "vengeful", "spirit", "spell" });
+                    if (sfxQuakePrepare == null) sfxQuakePrepare = best(new[] { "quake", "prepare", "start", "spell" });
+                    if (sfxQuakeImpact == null) sfxQuakeImpact = best(new[] { "quake", "impact", "spell" });
+                    if (sfxVoidQuakeImpact == null) sfxVoidQuakeImpact = best(new[] { "void", "quake", "impact" });
+                    if (sfxScream == null) sfxScream = best(new[] { "scream", "wraith", "howl", "spell" });
+                    if (sfxVoidScream == null) sfxVoidScream = best(new[] { "void", "scream", "abyss" });
+                }
+            }
+            catch { }
+        }
+
+        private void TryPlayFireballSfx()
+        {
+            try
+            {
+                EnsureSpellSfx();
+                if (spellSfx != null && sfxFireball != null) spellSfx.PlayOneShot(sfxFireball);
+            }
+            catch { }
+        }
+
+        private void TryPlayShriekSfx(bool upgraded)
+        {
+            try
+            {
+                EnsureSpellSfx();
+                var clip = upgraded ? sfxVoidScream : sfxScream;
+                if (spellSfx != null && clip != null) spellSfx.PlayOneShot(clip);
+            }
+            catch { }
+        }
+
+        private void TryPlayQuakePrepareSfx()
+        {
+            try
+            {
+                EnsureSpellSfx();
+                if (spellSfx != null && sfxQuakePrepare != null) spellSfx.PlayOneShot(sfxQuakePrepare);
+            }
+            catch { }
+        }
+
+        private void TryPlayQuakeImpactSfx(bool upgraded)
+        {
+            try
+            {
+                EnsureSpellSfx();
+                var clip = upgraded ? sfxVoidQuakeImpact : sfxQuakeImpact;
+                if (spellSfx != null && clip != null) spellSfx.PlayOneShot(clip);
+            }
+            catch { }
         }
 
         private void SetupShadeLight()
@@ -1004,6 +1528,12 @@ public partial class LegacyHelper
                     r.enabled = true;
                     r.sortingLayerID = baseLayer;
                     r.sortingOrder = baseOrder - 1;
+                }
+                // Keep focus aura sorted just below the shade sprite as well
+                if (focusAuraRenderer)
+                {
+                    focusAuraRenderer.sortingLayerID = baseLayer;
+                    focusAuraRenderer.sortingOrder = baseOrder - 2;
                 }
             }
             catch { }

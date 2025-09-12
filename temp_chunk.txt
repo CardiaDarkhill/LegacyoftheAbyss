@@ -1,0 +1,250 @@
+                        PushShadeStatsToHud();
+                        PersistIfChanged();
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private void PersistIfChanged()
+        {
+            if (lastSavedHP != shadeHP || lastSavedMax != shadeMaxHP || lastSavedSoul != shadeSoul)
+            {
+                LegacyHelper.SaveShadeState(shadeHP, shadeMaxHP, shadeSoul);
+                lastSavedHP = shadeHP; lastSavedMax = shadeMaxHP; lastSavedSoul = shadeSoul;
+            }
+        }
+
+        private void PushSoulToHud()
+        {
+            if (cachedHud)
+            {
+                try { cachedHud.SetShadeSoul(shadeSoul, shadeSoulMax); } catch { }
+            }
+        }
+
+        private void PushShadeStatsToHud()
+        {
+            if (cachedHud)
+            {
+                try { cachedHud.SetShadeStats(shadeHP, shadeMaxHP); } catch { }
+            }
+        }
+
+        private void HandleMovementAndFacing()
+        {
+            float h = (Input.GetKey(KeyCode.A) ? -1f : 0f) + (Input.GetKey(KeyCode.D) ? 1f : 0f);
+            float v = (Input.GetKey(KeyCode.S) ? -1f : 0f) + (Input.GetKey(KeyCode.W) ? 1f : 0f);
+            Vector2 input = new Vector2(h, v);
+            if (input.sqrMagnitude > 1f) input.Normalize();
+
+            // Freeze manual input while channeling teleport
+            if (isChannelingTeleport) input = Vector2.zero;
+
+            Vector2 to = (Vector2)(hornetTransform.position - transform.position);
+            float dist = to.magnitude;
+
+            if (dist > snapLeashRadius)
+            {
+                TeleportToHornet();
+                inHardLeash = false; hardLeashTimer = 0f; EnableCollisions(true);
+                return;
+            }
+
+            Vector2 moveDelta = Vector2.zero;
+            if (dist > softLeashRadius && dist <= hardLeashRadius)
+            {
+                float t = Mathf.InverseLerp(softLeashRadius, hardLeashRadius, dist);
+                Vector2 pullDir = to.normalized;
+                moveDelta += pullDir * (Mathf.Lerp(softPullSpeed, softPullSpeed * 1.5f, t)) * Time.deltaTime;
+                inHardLeash = false; hardLeashTimer = 0f; EnableCollisions(true);
+            }
+
+            if (dist > hardLeashRadius)
+            {
+                inHardLeash = true;
+                hardLeashTimer += Time.deltaTime;
+                EnableCollisions(false);
+                Vector2 dir = to.normalized;
+                moveDelta = dir * hardPullSpeed * Time.deltaTime;
+                if (hardLeashTimer >= hardLeashTimeout)
+                {
+                    TeleportToHornet();
+                    inHardLeash = false; hardLeashTimer = 0f; EnableCollisions(true);
+                    return;
+                }
+            }
+            else if (inHardLeash)
+            {
+                inHardLeash = false; hardLeashTimer = 0f; EnableCollisions(true);
+            }
+
+            if (!inHardLeash)
+                moveDelta += input * moveSpeed * Time.deltaTime;
+
+            // Compute proposed next position and clamp against transition gates at map edges
+            Vector2 curPos = rb ? rb.position : (Vector2)transform.position;
+            Vector2 proposed = curPos + moveDelta;
+            proposed = ClampAgainstTransitionGates(proposed);
+
+            if (rb) rb.MovePosition(proposed);
+            else transform.position = proposed;
+
+            // Update facing only from player's horizontal input.
+            // Do not auto-face Hornet when idle; preserve last manual facing.
+            if (h > 0.1f) facing = 1;
+            else if (h < -0.1f) facing = -1;
+
+            if (sr != null) sr.flipX = (facing == -1);
+
+            if (dist > maxDistance)
+            {
+                Vector3 toShade = transform.position - hornetTransform.position;
+                transform.position = hornetTransform.position + toShade.normalized * maxDistance;
+            }
+        }
+
+        private void HandleFire()
+        {
+            fireTimer -= Time.deltaTime;
+            if (!Input.GetKey(FireKey) || fireTimer > 0f) return;
+            // If aiming a spell with up/down, don't fire projectile
+            if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.S)) return;
+            if (!IsProjectileUnlocked()) return;
+            if (shadeSoul < projectileSoulCost) return;
+            fireTimer = fireCooldown;
+            shadeSoul = Mathf.Max(0, shadeSoul - projectileSoulCost);
+            PushSoulToHud();
+            CheckHazardOverlap();
+
+            Vector2 dir = new Vector2(facing, 0f);
+            SpawnProjectile(dir);
+        }
+
+        private void HandleShriek()
+        {
+            shriekTimer -= Time.deltaTime;
+            // Trigger on FireKey + Up
+            if (!Input.GetKeyDown(FireKey) || !Input.GetKey(KeyCode.W)) return;
+            if (!IsShriekUnlocked()) return; // locked until 3rd unlock
+            if (shriekTimer > 0f) return;
+            if (shadeSoul < shriekSoulCost) return;
+            shriekTimer = shriekCooldown;
+            shadeSoul = Mathf.Max(0, shadeSoul - shriekSoulCost);
+            PushSoulToHud();
+            CheckHazardOverlap();
+
+            int dmg = ComputeSpellDamageMultiplier(4f, IsShriekUpgraded()); // Abyss Shriek base 4x
+            float life = 0.18f;
+            // 12-unit high, 95-degree cone centered on torso
+            Vector2 localOffset = new Vector2(0f, 0.8f);
+            SpawnShriekCone(12f, 95f, dmg, life, localOffset);
+        }
+
+        private void HandleDescendingDark()
+        {
+            quakeTimer -= Time.deltaTime;
+            // Trigger on FireKey + Down
+            if (!Input.GetKeyDown(FireKey) || !Input.GetKey(KeyCode.S)) return;
+            if (!IsDescendingDarkUnlocked()) return; // locked until 2nd unlock
+            if (quakeTimer > 0f) return;
+            if (shadeSoul < quakeSoulCost) return;
+            quakeTimer = quakeCooldown;
+            shadeSoul = Mathf.Max(0, shadeSoul - quakeSoulCost);
+            PushSoulToHud();
+            CheckHazardOverlap();
+
+            int dmg = ComputeSpellDamageMultiplier(3f, IsDescendingDarkUpgraded()); // Descending Dark base 3x
+            StartCoroutine(DescendingDarkRoutine(dmg));
+        }
+
+        // Spell progression helpers
+        private int ShadeSpellProgress
+        {
+            get
+            {
+                try
+                {
+                    var pd = GameManager.instance != null ? GameManager.instance.playerData : null;
+                    if (pd == null) return 0;
+                    int c = 0;
+                    if (pd.hasNeedleThrow) c++;
+                    if (pd.hasThreadSphere) c++;
+                    if (pd.hasSilkCharge) c++;
+                    if (pd.hasParry) c++;
+                    if (pd.hasSilkBomb) c++;
+                    if (pd.hasSilkBossNeedle) c++;
+                    return Mathf.Clamp(c, 0, 6);
+                }
+                catch { return 0; }
+            }
+        }
+        private bool IsProjectileUnlocked() => ShadeSpellProgress >= 1;
+        private bool IsDescendingDarkUnlocked() => ShadeSpellProgress >= 2;
+        private bool IsShriekUnlocked() => ShadeSpellProgress >= 3;
+        private bool IsProjectileUpgraded() => ShadeSpellProgress >= 4;
+        private bool IsDescendingDarkUpgraded() => ShadeSpellProgress >= 5;
+        private bool IsShriekUpgraded() => ShadeSpellProgress >= 6;
+
+        private int ComputeSpellDamageMultiplier(float baseMult, bool upgraded)
+        {
+            int nail = Mathf.Max(1, GetHornetNailDamage());
+            float mult = upgraded ? baseMult : baseMult * 0.7f; // Soul variant = 30% less
+            int dmg = Mathf.RoundToInt(nail * mult);
+            return Mathf.Max(1, dmg);
+        }
+
+        private void SpawnAoE(string name, Vector3 worldPos, float radius, int damage, float lifeSeconds)
+        {
+            var go = new GameObject(name);
+            go.transform.position = worldPos;
+            go.tag = "Hero Spell";
+            int spellLayer = LayerMask.NameToLayer("Hero Spell");
+            int atkLayer = LayerMask.NameToLayer("Hero Attack");
+            if (spellLayer >= 0) go.layer = spellLayer; else if (atkLayer >= 0) go.layer = atkLayer;
+
+            var col = go.AddComponent<CircleCollider2D>();
+            col.isTrigger = true;
+            col.radius = radius;
+
+            var aoe = go.AddComponent<ShadeAoE>();
+            aoe.damage = damage;
+            aoe.hornetRoot = hornetTransform;
+            aoe.lifeSeconds = lifeSeconds;
+
+            // Optional visual hint
+            try
+            {
+                var sr2 = go.AddComponent<SpriteRenderer>();
+                sr2.sprite = MakeDotSprite();
+                var c = new Color(0f, 0f, 0f, 0.25f);
+                sr2.color = c;
+                sr2.sortingLayerID = sr ? sr.sortingLayerID : 0;
+                sr2.sortingOrder = sr ? (sr.sortingOrder - 1) : -1;
+                go.transform.localScale = Vector3.one * (radius * 2.2f);
+            }
+            catch { }
+
+            IgnoreHornetForCollider(col);
+        }
+
+        private void IgnoreHornetForCollider(Collider2D col)
+        {
+            try
+            {
+                if (!col || !hornetTransform) return;
+                var hornetCols = hornetTransform.GetComponentsInChildren<Collider2D>(true);
+                foreach (var hc in hornetCols)
+                    if (hc) Physics2D.IgnoreCollision(col, hc, true);
+            }
+            catch { }
+        }
+
+        private void SpawnShriekCone(float height, float degrees, int damage, float lifeSeconds, Vector2 localOffset)
+        {
+            var go = new GameObject("ShadeShriekCone");
+            go.transform.position = transform.position + (Vector3)localOffset;
+            go.tag = "Hero Spell";
+            int spellLayer = LayerMask.NameToLayer("Hero Spell");
+            int atkLayer = LayerMask.NameToLayer("Hero Attack");
+            if (spellLayer >= 0) go.layer = spellLayer; else if (atkLayer >= 0) go.layer = atkLayer;
