@@ -73,7 +73,12 @@ public partial class LegacyHelper
     [HarmonyPatch(typeof(GameManager), "Awake")]
     private class GameManager_Awake_Patch
     {
-        private static void Postfix(GameManager __instance) => DisableStartup(__instance);
+        private static void Postfix(GameManager __instance)
+        {
+            // New GameManager instance; ensure we re-register scene-enter handler next time.
+            registeredEnterSceneHandler = false;
+            DisableStartup(__instance);
+        }
     }
 
     [HarmonyPatch(typeof(GameManager), "Start")]

@@ -21,7 +21,6 @@
 
 
 - The shade needs its own sprite sheet/animations, currently it's just a black square. All of it's spells and the focus ability also need animations (Some of these can use assets and code already in Silksong, others will need assets taken from the first game, I've added some sprite sheets to the assets folder that should help with this).
-- The shade is failing to spawn in after having loaded into the game, quiting out to the main menu, and then reloading the game. At which point the shade stops ever respawning.
 - Desolate Dive/Descending Dark seems to stop it's dive when impacting Hornet or any enemy hitbox, it shouldn't stop for until it hits the ground (The easiest way to target it should be using it from directly above an enemy and abusing the iframes it gives to dive directly into them and then quickly run out)
 
 
