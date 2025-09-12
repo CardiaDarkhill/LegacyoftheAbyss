@@ -570,7 +570,7 @@ public partial class LegacyHelper
             // Enemy i-frames during descent (not hazards)
             hurtCooldown = Mathf.Max(hurtCooldown, 0.6f);
 
-            // Find ground below
+            // Find ground below: ignore Hornet/enemy/hazard hitboxes so we only stop on terrain
             Vector2 start = transform.position;
             float maxDist = 60f;
             var hits = Physics2D.RaycastAll(start, Vector2.down, maxDist);
@@ -579,7 +579,14 @@ public partial class LegacyHelper
             {
                 if (!h.collider) continue;
                 if (h.collider.isTrigger) continue;
-                if (h.collider.transform == transform || h.collider.transform.IsChildOf(transform)) continue;
+                var ht = h.collider.transform;
+                // ignore self
+                if (ht == transform || ht.IsChildOf(transform)) continue;
+                // ignore hornet
+                if (hornetTransform && (ht == hornetTransform || ht.IsChildOf(hornetTransform))) continue;
+                // ignore enemies/hazards (anything that damages hero)
+                try { if (h.collider.GetComponentInParent<DamageHero>() != null) continue; } catch { }
+                // otherwise this is acceptable ground
                 pick = h; break;
             }
 
