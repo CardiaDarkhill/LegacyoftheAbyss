@@ -16,26 +16,10 @@
 
 
 ## To Do:
-- At time of writing the following features still need to be implemented:
+- At time of writing the following bugs still need to be fixed:
 
-
-
-- The shade needs its own sprite sheet/animations, currently it's just a black square. All of it's spells and the focus ability also need animations (Some of these can use assets and code already in Silksong, others will need assets taken from the first game, I've added some sprite sheets to the assets folder that should help with this).
-        - Idle X
-        - Moving X
-        - Death X
-        - Inactive state X
-        - Fireball cast X
-        - Shade Soul fx
-        - Vengeful Spirit fx X
-        - Shriek cast X
-        - Abyss Shriek fx
-        - Howling Wraiths fx
-        - Ddive Prepare X
-        - Ddive Dive X
-        - Ddive fx X
-        - Ddark fx
-
+- For some reason whenever we compile we're dumping a whole bunch of extra files into the plugins folder. The only thing that we should be outputing when we compile is LegacyoftheAbyss.dll and LegacyoftheAbyss.pdb
+- The additional weirdly scaling nail strikes are still happening
 - Desolate Dive/Descending Dark seems to stop it's dive when impacting specifically the top of Hornet's hitbox, it shouldn't stop until it hits the ground (The easiest way to target it should be using it from directly above an enemy and abusing the iframes it gives to dive directly into them and then quickly run out)
 
 
