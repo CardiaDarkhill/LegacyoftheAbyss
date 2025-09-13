@@ -311,6 +311,11 @@ public partial class LegacyHelper
             if (!slash) yield break;
             try
             {
+                var allSlashes = transform.GetComponentsInChildren<NailSlash>(true);
+                foreach (var ns in allSlashes)
+                    if (ns && ns.gameObject != slash)
+                        ns.transform.localScale = Vector3.zero;
+
                 var recoils = slash.GetComponentsInChildren<NailSlashRecoil>(true);
                 foreach (var r in recoils) if (r) Destroy(r);
 

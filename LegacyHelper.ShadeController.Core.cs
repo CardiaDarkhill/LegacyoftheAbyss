@@ -34,7 +34,7 @@ public partial class LegacyHelper
         private Transform hornetTransform;
         private float fireTimer;
         private SpriteRenderer sr;
-        public float spriteScale = 1.8f;
+        public float spriteScale = 1.5f;
         private Sprite[] idleAnimFrames;
         private Sprite[] floatAnimFrames;
         private Sprite[] vengefulAnimFrames;
@@ -806,7 +806,7 @@ public partial class LegacyHelper
             var fxSr = go.AddComponent<SpriteRenderer>();
             fxSr.sortingLayerID = sr.sortingLayerID;
             fxSr.sortingOrder = sr.sortingOrder - 1;
-            float fxScale = spriteScale * 4f;
+            float fxScale = spriteScale * 3f;
             go.transform.localScale = Vector3.one * fxScale;
             StartCoroutine(PlayShriekFx(fxSr, frames, fxScale));
         }
