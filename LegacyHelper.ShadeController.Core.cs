@@ -901,10 +901,10 @@ public partial class LegacyHelper
                     if (ht == hornetTransform || ht.IsChildOf(hornetTransform) || (hornetRoot && ht.root == hornetRoot))
                         continue;
                 }
-                // also skip any collider tagged as Player (fallback if hornetTransform not found)
+                // also skip any collider attached to Hornet via HeroController component
                 try
                 {
-                    if (h.collider.CompareTag("Player") || h.collider.transform.root.CompareTag("Player"))
+                    if (h.collider.GetComponentInParent<HeroController>() != null)
                         continue;
                 }
                 catch { }
