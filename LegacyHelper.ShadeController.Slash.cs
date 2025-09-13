@@ -112,7 +112,7 @@ public partial class LegacyHelper
                 var tr = slash.transform;
                 var ls = tr.localScale;
                 ls.x = Mathf.Abs(ls.x) * (facing >= 0 ? 1f : -1f);
-                ls *= 1f / spriteScale;
+                ls *= 1f / SpriteScale;
                 tr.localScale = ls;
             }
             catch { }
@@ -361,7 +361,7 @@ public partial class LegacyHelper
 
                 try
                 {
-                    var tr = slash.transform; var ls = tr.localScale; ls.x = Mathf.Abs(ls.x) * (facingSign >= 0 ? -1f : 1f); ls *= 1f / spriteScale; tr.localScale = ls;
+                    var tr = slash.transform; var ls = tr.localScale; ls.x = Mathf.Abs(ls.x) * (facingSign >= 0 ? -1f : 1f); ls *= 1f / SpriteScale; tr.localScale = ls;
                 }
                 catch { }
             }
@@ -416,7 +416,7 @@ public partial class LegacyHelper
             bool flip = dir.x < 0f;
             psr.flipX = flip;
 
-            float scale = spriteScale * (IsProjectileUpgraded() ? 1.5f : 1f);
+            float scale = SpriteScale * (IsProjectileUpgraded() ? 1.5f : 1f);
             proj.transform.localScale = Vector3.one * scale;
 
             Collider2D[] projCols;

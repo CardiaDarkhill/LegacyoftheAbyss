@@ -34,7 +34,22 @@ public partial class LegacyHelper
         private Transform hornetTransform;
         private float fireTimer;
         private SpriteRenderer sr;
-        public float spriteScale = 1.5f;
+        private float _spriteScale = 1.5f;
+        public float SpriteScale
+        {
+            get
+            {
+                UnityEngine.Debug.Log($"[ShadeDebug] spriteScale read: {_spriteScale}\n{System.Environment.StackTrace}");
+                return _spriteScale;
+            }
+            set
+            {
+                _spriteScale = value;
+                UnityEngine.Debug.Log($"[ShadeDebug] spriteScale set: {_spriteScale}\n{System.Environment.StackTrace}");
+                if (transform != null)
+                    transform.localScale = Vector3.one * _spriteScale;
+            }
+        }
         private Sprite[] idleAnimFrames;
         private Sprite[] floatAnimFrames;
         private Sprite[] vengefulAnimFrames;
@@ -171,7 +186,7 @@ public partial class LegacyHelper
             }
 
             sr = GetComponent<SpriteRenderer>();
-            transform.localScale = Vector3.one * spriteScale;
+            transform.localScale = Vector3.one * SpriteScale;
             LoadShadeSprites();
             if (sr != null)
             {
@@ -806,7 +821,7 @@ public partial class LegacyHelper
             var fxSr = go.AddComponent<SpriteRenderer>();
             fxSr.sortingLayerID = sr.sortingLayerID;
             fxSr.sortingOrder = sr.sortingOrder - 1;
-            float fxScale = spriteScale * 3f;
+            float fxScale = SpriteScale * 3f;
             go.transform.localScale = Vector3.one * fxScale;
             StartCoroutine(PlayShriekFx(fxSr, frames, fxScale));
         }
@@ -816,7 +831,7 @@ public partial class LegacyHelper
             if (fxSr == null || frames == null || frames.Length == 0) yield break;
             float shadeBottom = transform.position.y;
             if (sr && sr.sprite)
-                shadeBottom -= sr.sprite.bounds.extents.y * spriteScale;
+                shadeBottom -= sr.sprite.bounds.extents.y * SpriteScale;
             float fxExt = frames[0].bounds.extents.y * fxScale;
             var pos = fxSr.transform.position;
             pos.y = shadeBottom + fxExt;
@@ -1057,10 +1072,10 @@ public partial class LegacyHelper
                 var frame = frames[idx];
                 auraSr.sprite = frame;
                 if (sr) auraSr.flipX = sr.flipX;
-                float shadeHeight = sr && sr.sprite ? sr.sprite.bounds.size.y * spriteScale : 0f;
-                float auraHeight = frame.bounds.size.y * spriteScale;
+                float shadeHeight = sr && sr.sprite ? sr.sprite.bounds.size.y * SpriteScale : 0f;
+                float auraHeight = frame.bounds.size.y * SpriteScale;
                 float auraBottom = -shadeHeight * 0.5f - auraHeight * 0.1f;
-                auraSr.transform.localScale = Vector3.one * spriteScale;
+                auraSr.transform.localScale = Vector3.one * SpriteScale;
                 auraSr.transform.localPosition = new Vector3(0f, auraBottom + auraHeight * 0.5f, 0f);
                 yield return null;
             }

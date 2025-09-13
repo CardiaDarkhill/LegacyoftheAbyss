@@ -178,4 +178,23 @@ public partial class LegacyHelper
             try { NotifyHornetSpellUnlocked(); } catch { }
         }
     }
+
+    [HarmonyPatch(typeof(NailSlash), "Awake")]
+    private class NailSlash_Awake_Log
+    {
+        private static void Postfix(NailSlash __instance)
+        {
+            try
+            {
+                var tr = __instance.transform;
+                var scale = tr.localScale;
+                string parent = tr.parent ? tr.parent.name : "(null)";
+                UnityEngine.Debug.Log($"[ShadeDebug] NailSlash spawned: {__instance.name} scale={scale} parent={parent}\n{System.Environment.StackTrace}");
+            }
+            catch (System.Exception ex)
+            {
+                UnityEngine.Debug.Log($"[ShadeDebug] NailSlash log error: {ex}");
+            }
+        }
+    }
 }
