@@ -91,7 +91,8 @@ public partial class LegacyHelper
             {
                 var tr = slash.transform;
                 var ls = tr.localScale;
-                ls.x = Mathf.Abs(ls.x) * (facing >= 0 ? 1f : -1f);
+                // Base slashes face left with positive scale; flip by facing so rightward attacks use negative X
+                ls.x = Mathf.Abs(ls.x) * -facing;
                 ls.y = Mathf.Abs(ls.y) * (v < -0.35f ? -1f : 1f);
                 ls *= 1f / SpriteScale;
                 tr.localScale = ls;
@@ -176,6 +177,7 @@ public partial class LegacyHelper
                 // Remove helpers that can extend hit windows
                 try { var extra = slash.GetComponentsInChildren<HeroExtraNailSlash>(true); foreach (var x in extra) if (x) Destroy(x); } catch { }
                 try { var thunks = slash.GetComponentsInChildren<NailSlashTerrainThunk>(true); foreach (var t in thunks) if (t) Destroy(t); } catch { }
+                try { var downAttacks = slash.GetComponentsInChildren<HeroDownAttack>(true); foreach (var d in downAttacks) if (d) Destroy(d); } catch { }
 
                 try
                 {
