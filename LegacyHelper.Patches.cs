@@ -192,6 +192,13 @@ public partial class LegacyHelper
                 {
                     f.SetValue(__instance, HeroController.instance);
                 }
+                // Some slashes lack a PolygonCollider2D which NailSlash expects; add a dummy to prevent Awake from NREing
+                var poly = __instance.GetComponent<PolygonCollider2D>();
+                if (poly == null)
+                {
+                    poly = __instance.gameObject.AddComponent<PolygonCollider2D>();
+                    poly.enabled = false;
+                }
             }
             catch { }
 
