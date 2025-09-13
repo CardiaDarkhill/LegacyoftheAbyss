@@ -538,8 +538,6 @@ public partial class LegacyHelper
             // Freeze manual input while channeling teleport
             if (isChannelingTeleport || isFocusing) input = Vector2.zero;
 
-            float speed = moveSpeed;
-
             Vector2 to = (Vector2)(hornetTransform.position - transform.position);
             float dist = to.magnitude;
 

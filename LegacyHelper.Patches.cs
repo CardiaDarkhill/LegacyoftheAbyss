@@ -222,7 +222,6 @@ public partial class LegacyHelper
                 bool isShade = __instance.GetComponent("ShadeSlashMarker") != null;
                 string owner = isShade ? "Shade" : "Hornet";
                 string parent = __instance.transform.parent ? __instance.transform.parent.name : "(null)";
-                UnityEngine.Debug.Log($"[ShadeDebug] {owner} slash started: {__instance.name} anim={__instance.animName} parent={parent}");
             }
             catch { }
         }

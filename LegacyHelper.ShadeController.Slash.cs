@@ -99,10 +99,7 @@ public partial class LegacyHelper
                 // NailAttackBase.OnSlashStarting later resets transform.localScale from its
                 // private "scale" field, so we update that field (and longNeedleScale) too.
                 ls.x = Mathf.Abs(ls.x) * -facing;
-                // Previously we inverted the Y scale for right-facing up-slashes, which
-                // caused the animation to play downward. Keeping the Y scale positive
-                // ensures upward slashes display correctly regardless of facing.
-                ls.y = Mathf.Abs(ls.y);
+                //ls.y = Mathf.Abs(ls.y);
                 ls *= 1f / SpriteScale;
                 tr.localScale = ls;
                 if (nailSlash != null)
