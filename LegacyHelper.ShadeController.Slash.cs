@@ -97,9 +97,14 @@ public partial class LegacyHelper
                 // Determine the original facing of the source slash so that we can
                 // mirror only when necessary. Some slashes (e.g. the up-slash) are
                 // authored facing right, while others default to facing left.
-                float sourceSign = source.transform.localScale.x >= 0f ? 1f : -1f;
-                float facingSign = facing >= 0 ? 1f : -1f;
-                ls.x = Mathf.Abs(ls.x) * sourceSign * facingSign;
+                // By default, Wanderer slashes are authored facing left, so we
+                // mirror them when the shade faces right. The up-slash is the
+                // odd one out: it is authored facing right, so only that variant
+                // needs the opposite mirroring rule.
+                var scaleSign = -facing;
+                if (v > 0.35f) // up-slash case
+                    scaleSign = facing;
+                ls.x = Mathf.Abs(ls.x) * scaleSign;
                 //ls.y = Mathf.Abs(ls.y);
                 ls *= 1f / SpriteScale;
                 tr.localScale = ls;
