@@ -1288,7 +1288,8 @@ public partial class LegacyHelper
                 {
                     var hz = GetHazardType(dh);
                     if (IsTerrainHazard(hz)) { OnShadeHitHazard(); return; }
-                    OnShadeHitEnemy(dh);
+                    int dmg = 0; try { dmg = dh.damageDealt; } catch { }
+                    if (dmg > 0) OnShadeHitEnemy(dh);
                 }
             }
             catch { }
@@ -1389,8 +1390,9 @@ public partial class LegacyHelper
                 {
                     var hz = GetHazardType(dh);
                     if (IsTerrainHazard(hz)) { OnShadeHitHazard(); return; }
-                    OnShadeHitEnemy(dh);
-                    return;
+                    int dmg = 0; try { dmg = dh.damageDealt; } catch { }
+                    if (dmg > 0) { OnShadeHitEnemy(dh); return; }
+                    else continue;
                 }
             }
         }
@@ -1421,8 +1423,9 @@ public partial class LegacyHelper
         private void OnShadeHitEnemy(DamageHero dh)
         {
             if (hurtCooldown > 0f) return;
-            int dmg = 1;
-            try { if (dh != null) dmg = Mathf.Max(1, dh.damageDealt); } catch { }
+            int dmg = 0;
+            try { if (dh != null) dmg = dh.damageDealt; } catch { }
+            if (dmg <= 0) return; // ignore non-damaging triggers
             shadeHP = Mathf.Max(0, shadeHP - dmg);
             if (shadeHP <= 0) StartDeathAnimation();
             PushShadeStatsToHud();
