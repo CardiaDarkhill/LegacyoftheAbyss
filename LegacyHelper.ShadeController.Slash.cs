@@ -27,63 +27,35 @@ public partial class LegacyHelper
             GameObject source = null;
             float v = (Input.GetKey(KeyCode.S) ? -1f : 0f) + (Input.GetKey(KeyCode.W) ? 1f : 0f);
 
-            var upField = hc.GetType().GetField("UpSlashObject", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            var downField = hc.GetType().GetField("DownSlashObject", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            var normalField = hc.GetType().GetField("NormalSlashObject", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            var altField = hc.GetType().GetField("AlternateSlashObject", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-
-            var upObj = upField?.GetValue(hc) as GameObject;
-            var downObj = downField?.GetValue(hc) as GameObject;
-            var normalObj = normalField?.GetValue(hc) as GameObject;
-            var altObj = altField?.GetValue(hc) as GameObject;
-
-            NailSlash upProp = null, downProp = null, normalProp = null, altProp = null;
-            try { upProp = hc.GetType().GetProperty("UpSlash", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(hc, null) as NailSlash; } catch { }
-            try { downProp = hc.GetType().GetProperty("DownSlash", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(hc, null) as NailSlash; } catch { }
-            try { normalProp = hc.GetType().GetProperty("NormalSlash", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(hc, null) as NailSlash; } catch { }
-            try { altProp = hc.GetType().GetProperty("AlternateSlash", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(hc, null) as NailSlash; } catch { }
-
-            var upGO2 = upProp ? upProp.gameObject : null;
-            var downGO2 = downProp ? downProp.gameObject : null;
-            var normalGO2 = normalProp ? normalProp.gameObject : null;
-            var altGO2 = altProp ? altProp.gameObject : null;
-
-            var upGO = upObj ?? upGO2;
-            var downGO = downObj ?? downGO2;
-            var normalGO = normalObj ?? normalGO2;
-            var altGO = altObj ?? altGO2;
-
-            if (v > 0.35f && upGO) source = upGO;
-            else if (v < -0.35f && downGO) source = downGO;
-            else source = (facing >= 0) ? (altGO ?? normalGO) : (normalGO ?? altGO);
-
-            if (source == null)
+            try
             {
-                try
+                var allHeroSlashes = hc.GetComponentsInChildren<NailSlash>(true);
+                if (allHeroSlashes == null || allHeroSlashes.Length == 0)
+                    allHeroSlashes = Resources.FindObjectsOfTypeAll<NailSlash>();
+                if (allHeroSlashes != null && allHeroSlashes.Length > 0)
                 {
-                    var allHeroSlashes = hc.GetComponentsInChildren<NailSlash>(true);
-                    if (allHeroSlashes == null || allHeroSlashes.Length == 0)
-                        allHeroSlashes = Resources.FindObjectsOfTypeAll<NailSlash>();
-                    if (allHeroSlashes != null && allHeroSlashes.Length > 0)
-                    {
-                        bool MatchUp(NailSlash ns) { return ns && (((ns.name ?? "").ToLowerInvariant().Contains("up")) || ((ns.animName ?? "").ToLowerInvariant().Contains("up"))); }
-                        bool MatchDown(NailSlash ns) { return ns && (((ns.name ?? "").ToLowerInvariant().Contains("down")) || ((ns.animName ?? "").ToLowerInvariant().Contains("down"))); }
-                        bool MatchNormal(NailSlash ns) { return ns && !MatchUp(ns) && !MatchDown(ns); }
-                        bool MatchRight(NailSlash ns) { if (!ns) return false; var n=(ns.name??"").ToLowerInvariant(); var a=(ns.animName??"").ToLowerInvariant(); return n.Contains("alt")||n.Contains("right")||a.Contains("alt")||a.Contains("right"); }
-                        bool MatchLeft(NailSlash ns)  { if (!ns) return false; var n=(ns.name??"").ToLowerInvariant(); var a=(ns.animName??"").ToLowerInvariant(); return n.Contains("left")||a.Contains("left"); }
-                        NailSlash pick = null;
-                        if (v > 0.35f) pick = System.Array.Find(allHeroSlashes, s => MatchUp(s));
-                        else if (v < -0.35f) pick = System.Array.Find(allHeroSlashes, s => MatchDown(s));
-                        else pick = (facing >= 0)
-                            ? (System.Array.Find(allHeroSlashes, s => MatchNormal(s) && MatchRight(s)) ?? System.Array.Find(allHeroSlashes, s => MatchRight(s)))
-                            : (System.Array.Find(allHeroSlashes, s => MatchNormal(s) && MatchLeft(s))  ?? System.Array.Find(allHeroSlashes, s => MatchLeft(s)));
-                        if (pick == null) pick = System.Array.Find(allHeroSlashes, s => MatchNormal(s)) ?? allHeroSlashes[0];
-                        source = pick ? pick.gameObject : null;
-                    }
+                    bool IsWanderer(NailSlash ns) => ns && ns.transform.parent && ns.transform.parent.name == "Wanderer";
+                    var wanderer = System.Array.FindAll(allHeroSlashes, s => IsWanderer(s));
+                    var searchSet = (wanderer != null && wanderer.Length > 0) ? wanderer : allHeroSlashes;
+
+                    bool MatchUp(NailSlash ns) { return ns && (((ns.name ?? "").ToLowerInvariant().Contains("up")) || ((ns.animName ?? "").ToLowerInvariant().Contains("up"))); }
+                    bool MatchDown(NailSlash ns) { return ns && (((ns.name ?? "").ToLowerInvariant().Contains("down")) || ((ns.animName ?? "").ToLowerInvariant().Contains("down"))); }
+                    bool MatchNormal(NailSlash ns) { return ns && !MatchUp(ns) && !MatchDown(ns); }
+                    bool MatchRight(NailSlash ns) { if (!ns) return false; var n=(ns.name??"").ToLowerInvariant(); var a=(ns.animName??"").ToLowerInvariant(); return n.Contains("alt")||n.Contains("right")||a.Contains("alt")||a.Contains("right"); }
+                    bool MatchLeft(NailSlash ns)  { if (!ns) return false; var n=(ns.name??"").ToLowerInvariant(); var a=(ns.animName??"").ToLowerInvariant(); return n.Contains("left")||a.Contains("left"); }
+
+                    NailSlash pick = null;
+                    if (v > 0.35f) pick = System.Array.Find(searchSet, s => MatchUp(s));
+                    else if (v < -0.35f) pick = System.Array.Find(searchSet, s => MatchDown(s));
+                    else pick = (facing >= 0)
+                        ? (System.Array.Find(searchSet, s => MatchNormal(s) && MatchRight(s)) ?? System.Array.Find(searchSet, s => MatchRight(s)))
+                        : (System.Array.Find(searchSet, s => MatchNormal(s) && MatchLeft(s))  ?? System.Array.Find(searchSet, s => MatchLeft(s)));
+                    if (pick == null) pick = System.Array.Find(searchSet, s => MatchNormal(s)) ?? searchSet[0];
+                    source = pick ? pick.gameObject : null;
                 }
-                catch { }
-                if (source == null) return;
             }
+            catch { }
+            if (source == null) return;
 
             // Spawn the slash while suppressing any activateOnSlash side effects
             GameObject slash = null;
