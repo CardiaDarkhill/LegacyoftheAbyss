@@ -34,6 +34,7 @@ public partial class LegacyHelper
         private Transform hornetTransform;
         private float fireTimer;
         private SpriteRenderer sr;
+        public float spriteScale = 2f;
         private Sprite[] idleAnimFrames;
         private Sprite[] floatAnimFrames;
         private Sprite inactiveSprite;
@@ -146,6 +147,7 @@ public partial class LegacyHelper
             }
 
             sr = GetComponent<SpriteRenderer>();
+            transform.localScale = Vector3.one * spriteScale;
             LoadShadeSprites();
             if (sr != null)
             {
