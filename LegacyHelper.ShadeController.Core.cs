@@ -3,13 +3,15 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
+using GlobalEnums;
 
 public partial class LegacyHelper
 {
     public partial class ShadeController : MonoBehaviour
     {
         // Movement and leash
-        public float moveSpeed = 8f;
+        public float moveSpeed = 10f;
+        public float sprintMultiplier = 1.8f;
         public float maxDistance = 14f;
         public float softLeashRadius = 10f;
         public float hardLeashRadius = 22f;
@@ -72,6 +74,7 @@ public partial class LegacyHelper
         private static Texture2D s_simpleLightTex;
         private static Material s_simpleAdditiveMat;
         private static Mesh s_simpleQuadMesh;
+        private static Material s_sprintBurstMat;
         private int facing = 1;
         private float nailTimer;
         internal static bool suppressActivateOnSlash;
@@ -79,6 +82,8 @@ public partial class LegacyHelper
         private const KeyCode FireKey = KeyCode.Space;
         private const KeyCode NailKey = KeyCode.J;
         private const KeyCode TeleportKey = KeyCode.K;
+        private const KeyCode SprintKeyPrimary = KeyCode.LeftShift;
+        private const KeyCode SprintKeySecondary = KeyCode.RightShift;
         // Spells use FireKey + W (Shriek) or FireKey + S (Descending Dark)
 
         // Teleport channel
@@ -87,6 +92,16 @@ public partial class LegacyHelper
         public float teleportChannelTime = 0.6f;
         private float teleportCooldownTimer;
         public float teleportCooldown = 1.5f;
+
+        private bool sprintUnlocked;
+        private bool isSprinting;
+        private float sprintDashTimer;
+        private float sprintDashCooldownTimer;
+        public float sprintDashMultiplier = 7.5f;
+        public float sprintDashDuration = 0.075f;
+        public float sprintDashCooldown = 1f;
+        private ParticleSystem activeDashPs;
+        private Vector2 activeDashDir;
 
         // Inactive state (at 0 HP)
         private bool isInactive;
@@ -112,7 +127,7 @@ public partial class LegacyHelper
         private bool isFocusing;
         private float focusTimer;
         private float focusAlphaWhileChannel = 0.75f;
-        private float focusHealRange = 3.5f;
+        private float focusHealRange = 6f;
         private float focusSoulAccumulator;
         private Renderer focusAuraRenderer;
         private float focusAuraBaseSize = 7f;
@@ -435,6 +450,8 @@ public partial class LegacyHelper
 
             HandleTeleportChannel();
 
+            CheckSprintUnlock();
+
             HandleMovementAndFacing();
             // Allow starting focus even when not casting other spells; focusing itself sets isCastingSpell
             if (!inHardLeash && !isChannelingTeleport && !isInactive)
@@ -466,7 +483,7 @@ public partial class LegacyHelper
                 var h = hornet != null ? hornet : hornetTransform;
                 if (h == null) return;
                 float dist = Vector2.Distance(h.position, transform.position);
-                if (dist <= 3.5f)
+                if (dist <= 6f)
                 {
                     int before = shadeHP;
                     shadeHP = Mathf.Min(shadeHP + 2, shadeMaxHP);
@@ -562,7 +579,53 @@ public partial class LegacyHelper
             }
 
             if (!inHardLeash)
+            {
+                float speed = moveSpeed;
+                bool sprinting = sprintUnlocked &&
+                                 (Input.GetKey(SprintKeyPrimary) || Input.GetKey(SprintKeySecondary)) &&
+                                 input.sqrMagnitude > 0f;
+                bool startedSprint = sprinting && !isSprinting;
+                if (startedSprint)
+                {
+                    SpawnSprintBurst(-input.normalized);
+                    if (sprintDashCooldownTimer <= 0f)
+                    {
+                        sprintDashTimer = sprintDashDuration;
+                        sprintDashCooldownTimer = sprintDashCooldown;
+                        TryPlayDashSfx();
+                    }
+                }
+                if (sprintDashTimer > 0f)
+                {
+                    speed *= sprintDashMultiplier;
+                    sprintDashTimer -= Time.deltaTime;
+                    if (activeDashPs)
+                    {
+                        var emit = new ParticleSystem.EmitParams();
+                        emit.velocity = activeDashDir * UnityEngine.Random.Range(4f, 8f);
+                        emit.startSize = UnityEngine.Random.Range(0.15f, 0.25f);
+                        activeDashPs.Emit(emit, 1);
+                    }
+                }
+                else
+                {
+                    activeDashPs = null;
+                    if (sprinting)
+                    {
+                        speed *= sprintMultiplier;
+                    }
+                }
+                if (sprintDashCooldownTimer > 0f)
+                    sprintDashCooldownTimer -= Time.deltaTime;
+
                 moveDelta += input * speed * Time.deltaTime;
+                isSprinting = sprinting;
+            }
+            else
+            {
+                isSprinting = false;
+                sprintDashTimer = 0f;
+            }
 
             // Compute proposed next position and clamp against transition gates at map edges
             Vector2 curPos = rb ? rb.position : (Vector2)transform.position;
@@ -585,6 +648,78 @@ public partial class LegacyHelper
                 Vector3 toShade = transform.position - hornetTransform.position;
                 transform.position = hornetTransform.position + toShade.normalized * maxDistance;
             }
+        }
+
+        private void CheckSprintUnlock()
+        {
+            if (sprintUnlocked) return;
+            try
+            {
+                var hc = HeroController.instance;
+                if (hc != null && hc.CanSprint())
+                    sprintUnlocked = true;
+            }
+            catch { }
+        }
+
+        private void SpawnSprintBurst(Vector2 dir)
+        {
+            try
+            {
+                Vector2 ndir = dir.normalized;
+                GameObject go = new GameObject("ShadeSprintBurst");
+                go.transform.position = transform.position;
+                var ps = go.AddComponent<ParticleSystem>();
+                var main = ps.main;
+                main.startLifetime = 0.4f;
+                main.startSpeed = 0f;
+                main.startSize = new ParticleSystem.MinMaxCurve(0.15f, 0.25f);
+                main.startColor = Color.black;
+                var psr = ps.GetComponent<ParticleSystemRenderer>();
+                if (psr != null)
+                {
+                    if (s_sprintBurstMat == null)
+                    {
+                        s_sprintBurstMat = new Material(Shader.Find("Sprites/Default"));
+                        s_sprintBurstMat.color = Color.black;
+                    }
+                    psr.sharedMaterial = s_sprintBurstMat;
+                    psr.sharedMaterial.mainTexture = MakeDotSprite().texture;
+                }
+                var col = ps.colorOverLifetime;
+                col.enabled = true;
+                Gradient g = new Gradient();
+                g.SetKeys(
+                    new[] { new GradientColorKey(Color.black, 0f), new GradientColorKey(Color.black, 1f) },
+                    new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(0f, 1f) });
+                col.color = g;
+                var emission = ps.emission;
+                emission.enabled = false;
+                for (int i = 0; i < 12; i++)
+                {
+                    var emit = new ParticleSystem.EmitParams();
+                    emit.velocity = ndir * UnityEngine.Random.Range(4f, 8f);
+                    emit.startColor = Color.black;
+                    emit.startSize = UnityEngine.Random.Range(0.15f, 0.25f);
+                    ps.Emit(emit, 1);
+                }
+                ps.Play();
+                activeDashPs = ps;
+                activeDashDir = ndir;
+                Destroy(go, 1f);
+            }
+            catch { }
+        }
+
+        private void TryPlayDashSfx()
+        {
+            try
+            {
+                var hc = HeroController.instance;
+                if (hc != null && hc.AudioCtrl != null)
+                    hc.AudioCtrl.PlaySound(HeroSounds.DASH);
+            }
+            catch { }
         }
 
         private void HandleFire()
