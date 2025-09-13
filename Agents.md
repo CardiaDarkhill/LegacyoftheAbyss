@@ -18,7 +18,6 @@
 ## To Do:
 - At time of writing the following bugs still need to be fixed:
 
-- For some reason whenever we compile we're dumping a whole bunch of extra files into the plugins folder. The only thing that we should be outputing when we compile is LegacyoftheAbyss.dll and LegacyoftheAbyss.pdb
 - When the shade is facing to the right, for some reason its upwards slash is firing downwards (Still playing the upslash animation, just upside down and below the shade). This does not happen when the shade is facing left. (The current fix that is in place does not work).
 - The shade seems to take damage from enemies almost at random. This appears to only happen with enemies who are "aggressive" (IE. Enemies who can "see" Hornet and begin chasing her). It seems the shade is taking damage from enemies whenever they "see" it. This needs to stop.
 - The shade needs a "Sprint" ability, it should unlock this at the same time Hornet unlocks her sprint-like skill.
