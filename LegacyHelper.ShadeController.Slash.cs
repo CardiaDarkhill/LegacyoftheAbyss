@@ -91,8 +91,8 @@ public partial class LegacyHelper
             {
                 var tr = slash.transform;
                 var ls = tr.localScale;
-                // Align clone scale with shade facing so positive X swings right
-                ls.x = Mathf.Abs(ls.x) * facing;
+                // Wanderer slashes are authored facing left; flip X opposite our facing so right swings aim right
+                ls.x = -Mathf.Abs(ls.x) * facing;
                 ls.y = Mathf.Abs(ls.y) * (v < -0.35f ? -1f : 1f);
                 ls *= 1f / SpriteScale;
                 tr.localScale = ls;
