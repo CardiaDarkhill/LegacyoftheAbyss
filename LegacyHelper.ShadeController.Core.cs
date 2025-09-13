@@ -99,7 +99,7 @@ public partial class LegacyHelper
         private float sprintDashCooldownTimer;
         public float sprintDashMultiplier = 7.5f;
         public float sprintDashDuration = 0.075f;
-        public float sprintDashCooldown = 3f;
+        public float sprintDashCooldown = 1f;
         private ParticleSystem activeDashPs;
         private Vector2 activeDashDir;
 
