@@ -96,7 +96,10 @@ public partial class LegacyHelper
 
                 foreach (var col in slash.GetComponentsInChildren<Collider2D>(true)) Destroy(col);
                 foreach (var mb in slash.GetComponentsInChildren<MonoBehaviour>(true))
-                    if (mb.GetType().Name != "tk2dSpriteAnimator") Destroy(mb);
+                {
+                    string tn = mb.GetType().Name;
+                    if (!tn.StartsWith("tk2d")) Destroy(mb);
+                }
                 foreach (var r in slash.GetComponentsInChildren<Renderer>(true)) r.enabled = true;
 
                 var anim = slash.GetComponent("tk2dSpriteAnimator");
