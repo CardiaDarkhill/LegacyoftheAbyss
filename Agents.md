@@ -21,7 +21,6 @@
 - When the shade is facing to the right, for some reason its upwards slash is firing downwards (Still playing the upslash animation, just upside down and below the shade). This does not happen when the shade is facing left. (The current fix that is in place does not work).
 - The shade seems to take damage from enemies almost at random. This appears to only happen with enemies who are "aggressive" (IE. Enemies who can "see" Hornet and begin chasing her). It seems the shade is taking damage from enemies whenever they "see" it. This needs to stop.
 - The shade needs a "Sprint" ability, it should unlock this at the same time Hornet unlocks her sprint-like skill.
-- Desolate Dive/Descending Dark seems to stop it's dive when impacting specifically the top of Hornet's hitbox, it shouldn't stop until it hits the ground (The easiest way to target it should be using it from directly above an enemy and abusing the iframes it gives to dive directly into them and then quickly run out)
 
 
 

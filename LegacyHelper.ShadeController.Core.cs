@@ -79,9 +79,6 @@ public partial class LegacyHelper
         private const KeyCode FireKey = KeyCode.Space;
         private const KeyCode NailKey = KeyCode.J;
         private const KeyCode TeleportKey = KeyCode.K;
-        private const KeyCode SprintKey1 = KeyCode.LeftShift;
-        private const KeyCode SprintKey2 = KeyCode.RightShift;
-        public float sprintMultiplier = 1.5f;
         // Spells use FireKey + W (Shriek) or FireKey + S (Descending Dark)
 
         // Teleport channel
@@ -525,8 +522,6 @@ public partial class LegacyHelper
             if (isChannelingTeleport || isFocusing) input = Vector2.zero;
 
             float speed = moveSpeed;
-            if (IsSprintUnlocked() && (Input.GetKey(SprintKey1) || Input.GetKey(SprintKey2)))
-                speed *= sprintMultiplier;
 
             Vector2 to = (Vector2)(hornetTransform.position - transform.position);
             float dist = to.magnitude;
@@ -727,16 +722,6 @@ public partial class LegacyHelper
         private bool IsProjectileUpgraded() => ShadeSpellProgress >= 4;
         private bool IsDescendingDarkUpgraded() => ShadeSpellProgress >= 5;
         private bool IsShriekUpgraded() => ShadeSpellProgress >= 6;
-        private bool IsSprintUnlocked()
-        {
-            try
-            {
-                HeroController hc = HeroController.instance;
-                return hc != null && hc.CanSprint();
-            }
-            catch { return false; }
-        }
-
         private int ComputeSpellDamageMultiplier(float baseMult, bool upgraded)
         {
             int nail = Mathf.Max(1, GetHornetNailDamage());
@@ -924,6 +909,10 @@ public partial class LegacyHelper
                         continue;
                 }
                 catch { }
+                if (h.collider.name == "Hero Physics Pusher")
+                    continue;
+                if (h.collider.CompareTag("Player"))
+                    continue;
                 // ignore enemies/hazards (anything that damages hero)
                 try { if (h.collider.GetComponentInParent<DamageHero>() != null) continue; } catch { }
                 // otherwise this is acceptable ground
