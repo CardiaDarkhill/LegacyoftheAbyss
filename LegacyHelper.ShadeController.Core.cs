@@ -34,7 +34,7 @@ public partial class LegacyHelper
         private Transform hornetTransform;
         private float fireTimer;
         private SpriteRenderer sr;
-        public float spriteScale = 1.7f;
+        public float spriteScale = 3f;
         private Sprite[] idleAnimFrames;
         private Sprite[] floatAnimFrames;
         private Sprite[] vengefulAnimFrames;
@@ -45,6 +45,11 @@ public partial class LegacyHelper
         private Sprite[] abyssShriekAnimFrames;
         private Sprite[] howlingWraithsAnimFrames;
         private Sprite[] deathAnimFrames;
+        private Sprite[] descendAnimFrames;
+        private Sprite[] descendAuraAnimFrames;
+        private Sprite[] dDiveSlamAnimFrames;
+        private Sprite[] dDarkSlamAnimFrames;
+        private Sprite[] dDarkBurstAnimFrames;
         private Sprite inactiveSprite;
         private SpriteRenderer inactivePulseSr;
         private Sprite[] currentAnimFrames;
@@ -224,6 +229,11 @@ public partial class LegacyHelper
                 abyssShriekAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Abyss_Shriek_sheet.png"), 8);
                 howlingWraithsAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Howling_Wraiths_Sheet.png"), 7);
                 deathAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Death_Sheet.png"), 6);
+                descendAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Descend_Sheet.png"), 3);
+                descendAuraAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Quake_Descend_Aura_Sheet.png"), 3);
+                dDiveSlamAnimFrames = LoadSpriteStrip(Path.Combine(dir, "DDive_Slam_Sheet.png"), 2);
+                dDarkSlamAnimFrames = LoadSpriteStrip(Path.Combine(dir, "DDark_Slam_Sheet.png"), 6);
+                dDarkBurstAnimFrames = LoadSpriteStrip(Path.Combine(dir, "DDark_Burst_sheet.png"), 7);
                 var inactive = LoadSpriteStrip(Path.Combine(dir, "ShadeInactive.png"));
                 inactiveSprite = inactive.Length > 0 ? inactive[0] : null;
             }
@@ -239,6 +249,11 @@ public partial class LegacyHelper
                 abyssShriekAnimFrames = System.Array.Empty<Sprite>();
                 howlingWraithsAnimFrames = System.Array.Empty<Sprite>();
                 deathAnimFrames = System.Array.Empty<Sprite>();
+                descendAnimFrames = System.Array.Empty<Sprite>();
+                descendAuraAnimFrames = System.Array.Empty<Sprite>();
+                dDiveSlamAnimFrames = System.Array.Empty<Sprite>();
+                dDarkSlamAnimFrames = System.Array.Empty<Sprite>();
+                dDarkBurstAnimFrames = System.Array.Empty<Sprite>();
                 inactiveSprite = null;
             }
         }
@@ -845,6 +860,15 @@ public partial class LegacyHelper
             // Enemy i-frames during descent (not hazards)
             hurtCooldown = Mathf.Max(hurtCooldown, 0.6f);
 
+            if (descendAnimFrames != null && descendAnimFrames.Length > 0 && sr)
+            {
+                currentAnimFrames = descendAnimFrames;
+                animFrameIndex = 0;
+                animTimer = 0f;
+                sr.sprite = descendAnimFrames[0];
+            }
+            var aura = SpawnDescendAura();
+
             // Find ground below: ignore Hornet/enemy/hazard hitboxes so we only stop on terrain
             Vector2 start = transform.position;
             float maxDist = 60f;
@@ -883,15 +907,28 @@ public partial class LegacyHelper
             float dropTime = 0.12f;
             Vector3 from = transform.position;
             float elapsed = 0f;
+            float descTimer = 0f;
+            float descFrame = 0.05f;
             while (elapsed < dropTime)
             {
                 elapsed += Time.deltaTime;
                 float u = Mathf.Clamp01(elapsed / dropTime);
                 Vector3 p = Vector3.Lerp(from, targetPos, u*u); // ease in
                 TeleportToPosition(p);
+                if (descendAnimFrames != null && descendAnimFrames.Length > 0 && sr)
+                {
+                    descTimer += Time.deltaTime;
+                    if (descTimer >= descFrame)
+                    {
+                        descTimer -= descFrame;
+                        animFrameIndex = (animFrameIndex + 1) % descendAnimFrames.Length;
+                        sr.sprite = descendAnimFrames[animFrameIndex];
+                    }
+                }
                 yield return null;
             }
             TeleportToPosition(targetPos);
+            if (aura) Destroy(aura);
 
             // If landing area is a hazard, skip the impact
             if (IsHazardAtPosition(new Vector2(targetPos.x, groundY + 0.2f), 0.8f))
@@ -906,6 +943,15 @@ public partial class LegacyHelper
             int half = Mathf.Max(1, Mathf.RoundToInt(totalDamage * 0.5f));
             SpawnQuakeImpact(groundY, half);
             SpawnQuakeTeardrop(groundY, half);
+            if (upgraded)
+            {
+                SpawnGroundSlamFx(dDarkSlamAnimFrames, groundY);
+                SpawnDarkBurstFx(groundY);
+            }
+            else
+            {
+                SpawnGroundSlamFx(dDiveSlamAnimFrames, groundY);
+            }
 
             // Small delay to keep i-frames briefly after impact
             yield return new WaitForSeconds(0.1f);
@@ -981,6 +1027,84 @@ public partial class LegacyHelper
             aoe.lifeSeconds = 0.25f;
 
             IgnoreHornetForCollider(cap);
+        }
+
+        private GameObject SpawnDescendAura()
+        {
+            if (descendAuraAnimFrames == null || descendAuraAnimFrames.Length == 0 || sr == null) return null;
+            var go = new GameObject("ShadeDescendAura");
+            go.transform.SetParent(transform, false);
+            var auraSr = go.AddComponent<SpriteRenderer>();
+            auraSr.sortingLayerID = sr.sortingLayerID;
+            auraSr.sortingOrder = sr.sortingOrder - 1;
+            StartCoroutine(PlayDescendAura(auraSr, descendAuraAnimFrames));
+            return go;
+        }
+
+        private IEnumerator PlayDescendAura(SpriteRenderer auraSr, Sprite[] frames)
+        {
+            if (auraSr == null || frames == null || frames.Length == 0) yield break;
+            int idx = 0; float timer = 0f; float frameTime = 0.05f;
+            while (auraSr)
+            {
+                timer += Time.deltaTime;
+                if (timer >= frameTime)
+                {
+                    timer -= frameTime;
+                    idx = (idx + 1) % frames.Length;
+                }
+                var frame = frames[idx];
+                auraSr.sprite = frame;
+                if (sr) auraSr.flipX = sr.flipX;
+                float shadeHeight = sr && sr.sprite ? sr.sprite.bounds.size.y * spriteScale : 0f;
+                float auraHeight = frame.bounds.size.y * spriteScale;
+                float auraBottom = -shadeHeight * 0.5f - auraHeight * 0.1f;
+                auraSr.transform.localScale = Vector3.one * spriteScale;
+                auraSr.transform.localPosition = new Vector3(0f, auraBottom + auraHeight * 0.5f, 0f);
+                yield return null;
+            }
+        }
+
+        private void SpawnGroundSlamFx(Sprite[] frames, float groundY)
+        {
+            if (frames == null || frames.Length == 0 || sr == null) return;
+            var go = new GameObject("ShadeQuakeSlamFx");
+            var fxSr = go.AddComponent<SpriteRenderer>();
+            fxSr.sortingLayerID = sr.sortingLayerID;
+            fxSr.sortingOrder = sr.sortingOrder - 1;
+            float desiredWidth = 10f;
+            float spriteWidth = frames[0].bounds.size.x;
+            float scale = desiredWidth / spriteWidth;
+            go.transform.localScale = new Vector3(scale, scale, 1f);
+            float height = frames[0].bounds.size.y * scale;
+            go.transform.position = new Vector3(transform.position.x, groundY + height / 2f, transform.position.z);
+            StartCoroutine(PlayAndDestroy(fxSr, frames, 0.05f));
+        }
+
+        private void SpawnDarkBurstFx(float groundY)
+        {
+            if (dDarkBurstAnimFrames == null || dDarkBurstAnimFrames.Length == 0 || sr == null) return;
+            var go = new GameObject("ShadeDDarkBurstFx");
+            var fxSr = go.AddComponent<SpriteRenderer>();
+            fxSr.sortingLayerID = sr.sortingLayerID;
+            fxSr.sortingOrder = sr.sortingOrder - 1;
+            float desiredHeight = 8f;
+            float spriteHeight = dDarkBurstAnimFrames[0].bounds.size.y;
+            float scale = desiredHeight / spriteHeight;
+            go.transform.localScale = new Vector3(scale, scale, 1f);
+            float height = spriteHeight * scale;
+            go.transform.position = new Vector3(transform.position.x, groundY + height / 2f, transform.position.z);
+            StartCoroutine(PlayAndDestroy(fxSr, dDarkBurstAnimFrames, 0.05f));
+        }
+
+        private IEnumerator PlayAndDestroy(SpriteRenderer rend, Sprite[] frames, float perFrame)
+        {
+            for (int i = 0; i < frames.Length; i++)
+            {
+                if (rend) rend.sprite = frames[i];
+                yield return new WaitForSeconds(perFrame);
+            }
+            if (rend) Destroy(rend.gameObject);
         }
 
         private void SetupPhysics()
