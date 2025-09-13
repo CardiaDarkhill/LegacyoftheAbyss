@@ -98,9 +98,10 @@ public partial class LegacyHelper
                 // NailAttackBase.OnSlashStarting later resets transform.localScale from its
                 // private "scale" field, so we update that field (and longNeedleScale) too.
                 ls.x = Mathf.Abs(ls.x) * -facing;
-                // Up-slash prefabs face downward; flip Y whenever attacking upward so the
-                // slash always appears above the shade regardless of facing direction
-                ls.y = Mathf.Abs(ls.y) * (v > 0.35f ? -1f : 1f);
+                // Up-slash prefabs face downward; when facing right we must flip Y so the
+                // upward strike renders above the shade. Left-facing slashes already appear
+                // correct without adjustment.
+                ls.y = Mathf.Abs(ls.y) * ((v > 0.35f && facing > 0f) ? -1f : 1f);
                 ls *= 1f / SpriteScale;
                 tr.localScale = ls;
                 if (nailSlash != null)
