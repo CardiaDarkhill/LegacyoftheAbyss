@@ -1286,6 +1286,9 @@ public partial class LegacyHelper
                 var dh = col.GetComponentInParent<DamageHero>();
                 if (dh != null)
                 {
+                    bool canDamage = false;
+                    try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
+                    if (!canDamage) return;
                     var hz = GetHazardType(dh);
                     if (IsTerrainHazard(hz)) { OnShadeHitHazard(); return; }
                     int dmg = 0; try { dmg = dh.damageDealt; } catch { }
@@ -1388,6 +1391,9 @@ public partial class LegacyHelper
                 var dh = c.GetComponentInParent<DamageHero>();
                 if (dh != null)
                 {
+                    bool canDamage = false;
+                    try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
+                    if (!canDamage) continue;
                     var hz = GetHazardType(dh);
                     if (IsTerrainHazard(hz)) { OnShadeHitHazard(); return; }
                     int dmg = 0; try { dmg = dh.damageDealt; } catch { }
