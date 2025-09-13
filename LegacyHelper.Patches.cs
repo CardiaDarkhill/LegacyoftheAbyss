@@ -184,6 +184,17 @@ public partial class LegacyHelper
     {
         private static bool Prefix(NailSlash __instance)
         {
+            try
+            {
+                // Ensure hc is wired before Awake runs to avoid null refs
+                var f = typeof(NailAttackBase).GetField("hc", BindingFlags.Instance | BindingFlags.NonPublic);
+                if (f != null && f.GetValue(__instance) == null)
+                {
+                    f.SetValue(__instance, HeroController.instance);
+                }
+            }
+            catch { }
+
             if (ShadeController.suppressActivateOnSlash)
             {
                 Transform parent = __instance.transform.parent;

@@ -289,9 +289,35 @@ public partial class LegacyHelper
                     foreach (var d in tempDamagers) if (d) d.enabled = true;
                     foreach (var c in tempCols) if (c) c.enabled = true;
 
+                    // Temporarily align HeroController orientation so StartSlash animates correctly
+                    var hcTr = hc.transform;
+                    float prevHx = hcTr.localScale.x;
+                    object cState = null; FieldInfo frField = null; bool prevFacing = false;
+                    try
+                    {
+                        cState = hc.GetType().GetField("cState", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(hc);
+                        frField = cState?.GetType().GetField("facingRight", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                        if (frField != null)
+                        {
+                            prevFacing = (bool)frField.GetValue(cState);
+                            frField.SetValue(cState, facing >= 0);
+                        }
+                        hcTr.localScale = new Vector3(Mathf.Abs(prevHx) * (facing >= 0 ? 1f : -1f), hcTr.localScale.y, hcTr.localScale.z);
+                    }
+                    catch { }
+
                     nailSlash.StartSlash();
                     expectedSlashParent = null;
                     suppressActivateOnSlash = false;
+
+                    // Restore HeroController orientation
+                    try
+                    {
+                        hcTr.localScale = new Vector3(prevHx, hcTr.localScale.y, hcTr.localScale.z);
+                        if (frField != null && cState != null)
+                            frField.SetValue(cState, prevFacing);
+                    }
+                    catch { }
 
                     // Ensure we fully end the hitboxes when damage ends to avoid lingering hits
                     try
