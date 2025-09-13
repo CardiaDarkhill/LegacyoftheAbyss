@@ -305,6 +305,8 @@ public partial class LegacyHelper
 
             DestroyOtherSlashes(slash);
 
+        }
+
         private void DestroyOtherSlashes(GameObject keep)
         {
             try
