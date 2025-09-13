@@ -1286,6 +1286,9 @@ public partial class LegacyHelper
                 var dh = col.GetComponentInParent<DamageHero>();
                 if (dh != null)
                 {
+                    string n = col.name;
+                    if (!string.IsNullOrEmpty(n) && n.IndexOf("alert range", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                        return;
                     bool canDamage = false;
                     try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
                     if (!canDamage) return;
@@ -1404,6 +1407,9 @@ public partial class LegacyHelper
                 var dh = c.GetComponentInParent<DamageHero>();
                 if (dh != null)
                 {
+                    string n = c.name;
+                    if (!string.IsNullOrEmpty(n) && n.IndexOf("alert range", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                        continue;
                     bool canDamage = false;
                     try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
                     if (!canDamage) continue;
