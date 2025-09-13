@@ -85,10 +85,11 @@ public partial class LegacyHelper
                 if (source == null) return;
             }
 
-            var slash = GameObject.Instantiate(source, hc.transform);
+            // Spawn the slash directly under the shade so we don't briefly
+            // parent to Hornet and log a stray spawn.
+            var slash = GameObject.Instantiate(source, transform);
             slash.AddComponent<ShadeSlashMarker>();
             slash.transform.position = transform.position;
-            slash.transform.SetParent(transform, true);
 
             // Temporarily disable colliders/damagers during patching
             var tempCols = slash.GetComponentsInChildren<Collider2D>(true);
