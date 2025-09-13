@@ -452,7 +452,8 @@ public partial class LegacyHelper
             int dmg = ComputeSpellDamageMultiplier(2.5f, IsProjectileUpgraded());
             sp.damage = Mathf.Max(1, dmg);
             sp.hornetRoot = hornetTransform;
-            sp.lifeSeconds = 1.5f;
+            sp.destroyOnTerrain = !IsProjectileUpgraded();
+            sp.maxRange = IsProjectileUpgraded() ? 22f : 0f;
 
             // SFX
             TryPlayFireballSfx();
