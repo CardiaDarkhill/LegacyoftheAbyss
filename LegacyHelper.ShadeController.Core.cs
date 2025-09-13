@@ -34,7 +34,7 @@ public partial class LegacyHelper
         private Transform hornetTransform;
         private float fireTimer;
         private SpriteRenderer sr;
-        public float spriteScale = 3f;
+        public float spriteScale = 1f;
         private Sprite[] idleAnimFrames;
         private Sprite[] floatAnimFrames;
         private Sprite[] vengefulAnimFrames;
@@ -806,17 +806,18 @@ public partial class LegacyHelper
             var fxSr = go.AddComponent<SpriteRenderer>();
             fxSr.sortingLayerID = sr.sortingLayerID;
             fxSr.sortingOrder = sr.sortingOrder - 1;
-            go.transform.localScale = Vector3.one * spriteScale;
-            StartCoroutine(PlayShriekFx(fxSr, frames));
+            float fxScale = spriteScale * 3f;
+            go.transform.localScale = Vector3.one * fxScale;
+            StartCoroutine(PlayShriekFx(fxSr, frames, fxScale));
         }
 
-        private IEnumerator PlayShriekFx(SpriteRenderer fxSr, Sprite[] frames)
+        private IEnumerator PlayShriekFx(SpriteRenderer fxSr, Sprite[] frames, float fxScale)
         {
             if (fxSr == null || frames == null || frames.Length == 0) yield break;
             float shadeBottom = transform.position.y;
             if (sr && sr.sprite)
                 shadeBottom -= sr.sprite.bounds.extents.y * spriteScale;
-            float fxExt = frames[0].bounds.extents.y * spriteScale;
+            float fxExt = frames[0].bounds.extents.y * fxScale;
             var pos = fxSr.transform.position;
             pos.y = shadeBottom + fxExt;
             fxSr.transform.position = pos;
