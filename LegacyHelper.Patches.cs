@@ -211,4 +211,20 @@ public partial class LegacyHelper
             }
         }
     }
+
+    [HarmonyPatch(typeof(NailSlash), nameof(NailSlash.StartSlash))]
+    private class NailSlash_StartSlash_Log
+    {
+        private static void Postfix(NailSlash __instance)
+        {
+            try
+            {
+                bool isShade = __instance.GetComponent("ShadeSlashMarker") != null;
+                string owner = isShade ? "Shade" : "Hornet";
+                string parent = __instance.transform.parent ? __instance.transform.parent.name : "(null)";
+                UnityEngine.Debug.Log($"[ShadeDebug] {owner} slash started: {__instance.name} anim={__instance.animName} parent={parent}");
+            }
+            catch { }
+        }
+    }
 }
