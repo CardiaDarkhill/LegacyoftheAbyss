@@ -112,6 +112,7 @@ public partial class LegacyHelper
                 var tr = slash.transform;
                 var ls = tr.localScale;
                 ls.x = Mathf.Abs(ls.x) * (facing >= 0 ? 1f : -1f);
+                ls *= 1f / spriteScale;
                 tr.localScale = ls;
             }
             catch { }
@@ -358,7 +359,7 @@ public partial class LegacyHelper
 
                 try
                 {
-                    var tr = slash.transform; var ls = tr.localScale; ls.x = Mathf.Abs(ls.x) * (facingSign >= 0 ? -1f : 1f); tr.localScale = ls;
+                    var tr = slash.transform; var ls = tr.localScale; ls.x = Mathf.Abs(ls.x) * (facingSign >= 0 ? -1f : 1f); ls *= 1f / spriteScale; tr.localScale = ls;
                 }
                 catch { }
             }

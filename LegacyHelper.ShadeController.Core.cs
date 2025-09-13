@@ -34,7 +34,7 @@ public partial class LegacyHelper
         private Transform hornetTransform;
         private float fireTimer;
         private SpriteRenderer sr;
-        public float spriteScale = 1f;
+        public float spriteScale = 1.8f;
         private Sprite[] idleAnimFrames;
         private Sprite[] floatAnimFrames;
         private Sprite[] vengefulAnimFrames;
@@ -806,7 +806,7 @@ public partial class LegacyHelper
             var fxSr = go.AddComponent<SpriteRenderer>();
             fxSr.sortingLayerID = sr.sortingLayerID;
             fxSr.sortingOrder = sr.sortingOrder - 1;
-            float fxScale = spriteScale * 3f;
+            float fxScale = spriteScale * 4f;
             go.transform.localScale = Vector3.one * fxScale;
             StartCoroutine(PlayShriekFx(fxSr, frames, fxScale));
         }
@@ -1073,7 +1073,7 @@ public partial class LegacyHelper
             var fxSr = go.AddComponent<SpriteRenderer>();
             fxSr.sortingLayerID = sr.sortingLayerID;
             fxSr.sortingOrder = sr.sortingOrder - 1;
-            float desiredWidth = 10f;
+            float desiredWidth = 15f;
             float spriteWidth = frames[0].bounds.size.x;
             float scale = desiredWidth / spriteWidth;
             go.transform.localScale = new Vector3(scale, scale, 1f);
@@ -1089,7 +1089,7 @@ public partial class LegacyHelper
             var fxSr = go.AddComponent<SpriteRenderer>();
             fxSr.sortingLayerID = sr.sortingLayerID;
             fxSr.sortingOrder = sr.sortingOrder - 1;
-            float desiredHeight = 8f;
+            float desiredHeight = 12f;
             float spriteHeight = dDarkBurstAnimFrames[0].bounds.size.y;
             float scale = desiredHeight / spriteHeight;
             go.transform.localScale = new Vector3(scale, scale, 1f);
