@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Reflection;
 using UnityEngine;
@@ -111,6 +112,21 @@ public partial class LegacyHelper
                     try { scaleField?.SetValue(nailSlash, ls); } catch { }
                     try { longNeedleField?.SetValue(nailSlash, ls); } catch { }
                 }
+                try
+                {
+                    var travel = slash.GetComponent<NailSlashTravel>();
+                    if (travel != null)
+                    {
+                        var evt = typeof(HeroController).GetEvent("FlippedSprite");
+                        var method = typeof(NailSlashTravel).GetMethod("OnHeroFlipped", BindingFlags.Instance | BindingFlags.NonPublic);
+                        if (evt != null && method != null)
+                        {
+                            var del = Delegate.CreateDelegate(evt.EventHandlerType, travel, method);
+                            evt.RemoveEventHandler(hc, del);
+                        }
+                    }
+                }
+                catch { }
                 UnityEngine.Debug.Log($"[ShadeDebug] Shade slash spawned: {slash.name} scale={ls} parent={tr.parent?.name}\n{System.Environment.StackTrace}");
             }
             catch { }
@@ -414,7 +430,7 @@ public partial class LegacyHelper
                 projCols = new Collider2D[] { col };
             }
 
-            var others = Object.FindObjectsByType<ShadeProjectile>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var others = UnityEngine.Object.FindObjectsByType<ShadeProjectile>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             foreach (var o in others)
                 foreach (var oc in o.GetComponents<Collider2D>())
                     foreach (var pc in projCols)
