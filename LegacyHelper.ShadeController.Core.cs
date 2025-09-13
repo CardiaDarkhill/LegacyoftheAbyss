@@ -9,8 +9,8 @@ public partial class LegacyHelper
     public partial class ShadeController : MonoBehaviour
     {
         // Movement and leash
-        public float moveSpeed = 8f;
-        public float sprintMultiplier = 1.5f;
+        public float moveSpeed = 10f;
+        public float sprintMultiplier = 2f;
         public float maxDistance = 14f;
         public float softLeashRadius = 10f;
         public float hardLeashRadius = 22f;
@@ -93,6 +93,11 @@ public partial class LegacyHelper
 
         private bool sprintUnlocked;
         private bool isSprinting;
+        private float sprintDashTimer;
+        private float sprintDashCooldownTimer;
+        public float sprintDashMultiplier = 5f;
+        public float sprintDashDuration = 0.25f;
+        public float sprintDashCooldown = 3f;
 
         // Inactive state (at 0 HP)
         private bool isInactive;
@@ -118,7 +123,7 @@ public partial class LegacyHelper
         private bool isFocusing;
         private float focusTimer;
         private float focusAlphaWhileChannel = 0.75f;
-        private float focusHealRange = 3.5f;
+        private float focusHealRange = 6f;
         private float focusSoulAccumulator;
         private Renderer focusAuraRenderer;
         private float focusAuraBaseSize = 7f;
@@ -474,7 +479,7 @@ public partial class LegacyHelper
                 var h = hornet != null ? hornet : hornetTransform;
                 if (h == null) return;
                 float dist = Vector2.Distance(h.position, transform.position);
-                if (dist <= 3.5f)
+                if (dist <= 6f)
                 {
                     int before = shadeHP;
                     shadeHP = Mathf.Min(shadeHP + 2, shadeMaxHP);
@@ -573,13 +578,35 @@ public partial class LegacyHelper
                 bool sprinting = sprintUnlocked &&
                                  (Input.GetKey(SprintKeyPrimary) || Input.GetKey(SprintKeySecondary)) &&
                                  input.sqrMagnitude > 0f;
-                if (sprinting) speed *= sprintMultiplier;
+                bool startedSprint = sprinting && !isSprinting;
+                if (startedSprint)
+                {
+                    SpawnSprintBurst(-input.normalized);
+                    if (sprintDashCooldownTimer <= 0f)
+                    {
+                        sprintDashTimer = sprintDashDuration;
+                        sprintDashCooldownTimer = sprintDashCooldown;
+                    }
+                }
+                if (sprintDashTimer > 0f)
+                {
+                    speed *= sprintDashMultiplier;
+                    sprintDashTimer -= Time.deltaTime;
+                }
+                else if (sprinting)
+                {
+                    speed *= sprintMultiplier;
+                }
+                if (sprintDashCooldownTimer > 0f)
+                    sprintDashCooldownTimer -= Time.deltaTime;
+
                 moveDelta += input * speed * Time.deltaTime;
                 isSprinting = sprinting;
             }
             else
             {
                 isSprinting = false;
+                sprintDashTimer = 0f;
             }
 
             // Compute proposed next position and clamp against transition gates at map edges
@@ -613,6 +640,35 @@ public partial class LegacyHelper
                 var hc = HeroController.instance;
                 if (hc != null && hc.CanSprint())
                     sprintUnlocked = true;
+            }
+            catch { }
+        }
+
+        private void SpawnSprintBurst(Vector2 dir)
+        {
+            try
+            {
+                Vector2 ndir = dir.normalized;
+                GameObject go = new GameObject("ShadeSprintBurst");
+                go.transform.position = transform.position;
+                var ps = go.AddComponent<ParticleSystem>();
+                var main = ps.main;
+                main.startLifetime = 0.4f;
+                main.startSpeed = 0f;
+                main.startSize = 0.2f;
+                main.startColor = Color.black;
+                var emission = ps.emission;
+                emission.enabled = false;
+                for (int i = 0; i < 12; i++)
+                {
+                    var emit = new ParticleSystem.EmitParams();
+                    emit.velocity = ndir * UnityEngine.Random.Range(4f, 8f);
+                    emit.startColor = Color.black;
+                    emit.startSize = 0.2f;
+                    ps.Emit(emit, 1);
+                }
+                ps.Play();
+                Destroy(go, 1f);
             }
             catch { }
         }
