@@ -31,11 +31,9 @@ public partial class LegacyHelper
 
         private IEnumerator SlashRoutine(Vector2 dir)
         {
-            isCastingSpell = true;
             SpawnSlashVisual(dir);
             SpawnSlashDamage(dir);
-            yield return new WaitForSeconds(0.25f);
-            isCastingSpell = false;
+            yield break;
         }
 
         private void SpawnSlashVisual(Vector2 dir)
@@ -59,8 +57,8 @@ public partial class LegacyHelper
                 else pick = Array.Find(allSlashes, s => MatchNormal(s));
                 if (pick == null) pick = allSlashes[0];
 
-                var slash = Instantiate(pick.gameObject, transform);
-                slash.transform.localPosition = Vector3.zero;
+                var slash = Instantiate(pick.gameObject, hc.transform);
+                slash.transform.position = transform.position;
                 var ls = slash.transform.localScale;
                 ls.x = Mathf.Abs(ls.x) * -facing;
                 ls.y = Mathf.Abs(ls.y) * (dir.y < -0.1f ? -1f : 1f);
@@ -68,6 +66,20 @@ public partial class LegacyHelper
                 slash.transform.localScale = ls;
                 foreach (var de in slash.GetComponentsInChildren<DamageEnemies>(true)) de.enabled = false;
                 foreach (var c in slash.GetComponentsInChildren<Collider2D>(true)) c.enabled = false;
+                var ns = slash.GetComponent<NailSlash>();
+                if (ns != null)
+                {
+                    var setSlash = typeof(NailSlash).GetField(
+                        "setSlashComponent",
+                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                    setSlash?.SetValue(ns, false);
+                    var drill = typeof(NailSlash).GetField(
+                        "drillPull",
+                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                    drill?.SetValue(ns, false);
+                    ns.StartSlash();
+                }
+                slash.transform.SetParent(transform);
                 Destroy(slash, 0.4f);
             }
             catch { }

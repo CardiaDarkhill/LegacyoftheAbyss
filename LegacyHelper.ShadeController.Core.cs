@@ -28,7 +28,7 @@ public partial class LegacyHelper
         // Ranged attack
         public float projectileSpeed = 22f;
         public float fireCooldown = 0.25f;
-        public float nailCooldown = 0.3f;
+        public float nailCooldown = 0.41f;
         public Vector2 muzzleOffset = new Vector2(0.9f, 0f);
 
         private Transform hornetTransform;
