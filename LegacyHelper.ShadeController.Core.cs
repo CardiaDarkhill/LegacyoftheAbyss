@@ -1290,10 +1290,23 @@ public partial class LegacyHelper
                     try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
                     if (!canDamage) return;
                     var hz = GetHazardType(dh);
-                    if (IsTerrainHazard(hz)) { OnShadeHitHazard(); return; }
+                    if (IsTerrainHazard(hz)) { LogShadeDamage(dh, col); OnShadeHitHazard(); return; }
                     int dmg = 0; try { dmg = dh.damageDealt; } catch { }
-                    if (dmg > 0) OnShadeHitEnemy(dh);
+                    if (dmg > 0) { LogShadeDamage(dh, col); OnShadeHitEnemy(dh); }
                 }
+            }
+            catch { }
+        }
+
+        private void LogShadeDamage(DamageHero dh, Collider2D src)
+        {
+            try
+            {
+                string obj = dh ? dh.gameObject?.name ?? dh.name : "<null>";
+                string colName = src ? src.name : "<null>";
+                int dmg = 0; try { dmg = dh.damageDealt; } catch { }
+                var hz = GetHazardType(dh);
+                UnityEngine.Debug.Log($"[ShadeDebug] Hurt by {obj} via {colName} hazard={hz} dmg={dmg}");
             }
             catch { }
         }
@@ -1395,9 +1408,9 @@ public partial class LegacyHelper
                     try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
                     if (!canDamage) continue;
                     var hz = GetHazardType(dh);
-                    if (IsTerrainHazard(hz)) { OnShadeHitHazard(); return; }
+                    if (IsTerrainHazard(hz)) { LogShadeDamage(dh, c); OnShadeHitHazard(); return; }
                     int dmg = 0; try { dmg = dh.damageDealt; } catch { }
-                    if (dmg > 0) { OnShadeHitEnemy(dh); return; }
+                    if (dmg > 0) { LogShadeDamage(dh, c); OnShadeHitEnemy(dh); return; }
                     else continue;
                 }
             }
