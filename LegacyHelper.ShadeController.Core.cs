@@ -37,6 +37,7 @@ public partial class LegacyHelper
         private Sprite[] idleAnimFrames;
         private Sprite[] floatAnimFrames;
         private Sprite inactiveSprite;
+        private SpriteRenderer inactivePulseSr;
         private Sprite[] currentAnimFrames;
         private int animFrameIndex;
         private float animTimer;
@@ -235,6 +236,21 @@ public partial class LegacyHelper
             return false;
         }
 
+        private void EnsureInactivePulse()
+        {
+            if (inactivePulseSr != null) return;
+            var pulseGO = new GameObject("InactivePulse");
+            pulseGO.transform.SetParent(transform, false);
+            pulseGO.transform.localPosition = Vector3.zero;
+            inactivePulseSr = pulseGO.AddComponent<SpriteRenderer>();
+            if (sr != null)
+            {
+                inactivePulseSr.sortingLayerID = sr.sortingLayerID;
+                inactivePulseSr.sortingOrder = sr.sortingOrder - 1;
+            }
+            inactivePulseSr.color = new Color(1f, 1f, 1f, 0f);
+        }
+
         private void HandleAnimation()
         {
             if (sr == null) return;
@@ -246,7 +262,23 @@ public partial class LegacyHelper
                 var cInact = sr.color;
                 cInact.a = 0.8f + 0.2f * Mathf.Sin(Time.time * 3f);
                 sr.color = cInact;
+                EnsureInactivePulse();
+                if (inactivePulseSr != null)
+                {
+                    inactivePulseSr.gameObject.SetActive(true);
+                    inactivePulseSr.sprite = inactiveSprite;
+                    float alpha = 0.35f + 0.25f * Mathf.Sin(Time.time * 3f);
+                    var pc = inactivePulseSr.color;
+                    pc.a = alpha;
+                    inactivePulseSr.color = pc;
+                    float scale = 1.05f + 0.03f * Mathf.Sin(Time.time * 2f);
+                    inactivePulseSr.transform.localScale = new Vector3(scale, scale, 1f);
+                }
                 return;
+            }
+            else if (inactivePulseSr != null)
+            {
+                inactivePulseSr.gameObject.SetActive(false);
             }
 
             var c = sr.color; c.a = 0.9f; sr.color = c;
