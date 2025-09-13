@@ -460,6 +460,7 @@ public partial class LegacyHelper
             PersistIfChanged();
             CheckFocusReadySfx();
             HandleAnimation();
+            CullStraySlashes();
         }
 
         public void ApplyBindHealFromHornet(Transform hornet)

@@ -86,6 +86,7 @@ public partial class LegacyHelper
             }
 
             var slash = GameObject.Instantiate(source, hc.transform);
+            slash.AddComponent<ShadeSlashMarker>();
             slash.transform.position = transform.position;
             slash.transform.SetParent(transform, true);
 
@@ -312,7 +313,7 @@ public partial class LegacyHelper
             try
             {
                 ShrinkOtherSlashes(slash);
-                CullOverscaledHornetSlashes();
+                CullStraySlashes();
 
                 var recoils = slash.GetComponentsInChildren<NailSlashRecoil>(true);
                 foreach (var r in recoils) if (r) Destroy(r);
@@ -384,26 +385,30 @@ public partial class LegacyHelper
             catch { }
         }
 
-        private void CullOverscaledHornetSlashes()
+        private void CullStraySlashes()
         {
             try
             {
-                if (!hornetTransform) return;
-                var slashes = hornetTransform.GetComponentsInChildren<NailSlash>(true);
+                var slashes = transform.GetComponentsInChildren<NailSlash>(true);
                 foreach (var ns in slashes)
                 {
                     if (!ns) continue;
-                    var ls = ns.transform.localScale;
-                    if (Mathf.Abs(Mathf.Abs(ls.x) - SpriteScale) < 0.01f ||
-                        Mathf.Abs(Mathf.Abs(ls.y) - SpriteScale) < 0.01f ||
-                        Mathf.Abs(Mathf.Abs(ls.z) - SpriteScale) < 0.01f)
+                    if (ns.GetComponent<ShadeSlashMarker>()) continue;
+                    ns.transform.localScale = Vector3.zero;
+                    try
                     {
-                        ns.transform.localScale = Vector3.zero;
+                        var cols = ns.GetComponentsInChildren<Collider2D>(true);
+                        foreach (var c in cols) if (c) c.enabled = false;
+                        var dams = ns.GetComponentsInChildren<DamageEnemies>(true);
+                        foreach (var d in dams) if (d) d.enabled = false;
                     }
+                    catch { }
                 }
             }
             catch { }
         }
+
+        private class ShadeSlashMarker : MonoBehaviour { }
 
         private IEnumerator DisableSlashAfterWindow(GameObject slash, float seconds)
         {
