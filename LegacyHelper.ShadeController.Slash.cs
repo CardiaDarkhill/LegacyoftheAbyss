@@ -88,6 +88,7 @@ public partial class LegacyHelper
             var slash = GameObject.Instantiate(source, hc.transform);
             slash.transform.position = transform.position;
             slash.transform.SetParent(transform, true);
+            slash.AddComponent<ShadeSlashMarker>();
 
             // Temporarily disable colliders/damagers during patching
             var tempCols = slash.GetComponentsInChildren<Collider2D>(true);
@@ -312,6 +313,7 @@ public partial class LegacyHelper
             try
             {
                 ShrinkOtherSlashes(slash);
+                CullUnmarkedHornetSlashes();
 
                 var recoils = slash.GetComponentsInChildren<NailSlashRecoil>(true);
                 foreach (var r in recoils) if (r) Destroy(r);
@@ -377,6 +379,22 @@ public partial class LegacyHelper
                 {
                     if (!ns) continue;
                     if (ns.gameObject == keep) continue;
+                    ns.transform.localScale = Vector3.zero;
+                }
+            }
+            catch { }
+        }
+
+        private void CullUnmarkedHornetSlashes()
+        {
+            try
+            {
+                if (!hornetTransform) return;
+                var slashes = hornetTransform.GetComponentsInChildren<NailSlash>(true);
+                foreach (var ns in slashes)
+                {
+                    if (!ns) continue;
+                    if (ns.GetComponent<ShadeSlashMarker>()) continue;
                     ns.transform.localScale = Vector3.zero;
                 }
             }
@@ -486,6 +504,9 @@ public partial class LegacyHelper
             tex.Apply();
             return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 16f);
         }
+
+        [AddComponentMenu(""), DisallowMultipleComponent]
+        private class ShadeSlashMarker : MonoBehaviour { }
     }
 }
 
