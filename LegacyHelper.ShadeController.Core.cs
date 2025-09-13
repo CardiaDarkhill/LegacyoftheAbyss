@@ -10,6 +10,7 @@ public partial class LegacyHelper
     {
         // Movement and leash
         public float moveSpeed = 8f;
+        public float sprintMultiplier = 1.5f;
         public float maxDistance = 14f;
         public float softLeashRadius = 10f;
         public float hardLeashRadius = 22f;
@@ -79,6 +80,7 @@ public partial class LegacyHelper
         private const KeyCode FireKey = KeyCode.Space;
         private const KeyCode NailKey = KeyCode.J;
         private const KeyCode TeleportKey = KeyCode.K;
+        private const KeyCode SprintKey = KeyCode.LeftShift;
         // Spells use FireKey + W (Shriek) or FireKey + S (Descending Dark)
 
         // Teleport channel
@@ -87,6 +89,9 @@ public partial class LegacyHelper
         public float teleportChannelTime = 0.6f;
         private float teleportCooldownTimer;
         public float teleportCooldown = 1.5f;
+
+        private bool sprintUnlocked;
+        private bool isSprinting;
 
         // Inactive state (at 0 HP)
         private bool isInactive;
@@ -435,6 +440,8 @@ public partial class LegacyHelper
 
             HandleTeleportChannel();
 
+            CheckSprintUnlock();
+
             HandleMovementAndFacing();
             // Allow starting focus even when not casting other spells; focusing itself sets isCastingSpell
             if (!inHardLeash && !isChannelingTeleport && !isInactive)
@@ -560,7 +567,17 @@ public partial class LegacyHelper
             }
 
             if (!inHardLeash)
-                moveDelta += input * moveSpeed * Time.deltaTime;
+            {
+                float speed = moveSpeed;
+                bool sprinting = sprintUnlocked && Input.GetKey(SprintKey) && input.sqrMagnitude > 0f;
+                if (sprinting) speed *= sprintMultiplier;
+                moveDelta += input * speed * Time.deltaTime;
+                isSprinting = sprinting;
+            }
+            else
+            {
+                isSprinting = false;
+            }
 
             // Compute proposed next position and clamp against transition gates at map edges
             Vector2 curPos = rb ? rb.position : (Vector2)transform.position;
@@ -583,6 +600,18 @@ public partial class LegacyHelper
                 Vector3 toShade = transform.position - hornetTransform.position;
                 transform.position = hornetTransform.position + toShade.normalized * maxDistance;
             }
+        }
+
+        private void CheckSprintUnlock()
+        {
+            if (sprintUnlocked) return;
+            try
+            {
+                var hc = HeroController.instance;
+                if (hc != null && hc.CanSprint())
+                    sprintUnlocked = true;
+            }
+            catch { }
         }
 
         private void HandleFire()
