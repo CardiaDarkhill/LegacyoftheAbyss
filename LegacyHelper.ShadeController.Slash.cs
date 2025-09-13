@@ -100,7 +100,7 @@ public partial class LegacyHelper
                 // up-slash is authored facing right but only needs special handling
                 // when the shade is also facing right; the left-facing up-slash
                 // already matches the Wanderer baseline.
-                var scaleSign = -facing;
+                float scaleSign = -facing;
                 if (v > 0.35f && facing > 0f) // right-facing up-slash
                     scaleSign = 1f;
                 ls.x = Mathf.Abs(ls.x) * scaleSign;
