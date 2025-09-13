@@ -39,6 +39,7 @@ public partial class LegacyHelper
         private Sprite[] floatAnimFrames;
         private Sprite[] vengefulAnimFrames;
         private Sprite[] shadeSoulAnimFrames;
+        private Sprite[] fireballCastAnimFrames;
         private Sprite inactiveSprite;
         private SpriteRenderer inactivePulseSr;
         private Sprite[] currentAnimFrames;
@@ -197,10 +198,11 @@ public partial class LegacyHelper
             try
             {
                 var dir = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Assets", "Knight_Shade_Sprites");
-                idleAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Idle_Sheet.png"));
-                floatAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Float_Sheet.png"));
-                vengefulAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Vengeful_Spirit_Sheet.png"));
-                shadeSoulAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Soul_Sheet.png"));
+                idleAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Idle_Sheet.png"), 9);
+                floatAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Float_Sheet.png"), 6);
+                vengefulAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Vengeful_Spirit_Sheet.png"), 2);
+                shadeSoulAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Soul_Sheet.png"), 4);
+                fireballCastAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Fireball_Cast_Sheet.png"), 4);
                 var inactive = LoadSpriteStrip(Path.Combine(dir, "ShadeInactive.png"));
                 inactiveSprite = inactive.Length > 0 ? inactive[0] : null;
             }
@@ -214,18 +216,19 @@ public partial class LegacyHelper
             }
         }
 
-        private Sprite[] LoadSpriteStrip(string path)
+        private Sprite[] LoadSpriteStrip(string path, int frames = 0)
         {
             if (!File.Exists(path)) return System.Array.Empty<Sprite>();
             var bytes = File.ReadAllBytes(path);
             var tex = new Texture2D(2, 2, TextureFormat.ARGB32, false);
             TryLoadImage(tex, bytes);
             tex.filterMode = FilterMode.Point;
-            int size = tex.height;
-            int cols = Mathf.Max(1, tex.width / size);
+            int cols = frames > 0 ? frames : Mathf.Max(1, tex.width / tex.height);
+            int frameWidth = tex.width / cols;
+            int frameHeight = tex.height;
             var sprites = new Sprite[cols];
             for (int i = 0; i < cols; i++)
-                sprites[i] = Sprite.Create(tex, new Rect(i * size, 0, size, size), new Vector2(0.5f, 0.5f));
+                sprites[i] = Sprite.Create(tex, new Rect(i * frameWidth, 0, frameWidth, frameHeight), new Vector2(0.5f, 0.5f));
             return sprites;
         }
 
@@ -263,6 +266,9 @@ public partial class LegacyHelper
         {
             if (sr == null) return;
             sr.flipX = (facing == 1);
+
+            if (isCastingSpell && currentAnimFrames == fireballCastAnimFrames)
+                return;
 
             if (isInactive)
             {
@@ -381,8 +387,9 @@ public partial class LegacyHelper
             {
                 HandleFocus();
                 if (!isCastingSpell)
-                {
                     HandleFire();
+                if (!isCastingSpell)
+                {
                     HandleNailAttack();
                     HandleShriek();
                     HandleDescendingDark();
@@ -447,6 +454,7 @@ public partial class LegacyHelper
 
         private void HandleMovementAndFacing()
         {
+            if (isCastingSpell) { lastMoveDelta = Vector2.zero; return; }
             float h = (Input.GetKey(KeyCode.A) ? -1f : 0f) + (Input.GetKey(KeyCode.D) ? 1f : 0f);
             float v = (Input.GetKey(KeyCode.S) ? -1f : 0f) + (Input.GetKey(KeyCode.W) ? 1f : 0f);
             Vector2 input = new Vector2(h, v);
@@ -531,10 +539,7 @@ public partial class LegacyHelper
             shadeSoul = Mathf.Max(0, shadeSoul - projectileSoulCost);
             PushSoulToHud();
             CheckHazardOverlap();
-            TryPlayFireballSfx();
-
-            Vector2 dir = new Vector2(facing, 0f);
-            SpawnProjectile(dir);
+            StartCoroutine(FireballCastRoutine());
         }
 
         private void HandleShriek()
@@ -557,6 +562,32 @@ public partial class LegacyHelper
             // 12-unit high, 95-degree cone centered on torso
             Vector2 localOffset = new Vector2(0f, 0.8f);
             SpawnShriekCone(12f, 95f, dmg, life, localOffset);
+        }
+
+        private IEnumerator FireballCastRoutine()
+        {
+            isCastingSpell = true;
+            if (fireballCastAnimFrames != null && fireballCastAnimFrames.Length > 0)
+            {
+                currentAnimFrames = fireballCastAnimFrames;
+                animFrameIndex = 0;
+                animTimer = 0f;
+                float perFrame = 0.25f / fireballCastAnimFrames.Length;
+                for (int i = 0; i < fireballCastAnimFrames.Length; i++)
+                {
+                    if (sr) sr.sprite = fireballCastAnimFrames[i];
+                    yield return new WaitForSeconds(perFrame);
+                }
+            }
+            else
+            {
+                yield return new WaitForSeconds(0.25f);
+            }
+
+            Vector2 dir = new Vector2(facing, 0f);
+            SpawnProjectile(dir);
+            currentAnimFrames = null;
+            isCastingSpell = false;
         }
 
         private void HandleDescendingDark()
