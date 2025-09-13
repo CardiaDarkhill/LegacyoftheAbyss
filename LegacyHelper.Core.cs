@@ -102,8 +102,6 @@ public partial class LegacyHelper : BaseUnityPlugin
         }
 
         var sr = helper.AddComponent<SpriteRenderer>();
-        sr.sprite = GenerateDebugSprite();
-        sr.color = Color.black;
 
         var hornetRenderer = gm.hero_ctrl.GetComponentInChildren<SpriteRenderer>();
         if (hornetRenderer != null)
@@ -111,16 +109,6 @@ public partial class LegacyHelper : BaseUnityPlugin
             sr.sortingLayerID = hornetRenderer.sortingLayerID;
             sr.sortingOrder = hornetRenderer.sortingOrder + 1;
         }
-    }
-
-    private static Sprite GenerateDebugSprite()
-    {
-        var tex = new Texture2D(160, 160);
-        for (int x = 0; x < 160; x++)
-            for (int y = 0; y < 160; y++)
-                tex.SetPixel(x, y, Color.white);
-        tex.Apply();
-        return Sprite.Create(tex, new Rect(0, 0, 160, 160), new Vector2(0.5f, 0.5f));
     }
 
     internal static void DisableStartup(GameManager gm)

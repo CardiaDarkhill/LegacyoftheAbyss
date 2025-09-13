@@ -34,6 +34,14 @@ public partial class LegacyHelper
         private Transform hornetTransform;
         private float fireTimer;
         private SpriteRenderer sr;
+        private Sprite[] idleAnimFrames;
+        private Sprite[] floatAnimFrames;
+        private Sprite inactiveSprite;
+        private Sprite[] currentAnimFrames;
+        private int animFrameIndex;
+        private float animTimer;
+        private const float AnimFrameTime = 0.1f;
+        private Vector2 lastMoveDelta;
         private Renderer[] shadeLightRenderers;
         public float simpleLightSize = 14f;
         private static Texture2D s_simpleLightTex;
@@ -137,8 +145,15 @@ public partial class LegacyHelper
             }
 
             sr = GetComponent<SpriteRenderer>();
+            LoadShadeSprites();
             if (sr != null)
             {
+                if (idleAnimFrames != null && idleAnimFrames.Length > 0)
+                    sr.sprite = idleAnimFrames[0];
+                else if (floatAnimFrames != null && floatAnimFrames.Length > 0)
+                    sr.sprite = floatAnimFrames[0];
+                else if (inactiveSprite != null)
+                    sr.sprite = inactiveSprite;
                 var c = sr.color; c.a = 0.9f; sr.color = c;
             }
 
@@ -170,6 +185,89 @@ public partial class LegacyHelper
             lastSavedHP = lastSavedMax = lastSavedSoul = -999;
             PersistIfChanged();
             lastSoulForReady = shadeSoul;
+        }
+
+        private void LoadShadeSprites()
+        {
+            try
+            {
+                var dir = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Assets", "Knight_Shade_Sprites");
+                idleAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Idle_Sheet.png"));
+                floatAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Float_Sheet.png"));
+                var inactive = LoadSpriteStrip(Path.Combine(dir, "ShadeInactive.png"));
+                inactiveSprite = inactive.Length > 0 ? inactive[0] : null;
+            }
+            catch
+            {
+                idleAnimFrames = System.Array.Empty<Sprite>();
+                floatAnimFrames = System.Array.Empty<Sprite>();
+                inactiveSprite = null;
+            }
+        }
+
+        private Sprite[] LoadSpriteStrip(string path)
+        {
+            if (!File.Exists(path)) return System.Array.Empty<Sprite>();
+            var bytes = File.ReadAllBytes(path);
+            var tex = new Texture2D(2, 2, TextureFormat.ARGB32, false);
+            TryLoadImage(tex, bytes);
+            tex.filterMode = FilterMode.Point;
+            int size = tex.height;
+            int cols = Mathf.Max(1, tex.width / size);
+            var sprites = new Sprite[cols];
+            for (int i = 0; i < cols; i++)
+                sprites[i] = Sprite.Create(tex, new Rect(i * size, 0, size, size), new Vector2(0.5f, 0.5f));
+            return sprites;
+        }
+
+        private static bool TryLoadImage(Texture2D tex, byte[] bytes)
+        {
+            try
+            {
+                var t = System.Type.GetType("UnityEngine.ImageConversion, UnityEngine.ImageConversionModule");
+                if (t != null)
+                {
+                    var m = t.GetMethod("LoadImage", BindingFlags.Public | BindingFlags.Static, null, new System.Type[] { typeof(Texture2D), typeof(byte[]), typeof(bool) }, null);
+                    if (m != null) { m.Invoke(null, new object[] { tex, bytes, false }); return true; }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private void HandleAnimation()
+        {
+            if (sr == null) return;
+            sr.flipX = (facing == 1);
+
+            if (isInactive)
+            {
+                if (inactiveSprite != null) sr.sprite = inactiveSprite;
+                var cInact = sr.color;
+                cInact.a = 0.8f + 0.2f * Mathf.Sin(Time.time * 3f);
+                sr.color = cInact;
+                return;
+            }
+
+            var c = sr.color; c.a = 0.9f; sr.color = c;
+            Sprite[] frames = (Mathf.Abs(lastMoveDelta.x) > 0.01f) ? floatAnimFrames : idleAnimFrames;
+            if (frames == null || frames.Length == 0) return;
+
+            if (currentAnimFrames != frames)
+            {
+                currentAnimFrames = frames;
+                animFrameIndex = 0;
+                animTimer = 0f;
+                sr.sprite = frames[0];
+            }
+
+            animTimer += Time.deltaTime;
+            if (animTimer >= AnimFrameTime)
+            {
+                animTimer -= AnimFrameTime;
+                animFrameIndex = (animFrameIndex + 1) % frames.Length;
+                sr.sprite = frames[animFrameIndex];
+            }
         }
 
         private void EnsurePogoTarget()
@@ -257,6 +355,7 @@ public partial class LegacyHelper
             SyncShadeLight();
             PersistIfChanged();
             CheckFocusReadySfx();
+            HandleAnimation();
         }
 
         public void ApplyBindHealFromHornet(Transform hornet)
@@ -364,13 +463,14 @@ public partial class LegacyHelper
 
             if (rb) rb.MovePosition(proposed);
             else transform.position = proposed;
+            lastMoveDelta = proposed - curPos;
 
             // Update facing only from player's horizontal input.
             // Do not auto-face Hornet when idle; preserve last manual facing.
             if (h > 0.1f) facing = 1;
             else if (h < -0.1f) facing = -1;
 
-            if (sr != null) sr.flipX = (facing == -1);
+            if (sr != null) sr.flipX = (facing == 1);
 
             if (dist > maxDistance)
             {
