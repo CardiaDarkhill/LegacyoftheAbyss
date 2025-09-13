@@ -234,7 +234,7 @@ public partial class LegacyHelper
     {
         private static bool Prefix(NailSlash __instance)
         {
-            return __instance.GetComponent("ShadeSlashMarker") == null;
+            return __instance.transform.GetComponentInParent<ShadeController>() == null;
         }
     }
 
@@ -243,7 +243,7 @@ public partial class LegacyHelper
     {
         private static bool Prefix(NailSlash __instance)
         {
-            return __instance.GetComponent("ShadeSlashMarker") == null;
+            return __instance.transform.GetComponentInParent<ShadeController>() == null;
         }
     }
 
@@ -252,7 +252,7 @@ public partial class LegacyHelper
     {
         private static bool Prefix(NailSlash __instance)
         {
-            return __instance.GetComponent("ShadeSlashMarker") == null;
+            return __instance.transform.GetComponentInParent<ShadeController>() == null;
         }
     }
 }

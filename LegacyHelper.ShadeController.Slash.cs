@@ -199,9 +199,22 @@ public partial class LegacyHelper
                     var damageDealtField = typeof(DamageEnemies).GetField("damageDealt", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
                     float dir = 0f;
-                    if (v > 0.35f) dir = 90f;
-                    else if (v < -0.35f) dir = 270f;
-                    else dir = (facing >= 0 ? 0f : 180f);
+                    Vector2 fwd = Vector2.zero;
+                    if (v > 0.35f)
+                    {
+                        dir = 90f;
+                        fwd = Vector2.up;
+                    }
+                    else if (v < -0.35f)
+                    {
+                        dir = 270f;
+                        fwd = Vector2.down;
+                    }
+                    else
+                    {
+                        dir = (facing >= 0 ? 180f : 0f);
+                        fwd = (facing >= 0 ? Vector2.right : Vector2.left);
+                    }
 
                     int nailDmg = Mathf.Max(1, GetHornetNailDamage());
                     foreach (var d in damagers)
@@ -214,7 +227,7 @@ public partial class LegacyHelper
                         try { dirField?.SetValue(d, dir); } catch { }
                         try { moveDirField?.SetValue(d, false); } catch { }
                         try { flipBehindField?.SetValue(d, false); } catch { }
-                        try { fwdVecField?.SetValue(d, Vector2.zero); } catch { }
+                        try { fwdVecField?.SetValue(d, fwd); } catch { }
                         try { if (setOnlyEnemies != null) setOnlyEnemies.Invoke(d, new object[] { false }); else onlyEnemiesField?.SetValue(d, false); } catch { }
                         try { ignoreNailPosField?.SetValue(d, true); } catch { }
                         try { if (silkGenField != null) { var enumType = silkGenField.FieldType; var noneVal = System.Enum.ToObject(enumType, 0); silkGenField.SetValue(d, noneVal);} } catch { }
