@@ -395,7 +395,14 @@ public partial class LegacyHelper
                 {
                     if (!ns) continue;
                     if (ns.GetComponent<ShadeSlashMarker>()) continue;
+                    if (!ns.gameObject.activeInHierarchy && !ns.name.Contains("(Clone)")) continue;
+
                     ns.transform.localScale = Vector3.zero;
+                    var cols = ns.GetComponentsInChildren<Collider2D>(true);
+                    foreach (var c in cols) if (c) c.enabled = false;
+                    var dams = ns.GetComponentsInChildren<DamageEnemies>(true);
+                    foreach (var d in dams) if (d) d.enabled = false;
+                    ns.gameObject.SetActive(false);
                 }
             }
             catch { }
