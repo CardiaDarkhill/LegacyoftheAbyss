@@ -227,4 +227,23 @@ public partial class LegacyHelper
             catch { }
         }
     }
+
+    // Prevent shade slashes from triggering Hornet pogo/bounce logic
+    [HarmonyPatch(typeof(NailSlash), "DoDownspikeBounce")]
+    private class NailSlash_DoDownspikeBounce_Block
+    {
+        private static bool Prefix(NailSlash __instance)
+        {
+            return __instance.GetComponent("ShadeSlashMarker") == null;
+        }
+    }
+
+    [HarmonyPatch(typeof(NailSlash), "DownBounce")]
+    private class NailSlash_DownBounce_Block
+    {
+        private static bool Prefix(NailSlash __instance)
+        {
+            return __instance.GetComponent("ShadeSlashMarker") == null;
+        }
+    }
 }

@@ -57,27 +57,27 @@ public partial class LegacyHelper
             catch { }
             if (source == null) return;
 
+            // remove lingering slashes from prior attacks
+            DestroyOtherSlashes(null);
+
             // Spawn the slash while suppressing any activateOnSlash side effects
             GameObject slash = null;
             suppressActivateOnSlash = true;
-            expectedSlashParent = transform;
+            expectedSlashParent = hc.transform;
             try
             {
-                slash = GameObject.Instantiate(source, transform);
+                slash = GameObject.Instantiate(source, hc.transform);
             }
             finally
             {
                 expectedSlashParent = null;
                 suppressActivateOnSlash = false;
             }
+            slash.transform.SetParent(transform, false);
             slash.AddComponent<ShadeSlashMarker>();
             slash.transform.position = transform.position;
 
-            // Temporarily disable colliders/damagers during patching
             var tempCols = slash.GetComponentsInChildren<Collider2D>(true);
-            foreach (var c in tempCols) if (c) c.enabled = false;
-            var tempDamagers = slash.GetComponentsInChildren<DamageEnemies>(true);
-            foreach (var d in tempDamagers) if (d) d.enabled = false;
 
             try
             {
@@ -112,6 +112,10 @@ public partial class LegacyHelper
                         foreach (var hc2 in hornetCols)
                             if (sc && hc2) Physics2D.IgnoreCollision(sc, hc2, true);
                 }
+                var shadeCols = GetComponentsInChildren<Collider2D>(true);
+                foreach (var sc in tempCols)
+                    foreach (var sh in shadeCols)
+                        if (sc && sh) Physics2D.IgnoreCollision(sc, sh, true);
             }
             catch { }
 
@@ -251,10 +255,7 @@ public partial class LegacyHelper
                     }
                     catch { }
 
-                    // Re-enable hitboxes after patching and ignoring Hornet
-                    foreach (var d in tempDamagers) if (d) d.enabled = true;
-                    foreach (var c in tempCols) if (c) c.enabled = true;
-
+                    // Start the slash once we've patched it
                     nailSlash.StartSlash();
 
                     // Ensure we fully end the hitboxes when damage ends to avoid lingering hits
@@ -302,73 +303,9 @@ public partial class LegacyHelper
                 // No NailSlash component found
             }
 
-            StartCoroutine(PostConfigureSlash(slash, v, facing, hc));
-        }
+            DestroyOtherSlashes(slash);
 
-        private IEnumerator PostConfigureSlash(GameObject slash, float v, int facingSign, HeroController hc)
-        {
-            yield return null;
-            if (!slash) yield break;
-            try
-            {
-                ShrinkOtherSlashes(slash);
-
-                var recoils = slash.GetComponentsInChildren<NailSlashRecoil>(true);
-                foreach (var r in recoils) if (r) Destroy(r);
-
-                var damagers = slash.GetComponentsInChildren<DamageEnemies>(true);
-                var srcField = typeof(DamageEnemies).GetField("sourceIsHero", BindingFlags.Instance | BindingFlags.NonPublic);
-                var ihField  = typeof(DamageEnemies).GetField("isHeroDamage", BindingFlags.Instance | BindingFlags.NonPublic);
-                var dirField = typeof(DamageEnemies).GetField("direction", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                var moveDirField = typeof(DamageEnemies).GetField("moveDirection", BindingFlags.Instance | BindingFlags.NonPublic);
-                var flipBehindField = typeof(DamageEnemies).GetField("flipDirectionIfBehind", BindingFlags.Instance | BindingFlags.NonPublic);
-                var fwdVecField = typeof(DamageEnemies).GetField("forwardVector", BindingFlags.Instance | BindingFlags.NonPublic);
-                var onlyEnemiesField = typeof(DamageEnemies).GetField("onlyDamageEnemies", BindingFlags.Instance | BindingFlags.NonPublic);
-                var setOnlyEnemies = typeof(DamageEnemies).GetMethod("setOnlyDamageEnemies", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                var ignoreNailPosField = typeof(DamageEnemies).GetField("ignoreNailPosition", BindingFlags.Instance | BindingFlags.NonPublic);
-                var silkGenField = typeof(DamageEnemies).GetField("silkGeneration", BindingFlags.Instance | BindingFlags.NonPublic);
-                var doesNotGenSilkField = typeof(DamageEnemies).GetField("doesNotGenerateSilk", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-                var attackTypeField = typeof(DamageEnemies).GetField("attackType", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-
-                float dir = 0f;
-                if (v > 0.35f) dir = 90f; else if (v < -0.35f) dir = 270f; else dir = (facingSign >= 0 ? 0f : 180f);
-
-                foreach (var d in damagers)
-                {
-                    if (!d) continue;
-                    try { srcField?.SetValue(d, false); } catch { }
-                    try { ihField?.SetValue(d, false); } catch { }
-                    try { attackTypeField?.SetValue(d, AttackTypes.Generic); } catch { }
-                    try { dirField?.SetValue(d, dir); } catch { }
-                    try { moveDirField?.SetValue(d, false); } catch { }
-                    try { flipBehindField?.SetValue(d, false); } catch { }
-                    try { fwdVecField?.SetValue(d, Vector2.zero); } catch { }
-                    try { if (setOnlyEnemies != null) setOnlyEnemies.Invoke(d, new object[] { false }); else onlyEnemiesField?.SetValue(d, false); } catch { }
-                    try { ignoreNailPosField?.SetValue(d, true); } catch { }
-                    try { if (silkGenField != null) { var enumType = silkGenField.FieldType; var noneVal = System.Enum.ToObject(enumType, 0); silkGenField.SetValue(d, noneVal);} } catch { }
-                    try { doesNotGenSilkField?.SetValue(d, true); } catch { }
-                }
-
-                var shadeCols = slash.GetComponentsInChildren<Collider2D>(true);
-                Collider2D[] hornetCols = new Collider2D[0];
-                if (hc)
-                {
-                    hornetCols = hc.GetComponentsInChildren<Collider2D>(true);
-                }
-                foreach (var sc in shadeCols)
-                    foreach (var hcCol in hornetCols)
-                        if (sc && hcCol) Physics2D.IgnoreCollision(sc, hcCol, true);
-
-                try
-                {
-                    var tr = slash.transform; var ls = tr.localScale; ls.x = Mathf.Abs(ls.x) * (facingSign >= 0 ? -1f : 1f); ls *= 1f / SpriteScale; tr.localScale = ls;
-                }
-                catch { }
-            }
-            catch { }
-        }
-
-        private void ShrinkOtherSlashes(GameObject keep)
+        private void DestroyOtherSlashes(GameObject keep)
         {
             try
             {
@@ -376,8 +313,9 @@ public partial class LegacyHelper
                 foreach (var ns in slashes)
                 {
                     if (!ns) continue;
-                    if (ns.gameObject == keep) continue;
-                    ns.transform.localScale = Vector3.zero;
+                    if (keep != null && ns.gameObject == keep) continue;
+                    ns.gameObject.SetActive(false);
+                    Destroy(ns.gameObject);
                 }
             }
             catch { }
