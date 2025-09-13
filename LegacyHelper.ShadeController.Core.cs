@@ -1300,10 +1300,30 @@ public partial class LegacyHelper
                 var dh = col.GetComponentInParent<DamageHero>();
                 if (dh != null)
                 {
+                    string n = col.name;
+                    if (!string.IsNullOrEmpty(n) && n.IndexOf("alert range", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                        return;
+                    bool canDamage = false;
+                    try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
+                    if (!canDamage) return;
                     var hz = GetHazardType(dh);
-                    if (IsTerrainHazard(hz)) { OnShadeHitHazard(); return; }
-                    OnShadeHitEnemy(dh);
+                    if (IsTerrainHazard(hz)) { LogShadeDamage(dh, col); OnShadeHitHazard(); return; }
+                    int dmg = 0; try { dmg = dh.damageDealt; } catch { }
+                    if (dmg > 0) { LogShadeDamage(dh, col); OnShadeHitEnemy(dh); }
                 }
+            }
+            catch { }
+        }
+
+        private void LogShadeDamage(DamageHero dh, Collider2D src)
+        {
+            try
+            {
+                string obj = dh ? dh.gameObject?.name ?? dh.name : "<null>";
+                string colName = src ? src.name : "<null>";
+                int dmg = 0; try { dmg = dh.damageDealt; } catch { }
+                var hz = GetHazardType(dh);
+                UnityEngine.Debug.Log($"[ShadeDebug] Hurt by {obj} via {colName} hazard={hz} dmg={dmg}");
             }
             catch { }
         }
@@ -1401,10 +1421,17 @@ public partial class LegacyHelper
                 var dh = c.GetComponentInParent<DamageHero>();
                 if (dh != null)
                 {
+                    string n = c.name;
+                    if (!string.IsNullOrEmpty(n) && n.IndexOf("alert range", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                        continue;
+                    bool canDamage = false;
+                    try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
+                    if (!canDamage) continue;
                     var hz = GetHazardType(dh);
-                    if (IsTerrainHazard(hz)) { OnShadeHitHazard(); return; }
-                    OnShadeHitEnemy(dh);
-                    return;
+                    if (IsTerrainHazard(hz)) { LogShadeDamage(dh, c); OnShadeHitHazard(); return; }
+                    int dmg = 0; try { dmg = dh.damageDealt; } catch { }
+                    if (dmg > 0) { LogShadeDamage(dh, c); OnShadeHitEnemy(dh); return; }
+                    else continue;
                 }
             }
         }
@@ -1435,8 +1462,9 @@ public partial class LegacyHelper
         private void OnShadeHitEnemy(DamageHero dh)
         {
             if (hurtCooldown > 0f) return;
-            int dmg = 1;
-            try { if (dh != null) dmg = Mathf.Max(1, dh.damageDealt); } catch { }
+            int dmg = 0;
+            try { if (dh != null) dmg = dh.damageDealt; } catch { }
+            if (dmg <= 0) return; // ignore non-damaging triggers
             shadeHP = Mathf.Max(0, shadeHP - dmg);
             if (shadeHP <= 0) StartDeathAnimation();
             PushShadeStatsToHud();
