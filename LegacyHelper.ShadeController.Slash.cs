@@ -311,6 +311,22 @@ public partial class LegacyHelper
             if (!slash) yield break;
             try
             {
+                // Cull any NailSlash instances not belonging to the shade or Hornet
+                try
+                {
+                    var sceneSlashes = Object.FindObjectsOfType<NailSlash>();
+                    foreach (var ns in sceneSlashes)
+                    {
+                        if (!ns) continue;
+                        if (ns.gameObject == slash) continue;
+                        if (ns.transform.IsChildOf(transform)) { ns.transform.localScale = Vector3.zero; ns.gameObject.SetActive(false); continue; }
+                        if (hc && ns.transform.IsChildOf(hc.transform)) continue;
+                        ns.transform.localScale = Vector3.zero;
+                        ns.gameObject.SetActive(false);
+                    }
+                }
+                catch { }
+
                 var allSlashes = transform.GetComponentsInChildren<NailSlash>(true);
                 foreach (var ns in allSlashes)
                     if (ns && ns.gameObject != slash)

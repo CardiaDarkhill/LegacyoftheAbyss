@@ -90,7 +90,7 @@ public partial class LegacyHelper
         public int quakeSoulCost = 33;
         private float shriekTimer;
         private float quakeTimer;
-        public float shriekCooldown = 1.2f;
+        public float shriekCooldown = 0f;
         public float quakeCooldown = 1.1f;
         
         // Focus (heal) ability
