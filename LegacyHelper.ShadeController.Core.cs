@@ -80,7 +80,8 @@ public partial class LegacyHelper
         private const KeyCode FireKey = KeyCode.Space;
         private const KeyCode NailKey = KeyCode.J;
         private const KeyCode TeleportKey = KeyCode.K;
-        private const KeyCode SprintKey = KeyCode.LeftShift;
+        private const KeyCode SprintKeyPrimary = KeyCode.LeftShift;
+        private const KeyCode SprintKeySecondary = KeyCode.RightShift;
         // Spells use FireKey + W (Shriek) or FireKey + S (Descending Dark)
 
         // Teleport channel
@@ -569,7 +570,9 @@ public partial class LegacyHelper
             if (!inHardLeash)
             {
                 float speed = moveSpeed;
-                bool sprinting = sprintUnlocked && Input.GetKey(SprintKey) && input.sqrMagnitude > 0f;
+                bool sprinting = sprintUnlocked &&
+                                 (Input.GetKey(SprintKeyPrimary) || Input.GetKey(SprintKeySecondary)) &&
+                                 input.sqrMagnitude > 0f;
                 if (sprinting) speed *= sprintMultiplier;
                 moveDelta += input * speed * Time.deltaTime;
                 isSprinting = sprinting;
