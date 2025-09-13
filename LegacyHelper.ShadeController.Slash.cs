@@ -41,16 +41,12 @@ public partial class LegacyHelper
                     bool MatchUp(NailSlash ns) { return ns && (((ns.name ?? "").ToLowerInvariant().Contains("up")) || ((ns.animName ?? "").ToLowerInvariant().Contains("up"))); }
                     bool MatchDown(NailSlash ns) { return ns && (((ns.name ?? "").ToLowerInvariant().Contains("down")) || ((ns.animName ?? "").ToLowerInvariant().Contains("down"))); }
                     bool MatchNormal(NailSlash ns) { return ns && !MatchUp(ns) && !MatchDown(ns); }
-                    bool MatchRight(NailSlash ns) { if (!ns) return false; var n=(ns.name??"").ToLowerInvariant(); var a=(ns.animName??"").ToLowerInvariant(); return n.Contains("alt")||n.Contains("right")||a.Contains("alt")||a.Contains("right"); }
-                    bool MatchLeft(NailSlash ns)  { if (!ns) return false; var n=(ns.name??"").ToLowerInvariant(); var a=(ns.animName??"").ToLowerInvariant(); return n.Contains("left")||a.Contains("left"); }
 
                     NailSlash pick = null;
                     if (v > 0.35f) pick = System.Array.Find(searchSet, s => MatchUp(s));
                     else if (v < -0.35f) pick = System.Array.Find(searchSet, s => MatchDown(s));
-                    else pick = (facing >= 0)
-                        ? (System.Array.Find(searchSet, s => MatchNormal(s) && MatchRight(s)) ?? System.Array.Find(searchSet, s => MatchRight(s)))
-                        : (System.Array.Find(searchSet, s => MatchNormal(s) && MatchLeft(s))  ?? System.Array.Find(searchSet, s => MatchLeft(s)));
-                    if (pick == null) pick = System.Array.Find(searchSet, s => MatchNormal(s)) ?? searchSet[0];
+                    else pick = System.Array.Find(searchSet, s => MatchNormal(s));
+                    if (pick == null) pick = searchSet[0];
                     source = pick ? pick.gameObject : null;
                 }
             }
@@ -96,6 +92,7 @@ public partial class LegacyHelper
                 var tr = slash.transform;
                 var ls = tr.localScale;
                 ls.x = Mathf.Abs(ls.x) * (facing >= 0 ? 1f : -1f);
+                ls.y = Mathf.Abs(ls.y) * (v < -0.35f ? -1f : 1f);
                 ls *= 1f / SpriteScale;
                 tr.localScale = ls;
                 UnityEngine.Debug.Log($"[ShadeDebug] Shade slash spawned: {slash.name} scale={ls} parent={tr.parent?.name}\n{System.Environment.StackTrace}");

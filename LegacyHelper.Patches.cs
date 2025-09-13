@@ -246,4 +246,13 @@ public partial class LegacyHelper
             return __instance.GetComponent("ShadeSlashMarker") == null;
         }
     }
+
+    [HarmonyPatch(typeof(NailSlash), nameof(NailSlash.QueueBounce))]
+    private class NailSlash_QueueBounce_Block
+    {
+        private static bool Prefix(NailSlash __instance)
+        {
+            return __instance.GetComponent("ShadeSlashMarker") == null;
+        }
+    }
 }
