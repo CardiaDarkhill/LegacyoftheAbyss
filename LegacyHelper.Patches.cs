@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Reflection;
 using HarmonyLib;
@@ -186,12 +187,12 @@ public partial class LegacyHelper
         {
             if (ShadeController.suppressActivateOnSlash)
             {
-                Transform parent = __instance.transform.parent;
-                if (parent != ShadeController.expectedSlashParent)
-                {
-                    Object.Destroy(__instance.gameObject);
-                    return false;
-                }
+                    Transform parent = __instance.transform.parent;
+                    if (parent != ShadeController.expectedSlashParent)
+                    {
+                        UnityEngine.Object.Destroy(__instance.gameObject);
+                        return false;
+                    }
             }
             return true;
         }
@@ -234,7 +235,14 @@ public partial class LegacyHelper
     {
         private static bool Prefix(NailSlash __instance)
         {
-            return __instance.transform.GetComponentInParent<ShadeController>() == null;
+            bool isShade = __instance.transform.GetComponentInParent<ShadeController>() != null;
+            if (!isShade)
+                return true;
+
+            // Allow bounce logic for up-slashes so their orientation stays correct
+            string anim = __instance.animName ?? string.Empty;
+            bool isUpSlash = anim.IndexOf("up", StringComparison.OrdinalIgnoreCase) >= 0;
+            return isUpSlash;
         }
     }
 
@@ -243,7 +251,13 @@ public partial class LegacyHelper
     {
         private static bool Prefix(NailSlash __instance)
         {
-            return __instance.transform.GetComponentInParent<ShadeController>() == null;
+            bool isShade = __instance.transform.GetComponentInParent<ShadeController>() != null;
+            if (!isShade)
+                return true;
+
+            string anim = __instance.animName ?? string.Empty;
+            bool isUpSlash = anim.IndexOf("up", StringComparison.OrdinalIgnoreCase) >= 0;
+            return isUpSlash;
         }
     }
 
@@ -252,7 +266,13 @@ public partial class LegacyHelper
     {
         private static bool Prefix(NailSlash __instance)
         {
-            return __instance.transform.GetComponentInParent<ShadeController>() == null;
+            bool isShade = __instance.transform.GetComponentInParent<ShadeController>() != null;
+            if (!isShade)
+                return true;
+
+            string anim = __instance.animName ?? string.Empty;
+            bool isUpSlash = anim.IndexOf("up", StringComparison.OrdinalIgnoreCase) >= 0;
+            return isUpSlash;
         }
     }
 }
