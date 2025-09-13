@@ -42,6 +42,8 @@ public partial class LegacyHelper
         private Sprite[] fireballCastAnimFrames;
         private Sprite[] quakeCastAnimFrames;
         private Sprite[] shriekCastAnimFrames;
+        private Sprite[] abyssShriekAnimFrames;
+        private Sprite[] howlingWraithsAnimFrames;
         private Sprite[] deathAnimFrames;
         private Sprite inactiveSprite;
         private SpriteRenderer inactivePulseSr;
@@ -219,6 +221,8 @@ public partial class LegacyHelper
                 fireballCastAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Fireball_Cast_Sheet.png"), 4);
                 quakeCastAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Quake_Cast_Sheet.png"), 2);
                 shriekCastAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Shriek_Cast_Sheet.png"), 2);
+                abyssShriekAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Abyss_Shriek_sheet.png"), 8);
+                howlingWraithsAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Howling_Wraiths_Sheet.png"), 7);
                 deathAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Death_Sheet.png"), 6);
                 var inactive = LoadSpriteStrip(Path.Combine(dir, "ShadeInactive.png"));
                 inactiveSprite = inactive.Length > 0 ? inactive[0] : null;
@@ -232,6 +236,8 @@ public partial class LegacyHelper
                 fireballCastAnimFrames = System.Array.Empty<Sprite>();
                 quakeCastAnimFrames = System.Array.Empty<Sprite>();
                 shriekCastAnimFrames = System.Array.Empty<Sprite>();
+                abyssShriekAnimFrames = System.Array.Empty<Sprite>();
+                howlingWraithsAnimFrames = System.Array.Empty<Sprite>();
                 deathAnimFrames = System.Array.Empty<Sprite>();
                 inactiveSprite = null;
             }
@@ -617,6 +623,7 @@ public partial class LegacyHelper
             float life = 0.18f;
             Vector2 localOffset = new Vector2(0f, 0.8f);
             SpawnShriekCone(12f, 95f, dmg, life, localOffset);
+            SpawnShriekFx(upgraded);
 
             if (shriekCastAnimFrames != null && shriekCastAnimFrames.Length > 0)
             {
@@ -772,6 +779,45 @@ public partial class LegacyHelper
             aoe.lifeSeconds = lifeSeconds;
 
             IgnoreHornetForCollider(poly);
+        }
+
+        private void SpawnShriekFx(bool upgraded)
+        {
+            var frames = upgraded ? abyssShriekAnimFrames : howlingWraithsAnimFrames;
+            if (frames == null || frames.Length == 0 || sr == null) return;
+            var go = new GameObject(upgraded ? "AbyssShriekFx" : "HowlingWraithsFx");
+            go.transform.position = transform.position;
+            go.layer = gameObject.layer;
+            var fxSr = go.AddComponent<SpriteRenderer>();
+            fxSr.sortingLayerID = sr.sortingLayerID;
+            fxSr.sortingOrder = sr.sortingOrder - 1;
+            go.transform.localScale = Vector3.one * spriteScale;
+            StartCoroutine(PlayShriekFx(fxSr, frames));
+        }
+
+        private IEnumerator PlayShriekFx(SpriteRenderer fxSr, Sprite[] frames)
+        {
+            if (fxSr == null || frames == null || frames.Length == 0) yield break;
+            float shadeBottom = transform.position.y;
+            if (sr && sr.sprite)
+                shadeBottom -= sr.sprite.bounds.extents.y * spriteScale;
+            float fxExt = frames[0].bounds.extents.y * spriteScale;
+            var pos = fxSr.transform.position;
+            pos.y = shadeBottom + fxExt;
+            fxSr.transform.position = pos;
+
+            float duration = 0.4f;
+            float per = duration / frames.Length;
+            float t = 0f;
+            fxSr.sprite = frames[0];
+            while (t < duration)
+            {
+                int idx = Mathf.Min((int)(t / per), frames.Length - 1);
+                fxSr.sprite = frames[idx];
+                t += Time.deltaTime;
+                yield return null;
+            }
+            Destroy(fxSr.gameObject);
         }
 
         private IEnumerator DescendingDarkRoutine(int totalDamage, bool upgraded)
