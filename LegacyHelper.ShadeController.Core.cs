@@ -75,6 +75,7 @@ public partial class LegacyHelper
         private int facing = 1;
         private float nailTimer;
         internal static bool suppressActivateOnSlash;
+        internal static Transform expectedSlashParent;
         private const KeyCode FireKey = KeyCode.Space;
         private const KeyCode NailKey = KeyCode.J;
         private const KeyCode TeleportKey = KeyCode.K;

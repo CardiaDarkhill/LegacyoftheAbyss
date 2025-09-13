@@ -88,12 +88,14 @@ public partial class LegacyHelper
             // Spawn the slash while suppressing any activateOnSlash side effects
             GameObject slash = null;
             suppressActivateOnSlash = true;
+            expectedSlashParent = transform;
             try
             {
                 slash = GameObject.Instantiate(source, transform);
             }
             finally
             {
+                expectedSlashParent = null;
                 suppressActivateOnSlash = false;
             }
             slash.AddComponent<ShadeSlashMarker>();
