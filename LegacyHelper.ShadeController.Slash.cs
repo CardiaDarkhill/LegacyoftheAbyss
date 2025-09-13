@@ -89,15 +89,25 @@ public partial class LegacyHelper
             GameObject slash = null;
             suppressActivateOnSlash = true;
             expectedSlashParent = transform;
-            try
+            slash = GameObject.Instantiate(source, transform);
+
+            // grab NailSlash and point its HeroController before touching damagers
+            var nailSlash = slash.GetComponent<NailSlash>();
+            if (nailSlash != null)
             {
-                slash = GameObject.Instantiate(source, transform);
+                var f = typeof(NailAttackBase).GetField("hc", BindingFlags.Instance | BindingFlags.NonPublic);
+                f?.SetValue(nailSlash, hc);
+
+                // remove any other NailSlash components that might cause extra slashes
+                var allSlashes = slash.GetComponentsInChildren<NailSlash>(true);
+                foreach (var ns in allSlashes)
+                {
+                    if (!ns || ns == nailSlash) continue;
+                    try { f?.SetValue(ns, hc); } catch { }
+                    try { Destroy(ns.gameObject); } catch { }
+                }
             }
-            finally
-            {
-                expectedSlashParent = null;
-                suppressActivateOnSlash = false;
-            }
+
             slash.AddComponent<ShadeSlashMarker>();
             slash.transform.position = transform.position;
 
@@ -151,12 +161,8 @@ public partial class LegacyHelper
             }
             catch { }
 
-            var nailSlash = slash.GetComponent<NailSlash>();
             if (nailSlash != null)
             {
-                var f = typeof(NailAttackBase).GetField("hc", BindingFlags.Instance | BindingFlags.NonPublic);
-                f?.SetValue(nailSlash, hc);
-
                 try
                 {
                     var travel = slash.GetComponent<NailSlashTravel>();
@@ -284,6 +290,8 @@ public partial class LegacyHelper
                     foreach (var c in tempCols) if (c) c.enabled = true;
 
                     nailSlash.StartSlash();
+                    expectedSlashParent = null;
+                    suppressActivateOnSlash = false;
 
                     // Ensure we fully end the hitboxes when damage ends to avoid lingering hits
                     try
@@ -328,6 +336,8 @@ public partial class LegacyHelper
             else
             {
                 // No NailSlash component found
+                expectedSlashParent = null;
+                suppressActivateOnSlash = false;
             }
 
             StartCoroutine(PostConfigureSlash(slash, v, facing, hc));
@@ -389,7 +399,7 @@ public partial class LegacyHelper
 
                 try
                 {
-                    var tr = slash.transform; var ls = tr.localScale; ls.x = Mathf.Abs(ls.x) * (facingSign >= 0 ? -1f : 1f); ls *= 1f / SpriteScale; tr.localScale = ls;
+                    var tr = slash.transform; var ls = tr.localScale; ls.x = Mathf.Abs(ls.x) * (facingSign >= 0 ? 1f : -1f); ls *= 1f / SpriteScale; tr.localScale = ls;
                 }
                 catch { }
             }
