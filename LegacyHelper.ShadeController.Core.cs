@@ -10,7 +10,7 @@ public partial class LegacyHelper
     {
         // Movement and leash
         public float moveSpeed = 10f;
-        public float sprintMultiplier = 2f;
+        public float sprintMultiplier = 1.8f;
         public float maxDistance = 14f;
         public float softLeashRadius = 10f;
         public float hardLeashRadius = 22f;
@@ -73,6 +73,7 @@ public partial class LegacyHelper
         private static Texture2D s_simpleLightTex;
         private static Material s_simpleAdditiveMat;
         private static Mesh s_simpleQuadMesh;
+        private static Material s_sprintBurstMat;
         private int facing = 1;
         private float nailTimer;
         internal static bool suppressActivateOnSlash;
@@ -95,8 +96,8 @@ public partial class LegacyHelper
         private bool isSprinting;
         private float sprintDashTimer;
         private float sprintDashCooldownTimer;
-        public float sprintDashMultiplier = 5f;
-        public float sprintDashDuration = 0.25f;
+        public float sprintDashMultiplier = 7.5f;
+        public float sprintDashDuration = 0.125f;
         public float sprintDashCooldown = 3f;
 
         // Inactive state (at 0 HP)
@@ -657,6 +658,16 @@ public partial class LegacyHelper
                 main.startSpeed = 0f;
                 main.startSize = 0.2f;
                 main.startColor = Color.black;
+                var psr = ps.GetComponent<ParticleSystemRenderer>();
+                if (psr != null)
+                {
+                    if (s_sprintBurstMat == null)
+                    {
+                        s_sprintBurstMat = new Material(Shader.Find("Sprites/Default"));
+                        s_sprintBurstMat.color = Color.black;
+                    }
+                    psr.sharedMaterial = s_sprintBurstMat;
+                }
                 var emission = ps.emission;
                 emission.enabled = false;
                 for (int i = 0; i < 12; i++)
