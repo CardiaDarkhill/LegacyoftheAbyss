@@ -8,6 +8,9 @@ public partial class LegacyHelper
     public partial class ShadeController
     {
         private const int slashSoulGain = 11;
+        private NailSlash cachedSlash;
+        private NailSlash cachedUpSlash;
+        private NailSlash cachedDownSlash;
 
         private void HandleNailAttack()
         {
@@ -40,54 +43,21 @@ public partial class LegacyHelper
         {
             try
             {
-                var allSlashes = Resources.FindObjectsOfTypeAll<NailSlash>();
-                if (allSlashes == null || allSlashes.Length == 0) return;
-                allSlashes = Array.FindAll(allSlashes,
-                    s => s && s.transform.parent &&
-                         s.transform.parent.name.IndexOf("Wanderer",
-                             StringComparison.OrdinalIgnoreCase) >= 0);
-                if (allSlashes == null || allSlashes.Length == 0) return;
+                EnsureSlashPrefabs();
+                NailSlash pick = cachedSlash;
+                if (dir.y > 0.1f) pick = cachedUpSlash ?? cachedSlash;
+                else if (dir.y < -0.1f) pick = cachedDownSlash ?? cachedSlash;
+                if (pick == null) return;
 
-                bool MatchUp(NailSlash ns) => ns && (((ns.name ?? "").ToLowerInvariant().Contains("up")) || ((ns.animName ?? "").ToLowerInvariant().Contains("up")));
-                bool MatchDown(NailSlash ns) => ns && (((ns.name ?? "").ToLowerInvariant().Contains("down")) || ((ns.animName ?? "").ToLowerInvariant().Contains("down")));
-                bool MatchLeft(NailSlash ns)
-                {
-                    if (!ns) return false;
-                    string n = (ns.name ?? "").ToLowerInvariant();
-                    string a = (ns.animName ?? "").ToLowerInvariant();
-                    return n.Contains("left") || a.Contains("left");
-                }
-                bool MatchRight(NailSlash ns)
-                {
-                    if (!ns) return false;
-                    string n = (ns.name ?? "").ToLowerInvariant();
-                    string a = (ns.animName ?? "").ToLowerInvariant();
-                    if (n.Contains("alt") || n.Contains("right") || a.Contains("alt")) return true;
-                    return a.Contains("right");
-                }
-                bool MatchNormal(NailSlash ns) => ns && !MatchUp(ns) && !MatchDown(ns);
-
-                NailSlash pick = null;
-                if (dir.y > 0.1f)
-                    pick = Array.Find(allSlashes, s => MatchUp(s));
-                else if (dir.y < -0.1f)
-                    pick = Array.Find(allSlashes, s => MatchDown(s));
-                else if ((dir.x != 0f ? dir.x : facing) >= 0f)
-                    pick = Array.Find(allSlashes, s => MatchNormal(s) && MatchRight(s)) ?? Array.Find(allSlashes, s => MatchRight(s));
-                else
-                    pick = Array.Find(allSlashes, s => MatchNormal(s) && MatchLeft(s)) ?? Array.Find(allSlashes, s => MatchLeft(s));
-
-                if (pick == null)
-                    pick = Array.Find(allSlashes, s => MatchNormal(s));
-                if (pick == null && allSlashes.Length > 0)
-                    pick = allSlashes[0];
-
-                var slash = Instantiate(pick.gameObject);
+                var slash = Instantiate(pick.gameObject, HeroController.instance.transform);
                 slash.transform.position = transform.position;
-                var horiz = dir.x != 0f ? Mathf.Sign(dir.x) : facing;
+
                 var ls = slash.transform.localScale;
-                ls.x = Mathf.Abs(ls.x) * horiz;
-                ls.y = Mathf.Abs(ls.y) * (dir.y < -0.1f ? -1f : 1f);
+                if (Mathf.Abs(dir.y) > 0.1f)
+                    ls.x = Mathf.Abs(ls.x);
+                else
+                    ls.x = Mathf.Abs(ls.x) * facing;
+                ls.y = Mathf.Abs(ls.y) * (dir.y > 0.1f ? -1f : 1f);
                 ls *= 1f / SpriteScale;
                 slash.transform.localScale = ls;
 
@@ -95,11 +65,7 @@ public partial class LegacyHelper
                 string animName = ns ? ns.animName : string.Empty;
 
                 foreach (var col in slash.GetComponentsInChildren<Collider2D>(true)) Destroy(col);
-                foreach (var mb in slash.GetComponentsInChildren<MonoBehaviour>(true))
-                {
-                    string tn = mb.GetType().Name;
-                    if (!tn.StartsWith("tk2d")) Destroy(mb);
-                }
+                foreach (var recoil in slash.GetComponentsInChildren<NailSlashRecoil>(true)) Destroy(recoil);
                 foreach (var r in slash.GetComponentsInChildren<Renderer>(true)) r.enabled = true;
 
                 var anim = slash.GetComponent("tk2dSpriteAnimator");
@@ -111,10 +77,24 @@ public partial class LegacyHelper
                 var audio = slash.GetComponent<AudioSource>();
                 audio?.Play();
 
-                slash.transform.SetParent(transform);
+                slash.transform.SetParent(transform, true);
                 Destroy(slash, 0.4f);
             }
             catch { }
+        }
+
+        private void EnsureSlashPrefabs()
+        {
+            if (cachedSlash && cachedUpSlash && cachedDownSlash) return;
+            var allSlashes = Resources.FindObjectsOfTypeAll<NailSlash>();
+            if (allSlashes == null || allSlashes.Length == 0) return;
+            allSlashes = Array.FindAll(allSlashes,
+                s => s && s.transform.parent &&
+                     s.transform.parent.name.IndexOf("Wanderer", StringComparison.OrdinalIgnoreCase) >= 0);
+            if (allSlashes == null) return;
+            cachedUpSlash = Array.Find(allSlashes, s => (s.name ?? "").IndexOf("Up", StringComparison.OrdinalIgnoreCase) >= 0 || (s.animName ?? "").IndexOf("Up", StringComparison.OrdinalIgnoreCase) >= 0);
+            cachedDownSlash = Array.Find(allSlashes, s => (s.name ?? "").IndexOf("Down", StringComparison.OrdinalIgnoreCase) >= 0 || (s.animName ?? "").IndexOf("Down", StringComparison.OrdinalIgnoreCase) >= 0);
+            cachedSlash = Array.Find(allSlashes, s => s != cachedUpSlash && s != cachedDownSlash);
         }
 
         private void SpawnSlashDamage(Vector2 dir)
@@ -132,7 +112,7 @@ public partial class LegacyHelper
             Vector2 offset = Vector2.zero;
             if (dir.y > 0.1f) { w = 0.6f; h = 1.4f; offset = Vector2.up * 0.8f; }
             else if (dir.y < -0.1f) { w = 0.6f; h = 1.4f; offset = Vector2.down * 0.8f; }
-            else { offset = new Vector2(facing * 0.8f, 0f); }
+            else { offset = new Vector2(-facing * 0.8f, 0f); }
             col.size = new Vector2(w, h);
             col.offset = offset;
             IgnoreHornetForCollider(col);
