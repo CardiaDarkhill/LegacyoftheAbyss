@@ -404,11 +404,15 @@ public partial class LegacyHelper
         {
             try
             {
-                var slashes = transform.GetComponentsInChildren<NailSlash>(true);
+                var slashes = Object.FindObjectsByType<NailSlash>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                float globalScale = SpriteScale;
                 foreach (var ns in slashes)
                 {
                     if (!ns) continue;
                     if (ns.GetComponent<ShadeSlashMarker>()) continue;
+                    var ls = ns.transform.localScale;
+                    if (!Mathf.Approximately(Mathf.Abs(ls.x), globalScale) || !Mathf.Approximately(Mathf.Abs(ls.y), globalScale))
+                        continue;
                     ns.transform.localScale = Vector3.zero;
                     try
                     {
