@@ -104,7 +104,7 @@ public partial class LegacyHelper
                 {
                     if (!ns || ns == nailSlash) continue;
                     try { f?.SetValue(ns, hc); } catch { }
-                    try { Destroy(ns.gameObject); } catch { }
+                    try { Destroy(ns); } catch { }
                 }
             }
 

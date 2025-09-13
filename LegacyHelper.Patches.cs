@@ -199,6 +199,15 @@ public partial class LegacyHelper
                     poly = __instance.gameObject.AddComponent<PolygonCollider2D>();
                     poly.enabled = false;
                 }
+
+                // Ensure an AudioSource exists so the vanilla Awake logic can read pitch without null refs
+                var audio = __instance.GetComponent<AudioSource>();
+                if (audio == null)
+                {
+                    audio = __instance.gameObject.AddComponent<AudioSource>();
+                    audio.playOnAwake = false;
+                    audio.enabled = false;
+                }
             }
             catch { }
 
