@@ -40,6 +40,9 @@ public partial class LegacyHelper
         private Sprite[] vengefulAnimFrames;
         private Sprite[] shadeSoulAnimFrames;
         private Sprite[] fireballCastAnimFrames;
+        private Sprite[] quakeCastAnimFrames;
+        private Sprite[] shriekCastAnimFrames;
+        private Sprite[] deathAnimFrames;
         private Sprite inactiveSprite;
         private SpriteRenderer inactivePulseSr;
         private Sprite[] currentAnimFrames;
@@ -68,6 +71,8 @@ public partial class LegacyHelper
 
         // Inactive state (at 0 HP)
         private bool isInactive;
+        private bool isDying;
+        private Coroutine deathRoutine;
 
         // Shade Soul resource
         public int shadeSoulMax = 99;
@@ -119,6 +124,11 @@ public partial class LegacyHelper
         public void FullHealFromBench()
         {
             shadeHP = Mathf.Max(shadeHP, shadeMaxHP);
+            if (shadeHP > 0)
+            {
+                isInactive = false;
+                CancelDeathAnimation();
+            }
             PushShadeStatsToHud();
         }
 
@@ -126,7 +136,11 @@ public partial class LegacyHelper
         {
             int target = Mathf.Max(1, hp);
             shadeHP = Mathf.Max(shadeHP, target);
-            if (shadeHP > 0) isInactive = false;
+            if (shadeHP > 0)
+            {
+                isInactive = false;
+                CancelDeathAnimation();
+            }
             PushShadeStatsToHud();
             PersistIfChanged();
         }
@@ -203,6 +217,9 @@ public partial class LegacyHelper
                 vengefulAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Vengeful_Spirit_Sheet.png"), 2);
                 shadeSoulAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Soul_Sheet.png"), 4);
                 fireballCastAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Fireball_Cast_Sheet.png"), 4);
+                quakeCastAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Quake_Cast_Sheet.png"), 2);
+                shriekCastAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Shriek_Cast_Sheet.png"), 2);
+                deathAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Death_Sheet.png"), 6);
                 var inactive = LoadSpriteStrip(Path.Combine(dir, "ShadeInactive.png"));
                 inactiveSprite = inactive.Length > 0 ? inactive[0] : null;
             }
@@ -212,6 +229,10 @@ public partial class LegacyHelper
                 floatAnimFrames = System.Array.Empty<Sprite>();
                 vengefulAnimFrames = System.Array.Empty<Sprite>();
                 shadeSoulAnimFrames = System.Array.Empty<Sprite>();
+                fireballCastAnimFrames = System.Array.Empty<Sprite>();
+                quakeCastAnimFrames = System.Array.Empty<Sprite>();
+                shriekCastAnimFrames = System.Array.Empty<Sprite>();
+                deathAnimFrames = System.Array.Empty<Sprite>();
                 inactiveSprite = null;
             }
         }
@@ -267,7 +288,7 @@ public partial class LegacyHelper
             if (sr == null) return;
             sr.flipX = (facing == 1);
 
-            if (isCastingSpell && currentAnimFrames == fireballCastAnimFrames)
+            if (isCastingSpell && currentAnimFrames != null)
                 return;
 
             if (isInactive)
@@ -377,7 +398,7 @@ public partial class LegacyHelper
             }
 
             // Track inactive flag
-            isInactive = (shadeHP <= 0);
+            isInactive = (!isDying && shadeHP <= 0);
 
             HandleTeleportChannel();
 
@@ -418,7 +439,11 @@ public partial class LegacyHelper
                     shadeHP = Mathf.Min(shadeHP + 2, shadeMaxHP);
                     if (shadeHP != before)
                     {
-                        if (shadeHP > 0) isInactive = false;
+                        if (shadeHP > 0)
+                        {
+                            isInactive = false;
+                            CancelDeathAnimation();
+                        }
                         PushShadeStatsToHud();
                         PersistIfChanged();
                     }
@@ -554,14 +579,7 @@ public partial class LegacyHelper
             shadeSoul = Mathf.Max(0, shadeSoul - shriekSoulCost);
             PushSoulToHud();
             CheckHazardOverlap();
-
-            bool upgraded = IsShriekUpgraded();
-            int dmg = ComputeSpellDamageMultiplier(4f, upgraded); // Abyss Shriek base 4x
-            TryPlayShriekSfx(upgraded);
-            float life = 0.18f;
-            // 12-unit high, 95-degree cone centered on torso
-            Vector2 localOffset = new Vector2(0f, 0.8f);
-            SpawnShriekCone(12f, 95f, dmg, life, localOffset);
+            StartCoroutine(ShriekCastRoutine());
         }
 
         private IEnumerator FireballCastRoutine()
@@ -586,6 +604,38 @@ public partial class LegacyHelper
 
             Vector2 dir = new Vector2(facing, 0f);
             SpawnProjectile(dir);
+            currentAnimFrames = null;
+            isCastingSpell = false;
+        }
+
+        private IEnumerator ShriekCastRoutine()
+        {
+            isCastingSpell = true;
+            bool upgraded = IsShriekUpgraded();
+            int dmg = ComputeSpellDamageMultiplier(4f, upgraded);
+            TryPlayShriekSfx(upgraded);
+            float life = 0.18f;
+            Vector2 localOffset = new Vector2(0f, 0.8f);
+            SpawnShriekCone(12f, 95f, dmg, life, localOffset);
+
+            if (shriekCastAnimFrames != null && shriekCastAnimFrames.Length > 0)
+            {
+                currentAnimFrames = shriekCastAnimFrames;
+                animFrameIndex = 0;
+                animTimer = 0f;
+                float perFrame = 0.25f / shriekCastAnimFrames.Length;
+                float elapsed = 0f;
+                while (elapsed < 0.25f)
+                {
+                    if (sr) sr.sprite = shriekCastAnimFrames[(int)(elapsed / perFrame) % shriekCastAnimFrames.Length];
+                    elapsed += Time.deltaTime;
+                    yield return null;
+                }
+            }
+            else
+            {
+                yield return new WaitForSeconds(0.25f);
+            }
             currentAnimFrames = null;
             isCastingSpell = false;
         }
@@ -727,15 +777,23 @@ public partial class LegacyHelper
         private IEnumerator DescendingDarkRoutine(int totalDamage, bool upgraded)
         {
             isCastingSpell = true;
-            // Cast time ~0.25s
-            float castTime = 0.25f;
             float prevVelY = rb ? rb.linearVelocity.y : 0f;
             if (rb) rb.linearVelocity = Vector2.zero;
-            float t = 0f;
-            while (t < castTime)
+            if (quakeCastAnimFrames != null && quakeCastAnimFrames.Length > 0)
             {
-                t += Time.deltaTime;
-                yield return null;
+                currentAnimFrames = quakeCastAnimFrames;
+                animFrameIndex = 0;
+                animTimer = 0f;
+                float perFrame = 0.25f / quakeCastAnimFrames.Length;
+                for (int i = 0; i < quakeCastAnimFrames.Length; i++)
+                {
+                    if (sr) sr.sprite = quakeCastAnimFrames[i];
+                    yield return new WaitForSeconds(perFrame);
+                }
+            }
+            else
+            {
+                yield return new WaitForSeconds(0.25f);
             }
 
             // Enemy i-frames during descent (not hazards)
@@ -792,6 +850,7 @@ public partial class LegacyHelper
             // If landing area is a hazard, skip the impact
             if (IsHazardAtPosition(new Vector2(targetPos.x, groundY + 0.2f), 0.8f))
             {
+                currentAnimFrames = null;
                 isCastingSpell = false;
                 yield break;
             }
@@ -805,6 +864,7 @@ public partial class LegacyHelper
             // Small delay to keep i-frames briefly after impact
             yield return new WaitForSeconds(0.1f);
             if (rb) rb.linearVelocity = new Vector2(rb.linearVelocity.x, prevVelY);
+            currentAnimFrames = null;
             isCastingSpell = false;
         }
 
@@ -1168,7 +1228,7 @@ public partial class LegacyHelper
             if (hazardCooldown > 0f) return;
             TeleportToHornet();
             shadeHP = Mathf.Max(0, shadeHP - 1);
-            if (shadeHP <= 0) isInactive = true;
+            if (shadeHP <= 0) StartDeathAnimation();
             PushShadeStatsToHud();
             hazardCooldown = 0.25f;
             CancelFocus();
@@ -1181,11 +1241,75 @@ public partial class LegacyHelper
             int dmg = 1;
             try { if (dh != null) dmg = Mathf.Max(1, dh.damageDealt); } catch { }
             shadeHP = Mathf.Max(0, shadeHP - dmg);
-            if (shadeHP <= 0) isInactive = true;
+            if (shadeHP <= 0) StartDeathAnimation();
             PushShadeStatsToHud();
             hurtCooldown = HurtIFrameSeconds;
             CancelFocus();
             PersistIfChanged();
+        }
+
+        private void StartDeathAnimation()
+        {
+            if (isDying) return;
+            if (deathRoutine != null) StopCoroutine(deathRoutine);
+            isDying = true;
+            deathRoutine = StartCoroutine(DeathAnimationRoutine());
+        }
+
+        private void CancelDeathAnimation()
+        {
+            if (!isDying)
+            {
+                if (deathRoutine != null) { StopCoroutine(deathRoutine); deathRoutine = null; }
+                return;
+            }
+            if (deathRoutine != null) StopCoroutine(deathRoutine);
+            deathRoutine = null;
+            isDying = false;
+            isCastingSpell = false;
+            currentAnimFrames = null;
+        }
+
+        private IEnumerator DeathAnimationRoutine()
+        {
+            isDying = true;
+            isCastingSpell = true;
+            if (deathAnimFrames != null && deathAnimFrames.Length > 0)
+            {
+                currentAnimFrames = deathAnimFrames;
+                float perFrame = 0.5f / deathAnimFrames.Length;
+                for (int i = 0; i < deathAnimFrames.Length; i++)
+                {
+                    if (shadeHP > 0)
+                    {
+                        isCastingSpell = false;
+                        isDying = false;
+                        currentAnimFrames = null;
+                        yield break;
+                    }
+                    if (sr) sr.sprite = deathAnimFrames[i];
+                    yield return new WaitForSeconds(perFrame);
+                }
+            }
+            else
+            {
+                float t = 0f;
+                while (t < 0.5f)
+                {
+                    if (shadeHP > 0)
+                    {
+                        isCastingSpell = false;
+                        isDying = false;
+                        yield break;
+                    }
+                    t += Time.deltaTime;
+                    yield return null;
+                }
+            }
+            currentAnimFrames = null;
+            isCastingSpell = false;
+            isDying = false;
+            deathRoutine = null;
         }
 
         private void HandleFocus()
@@ -1247,7 +1371,11 @@ public partial class LegacyHelper
                     shadeHP = Mathf.Min(shadeHP + canHeal, shadeMaxHP);
                     if (shadeHP != before)
                     {
-                        if (shadeHP > 0) isInactive = false;
+                        if (shadeHP > 0)
+                        {
+                            isInactive = false;
+                            CancelDeathAnimation();
+                        }
                         PushShadeStatsToHud();
                     }
 
