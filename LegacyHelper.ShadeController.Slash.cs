@@ -94,11 +94,12 @@ public partial class LegacyHelper
             {
                 var tr = slash.transform;
                 var ls = tr.localScale;
-                // Wanderer slashes are authored facing left. To mirror them so the
-                // shade attacks to the right, we use a negative X scale when facing right.
-                // NailAttackBase.OnSlashStarting later resets transform.localScale from its
-                // private "scale" field, so we update that field (and longNeedleScale) too.
-                ls.x = Mathf.Abs(ls.x) * -facing;
+                // Determine the original facing of the source slash so that we can
+                // mirror only when necessary. Some slashes (e.g. the up-slash) are
+                // authored facing right, while others default to facing left.
+                float sourceSign = source.transform.localScale.x >= 0f ? 1f : -1f;
+                float facingSign = facing >= 0 ? 1f : -1f;
+                ls.x = Mathf.Abs(ls.x) * sourceSign * facingSign;
                 //ls.y = Mathf.Abs(ls.y);
                 ls *= 1f / SpriteScale;
                 tr.localScale = ls;
