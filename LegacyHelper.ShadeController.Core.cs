@@ -901,6 +901,13 @@ public partial class LegacyHelper
                     if (ht == hornetTransform || ht.IsChildOf(hornetTransform) || (hornetRoot && ht.root == hornetRoot))
                         continue;
                 }
+                // also skip any collider tagged as Player (fallback if hornetTransform not found)
+                try
+                {
+                    if (h.collider.CompareTag("Player") || h.collider.transform.root.CompareTag("Player"))
+                        continue;
+                }
+                catch { }
                 // ignore enemies/hazards (anything that damages hero)
                 try { if (h.collider.GetComponentInParent<DamageHero>() != null) continue; } catch { }
                 // otherwise this is acceptable ground
