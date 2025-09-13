@@ -40,8 +40,6 @@ public partial class LegacyHelper
         {
             try
             {
-                var hc = HeroController.instance;
-                if (hc == null) return;
                 var allSlashes = Resources.FindObjectsOfTypeAll<NailSlash>();
                 if (allSlashes == null || allSlashes.Length == 0) return;
                 allSlashes = Array.FindAll(allSlashes,
@@ -52,37 +50,64 @@ public partial class LegacyHelper
 
                 bool MatchUp(NailSlash ns) => ns && (((ns.name ?? "").ToLowerInvariant().Contains("up")) || ((ns.animName ?? "").ToLowerInvariant().Contains("up")));
                 bool MatchDown(NailSlash ns) => ns && (((ns.name ?? "").ToLowerInvariant().Contains("down")) || ((ns.animName ?? "").ToLowerInvariant().Contains("down")));
+                bool MatchLeft(NailSlash ns)
+                {
+                    if (!ns) return false;
+                    string n = (ns.name ?? "").ToLowerInvariant();
+                    string a = (ns.animName ?? "").ToLowerInvariant();
+                    return n.Contains("left") || a.Contains("left");
+                }
+                bool MatchRight(NailSlash ns)
+                {
+                    if (!ns) return false;
+                    string n = (ns.name ?? "").ToLowerInvariant();
+                    string a = (ns.animName ?? "").ToLowerInvariant();
+                    if (n.Contains("alt") || n.Contains("right") || a.Contains("alt")) return true;
+                    return a.Contains("right");
+                }
                 bool MatchNormal(NailSlash ns) => ns && !MatchUp(ns) && !MatchDown(ns);
 
                 NailSlash pick = null;
-                if (dir.y > 0.1f) pick = Array.Find(allSlashes, s => MatchUp(s));
-                else if (dir.y < -0.1f) pick = Array.Find(allSlashes, s => MatchDown(s));
-                else pick = Array.Find(allSlashes, s => MatchNormal(s));
-                if (pick == null) pick = allSlashes[0];
+                if (dir.y > 0.1f)
+                    pick = Array.Find(allSlashes, s => MatchUp(s));
+                else if (dir.y < -0.1f)
+                    pick = Array.Find(allSlashes, s => MatchDown(s));
+                else if ((dir.x != 0f ? dir.x : facing) >= 0f)
+                    pick = Array.Find(allSlashes, s => MatchNormal(s) && MatchRight(s)) ?? Array.Find(allSlashes, s => MatchRight(s));
+                else
+                    pick = Array.Find(allSlashes, s => MatchNormal(s) && MatchLeft(s)) ?? Array.Find(allSlashes, s => MatchLeft(s));
 
-                var slash = Instantiate(pick.gameObject, hc.transform);
+                if (pick == null)
+                    pick = Array.Find(allSlashes, s => MatchNormal(s));
+                if (pick == null && allSlashes.Length > 0)
+                    pick = allSlashes[0];
+
+                var slash = Instantiate(pick.gameObject);
                 slash.transform.position = transform.position;
+                var horiz = dir.x != 0f ? Mathf.Sign(dir.x) : facing;
                 var ls = slash.transform.localScale;
-                ls.x = Mathf.Abs(ls.x) * facing;
+                ls.x = Mathf.Abs(ls.x) * horiz;
                 ls.y = Mathf.Abs(ls.y) * (dir.y < -0.1f ? -1f : 1f);
                 ls *= 1f / SpriteScale;
                 slash.transform.localScale = ls;
-                foreach (var de in slash.GetComponentsInChildren<DamageEnemies>(true)) de.enabled = false;
-                foreach (var c in slash.GetComponentsInChildren<Collider2D>(true)) c.enabled = false;
-                foreach (var r in slash.GetComponentsInChildren<NailSlashRecoil>(true)) Destroy(r);
+
                 var ns = slash.GetComponent<NailSlash>();
-                if (ns != null)
+                string animName = ns ? ns.animName : string.Empty;
+
+                foreach (var col in slash.GetComponentsInChildren<Collider2D>(true)) Destroy(col);
+                foreach (var mb in slash.GetComponentsInChildren<MonoBehaviour>(true))
+                    if (mb.GetType().Name != "tk2dSpriteAnimator") Destroy(mb);
+                foreach (var r in slash.GetComponentsInChildren<Renderer>(true)) r.enabled = true;
+
+                var anim = slash.GetComponent("tk2dSpriteAnimator");
+                if (anim != null && !string.IsNullOrEmpty(animName))
                 {
-                    var setSlash = typeof(NailSlash).GetField(
-                        "setSlashComponent",
-                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-                    setSlash?.SetValue(ns, false);
-                    var drill = typeof(NailSlash).GetField(
-                        "drillPull",
-                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-                    drill?.SetValue(ns, false);
-                    ns.StartSlash();
+                    var play = anim.GetType().GetMethod("Play", new Type[] { typeof(string) });
+                    play?.Invoke(anim, new object[] { animName });
                 }
+                var audio = slash.GetComponent<AudioSource>();
+                audio?.Play();
+
                 slash.transform.SetParent(transform);
                 Destroy(slash, 0.4f);
             }
