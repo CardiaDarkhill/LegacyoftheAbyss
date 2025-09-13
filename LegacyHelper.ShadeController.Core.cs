@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
+using GlobalEnums;
 
 public partial class LegacyHelper
 {
@@ -97,8 +98,10 @@ public partial class LegacyHelper
         private float sprintDashTimer;
         private float sprintDashCooldownTimer;
         public float sprintDashMultiplier = 7.5f;
-        public float sprintDashDuration = 0.125f;
+        public float sprintDashDuration = 0.075f;
         public float sprintDashCooldown = 3f;
+        private ParticleSystem activeDashPs;
+        private Vector2 activeDashDir;
 
         // Inactive state (at 0 HP)
         private bool isInactive;
@@ -587,16 +590,28 @@ public partial class LegacyHelper
                     {
                         sprintDashTimer = sprintDashDuration;
                         sprintDashCooldownTimer = sprintDashCooldown;
+                        TryPlayDashSfx();
                     }
                 }
                 if (sprintDashTimer > 0f)
                 {
                     speed *= sprintDashMultiplier;
                     sprintDashTimer -= Time.deltaTime;
+                    if (activeDashPs)
+                    {
+                        var emit = new ParticleSystem.EmitParams();
+                        emit.velocity = activeDashDir * UnityEngine.Random.Range(4f, 8f);
+                        emit.startSize = UnityEngine.Random.Range(0.15f, 0.25f);
+                        activeDashPs.Emit(emit, 1);
+                    }
                 }
-                else if (sprinting)
+                else
                 {
-                    speed *= sprintMultiplier;
+                    activeDashPs = null;
+                    if (sprinting)
+                    {
+                        speed *= sprintMultiplier;
+                    }
                 }
                 if (sprintDashCooldownTimer > 0f)
                     sprintDashCooldownTimer -= Time.deltaTime;
@@ -656,7 +671,7 @@ public partial class LegacyHelper
                 var main = ps.main;
                 main.startLifetime = 0.4f;
                 main.startSpeed = 0f;
-                main.startSize = 0.2f;
+                main.startSize = new ParticleSystem.MinMaxCurve(0.15f, 0.25f);
                 main.startColor = Color.black;
                 var psr = ps.GetComponent<ParticleSystemRenderer>();
                 if (psr != null)
@@ -667,7 +682,15 @@ public partial class LegacyHelper
                         s_sprintBurstMat.color = Color.black;
                     }
                     psr.sharedMaterial = s_sprintBurstMat;
+                    psr.sharedMaterial.mainTexture = MakeDotSprite().texture;
                 }
+                var col = ps.colorOverLifetime;
+                col.enabled = true;
+                Gradient g = new Gradient();
+                g.SetKeys(
+                    new[] { new GradientColorKey(Color.black, 0f), new GradientColorKey(Color.black, 1f) },
+                    new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(0f, 1f) });
+                col.color = g;
                 var emission = ps.emission;
                 emission.enabled = false;
                 for (int i = 0; i < 12; i++)
@@ -675,11 +698,24 @@ public partial class LegacyHelper
                     var emit = new ParticleSystem.EmitParams();
                     emit.velocity = ndir * UnityEngine.Random.Range(4f, 8f);
                     emit.startColor = Color.black;
-                    emit.startSize = 0.2f;
+                    emit.startSize = UnityEngine.Random.Range(0.15f, 0.25f);
                     ps.Emit(emit, 1);
                 }
                 ps.Play();
+                activeDashPs = ps;
+                activeDashDir = ndir;
                 Destroy(go, 1f);
+            }
+            catch { }
+        }
+
+        private void TryPlayDashSfx()
+        {
+            try
+            {
+                var hc = HeroController.instance;
+                if (hc != null && hc.AudioCtrl != null)
+                    hc.AudioCtrl.PlaySound(HeroSounds.DASH);
             }
             catch { }
         }
