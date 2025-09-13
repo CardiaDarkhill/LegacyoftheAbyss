@@ -91,8 +91,8 @@ public partial class LegacyHelper
             {
                 var tr = slash.transform;
                 var ls = tr.localScale;
-                // Base slashes face left with positive scale; flip by facing so rightward attacks use negative X
-                ls.x = Mathf.Abs(ls.x) * -facing;
+                // Align clone scale with shade facing so positive X swings right
+                ls.x = Mathf.Abs(ls.x) * facing;
                 ls.y = Mathf.Abs(ls.y) * (v < -0.35f ? -1f : 1f);
                 ls *= 1f / SpriteScale;
                 tr.localScale = ls;
@@ -212,7 +212,7 @@ public partial class LegacyHelper
                     }
                     else
                     {
-                        dir = (facing >= 0 ? 180f : 0f);
+                        dir = (facing >= 0 ? 0f : 180f);
                         fwd = (facing >= 0 ? Vector2.right : Vector2.left);
                     }
 
