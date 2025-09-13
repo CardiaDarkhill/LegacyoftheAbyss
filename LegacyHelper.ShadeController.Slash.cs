@@ -99,8 +99,8 @@ public partial class LegacyHelper
                 // NailAttackBase.OnSlashStarting later resets transform.localScale from its
                 // private "scale" field, so we update that field (and longNeedleScale) too.
                 ls.x = Mathf.Abs(ls.x) * -facing;
-                // Keep slashes upright by ensuring a positive Y scale.
-                ls.y = Mathf.Abs(ls.y);
+                if (facing == 1 && v > 0.35f)
+                    ls.y = Mathf.Abs(ls.y); // right-facing upslashes need positive Y to avoid flipping down
                 ls *= 1f / SpriteScale;
                 tr.localScale = ls;
                 if (nailSlash != null)
@@ -108,10 +108,7 @@ public partial class LegacyHelper
                     var scaleField = typeof(NailAttackBase).GetField("scale", BindingFlags.Instance | BindingFlags.NonPublic);
                     var longNeedleField = typeof(NailAttackBase).GetField("longNeedleScale", BindingFlags.Instance | BindingFlags.NonPublic);
                     try { scaleField?.SetValue(nailSlash, ls); } catch { }
-                    // Long needle scale fix causes right-facing upslashes to flip
-                    // incorrectly, so skip applying it in that case.
-                    if (!(v > 0.35f && facing == 1))
-                        try { longNeedleField?.SetValue(nailSlash, ls); } catch { }
+                    try { longNeedleField?.SetValue(nailSlash, ls); } catch { }
                 }
                 try
                 {
