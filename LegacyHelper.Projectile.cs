@@ -10,8 +10,30 @@ public partial class LegacyHelper
         public Transform hornetRoot;
         public float lifeSeconds = 1.5f;
         bool hasHit;
+        public Sprite[] animFrames;
+        public float animFrameTime = 0.1f;
+        private SpriteRenderer sr;
+        private int animFrameIndex;
+        private float animTimer;
+
+        void Awake()
+        {
+            sr = GetComponent<SpriteRenderer>();
+        }
 
         void Start() => Destroy(gameObject, lifeSeconds);
+
+        void Update()
+        {
+            if (sr == null || animFrames == null || animFrames.Length <= 1) return;
+            animTimer += Time.deltaTime;
+            if (animTimer >= animFrameTime)
+            {
+                animTimer -= animFrameTime;
+                animFrameIndex = (animFrameIndex + 1) % animFrames.Length;
+                sr.sprite = animFrames[animFrameIndex];
+            }
+        }
 
         void OnTriggerEnter2D(Collider2D other)
         {

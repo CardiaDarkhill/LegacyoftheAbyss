@@ -34,9 +34,11 @@ public partial class LegacyHelper
         private Transform hornetTransform;
         private float fireTimer;
         private SpriteRenderer sr;
-        public float spriteScale = 2f;
+        public float spriteScale = 1.7f;
         private Sprite[] idleAnimFrames;
         private Sprite[] floatAnimFrames;
+        private Sprite[] vengefulAnimFrames;
+        private Sprite[] shadeSoulAnimFrames;
         private Sprite inactiveSprite;
         private SpriteRenderer inactivePulseSr;
         private Sprite[] currentAnimFrames;
@@ -197,6 +199,8 @@ public partial class LegacyHelper
                 var dir = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Assets", "Knight_Shade_Sprites");
                 idleAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Idle_Sheet.png"));
                 floatAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Float_Sheet.png"));
+                vengefulAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Vengeful_Spirit_Sheet.png"));
+                shadeSoulAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Soul_Sheet.png"));
                 var inactive = LoadSpriteStrip(Path.Combine(dir, "ShadeInactive.png"));
                 inactiveSprite = inactive.Length > 0 ? inactive[0] : null;
             }
@@ -204,6 +208,8 @@ public partial class LegacyHelper
             {
                 idleAnimFrames = System.Array.Empty<Sprite>();
                 floatAnimFrames = System.Array.Empty<Sprite>();
+                vengefulAnimFrames = System.Array.Empty<Sprite>();
+                shadeSoulAnimFrames = System.Array.Empty<Sprite>();
                 inactiveSprite = null;
             }
         }

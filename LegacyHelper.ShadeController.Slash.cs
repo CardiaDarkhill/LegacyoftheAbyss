@@ -389,16 +389,49 @@ public partial class LegacyHelper
             if (spellLayer >= 0) proj.layer = spellLayer; else if (atkLayer >= 0) proj.layer = atkLayer;
 
             var psr = proj.AddComponent<SpriteRenderer>();
-            psr.sprite = MakeDotSprite();
-            var col = proj.AddComponent<CircleCollider2D>();
-            col.isTrigger = true;
+            Sprite[] frames = IsProjectileUpgraded() && shadeSoulAnimFrames.Length > 0 ? shadeSoulAnimFrames : vengefulAnimFrames;
+            if (frames.Length > 0)
+                psr.sprite = frames[0];
+            else
+                psr.sprite = MakeDotSprite();
+
+            bool flip = dir.x < 0f;
+            psr.flipX = flip;
+
+            float scale = spriteScale * (IsProjectileUpgraded() ? 1.5f : 1f);
+            proj.transform.localScale = Vector3.one * scale;
+
+            Collider2D[] projCols;
+            if (frames.Length > 0)
+            {
+                var size = frames[0].bounds.size;
+                float radius = size.y / 2f;
+                float facingSign = flip ? -1f : 1f;
+
+                var head = proj.AddComponent<CircleCollider2D>();
+                head.isTrigger = true;
+                head.radius = radius;
+                head.offset = new Vector2(facingSign * (size.x / 2f - radius), 0f);
+
+                var body = proj.AddComponent<BoxCollider2D>();
+                body.isTrigger = true;
+                body.size = new Vector2(Mathf.Max(0f, size.x - radius), size.y);
+                body.offset = new Vector2(-facingSign * radius / 2f, 0f);
+
+                projCols = new Collider2D[] { head, body };
+            }
+            else
+            {
+                var col = proj.AddComponent<CircleCollider2D>();
+                col.isTrigger = true;
+                projCols = new Collider2D[] { col };
+            }
 
             var others = Object.FindObjectsByType<ShadeProjectile>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             foreach (var o in others)
-            {
-                var oc = o.GetComponent<Collider2D>();
-                if (oc) Physics2D.IgnoreCollision(col, oc, true);
-            }
+                foreach (var oc in o.GetComponents<Collider2D>())
+                    foreach (var pc in projCols)
+                        if (oc && pc) Physics2D.IgnoreCollision(pc, oc, true);
 
             var rb = proj.AddComponent<Rigidbody2D>();
             rb.gravityScale = 0;
@@ -409,10 +442,12 @@ public partial class LegacyHelper
             {
                 var hornetCols = hornetTransform.GetComponentsInChildren<Collider2D>(true);
                 foreach (var hc in hornetCols)
-                    if (hc && col) Physics2D.IgnoreCollision(col, hc, true);
+                    foreach (var pc in projCols)
+                        if (hc && pc) Physics2D.IgnoreCollision(pc, hc, true);
             }
 
             var sp = proj.AddComponent<ShadeProjectile>();
+            sp.animFrames = frames;
             // Use spell progression for damage (2.5x upgraded, 30% less when unupgraded)
             int dmg = ComputeSpellDamageMultiplier(2.5f, IsProjectileUpgraded());
             sp.damage = Mathf.Max(1, dmg);
