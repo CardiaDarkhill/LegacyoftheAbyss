@@ -79,6 +79,9 @@ public partial class LegacyHelper
         private const KeyCode FireKey = KeyCode.Space;
         private const KeyCode NailKey = KeyCode.J;
         private const KeyCode TeleportKey = KeyCode.K;
+        private const KeyCode SprintKey1 = KeyCode.LeftShift;
+        private const KeyCode SprintKey2 = KeyCode.RightShift;
+        public float sprintMultiplier = 1.5f;
         // Spells use FireKey + W (Shriek) or FireKey + S (Descending Dark)
 
         // Teleport channel
@@ -521,6 +524,10 @@ public partial class LegacyHelper
             // Freeze manual input while channeling teleport
             if (isChannelingTeleport || isFocusing) input = Vector2.zero;
 
+            float speed = moveSpeed;
+            if (IsSprintUnlocked() && (Input.GetKey(SprintKey1) || Input.GetKey(SprintKey2)))
+                speed *= sprintMultiplier;
+
             Vector2 to = (Vector2)(hornetTransform.position - transform.position);
             float dist = to.magnitude;
 
@@ -560,7 +567,7 @@ public partial class LegacyHelper
             }
 
             if (!inHardLeash)
-                moveDelta += input * moveSpeed * Time.deltaTime;
+                moveDelta += input * speed * Time.deltaTime;
 
             // Compute proposed next position and clamp against transition gates at map edges
             Vector2 curPos = rb ? rb.position : (Vector2)transform.position;
@@ -720,6 +727,15 @@ public partial class LegacyHelper
         private bool IsProjectileUpgraded() => ShadeSpellProgress >= 4;
         private bool IsDescendingDarkUpgraded() => ShadeSpellProgress >= 5;
         private bool IsShriekUpgraded() => ShadeSpellProgress >= 6;
+        private bool IsSprintUnlocked()
+        {
+            try
+            {
+                HeroController hc = HeroController.instance;
+                return hc != null && hc.CanSprint();
+            }
+            catch { return false; }
+        }
 
         private int ComputeSpellDamageMultiplier(float baseMult, bool upgraded)
         {
@@ -911,7 +927,9 @@ public partial class LegacyHelper
                 // ignore enemies/hazards (anything that damages hero)
                 try { if (h.collider.GetComponentInParent<DamageHero>() != null) continue; } catch { }
                 // otherwise this is acceptable ground
-                pick = h; break;
+                pick = h;
+                UnityEngine.Debug.Log($"[ShadeDebug] Descending Dark ground hit {h.collider.name} tag={h.collider.tag} layer={h.collider.gameObject.layer}");
+                break;
             }
 
             Vector3 targetPos = transform.position + Vector3.down * 8f; // fallback
