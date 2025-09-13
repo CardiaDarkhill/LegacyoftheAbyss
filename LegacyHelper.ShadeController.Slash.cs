@@ -156,6 +156,21 @@ public partial class LegacyHelper
                 }
                 catch { }
 
+                // Prevent StartSlash from activating any additional slashes from Hornet
+                try
+                {
+                    var actField = typeof(NailAttackBase).GetField("activateOnSlash", BindingFlags.Instance | BindingFlags.NonPublic);
+                    var arr = actField?.GetValue(nailSlash) as GameObject[];
+                    if (arr != null)
+                    {
+                        foreach (var go in arr)
+                            if (go)
+                                go.SetActive(false);
+                        actField.SetValue(nailSlash, new GameObject[0]);
+                    }
+                }
+                catch { }
+
                 try
                 {
                     var recoils = slash.GetComponentsInChildren<NailSlashRecoil>(true);
