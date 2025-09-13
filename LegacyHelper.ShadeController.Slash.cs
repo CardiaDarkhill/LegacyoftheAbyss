@@ -311,26 +311,7 @@ public partial class LegacyHelper
             if (!slash) yield break;
             try
             {
-                // Cull any NailSlash instances not belonging to the shade or Hornet
-                try
-                {
-                    var sceneSlashes = Object.FindObjectsOfType<NailSlash>();
-                    foreach (var ns in sceneSlashes)
-                    {
-                        if (!ns) continue;
-                        if (ns.gameObject == slash) continue;
-                        if (ns.transform.IsChildOf(transform)) { ns.transform.localScale = Vector3.zero; ns.gameObject.SetActive(false); continue; }
-                        if (hc && ns.transform.IsChildOf(hc.transform)) continue;
-                        ns.transform.localScale = Vector3.zero;
-                        ns.gameObject.SetActive(false);
-                    }
-                }
-                catch { }
-
-                var allSlashes = transform.GetComponentsInChildren<NailSlash>(true);
-                foreach (var ns in allSlashes)
-                    if (ns && ns.gameObject != slash)
-                        ns.transform.localScale = Vector3.zero;
+                ShrinkOtherSlashes(slash);
 
                 var recoils = slash.GetComponentsInChildren<NailSlashRecoil>(true);
                 foreach (var r in recoils) if (r) Destroy(r);
@@ -383,6 +364,21 @@ public partial class LegacyHelper
                     var tr = slash.transform; var ls = tr.localScale; ls.x = Mathf.Abs(ls.x) * (facingSign >= 0 ? -1f : 1f); ls *= 1f / spriteScale; tr.localScale = ls;
                 }
                 catch { }
+            }
+            catch { }
+        }
+
+        private void ShrinkOtherSlashes(GameObject keep)
+        {
+            try
+            {
+                var slashes = transform.GetComponentsInChildren<NailSlash>(true);
+                foreach (var ns in slashes)
+                {
+                    if (!ns) continue;
+                    if (ns.gameObject == keep) continue;
+                    ns.transform.localScale = Vector3.zero;
+                }
             }
             catch { }
         }
