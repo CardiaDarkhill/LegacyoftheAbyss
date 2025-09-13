@@ -115,6 +115,7 @@ public partial class LegacyHelper
                 ls.x = Mathf.Abs(ls.x) * (facing >= 0 ? 1f : -1f);
                 ls *= 1f / SpriteScale;
                 tr.localScale = ls;
+                UnityEngine.Debug.Log($"[ShadeDebug] Shade slash spawned: {slash.name} scale={ls} parent={tr.parent?.name}\n{System.Environment.StackTrace}");
             }
             catch { }
 

@@ -37,15 +37,10 @@ public partial class LegacyHelper
         private float _spriteScale = 1.5f;
         public float SpriteScale
         {
-            get
-            {
-                UnityEngine.Debug.Log($"[ShadeDebug] spriteScale read: {_spriteScale}\n{System.Environment.StackTrace}");
-                return _spriteScale;
-            }
+            get => _spriteScale;
             set
             {
                 _spriteScale = value;
-                UnityEngine.Debug.Log($"[ShadeDebug] spriteScale set: {_spriteScale}\n{System.Environment.StackTrace}");
                 if (transform != null)
                     transform.localScale = Vector3.one * _spriteScale;
             }
