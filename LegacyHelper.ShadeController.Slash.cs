@@ -73,6 +73,8 @@ public partial class LegacyHelper
             slash.AddComponent<ShadeSlashMarker>();
             slash.transform.position = transform.position;
 
+            var nailSlash = slash.GetComponent<NailSlash>();
+
             var tempCols = slash.GetComponentsInChildren<Collider2D>(true);
 
             try
@@ -91,13 +93,21 @@ public partial class LegacyHelper
             {
                 var tr = slash.transform;
                 var ls = tr.localScale;
-                // Wanderer slashes are authored facing left.  To mirror them so the
-                // shade attacks to the right, we use a *negative* X scale when the
-                // shade faces right and a positive scale when facing left.
+                // Wanderer slashes are authored facing left. To mirror them so the
+                // shade attacks to the right, we use a negative X scale when facing right.
+                // NailAttackBase.OnSlashStarting later resets transform.localScale from its
+                // private "scale" field, so we update that field (and longNeedleScale) too.
                 ls.x = Mathf.Abs(ls.x) * -facing;
                 ls.y = Mathf.Abs(ls.y) * (v < -0.35f ? -1f : 1f);
                 ls *= 1f / SpriteScale;
                 tr.localScale = ls;
+                if (nailSlash != null)
+                {
+                    var scaleField = typeof(NailAttackBase).GetField("scale", BindingFlags.Instance | BindingFlags.NonPublic);
+                    var longNeedleField = typeof(NailAttackBase).GetField("longNeedleScale", BindingFlags.Instance | BindingFlags.NonPublic);
+                    try { scaleField?.SetValue(nailSlash, ls); } catch { }
+                    try { longNeedleField?.SetValue(nailSlash, ls); } catch { }
+                }
                 UnityEngine.Debug.Log($"[ShadeDebug] Shade slash spawned: {slash.name} scale={ls} parent={tr.parent?.name}\n{System.Environment.StackTrace}");
             }
             catch { }
@@ -127,7 +137,6 @@ public partial class LegacyHelper
             }
             catch { }
 
-            var nailSlash = slash.GetComponent<NailSlash>();
             if (nailSlash != null)
             {
                 var f = typeof(NailAttackBase).GetField("hc", BindingFlags.Instance | BindingFlags.NonPublic);
