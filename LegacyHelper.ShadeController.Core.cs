@@ -74,6 +74,7 @@ public partial class LegacyHelper
         private static Mesh s_simpleQuadMesh;
         private int facing = 1;
         private float nailTimer;
+        internal static bool suppressActivateOnSlash;
         private const KeyCode FireKey = KeyCode.Space;
         private const KeyCode NailKey = KeyCode.J;
         private const KeyCode TeleportKey = KeyCode.K;
@@ -455,7 +456,6 @@ public partial class LegacyHelper
             PersistIfChanged();
             CheckFocusReadySfx();
             HandleAnimation();
-            CullStraySlashes();
         }
 
         public void ApplyBindHealFromHornet(Transform hornet)

@@ -85,9 +85,17 @@ public partial class LegacyHelper
                 if (source == null) return;
             }
 
-            // Spawn the slash directly under the shade so we don't briefly
-            // parent to Hornet and log a stray spawn.
-            var slash = GameObject.Instantiate(source, transform);
+            // Spawn the slash while suppressing any activateOnSlash side effects
+            GameObject slash = null;
+            suppressActivateOnSlash = true;
+            try
+            {
+                slash = GameObject.Instantiate(source, transform);
+            }
+            finally
+            {
+                suppressActivateOnSlash = false;
+            }
             slash.AddComponent<ShadeSlashMarker>();
             slash.transform.position = transform.position;
 
@@ -330,7 +338,6 @@ public partial class LegacyHelper
             try
             {
                 ShrinkOtherSlashes(slash);
-                CullStraySlashes();
 
                 var recoils = slash.GetComponentsInChildren<NailSlashRecoil>(true);
                 foreach (var r in recoils) if (r) Destroy(r);
@@ -402,32 +409,6 @@ public partial class LegacyHelper
             catch { }
         }
 
-        private void CullStraySlashes()
-        {
-            try
-            {
-                var slashes = Object.FindObjectsByType<NailSlash>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-                float globalScale = SpriteScale;
-                foreach (var ns in slashes)
-                {
-                    if (!ns) continue;
-                    if (ns.GetComponent<ShadeSlashMarker>()) continue;
-                    var ls = ns.transform.localScale;
-                    if (!Mathf.Approximately(Mathf.Abs(ls.x), globalScale) || !Mathf.Approximately(Mathf.Abs(ls.y), globalScale))
-                        continue;
-                    ns.transform.localScale = Vector3.zero;
-                    try
-                    {
-                        var cols = ns.GetComponentsInChildren<Collider2D>(true);
-                        foreach (var c in cols) if (c) c.enabled = false;
-                        var dams = ns.GetComponentsInChildren<DamageEnemies>(true);
-                        foreach (var d in dams) if (d) d.enabled = false;
-                    }
-                    catch { }
-                }
-            }
-            catch { }
-        }
 
         private class ShadeSlashMarker : MonoBehaviour { }
 

@@ -182,6 +182,19 @@ public partial class LegacyHelper
     [HarmonyPatch(typeof(NailSlash), "Awake")]
     private class NailSlash_Awake_Log
     {
+        private static void Prefix(NailSlash __instance)
+        {
+            if (ShadeController.suppressActivateOnSlash)
+            {
+                try
+                {
+                    var actField = typeof(NailAttackBase).GetField("activateOnSlash", BindingFlags.Instance | BindingFlags.NonPublic);
+                    actField?.SetValue(__instance, new GameObject[0]);
+                }
+                catch { }
+            }
+        }
+
         private static void Postfix(NailSlash __instance)
         {
             try
