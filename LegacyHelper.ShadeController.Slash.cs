@@ -42,9 +42,12 @@ public partial class LegacyHelper
             {
                 var hc = HeroController.instance;
                 if (hc == null) return;
-                var allSlashes = hc.GetComponentsInChildren<NailSlash>(true);
-                if (allSlashes == null || allSlashes.Length == 0)
-                    allSlashes = Resources.FindObjectsOfTypeAll<NailSlash>();
+                var allSlashes = Resources.FindObjectsOfTypeAll<NailSlash>();
+                if (allSlashes == null || allSlashes.Length == 0) return;
+                allSlashes = Array.FindAll(allSlashes,
+                    s => s && s.transform.parent &&
+                         s.transform.parent.name.IndexOf("Wanderer",
+                             StringComparison.OrdinalIgnoreCase) >= 0);
                 if (allSlashes == null || allSlashes.Length == 0) return;
 
                 bool MatchUp(NailSlash ns) => ns && (((ns.name ?? "").ToLowerInvariant().Contains("up")) || ((ns.animName ?? "").ToLowerInvariant().Contains("up")));
@@ -60,12 +63,13 @@ public partial class LegacyHelper
                 var slash = Instantiate(pick.gameObject, hc.transform);
                 slash.transform.position = transform.position;
                 var ls = slash.transform.localScale;
-                ls.x = Mathf.Abs(ls.x) * -facing;
+                ls.x = Mathf.Abs(ls.x) * facing;
                 ls.y = Mathf.Abs(ls.y) * (dir.y < -0.1f ? -1f : 1f);
                 ls *= 1f / SpriteScale;
                 slash.transform.localScale = ls;
                 foreach (var de in slash.GetComponentsInChildren<DamageEnemies>(true)) de.enabled = false;
                 foreach (var c in slash.GetComponentsInChildren<Collider2D>(true)) c.enabled = false;
+                foreach (var r in slash.GetComponentsInChildren<NailSlashRecoil>(true)) Destroy(r);
                 var ns = slash.GetComponent<NailSlash>();
                 if (ns != null)
                 {
@@ -227,11 +231,11 @@ public partial class LegacyHelper
                 if (other == null || owner == null) return;
                 if (owner.hornetTransform != null && other.transform.IsChildOf(owner.hornetTransform)) return;
                 if (hitSet.Contains(other)) return;
+                if (!HitTaker.TryGetHealthManager(other.gameObject, out var hm)) return;
                 hitSet.Add(other);
 
                 float angle;
-                if (owner == null) angle = 0f;
-                else if (other.transform.position.y > owner.transform.position.y && Mathf.Abs(owner.transform.position.x - other.transform.position.x) < 1f) angle = 90f;
+                if (other.transform.position.y > owner.transform.position.y && Mathf.Abs(owner.transform.position.x - other.transform.position.x) < 1f) angle = 90f;
                 else if (other.transform.position.y < owner.transform.position.y && Mathf.Abs(owner.transform.position.x - other.transform.position.x) < 1f) angle = 270f;
                 else angle = owner.facing >= 0 ? 0f : 180f;
 
@@ -248,8 +252,7 @@ public partial class LegacyHelper
                 };
 
                 HitTaker.Hit(other.gameObject, hit);
-                if (HitTaker.TryGetHealthManager(other.gameObject, out var hm))
-                    hm.Hit(hit);
+                hm.Hit(hit);
                 owner.AddSoul(soulGain);
             }
         }
