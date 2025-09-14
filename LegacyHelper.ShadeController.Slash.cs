@@ -26,7 +26,8 @@ public partial class LegacyHelper
 
             // Choose slash variant based on input: up / down / side
             GameObject source = null;
-            float v = (Input.GetKey(KeyCode.S) ? -1f : 0f) + (Input.GetKey(KeyCode.W) ? 1f : 0f);
+            float v = ((Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.Q)) ? -1f : 0f) +
+                      ((Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.E)) ? 1f : 0f);
 
             try
             {

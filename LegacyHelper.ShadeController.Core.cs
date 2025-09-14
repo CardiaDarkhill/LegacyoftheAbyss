@@ -28,7 +28,11 @@ public partial class LegacyHelper
         private float hazardCooldown;
         private float baseMaxDistance, baseSoftLeashRadius, baseHardLeashRadius, baseSnapLeashRadius;
         private bool wasInactive;
-        public float hitKnockbackForce = 0.8f;
+        public float hitKnockbackForce = 4f;
+        private Vector2 knockbackVelocity;
+        private float knockbackTimer;
+        private BattleScene cachedBattle;
+        private float battleCheckTimer;
 
         private static readonly string[] IgnoreDamageTokens =
             {"alert range", "attack range", "wake", "close range", "sight range", "terrain", "range", "physics pusher"};
@@ -666,6 +670,13 @@ public partial class LegacyHelper
                 sprintDashTimer = 0f;
             }
 
+            if (knockbackTimer > 0f)
+            {
+                moveDelta += knockbackVelocity * Time.deltaTime;
+                knockbackVelocity = Vector2.Lerp(knockbackVelocity, Vector2.zero, 10f * Time.deltaTime);
+                knockbackTimer -= Time.deltaTime;
+            }
+
             // Compute proposed next position and clamp against transition gates at map edges
             Vector2 curPos = rb ? rb.position : (Vector2)transform.position;
             Vector2 proposed = curPos + moveDelta;
@@ -701,13 +712,36 @@ public partial class LegacyHelper
             catch { }
         }
 
+        private bool InArenaFight()
+        {
+            if (BossSceneController.IsBossScene) return true;
+            try
+            {
+                battleCheckTimer -= Time.deltaTime;
+                if (battleCheckTimer <= 0f || cachedBattle == null)
+                {
+                    cachedBattle = GameObject.FindObjectOfType<BattleScene>();
+                    battleCheckTimer = 1f;
+                }
+                if (cachedBattle != null)
+                {
+                    var f = typeof(BattleScene).GetField("started", BindingFlags.Instance | BindingFlags.NonPublic);
+                    if (f != null && (bool)f.GetValue(cachedBattle))
+                        return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
         private void AdjustLeashForCamera()
         {
             try
             {
                 var cam = GameManager.instance?.cameraCtrl;
                 bool locked = cam != null && cam.mode == CameraController.CameraMode.LOCKED;
-                if (locked)
+                bool arena = locked && InArenaFight();
+                if (arena)
                 {
                     maxDistance = baseMaxDistance * 3f;
                     softLeashRadius = baseSoftLeashRadius * 3f;
@@ -1659,11 +1693,9 @@ public partial class LegacyHelper
         {
             try
             {
-                if (rb)
-                {
-                    Vector2 dir = ((Vector2)transform.position - sourcePos).normalized;
-                    rb.AddForce(dir * hitKnockbackForce, ForceMode2D.Impulse);
-                }
+                Vector2 dir = ((Vector2)transform.position - sourcePos).normalized;
+                knockbackVelocity = dir * hitKnockbackForce;
+                knockbackTimer = 0.2f;
             }
             catch { }
         }
