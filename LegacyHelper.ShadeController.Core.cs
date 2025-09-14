@@ -1429,19 +1429,18 @@ public partial class LegacyHelper
             TryProcessDamageHero(other);
         }
 
-        private static readonly string[] DamageTags = { "Enemy Damager", "EnemyDamager", "Damager", "Hazard" };
+        private static readonly System.Collections.Generic.HashSet<string> DamageTags = new()
+        {
+            "Enemy Damager",
+            "EnemyDamager",
+            "Damager",
+            "Hazard"
+        };
 
         private static bool HasDamageTag(Collider2D col)
         {
-            try
-            {
-                string t = col.tag;
-                foreach (var tag in DamageTags)
-                    if (t == tag)
-                        return true;
-            }
-            catch { }
-            return false;
+            try { return DamageTags.Contains(col.tag); }
+            catch { return false; }
         }
 
         private static bool CanDamageShade(DamageHero dh)
@@ -1600,13 +1599,8 @@ public partial class LegacyHelper
 
         private static GlobalEnums.HazardType GetHazardType(DamageHero dh)
         {
-            try
-            {
-                var tf = typeof(DamageHero).GetField("hazardType", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (tf != null) return (GlobalEnums.HazardType)tf.GetValue(dh);
-            }
-            catch { }
-            return GlobalEnums.HazardType.NON_HAZARD;
+            try { return dh.hazardType; }
+            catch { return GlobalEnums.HazardType.NON_HAZARD; }
         }
 
         private void OnShadeHitHazard()
