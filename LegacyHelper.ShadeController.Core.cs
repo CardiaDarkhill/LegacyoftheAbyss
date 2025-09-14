@@ -11,9 +11,9 @@ public partial class LegacyHelper
     {
         // Movement and leash
         public float moveSpeed = 10f;
-        public float sprintMultiplier = 1.8f;
+        public float sprintMultiplier = 2.5f;
         public float maxDistance = 14f;
-        public float softLeashRadius = 10f;
+        public float softLeashRadius = 12f;
         public float hardLeashRadius = 22f;
         public float snapLeashRadius = 38f;
         public float softPullSpeed = 6f;
@@ -28,7 +28,7 @@ public partial class LegacyHelper
         private float hazardCooldown;
         private float baseMaxDistance, baseSoftLeashRadius, baseHardLeashRadius, baseSnapLeashRadius;
         private bool wasInactive;
-        public float hitKnockbackForce = 8f;
+        public float hitKnockbackForce = 0.8f;
 
         private static readonly string[] IgnoreDamageTokens =
             {"alert range", "attack range", "wake", "close range", "sight range", "terrain", "range", "physics pusher"};
@@ -561,14 +561,23 @@ public partial class LegacyHelper
 
         private void HandleMovementAndFacing()
         {
-            if (isCastingSpell) { lastMoveDelta = Vector2.zero; return; }
+            if (isCastingSpell || isFocusing)
+            {
+                if (rb) rb.linearVelocity = Vector2.zero;
+                lastMoveDelta = Vector2.zero;
+                isSprinting = false;
+                sprintDashTimer = 0f;
+                inHardLeash = false;
+                hardLeashTimer = 0f;
+                return;
+            }
             float h = (Input.GetKey(KeyCode.A) ? -1f : 0f) + (Input.GetKey(KeyCode.D) ? 1f : 0f);
             float v = (Input.GetKey(KeyCode.S) ? -1f : 0f) + (Input.GetKey(KeyCode.W) ? 1f : 0f);
             Vector2 input = new Vector2(h, v);
             if (input.sqrMagnitude > 1f) input.Normalize();
 
             // Freeze manual input while channeling teleport
-            if (isChannelingTeleport || isFocusing) input = Vector2.zero;
+            if (isChannelingTeleport) input = Vector2.zero;
 
             Vector2 to = (Vector2)(hornetTransform.position - transform.position);
             float dist = to.magnitude;
@@ -1683,15 +1692,20 @@ public partial class LegacyHelper
             Vector2 srcPos = dh ? (Vector2)dh.transform.position : (Vector2)transform.position;
             if (!canTakeDamage)
             {
-                ApplyKnockback(srcPos);
                 hurtCooldown = HurtIFrameSeconds;
                 return;
             }
             shadeHP = Mathf.Max(0, shadeHP - dmg);
-            if (shadeHP <= 0) StartDeathAnimation();
+            if (shadeHP > 0)
+            {
+                ApplyKnockback(srcPos);
+            }
+            else
+            {
+                StartDeathAnimation();
+            }
             PushShadeStatsToHud();
             hurtCooldown = HurtIFrameSeconds;
-            ApplyKnockback(srcPos);
             CancelFocus();
             PersistIfChanged();
         }
