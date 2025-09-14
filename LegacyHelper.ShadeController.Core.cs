@@ -1429,6 +1429,21 @@ public partial class LegacyHelper
             TryProcessDamageHero(other);
         }
 
+        private static bool CanDamageShade(DamageHero dh)
+        {
+            if (dh == null) return false;
+            try
+            {
+                if (!dh.enabled || !dh.CanCauseDamage) return false;
+                if (dh.damageDealt <= 0) return false;
+            }
+            catch
+            {
+                return false;
+            }
+            return true;
+        }
+
         private void TryProcessDamageHero(Collider2D col)
         {
             if (!col) return;
@@ -1452,13 +1467,11 @@ public partial class LegacyHelper
                         if (nl.Contains("alert range") || nl.Contains("attack range") || nl.Contains("wake range") || nl.Contains("close range") || nl.Contains("sight range"))
                             return;
                     }
-                    bool canDamage = false;
-                    try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
-                    if (!canDamage) return;
+                    if (!CanDamageShade(dh)) return;
                     var hz = GetHazardType(dh);
                     if (IsTerrainHazard(hz)) { LogShadeDamage(dh, col); OnShadeHitHazard(); return; }
-                    int dmg = 0; try { dmg = dh.damageDealt; } catch { }
-                    if (dmg > 0) { LogShadeDamage(dh, col); OnShadeHitEnemy(dh); }
+                    LogShadeDamage(dh, col);
+                    OnShadeHitEnemy(dh);
                 }
             }
             catch { }
@@ -1575,14 +1588,11 @@ public partial class LegacyHelper
                         (n.IndexOf("alert range", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                          n.IndexOf("attack range", System.StringComparison.OrdinalIgnoreCase) >= 0))
                         continue;
-                    bool canDamage = false;
-                    try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
-                    if (!canDamage) continue;
+                    if (!CanDamageShade(dh)) continue;
                     var hz = GetHazardType(dh);
                     if (IsTerrainHazard(hz)) { LogShadeDamage(dh, c); OnShadeHitHazard(); return; }
-                    int dmg = 0; try { dmg = dh.damageDealt; } catch { }
-                    if (dmg > 0) { LogShadeDamage(dh, c); OnShadeHitEnemy(dh); return; }
-                    else continue;
+                    LogShadeDamage(dh, c);
+                    OnShadeHitEnemy(dh); return;
                 }
             }
         }
