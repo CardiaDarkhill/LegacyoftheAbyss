@@ -35,10 +35,10 @@ public partial class SimpleHUD : MonoBehaviour
     private Canvas canvas;
     private CanvasScaler scaler;
 
-    private const KeyCode DebugDamageKey = KeyCode.Minus;
-    private const KeyCode DebugHealKey = KeyCode.Equals;
-    private const KeyCode DebugSoulDecKey = KeyCode.LeftBracket;   // [
-    private const KeyCode DebugSoulIncKey = KeyCode.RightBracket;  // ]
+    private const KeyCode DebugDamageKey = KeyCode.None; // disabled
+    private const KeyCode DebugHealKey = KeyCode.None; // disabled
+    private const KeyCode DebugSoulDecKey = KeyCode.None;   // disabled
+    private const KeyCode DebugSoulIncKey = KeyCode.None;  // disabled
     private const KeyCode DebugSoulResetKey = KeyCode.Backslash;   // \
 
     // Debug silk override (UI-only, does not write PlayerData)

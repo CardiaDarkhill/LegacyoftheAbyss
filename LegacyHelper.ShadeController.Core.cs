@@ -84,6 +84,8 @@ public partial class LegacyHelper
         private const KeyCode TeleportKey = KeyCode.K;
         private const KeyCode SprintKeyPrimary = KeyCode.LeftShift;
         private const KeyCode SprintKeySecondary = KeyCode.RightShift;
+        private const KeyCode DamageToggleKey = KeyCode.Alpha0;
+        private bool canTakeDamage = true;
         // Spells use FireKey + W (Shriek) or FireKey + S (Descending Dark)
 
         // Teleport channel
@@ -431,6 +433,11 @@ public partial class LegacyHelper
 
             if (hazardCooldown > 0f) hazardCooldown = Mathf.Max(0f, hazardCooldown - Time.deltaTime);
             if (hurtCooldown > 0f) hurtCooldown = Mathf.Max(0f, hurtCooldown - Time.deltaTime);
+            if (Input.GetKeyDown(DamageToggleKey))
+            {
+                canTakeDamage = !canTakeDamage;
+                try { UnityEngine.Debug.Log($"[ShadeDebug] Damage {(canTakeDamage ? "enabled" : "disabled")}"); } catch { }
+            }
             ignoreRefreshTimer -= Time.deltaTime;
             if (ignoreRefreshTimer <= 0f)
             {
@@ -1434,7 +1441,9 @@ public partial class LegacyHelper
                 if (dh != null)
                 {
                     string n = col.name;
-                    if (!string.IsNullOrEmpty(n) && n.IndexOf("alert range", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    if (!string.IsNullOrEmpty(n) &&
+                        (n.IndexOf("alert range", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         n.IndexOf("attack range", System.StringComparison.OrdinalIgnoreCase) >= 0))
                         return;
                     bool canDamage = false;
                     try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
@@ -1555,7 +1564,9 @@ public partial class LegacyHelper
                 if (dh != null)
                 {
                     string n = c.name;
-                    if (!string.IsNullOrEmpty(n) && n.IndexOf("alert range", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    if (!string.IsNullOrEmpty(n) &&
+                        (n.IndexOf("alert range", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         n.IndexOf("attack range", System.StringComparison.OrdinalIgnoreCase) >= 0))
                         continue;
                     bool canDamage = false;
                     try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
@@ -1584,8 +1595,11 @@ public partial class LegacyHelper
         {
             if (hazardCooldown > 0f) return;
             TeleportToHornet();
-            shadeHP = Mathf.Max(0, shadeHP - 1);
-            if (shadeHP <= 0) StartDeathAnimation();
+            if (canTakeDamage)
+            {
+                shadeHP = Mathf.Max(0, shadeHP - 1);
+                if (shadeHP <= 0) StartDeathAnimation();
+            }
             PushShadeStatsToHud();
             hazardCooldown = 0.25f;
             CancelFocus();
@@ -1598,6 +1612,11 @@ public partial class LegacyHelper
             int dmg = 0;
             try { if (dh != null) dmg = dh.damageDealt; } catch { }
             if (dmg <= 0) return; // ignore non-damaging triggers
+            if (!canTakeDamage)
+            {
+                hurtCooldown = HurtIFrameSeconds;
+                return;
+            }
             shadeHP = Mathf.Max(0, shadeHP - dmg);
             if (shadeHP <= 0) StartDeathAnimation();
             PushShadeStatsToHud();
