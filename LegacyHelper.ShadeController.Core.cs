@@ -26,9 +26,12 @@ public partial class LegacyHelper
         private int shadeMaxHP;
         private int shadeHP;
         private float hazardCooldown;
+        private float baseMaxDistance, baseSoftLeashRadius, baseHardLeashRadius, baseSnapLeashRadius;
+        private bool wasInactive;
+        public float hitKnockbackForce = 8f;
 
         private static readonly string[] IgnoreDamageTokens =
-            {"alert range", "attack range", "wake", "close range", "sight range", "terrain", "range"};
+            {"alert range", "attack range", "wake", "close range", "sight range", "terrain", "range", "physics pusher"};
 
         // Ranged attack
         public float projectileSpeed = 22f;
@@ -135,7 +138,7 @@ public partial class LegacyHelper
         private float focusHealRange = 6f;
         private float focusSoulAccumulator;
         private Renderer focusAuraRenderer;
-        private float focusAuraBaseSize = 7f;
+        private float focusAuraBaseSize = 12f;
         private AudioSource focusSfx;
         private AudioClip sfxFocusCharge;
         private AudioClip sfxFocusComplete;
@@ -145,6 +148,7 @@ public partial class LegacyHelper
         private SimpleHUD cachedHud;
         private float hurtCooldown;
         private const float HurtIFrameSeconds = 1.35f;
+        private const float ReviveIFrameSeconds = 1.5f;
         private float ignoreRefreshTimer;
         private float hornetIgnoreRefreshTimer;
         private bool isCastingSpell;
@@ -219,6 +223,12 @@ public partial class LegacyHelper
                     sr.sprite = inactiveSprite;
                 var c = sr.color; c.a = 0.9f; sr.color = c;
             }
+
+            baseMaxDistance = maxDistance;
+            baseSoftLeashRadius = softLeashRadius;
+            baseHardLeashRadius = hardLeashRadius;
+            baseSnapLeashRadius = snapLeashRadius;
+            wasInactive = (!isDying && shadeHP <= 0);
 
             // Ensure the shade can act as a pogo surface for Hornet
             try { gameObject.tag = "Recoiler"; } catch { }
@@ -462,10 +472,17 @@ public partial class LegacyHelper
 
             // Track inactive flag
             isInactive = (!isDying && shadeHP <= 0);
+            if (wasInactive && !isInactive)
+            {
+                hurtCooldown = Mathf.Max(hurtCooldown, ReviveIFrameSeconds);
+                hazardCooldown = Mathf.Max(hazardCooldown, ReviveIFrameSeconds);
+            }
+            wasInactive = isInactive;
 
             HandleTeleportChannel();
 
             CheckSprintUnlock();
+            AdjustLeashForCamera();
 
             HandleMovementAndFacing();
             // Allow starting focus even when not casting other spells; focusing itself sets isCastingSpell
@@ -668,9 +685,33 @@ public partial class LegacyHelper
             if (sprintUnlocked) return;
             try
             {
-                var hc = HeroController.instance;
-                if (hc != null && hc.CanSprint())
+                var pd = GameManager.instance != null ? GameManager.instance.playerData : null;
+                if (pd != null && pd.hasDash)
                     sprintUnlocked = true;
+            }
+            catch { }
+        }
+
+        private void AdjustLeashForCamera()
+        {
+            try
+            {
+                var cam = GameManager.instance?.cameraCtrl;
+                bool locked = cam != null && cam.mode == CameraController.CameraMode.LOCKED;
+                if (locked)
+                {
+                    maxDistance = baseMaxDistance * 3f;
+                    softLeashRadius = baseSoftLeashRadius * 3f;
+                    hardLeashRadius = baseHardLeashRadius * 3f;
+                    snapLeashRadius = baseSnapLeashRadius * 3f;
+                }
+                else
+                {
+                    maxDistance = baseMaxDistance;
+                    softLeashRadius = baseSoftLeashRadius;
+                    hardLeashRadius = baseHardLeashRadius;
+                    snapLeashRadius = baseSnapLeashRadius;
+                }
             }
             catch { }
         }
@@ -1605,6 +1646,19 @@ public partial class LegacyHelper
             return GlobalEnums.HazardType.NON_HAZARD;
         }
 
+        private void ApplyKnockback(Vector2 sourcePos)
+        {
+            try
+            {
+                if (rb)
+                {
+                    Vector2 dir = ((Vector2)transform.position - sourcePos).normalized;
+                    rb.AddForce(dir * hitKnockbackForce, ForceMode2D.Impulse);
+                }
+            }
+            catch { }
+        }
+
         private void OnShadeHitHazard()
         {
             if (hazardCooldown > 0f) return;
@@ -1626,8 +1680,10 @@ public partial class LegacyHelper
             int dmg = 0;
             try { if (dh != null) dmg = dh.damageDealt; } catch { }
             if (dmg <= 0) return; // ignore non-damaging triggers
+            Vector2 srcPos = dh ? (Vector2)dh.transform.position : (Vector2)transform.position;
             if (!canTakeDamage)
             {
+                ApplyKnockback(srcPos);
                 hurtCooldown = HurtIFrameSeconds;
                 return;
             }
@@ -1635,6 +1691,7 @@ public partial class LegacyHelper
             if (shadeHP <= 0) StartDeathAnimation();
             PushShadeStatsToHud();
             hurtCooldown = HurtIFrameSeconds;
+            ApplyKnockback(srcPos);
             CancelFocus();
             PersistIfChanged();
         }
@@ -1723,7 +1780,7 @@ public partial class LegacyHelper
                     {
                         focusAuraRenderer.enabled = true;
                         var t = focusAuraRenderer.transform;
-                        float pulse = 1f + 0.12f * Mathf.Sin(Time.time * 15f);
+                        float pulse = 1f + 0.25f * Mathf.Sin(Time.time * 15f);
                         float size = focusAuraBaseSize * pulse;
                         t.localScale = new Vector3(size, size, 1f);
                     }
@@ -1844,6 +1901,7 @@ public partial class LegacyHelper
                 mf.sharedMesh = s_simpleQuadMesh;
                 var mr = go.AddComponent<MeshRenderer>();
                 mr.sharedMaterial = s_simpleAdditiveMat;
+                try { mr.material.SetColor("_Color", new Color(1f, 1f, 1f, 0.8f)); } catch { }
                 mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 mr.receiveShadows = false;
                 var shadeSR = GetComponent<SpriteRenderer>();

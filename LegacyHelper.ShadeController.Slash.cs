@@ -403,7 +403,7 @@ public partial class LegacyHelper
             bool flip = dir.x < 0f;
             psr.flipX = flip;
 
-            float scale = SpriteScale * (IsProjectileUpgraded() ? 1.5f : 1f);
+            float scale = SpriteScale * (IsProjectileUpgraded() ? 1.5f : 1f) * 1.6f;
             proj.transform.localScale = Vector3.one * scale;
 
             Collider2D[] projCols;
