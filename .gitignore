@@ -1,3 +1,14 @@
 # Ignore mod build outputs
 LegacyoftheAbyss.dll
 LegacyoftheAbyss.pdb
+*.editorconfig
+*.cache
+DummyDLLs/DLLDecompiles/Assembly-CSharp/Assembly-CSharp/obj/Debug/net10.0/EnemyBullet.GlobalUsings.g.cs
+DummyDLLs/DLLDecompiles/Assembly-CSharp/Assembly-CSharp/obj/Debug/net10.0/EnemyBullet.AssemblyInfo.cs
+DummyDLLs/DLLDecompiles/Assembly-CSharp/Assembly-CSharp/obj/Debug/net10.0/DamageTagInfo.GlobalUsings.g.cs
+DummyDLLs/DLLDecompiles/Assembly-CSharp/Assembly-CSharp/obj/Debug/net10.0/DamageTagInfo.AssemblyInfo.cs
+DummyDLLs/DLLDecompiles/Assembly-CSharp/Assembly-CSharp/obj/Debug/net10.0/DamageTag.GlobalUsings.g.cs
+DummyDLLs/DLLDecompiles/Assembly-CSharp/Assembly-CSharp/obj/Debug/net10.0/DamageTag.AssemblyInfo.cs
+DummyDLLs/DLLDecompiles/Assembly-CSharp/Assembly-CSharp/obj/Debug/net10.0/DamageReference.GlobalUsings.g.cs
+DummyDLLs/DLLDecompiles/Assembly-CSharp/Assembly-CSharp/obj/Debug/net10.0/DamageReference.AssemblyInfo.cs
+DummyDLLs/DLLDecompiles/Assembly-CSharp/Assembly-CSharp/obj/Debug/net10.0/.NETCoreApp,Version=v10.0.AssemblyAttributes.cs

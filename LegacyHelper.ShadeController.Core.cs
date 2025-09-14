@@ -1449,7 +1449,7 @@ public partial class LegacyHelper
                     if (!string.IsNullOrEmpty(n))
                     {
                         string nl = n.ToLowerInvariant();
-                        if (nl.Contains("alert range") || nl.Contains("attack range") || nl.Contains("wake range") || nl.Contains("close range") || nl.Contains("sight range"))
+                        if (nl.Contains("alert range") || nl.Contains("attack range") || nl.Contains("wake") || nl.Contains("close range") || nl.Contains("sight range") || nl.Contains("terrain") || nl.Contains("range"))
                             return;
                     }
                     bool canDamage = false;
