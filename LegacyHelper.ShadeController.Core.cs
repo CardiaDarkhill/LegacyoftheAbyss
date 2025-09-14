@@ -27,6 +27,9 @@ public partial class LegacyHelper
         private int shadeHP;
         private float hazardCooldown;
 
+        private static readonly string[] IgnoreDamageTokens =
+            {"alert range", "attack range", "wake", "close range", "sight range", "terrain", "range"};
+
         // Ranged attack
         public float projectileSpeed = 22f;
         public float fireCooldown = 0.25f;
@@ -1429,6 +1432,20 @@ public partial class LegacyHelper
             TryProcessDamageHero(other);
         }
 
+        private bool ShouldIgnoreDamageSource(Component c)
+        {
+            if (!c) return false;
+            try
+            {
+                string s = (c.name + " " + c.tag).ToLowerInvariant();
+                foreach (var token in IgnoreDamageTokens)
+                    if (s.Contains(token))
+                        return true;
+            }
+            catch { }
+            return false;
+        }
+
         private void TryProcessDamageHero(Collider2D col)
         {
             if (!col) return;
@@ -1445,13 +1462,7 @@ public partial class LegacyHelper
                 var dh = col.GetComponentInParent<DamageHero>();
                 if (dh != null)
                 {
-                    string n = col.name;
-                    if (!string.IsNullOrEmpty(n))
-                    {
-                        string nl = n.ToLowerInvariant();
-                        if (nl.Contains("alert range") || nl.Contains("attack range") || nl.Contains("wake") || nl.Contains("close range") || nl.Contains("sight range") || nl.Contains("terrain") || nl.Contains("range"))
-                            return;
-                    }
+                    if (ShouldIgnoreDamageSource(col) || ShouldIgnoreDamageSource(dh)) return;
                     bool canDamage = false;
                     try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
                     if (!canDamage) return;
@@ -1570,11 +1581,7 @@ public partial class LegacyHelper
                 var dh = c.GetComponentInParent<DamageHero>();
                 if (dh != null)
                 {
-                    string n = c.name;
-                    if (!string.IsNullOrEmpty(n) &&
-                        (n.IndexOf("alert range", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         n.IndexOf("attack range", System.StringComparison.OrdinalIgnoreCase) >= 0))
-                        continue;
+                    if (ShouldIgnoreDamageSource(c) || ShouldIgnoreDamageSource(dh)) continue;
                     bool canDamage = false;
                     try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
                     if (!canDamage) continue;
