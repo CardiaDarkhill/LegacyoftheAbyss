@@ -19,13 +19,15 @@ public partial class LegacyHelper : BaseUnityPlugin
     internal static int savedShadeMax = -1;
     internal static int savedShadeSoul = -1;
     internal static int savedShadeSpellProgress = 0; // 0..6 progression
+    internal static bool savedShadeCanTakeDamage = true;
     internal static bool HasSavedShadeState => savedShadeMax > 0;
 
-    internal static void SaveShadeState(int curHp, int maxHp, int soul)
+    internal static void SaveShadeState(int curHp, int maxHp, int soul, bool? canTakeDamage = null)
     {
         savedShadeMax = Mathf.Max(1, maxHp);
         savedShadeHP = Mathf.Clamp(curHp, 0, savedShadeMax);
         savedShadeSoul = Mathf.Max(0, soul);
+        if (canTakeDamage.HasValue) savedShadeCanTakeDamage = canTakeDamage.Value;
     }
 
     // Called when Hornet gains a new spell. Advances Shade's unlock/upgrade track.
@@ -78,7 +80,7 @@ public partial class LegacyHelper : BaseUnityPlugin
                 if (sc != null)
                 {
                     sc.TeleportToPosition(pos);
-                    SaveShadeState(sc.GetCurrentHP(), sc.GetMaxHP(), sc.GetShadeSoul());
+                    SaveShadeState(sc.GetCurrentHP(), sc.GetMaxHP(), sc.GetShadeSoul(), sc.GetCanTakeDamage());
                 }
                 else
                 {
@@ -98,7 +100,7 @@ public partial class LegacyHelper : BaseUnityPlugin
         scNew.Init(gm.hero_ctrl.transform);
         if (HasSavedShadeState)
         {
-            scNew.RestorePersistentState(savedShadeHP, savedShadeMax, savedShadeSoul);
+            scNew.RestorePersistentState(savedShadeHP, savedShadeMax, savedShadeSoul, savedShadeCanTakeDamage);
         }
 
         var sr = helper.AddComponent<SpriteRenderer>();

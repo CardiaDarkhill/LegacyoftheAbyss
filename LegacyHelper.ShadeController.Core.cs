@@ -149,12 +149,15 @@ public partial class LegacyHelper
         private int lastSavedHP;
         private int lastSavedMax;
         private int lastSavedSoul;
+        private bool lastSavedCanTakeDamage = true;
 
-        public void RestorePersistentState(int hp, int max, int soul)
+        public void RestorePersistentState(int hp, int max, int soul, bool canDamage = true)
         {
             shadeMaxHP = Mathf.Max(1, max);
             shadeHP = Mathf.Clamp(hp, 0, shadeMaxHP);
             shadeSoul = Mathf.Clamp(soul, 0, shadeSoulMax);
+            canTakeDamage = canDamage;
+            lastSavedCanTakeDamage = canTakeDamage;
         }
 
         public void FullHealFromBench()
@@ -184,6 +187,7 @@ public partial class LegacyHelper
         public int GetCurrentHP() => shadeHP;
         public int GetMaxHP() => shadeMaxHP;
         public int GetShadeSoul() => shadeSoul;
+        public bool GetCanTakeDamage() => canTakeDamage;
 
         public void Init(Transform hornet) { hornetTransform = hornet; }
 
@@ -437,6 +441,7 @@ public partial class LegacyHelper
             {
                 canTakeDamage = !canTakeDamage;
                 try { UnityEngine.Debug.Log($"[ShadeDebug] Damage {(canTakeDamage ? "enabled" : "disabled")}"); } catch { }
+                PersistIfChanged();
             }
             ignoreRefreshTimer -= Time.deltaTime;
             if (ignoreRefreshTimer <= 0f)
@@ -511,10 +516,10 @@ public partial class LegacyHelper
 
         private void PersistIfChanged()
         {
-            if (lastSavedHP != shadeHP || lastSavedMax != shadeMaxHP || lastSavedSoul != shadeSoul)
+            if (lastSavedHP != shadeHP || lastSavedMax != shadeMaxHP || lastSavedSoul != shadeSoul || lastSavedCanTakeDamage != canTakeDamage)
             {
-                LegacyHelper.SaveShadeState(shadeHP, shadeMaxHP, shadeSoul);
-                lastSavedHP = shadeHP; lastSavedMax = shadeMaxHP; lastSavedSoul = shadeSoul;
+                LegacyHelper.SaveShadeState(shadeHP, shadeMaxHP, shadeSoul, canTakeDamage);
+                lastSavedHP = shadeHP; lastSavedMax = shadeMaxHP; lastSavedSoul = shadeSoul; lastSavedCanTakeDamage = canTakeDamage;
             }
         }
 
@@ -1441,10 +1446,12 @@ public partial class LegacyHelper
                 if (dh != null)
                 {
                     string n = col.name;
-                    if (!string.IsNullOrEmpty(n) &&
-                        (n.IndexOf("alert range", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         n.IndexOf("attack range", System.StringComparison.OrdinalIgnoreCase) >= 0))
-                        return;
+                    if (!string.IsNullOrEmpty(n))
+                    {
+                        string nl = n.ToLowerInvariant();
+                        if (nl.Contains("alert range") || nl.Contains("attack range") || nl.Contains("wake range") || nl.Contains("close range") || nl.Contains("sight range"))
+                            return;
+                    }
                     bool canDamage = false;
                     try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
                     if (!canDamage) return;
