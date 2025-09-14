@@ -1429,6 +1429,21 @@ public partial class LegacyHelper
             TryProcessDamageHero(other);
         }
 
+        private static readonly string[] DamageTags = { "Enemy Damager", "EnemyDamager", "Damager", "Hazard" };
+
+        private static bool HasDamageTag(Collider2D col)
+        {
+            try
+            {
+                string t = col.tag;
+                foreach (var tag in DamageTags)
+                    if (t == tag)
+                        return true;
+            }
+            catch { }
+            return false;
+        }
+
         private static bool CanDamageShade(DamageHero dh)
         {
             if (dh == null) return false;
@@ -1457,17 +1472,9 @@ public partial class LegacyHelper
                     if (col.transform == hornetTransform || col.transform.IsChildOf(hornetTransform) || col.transform.root == hornetRoot)
                         return;
                 }
-                var dh = col.GetComponentInParent<DamageHero>();
-                if (dh != null)
+                var dh = col.GetComponent<DamageHero>();
+                if (dh != null && HasDamageTag(col) && CanDamageShade(dh))
                 {
-                    string n = col.name;
-                    if (!string.IsNullOrEmpty(n))
-                    {
-                        string nl = n.ToLowerInvariant();
-                        if (nl.Contains("alert range") || nl.Contains("attack range") || nl.Contains("wake range") || nl.Contains("close range") || nl.Contains("sight range"))
-                            return;
-                    }
-                    if (!CanDamageShade(dh)) return;
                     var hz = GetHazardType(dh);
                     if (IsTerrainHazard(hz)) { LogShadeDamage(dh, col); OnShadeHitHazard(); return; }
                     LogShadeDamage(dh, col);
@@ -1580,15 +1587,9 @@ public partial class LegacyHelper
                 if (!c) continue;
                 if (c.transform == transform || c.transform.IsChildOf(transform)) continue;
                 if (hornetTransform && c.transform.root == hornetTransform.root) continue;
-                var dh = c.GetComponentInParent<DamageHero>();
-                if (dh != null)
+                var dh = c.GetComponent<DamageHero>();
+                if (dh != null && HasDamageTag(c) && CanDamageShade(dh))
                 {
-                    string n = c.name;
-                    if (!string.IsNullOrEmpty(n) &&
-                        (n.IndexOf("alert range", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         n.IndexOf("attack range", System.StringComparison.OrdinalIgnoreCase) >= 0))
-                        continue;
-                    if (!CanDamageShade(dh)) continue;
                     var hz = GetHazardType(dh);
                     if (IsTerrainHazard(hz)) { LogShadeDamage(dh, c); OnShadeHitHazard(); return; }
                     LogShadeDamage(dh, c);
