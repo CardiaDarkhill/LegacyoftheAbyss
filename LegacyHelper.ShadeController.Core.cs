@@ -1429,22 +1429,15 @@ public partial class LegacyHelper
             TryProcessDamageHero(other);
         }
 
-        private static readonly System.Collections.Generic.HashSet<string> DamageTags = new()
+        private static bool IsDamageCollider(Collider2D col)
         {
-            "Enemy Damager",
-            "EnemyDamager",
-            "Damager",
-            "Hazard"
-        };
-
-        private static bool HasDamageTag(Collider2D col)
-        {
+            if (!col) return false;
             try
             {
                 Transform t = col.transform;
                 while (t != null)
                 {
-                    if (DamageTags.Contains(t.tag)) return true;
+                    if (t.name == "Damage Collider") return true;
                     t = t.parent;
                 }
             }
@@ -1486,9 +1479,9 @@ public partial class LegacyHelper
                     LogShadeIgnore(null, col, "no DamageHero");
                     return;
                 }
-                if (!HasDamageTag(col))
+                if (!IsDamageCollider(col))
                 {
-                    LogShadeIgnore(dh, col, $"tag '{col.tag}' not whitelisted");
+                    LogShadeIgnore(dh, col, "not Damage Collider");
                     return;
                 }
                 if (!CanDamageShade(dh))
@@ -1624,9 +1617,9 @@ public partial class LegacyHelper
                     LogShadeIgnore(null, c, "no DamageHero");
                     continue;
                 }
-                if (!HasDamageTag(c))
+                if (!IsDamageCollider(c))
                 {
-                    LogShadeIgnore(dh, c, $"tag '{c.tag}' not whitelisted");
+                    LogShadeIgnore(dh, c, "not Damage Collider");
                     continue;
                 }
                 if (!CanDamageShade(dh))
