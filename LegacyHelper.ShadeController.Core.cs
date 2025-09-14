@@ -1439,8 +1439,17 @@ public partial class LegacyHelper
 
         private static bool HasDamageTag(Collider2D col)
         {
-            try { return DamageTags.Contains(col.tag); }
-            catch { return false; }
+            try
+            {
+                Transform t = col.transform;
+                while (t != null)
+                {
+                    if (DamageTags.Contains(t.tag)) return true;
+                    t = t.parent;
+                }
+            }
+            catch { }
+            return false;
         }
 
         private static bool CanDamageShade(DamageHero dh)
@@ -1471,14 +1480,26 @@ public partial class LegacyHelper
                     if (col.transform == hornetTransform || col.transform.IsChildOf(hornetTransform) || col.transform.root == hornetRoot)
                         return;
                 }
-                var dh = col.GetComponent<DamageHero>();
-                if (dh != null && HasDamageTag(col) && CanDamageShade(dh))
+                var dh = col.GetComponentInParent<DamageHero>();
+                if (dh == null)
                 {
-                    var hz = GetHazardType(dh);
-                    if (IsTerrainHazard(hz)) { LogShadeDamage(dh, col); OnShadeHitHazard(); return; }
-                    LogShadeDamage(dh, col);
-                    OnShadeHitEnemy(dh);
+                    LogShadeIgnore(null, col, "no DamageHero");
+                    return;
                 }
+                if (!HasDamageTag(col))
+                {
+                    LogShadeIgnore(dh, col, $"tag '{col.tag}' not whitelisted");
+                    return;
+                }
+                if (!CanDamageShade(dh))
+                {
+                    LogShadeIgnore(dh, col, "CanDamageShade=false");
+                    return;
+                }
+                var hz = GetHazardType(dh);
+                if (IsTerrainHazard(hz)) { LogShadeDamage(dh, col); OnShadeHitHazard(); return; }
+                LogShadeDamage(dh, col);
+                OnShadeHitEnemy(dh);
             }
             catch { }
         }
@@ -1492,6 +1513,17 @@ public partial class LegacyHelper
                 int dmg = 0; try { dmg = dh.damageDealt; } catch { }
                 var hz = GetHazardType(dh);
                 UnityEngine.Debug.Log($"[ShadeDebug] Hurt by {obj} via {colName} hazard={hz} dmg={dmg}");
+            }
+            catch { }
+        }
+
+        private void LogShadeIgnore(DamageHero dh, Collider2D src, string reason)
+        {
+            try
+            {
+                string obj = dh ? dh.gameObject?.name ?? dh.name : "<null>";
+                string colName = src ? src.name : "<null>";
+                UnityEngine.Debug.Log($"[ShadeDebug] Ignored {obj} via {colName}: {reason}");
             }
             catch { }
         }
@@ -1586,14 +1618,26 @@ public partial class LegacyHelper
                 if (!c) continue;
                 if (c.transform == transform || c.transform.IsChildOf(transform)) continue;
                 if (hornetTransform && c.transform.root == hornetTransform.root) continue;
-                var dh = c.GetComponent<DamageHero>();
-                if (dh != null && HasDamageTag(c) && CanDamageShade(dh))
+                var dh = c.GetComponentInParent<DamageHero>();
+                if (dh == null)
                 {
-                    var hz = GetHazardType(dh);
-                    if (IsTerrainHazard(hz)) { LogShadeDamage(dh, c); OnShadeHitHazard(); return; }
-                    LogShadeDamage(dh, c);
-                    OnShadeHitEnemy(dh); return;
+                    LogShadeIgnore(null, c, "no DamageHero");
+                    continue;
                 }
+                if (!HasDamageTag(c))
+                {
+                    LogShadeIgnore(dh, c, $"tag '{c.tag}' not whitelisted");
+                    continue;
+                }
+                if (!CanDamageShade(dh))
+                {
+                    LogShadeIgnore(dh, c, "CanDamageShade=false");
+                    continue;
+                }
+                var hz = GetHazardType(dh);
+                if (IsTerrainHazard(hz)) { LogShadeDamage(dh, c); OnShadeHitHazard(); return; }
+                LogShadeDamage(dh, c);
+                OnShadeHitEnemy(dh); return;
             }
         }
 
