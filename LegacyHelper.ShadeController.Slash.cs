@@ -11,23 +11,28 @@ public partial class LegacyHelper
         {
             nailTimer -= Time.deltaTime;
             if (nailTimer > 0f) return;
+
+            float forcedV = 0f;
             bool pressed = Input.GetMouseButtonDown(0) || Input.GetKeyDown(NailKey);
+            if (Input.GetKeyDown(KeyCode.Q)) { pressed = true; forcedV = -1f; }
+            else if (Input.GetKeyDown(KeyCode.E)) { pressed = true; forcedV = 1f; }
             if (pressed)
             {
                 nailTimer = nailCooldown;
-                PerformNailSlash();
+                PerformNailSlash(forcedV);
             }
         }
 
-        private void PerformNailSlash()
+        private void PerformNailSlash(float forcedV = 0f)
         {
             var hc = HeroController.instance;
             if (hc == null) return;
 
             // Choose slash variant based on input: up / down / side
             GameObject source = null;
-            float v = ((Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.Q)) ? -1f : 0f) +
-                      ((Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.E)) ? 1f : 0f);
+            float v = forcedV;
+            if (v == 0f)
+                v = (Input.GetKey(KeyCode.S) ? -1f : 0f) + (Input.GetKey(KeyCode.W) ? 1f : 0f);
 
             try
             {

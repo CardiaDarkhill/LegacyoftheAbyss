@@ -28,7 +28,7 @@ public partial class LegacyHelper
         private float hazardCooldown;
         private float baseMaxDistance, baseSoftLeashRadius, baseHardLeashRadius, baseSnapLeashRadius;
         private bool wasInactive;
-        public float hitKnockbackForce = 4f;
+        public float hitKnockbackForce = 6f;
         private Vector2 knockbackVelocity;
         private float knockbackTimer;
         private BattleScene cachedBattle;
