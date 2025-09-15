@@ -41,9 +41,12 @@ public static class ShadeSettingsMenu
         txt.text = label;
         txt.color = Color.white;
         var slider = go.GetComponentInChildren<Slider>(true);
+        Object.DestroyImmediate(slider.GetComponent<MenuAudioSlider>());
+        slider.onValueChanged.RemoveAllListeners();
+        Object.DestroyImmediate(go.GetComponent<MenuButton>());
         slider.minValue = min;
         slider.maxValue = max;
-        slider.value = value;
+        slider.SetValueWithoutNotify(value);
         slider.wholeNumbers = whole;
         slider.onValueChanged.AddListener(onChange.Invoke);
         return slider;
@@ -64,6 +67,8 @@ public static class ShadeSettingsMenu
         txt.text = label;
         txt.color = Color.white;
         var toggle = go.GetComponentInChildren<Toggle>(true);
+        Object.DestroyImmediate(go.GetComponent<MenuButton>());
+        toggle.onValueChanged.RemoveAllListeners();
         toggle.isOn = value;
         toggle.onValueChanged.AddListener(onChange.Invoke);
         return toggle;
@@ -159,7 +164,6 @@ public static class ShadeSettingsMenu
             return;
         }
 
-        built = true;
         screen = Object.Instantiate(templateScreen, templateScreen.transform.parent);
         screen.name = "ShadeSettingsPage";
         screen.SetActive(false);
@@ -200,9 +204,10 @@ public static class ShadeSettingsMenu
         if (mbl != null)
         {
             log.LogDebug("Removing inherited MenuButtonList from settings page");
-            Object.Destroy(mbl);
+            Object.DestroyImmediate(mbl);
         }
 
+        built = true;
         log.LogInfo("Shade settings page built");
     }
 
@@ -254,10 +259,20 @@ public static class ShadeSettingsMenu
             }
             return;
         }
-        var template = buttons[buttons.Length - 1];
 
-        var list = template.GetComponentInParent<MenuButtonList>();
-        if (list == null)
+        PauseMenuButton template = null;
+        MenuButtonList list = null;
+        foreach (var b in buttons)
+        {
+            var l = b.GetComponentInParent<MenuButtonList>();
+            if (l != null)
+            {
+                template = b;
+                list = l;
+                break;
+            }
+        }
+        if (template == null || list == null)
         {
             if (!loggedNoMenuButtonList)
             {
@@ -280,18 +295,39 @@ public static class ShadeSettingsMenu
 
         var go = Object.Instantiate(template.gameObject, template.transform.parent);
         go.name = "ShadeSettingsButton";
-        Object.Destroy(go.GetComponentInChildren<AutoLocalizeTextUI>());
+        Object.DestroyImmediate(go.GetComponentInChildren<AutoLocalizeTextUI>());
         var txt = go.GetComponentInChildren<Text>(true);
         if (txt != null)
         {
             txt.text = "Legacy of the Abyss";
             txt.color = Color.white;
         }
+        else
+        {
+            var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
+            if (tmpType != null)
+            {
+                var tmp = go.GetComponentInChildren(tmpType, true);
+                if (tmp != null)
+                {
+                    tmpType.GetProperty("text")?.SetValue(tmp, "Legacy of the Abyss");
+                    tmpType.GetProperty("color")?.SetValue(tmp, Color.white);
+                    return;
+                }
+            }
+
+            var textObj = new GameObject("Label");
+            textObj.transform.SetParent(go.transform, false);
+            var t = textObj.AddComponent<Text>();
+            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            t.text = "Legacy of the Abyss";
+            t.color = Color.white;
+        }
 
         var pauseBtn = go.GetComponent<PauseMenuButton>();
 
         foreach (var cond in go.GetComponents<MenuButtonListCondition>())
-            Object.Destroy(cond);
+            Object.DestroyImmediate(cond);
 
         var entryType = entries.GetType().GetElementType();
         var newEntry = Activator.CreateInstance(entryType);
