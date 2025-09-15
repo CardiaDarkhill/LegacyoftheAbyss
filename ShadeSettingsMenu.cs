@@ -153,6 +153,7 @@ public static class ShadeSettingsMenu
 
         // slider instance
         var go = Object.Instantiate(template.gameObject, row.transform, false);
+        go.SetActive(true);
         go.name = label + "Slider";
         foreach (var t in go.GetComponentsInChildren<Text>(true))
             Object.DestroyImmediate(t);
@@ -168,6 +169,10 @@ public static class ShadeSettingsMenu
         Object.DestroyImmediate(slider.GetComponent<MenuAudioSlider>());
         Object.DestroyImmediate(slider.GetComponent<MenuPreventDeselect>());
         slider.onValueChanged.RemoveAllListeners();
+        slider.interactable = true;
+        slider.enabled = true;
+        if (slider.GetComponent<SliderRightStickInput>() == null)
+            slider.gameObject.AddComponent<SliderRightStickInput>();
         var rect = go.GetComponent<RectTransform>();
         rect.anchorMin = new Vector2(0f, 0.5f);
         rect.anchorMax = new Vector2(0f, 0.5f);
@@ -254,6 +259,7 @@ public static class ShadeSettingsMenu
 
         // toggle instance
         var go = Object.Instantiate(template.gameObject, row.transform, false);
+        go.SetActive(true);
         go.name = label + "Toggle";
         foreach (var t in go.GetComponentsInChildren<Text>(true))
             Object.DestroyImmediate(t);
@@ -276,6 +282,8 @@ public static class ShadeSettingsMenu
 
         toggle.onValueChanged.RemoveAllListeners();
         toggle.isOn = value;
+        toggle.interactable = true;
+        toggle.enabled = true;
         toggle.onValueChanged.AddListener(onChange.Invoke);
         toggle.gameObject.AddComponent<CancelToPause>();
 
@@ -394,6 +402,14 @@ public static class ShadeSettingsMenu
         screen.SetActive(false);
         log.LogDebug("Instantiated ShadeSettingsPage");
 
+        var canvasGroup = screen.GetComponent<CanvasGroup>();
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = 1f;
+            canvasGroup.interactable = true;
+            canvasGroup.blocksRaycasts = true;
+        }
+
         var rt = screen.GetComponent<RectTransform>();
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
@@ -443,7 +459,11 @@ public static class ShadeSettingsMenu
         s = CreateToggle(content.transform, toggleTemplate, "Damage Logging", ModConfig.Instance.logDamage, v => ModConfig.Instance.logDamage = v);
         if (s != null) selectables.Add(s);
         if (selectables.Count > 0)
+        {
             firstSelectable = selectables[0];
+            if (ms != null)
+                ms.defaultHighlight = firstSelectable;
+        }
 
         if (ms.backButton != null)
         {
@@ -452,6 +472,7 @@ public static class ShadeSettingsMenu
         }
 
         var mbl = screen.GetComponent<MenuButtonList>() ?? screen.AddComponent<MenuButtonList>();
+        mbl.ClearLastSelected();
         var entryField = typeof(MenuButtonList).GetField("entries", BindingFlags.NonPublic | BindingFlags.Instance);
         var entryType = entryField.FieldType.GetElementType();
         var arr = Array.CreateInstance(entryType, selectables.Count);
@@ -562,11 +583,13 @@ public static class ShadeSettingsMenu
         var go = Object.Instantiate(template.gameObject, template.transform.parent);
         go.name = "ShadeSettingsButton";
         Object.DestroyImmediate(go.GetComponentInChildren<AutoLocalizeTextUI>());
+        bool hasLabel = false;
         var txt = go.GetComponentInChildren<Text>(true);
         if (txt != null)
         {
             txt.text = "Legacy of the Abyss";
             txt.color = Color.white;
+            hasLabel = true;
         }
         else
         {
@@ -578,10 +601,13 @@ public static class ShadeSettingsMenu
                 {
                     tmpType.GetProperty("text")?.SetValue(tmp, "Legacy of the Abyss");
                     tmpType.GetProperty("color")?.SetValue(tmp, Color.white);
-                    return;
+                    hasLabel = true;
                 }
             }
+        }
 
+        if (!hasLabel)
+        {
             var textObj = new GameObject("Label");
             textObj.transform.SetParent(go.transform, false);
             var t = textObj.AddComponent<Text>();
@@ -625,7 +651,9 @@ public static class ShadeSettingsMenu
         screen.SetActive(true);
         if (firstSelectable != null)
         {
-            EventSystem.current.SetSelectedGameObject(firstSelectable.gameObject);
+            if (EventSystem.current != null)
+                EventSystem.current.SetSelectedGameObject(firstSelectable.gameObject);
+            UIManager.HighlightSelectableNoSound(firstSelectable.GetFirstInteractable());
         }
         yield break;
     }
