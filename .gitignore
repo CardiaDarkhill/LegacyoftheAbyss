@@ -12,3 +12,5 @@ DummyDLLs/DLLDecompiles/Assembly-CSharp/Assembly-CSharp/obj/Debug/net10.0/Damage
 DummyDLLs/DLLDecompiles/Assembly-CSharp/Assembly-CSharp/obj/Debug/net10.0/DamageReference.GlobalUsings.g.cs
 DummyDLLs/DLLDecompiles/Assembly-CSharp/Assembly-CSharp/obj/Debug/net10.0/DamageReference.AssemblyInfo.cs
 DummyDLLs/DLLDecompiles/Assembly-CSharp/Assembly-CSharp/obj/Debug/net10.0/.NETCoreApp,Version=v10.0.AssemblyAttributes.cs
+Assets/logs/*
+!Assets/logs/.gitkeep

@@ -38,6 +38,8 @@ public partial class LegacyHelper : BaseUnityPlugin
 
     private void Awake()
     {
+        ModConfig.Load();
+        LoggingManager.Initialize();
         var harmony = new Harmony("com.legacyoftheabyss.helper");
         harmony.PatchAll();
 
@@ -51,6 +53,17 @@ public partial class LegacyHelper : BaseUnityPlugin
             }
         };
 
+    }
+
+    private void Update()
+    {
+        LoggingManager.Update();
+    }
+
+    private void OnDestroy()
+    {
+        LoggingManager.Flush();
+        ModConfig.Save();
     }
     
 

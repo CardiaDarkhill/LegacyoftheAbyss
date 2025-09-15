@@ -65,6 +65,10 @@
       <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.AudioModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="UnityEngine.JSONSerializeModule">
+      <HintPath>..\..\..\Hollow Knight Silksong_Data\Managed\UnityEngine.JSONSerializeModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
 
     <!-- BepInEx Core -->
     <Reference Include="BepInEx">

@@ -1565,9 +1565,8 @@ public partial class LegacyHelper
             {
                 string obj = dh ? dh.gameObject?.name ?? dh.name : "<null>";
                 string colName = src ? src.name : "<null>";
-                int dmg = 0; try { dmg = dh.damageDealt; } catch { }
-                var hz = GetHazardType(dh);
-                UnityEngine.Debug.Log($"[ShadeDebug] Hurt by {obj} via {colName} hazard={hz} dmg={dmg}");
+                string source = $"{obj} via {colName}";
+                LoggingManager.LogShadeDamage(source, canTakeDamage);
             }
             catch { }
         }
