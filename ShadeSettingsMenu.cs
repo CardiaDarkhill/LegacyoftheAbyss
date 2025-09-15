@@ -10,6 +10,7 @@ public static class ShadeSettingsMenu
 {
     private static GameObject screen;
     private static bool built;
+    private static UIManager builtFor;
     private static Selectable firstSelectable;
 
     private static Slider CreateSlider(Transform parent, Slider template, string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
@@ -49,7 +50,16 @@ public static class ShadeSettingsMenu
 
     private static void Build(UIManager ui)
     {
-        if (built) return;
+        if (built && screen != null && builtFor == ui) return;
+
+        if (screen != null && builtFor != ui)
+        {
+            Object.Destroy(screen);
+            screen = null;
+        }
+
+        built = false;
+        builtFor = ui;
 
         // Need an options menu screen to clone for consistent styling
         if (ui.optionsMenuScreen == null)
@@ -112,9 +122,18 @@ public static class ShadeSettingsMenu
     internal static void Inject(UIManager ui)
     {
         if (ui == null || ui.pauseMenuScreen == null) return;
+
+        // Ensure a screen exists for this UI
         Build(ui);
-        if (ui.pauseMenuScreen.GetComponentInChildren<PauseMenuButton>(true) == null) return;
+
+        // Avoid duplicate buttons
+        foreach (var existing in ui.pauseMenuScreen.GetComponentsInChildren<MenuSelectable>(true))
+        {
+            if (existing.name == "ShadeSettingsButton") return;
+        }
+
         var buttons = ui.pauseMenuScreen.GetComponentsInChildren<PauseMenuButton>(true);
+        if (buttons.Length == 0) return;
         var template = buttons[buttons.Length - 1];
         var go = Object.Instantiate(template.gameObject, template.transform.parent);
         go.name = "ShadeSettingsButton";
@@ -125,23 +144,32 @@ public static class ShadeSettingsMenu
             txt.text = "Legacy of the Abyss";
             txt.color = Color.white;
         }
-        var btn = go.GetComponent<PauseMenuButton>();
+
+        var pauseBtn = go.GetComponent<PauseMenuButton>();
+        Animator flash = null;
+        if (pauseBtn != null)
+        {
+            flash = pauseBtn.flashEffect;
+            Object.Destroy(pauseBtn);
+        }
+        var menuBtn = go.AddComponent<MenuButton>();
+        if (flash != null) menuBtn.flashEffect = flash;
+        menuBtn.OnSubmitPressed.AddListener(() => ui.StartCoroutine(Show(ui)));
 
         var list = template.transform.parent.GetComponent<MenuButtonList>();
-        if (list != null && btn != null)
+        if (list != null)
         {
             var field = typeof(MenuButtonList).GetField("entries", BindingFlags.NonPublic | BindingFlags.Instance);
             var entries = (Array)field.GetValue(list);
             var entryType = entries.GetType().GetElementType();
             var newEntry = Activator.CreateInstance(entryType);
             var selField = entryType.GetField("selectable", BindingFlags.NonPublic | BindingFlags.Instance);
-            selField.SetValue(newEntry, btn);
+            selField.SetValue(newEntry, menuBtn);
             var arr = Array.CreateInstance(entryType, entries.Length + 1);
             entries.CopyTo(arr, 0);
             arr.SetValue(newEntry, entries.Length);
             field.SetValue(list, arr);
 
-            // Mark dirty so navigation rebuilds when the menu is shown
             var dirtyField = typeof(MenuButtonList).GetField("isDirty", BindingFlags.NonPublic | BindingFlags.Instance);
             dirtyField?.SetValue(list, true);
 

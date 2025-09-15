@@ -58,14 +58,10 @@ public partial class LegacyHelper : BaseUnityPlugin
     private void Update()
     {
         LoggingManager.Update();
-        if (!shadeMenuInit)
+        var ui = UnityEngine.Object.FindObjectOfType<UIManager>();
+        if (ui != null && ui.pauseMenuScreen != null)
         {
-            var ui = UnityEngine.Object.FindObjectOfType<UIManager>();
-            if (ui != null && ui.pauseMenuScreen != null)
-            {
-                ShadeSettingsMenu.Inject(ui);
-                shadeMenuInit = true;
-            }
+            ShadeSettingsMenu.Inject(ui);
         }
     }
 
@@ -75,7 +71,7 @@ public partial class LegacyHelper : BaseUnityPlugin
         ModConfig.Save();
     }
 
-    private static bool shadeMenuInit;
+    // no cached UI needed; menu injects when available
     
 
     private static void HandleFinishedEnteringScene()
