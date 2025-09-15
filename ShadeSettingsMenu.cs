@@ -127,10 +127,8 @@ public static class ShadeSettingsMenu
         Build(ui);
 
         // Avoid duplicate buttons
-        foreach (var existing in ui.pauseMenuScreen.GetComponentsInChildren<MenuSelectable>(true))
-        {
-            if (existing.name == "ShadeSettingsButton") return;
-        }
+        if (ui.pauseMenuScreen.transform.Find("ShadeSettingsButton") != null)
+            return;
 
         var buttons = ui.pauseMenuScreen.GetComponentsInChildren<PauseMenuButton>(true);
         if (buttons.Length == 0) return;
@@ -150,10 +148,11 @@ public static class ShadeSettingsMenu
         if (pauseBtn != null)
         {
             flash = pauseBtn.flashEffect;
-            Object.Destroy(pauseBtn);
+            Object.DestroyImmediate(pauseBtn);
         }
         var menuBtn = go.AddComponent<MenuButton>();
-        if (flash != null) menuBtn.flashEffect = flash;
+        if (flash != null)
+            menuBtn.flashEffect = flash;
         menuBtn.OnSubmitPressed.AddListener(() => ui.StartCoroutine(Show(ui)));
 
         var list = template.transform.parent.GetComponent<MenuButtonList>();
