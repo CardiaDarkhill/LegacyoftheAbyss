@@ -333,4 +333,25 @@ public partial class LegacyHelper
             return true;
         }
     }
+
+    [HarmonyPatch(typeof(UIManager), nameof(UIManager.UIGoToPauseMenu))]
+    private class UIManager_UIGoToPauseMenu_HideShadeMenu
+    {
+        private static void Prefix(UIManager __instance)
+        {
+            if (ShadeSettingsMenu.IsShowing)
+                ShadeSettingsMenu.HideImmediate(__instance);
+        }
+    }
+
+    [HarmonyPatch(typeof(UIManager), nameof(UIManager.UIClosePauseMenu))]
+    private class UIManager_UIClosePauseMenu_ClearShadeMenu
+    {
+        private static void Prefix(UIManager __instance)
+        {
+            if (ShadeSettingsMenu.IsShowing)
+                ShadeSettingsMenu.HideImmediate(__instance);
+            ShadeSettingsMenu.Clear();
+        }
+    }
 }

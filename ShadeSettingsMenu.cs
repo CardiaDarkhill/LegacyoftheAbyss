@@ -7,6 +7,7 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using Object = UnityEngine.Object;
 using BepInEx.Logging;
+using GlobalEnums;
 
 public static class ShadeSettingsMenu
 {
@@ -25,6 +26,8 @@ public static class ShadeSettingsMenu
     private static bool loggedNoPauseButtonTemplates;
     private static bool loggedNoMenuButtonList;
     private static bool loggedNullEntries;
+
+    internal static bool IsShowing => screen != null && screen.activeSelf;
 
     private static MenuSelectable CreateDefaultSliderTemplate()
     {
@@ -154,7 +157,8 @@ public static class ShadeSettingsMenu
         rect.anchorMax = new Vector2(0f, 0.5f);
         rect.pivot = new Vector2(0f, 0.5f);
         var sliderLe = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
-        sliderLe.minWidth = 200f;
+        sliderLe.minWidth = 600f;
+        sliderLe.preferredWidth = 600f;
         sliderLe.flexibleWidth = 1f;
 
         // value text to the right of slider
@@ -191,9 +195,11 @@ public static class ShadeSettingsMenu
             Object.Destroy(row);
             return null;
         }
+        selectable.DontPlaySelectSound = true;
+        selectable.cancelAction = CancelAction.GoToPauseMenu;
         selectable.OnSelected += _ =>
         {
-            slider.Select();
+            EventSystem.current.SetSelectedGameObject(slider.gameObject);
             slider.navigation = selectable.navigation;
         };
         return selectable;
@@ -265,9 +271,11 @@ public static class ShadeSettingsMenu
             Object.Destroy(row);
             return null;
         }
+        selectable.DontPlaySelectSound = true;
+        selectable.cancelAction = CancelAction.GoToPauseMenu;
         selectable.OnSelected += _ =>
         {
-            toggle.Select();
+            EventSystem.current.SetSelectedGameObject(toggle.gameObject);
             toggle.navigation = selectable.navigation;
         };
         return selectable;
@@ -604,12 +612,32 @@ public static class ShadeSettingsMenu
         yield break;
     }
 
-    internal static IEnumerator Hide(UIManager ui)
+    internal static void HideImmediate(UIManager ui)
     {
+        if (screen == null)
+            return;
         log.LogInfo("Hiding Shade settings page");
         screen.SetActive(false);
-        ui.pauseMenuScreen.gameObject.SetActive(true);
+        if (ui != null && ui.pauseMenuScreen != null)
+            ui.pauseMenuScreen.gameObject.SetActive(true);
         ModConfig.Save();
+    }
+
+    internal static IEnumerator Hide(UIManager ui)
+    {
+        HideImmediate(ui);
         yield break;
+    }
+
+    internal static void Clear()
+    {
+        if (screen != null)
+        {
+            Object.Destroy(screen);
+            screen = null;
+        }
+        built = false;
+        builtFor = null;
+        firstSelectable = null;
     }
 }
