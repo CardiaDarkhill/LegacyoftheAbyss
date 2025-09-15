@@ -27,6 +27,22 @@ public static class ShadeSettingsMenu
     private static bool loggedNoMenuButtonList;
     private static bool loggedNullEntries;
 
+    private class CancelToPause : MonoBehaviour, ICancelHandler
+    {
+        public void OnCancel(BaseEventData eventData)
+        {
+            if (builtFor != null)
+                HideImmediate(builtFor);
+        }
+    }
+
+    private static IEnumerator FocusSelectableNextFrame(Selectable target, MenuSelectable wrapper)
+    {
+        yield return null;
+        EventSystem.current.SetSelectedGameObject(target.gameObject);
+        target.navigation = wrapper.navigation;
+    }
+
     internal static bool IsShowing => screen != null && screen.activeSelf;
 
     private static MenuSelectable CreateDefaultSliderTemplate()
@@ -157,9 +173,11 @@ public static class ShadeSettingsMenu
         rect.anchorMax = new Vector2(0f, 0.5f);
         rect.pivot = new Vector2(0f, 0.5f);
         var sliderLe = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
-        sliderLe.minWidth = 600f;
-        sliderLe.preferredWidth = 600f;
+        sliderLe.minWidth = 800f;
+        sliderLe.preferredWidth = 800f;
         sliderLe.flexibleWidth = 1f;
+        var sliderRect = slider.GetComponent<RectTransform>();
+        sliderRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, 800f);
 
         // value text to the right of slider
         var valueObj = new GameObject("Value");
@@ -197,10 +215,10 @@ public static class ShadeSettingsMenu
         }
         selectable.DontPlaySelectSound = true;
         selectable.cancelAction = CancelAction.GoToPauseMenu;
+        slider.gameObject.AddComponent<CancelToPause>();
         selectable.OnSelected += _ =>
         {
-            EventSystem.current.SetSelectedGameObject(slider.gameObject);
-            slider.navigation = selectable.navigation;
+            selectable.StartCoroutine(FocusSelectableNextFrame(slider, selectable));
         };
         return selectable;
     }
@@ -259,6 +277,7 @@ public static class ShadeSettingsMenu
         toggle.onValueChanged.RemoveAllListeners();
         toggle.isOn = value;
         toggle.onValueChanged.AddListener(onChange.Invoke);
+        toggle.gameObject.AddComponent<CancelToPause>();
 
         var rowLe = row.AddComponent<LayoutElement>();
         rowLe.preferredHeight = rect.sizeDelta.y;
@@ -275,8 +294,7 @@ public static class ShadeSettingsMenu
         selectable.cancelAction = CancelAction.GoToPauseMenu;
         selectable.OnSelected += _ =>
         {
-            EventSystem.current.SetSelectedGameObject(toggle.gameObject);
-            toggle.navigation = selectable.navigation;
+            selectable.StartCoroutine(FocusSelectableNextFrame(toggle, selectable));
         };
         return selectable;
     }
