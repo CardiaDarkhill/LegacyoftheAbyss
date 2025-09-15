@@ -162,6 +162,10 @@ public static class ShadeSettingsMenu
             flash = pauseBtn.flashEffect;
             Object.DestroyImmediate(pauseBtn);
         }
+
+        foreach (var cond in go.GetComponents<MenuButtonListCondition>())
+            Object.Destroy(cond);
+
         var menuBtn = go.AddComponent<MenuButton>();
         if (flash != null)
             menuBtn.flashEffect = flash;
