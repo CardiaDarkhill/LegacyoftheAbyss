@@ -31,6 +31,7 @@
 - Support a second controller, so both Hornet and the Shade can be played using a controller
 - A menu option in the silksong pause menu that provides a default hotkey setup that allows both the Shade and Hornet to be controlled using a single keyboard
 - Improved damage logging for the shade, for some reason, certain hits that should be damaging the shade are both not damaging it and not showing up in the logs as a blocked hit
+- Currently we have logging for shade damage toggled based on pressing F1, I'd like to set up a similar hotkey for the shades nail-attack (IE. Make it toggle when F2 is pressed), and the same system for all future logging we set up.
 
 
 ## Testing:
