@@ -28,7 +28,34 @@ public static class ShadeSettingsMenu
 
     private static Slider CreateSlider(Transform parent, Slider template, string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
     {
-        var go = Object.Instantiate(template.gameObject, parent);
+        // container row stretching full width
+        var row = new GameObject(label + "Row");
+        var rowRect = row.AddComponent<RectTransform>();
+        rowRect.SetParent(parent, false);
+        rowRect.anchorMin = new Vector2(0f, 1f);
+        rowRect.anchorMax = new Vector2(1f, 1f);
+        rowRect.pivot = new Vector2(0.5f, 1f);
+        var hLayout = row.AddComponent<HorizontalLayoutGroup>();
+        hLayout.childControlHeight = true;
+        hLayout.childControlWidth = false;
+        hLayout.childForceExpandHeight = false;
+        hLayout.childForceExpandWidth = false;
+        hLayout.spacing = 20f;
+        hLayout.childAlignment = TextAnchor.MiddleLeft;
+
+        // label text
+        var labelObj = new GameObject("Label");
+        labelObj.transform.SetParent(row.transform, false);
+        var labelTxt = labelObj.AddComponent<Text>();
+        labelTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        labelTxt.text = label;
+        labelTxt.color = Color.white;
+        labelTxt.alignment = TextAnchor.MiddleLeft;
+        var labelLe = labelObj.AddComponent<LayoutElement>();
+        labelLe.preferredWidth = 250f;
+
+        // slider instance
+        var go = Object.Instantiate(template.gameObject, row.transform, false);
         go.name = label + "Slider";
         foreach (var t in go.GetComponentsInChildren<Text>(true))
             Object.DestroyImmediate(t.gameObject);
@@ -39,12 +66,6 @@ public static class ShadeSettingsMenu
             foreach (var tmp in tmps)
                 Object.DestroyImmediate(tmp.gameObject);
         }
-        var textObj = new GameObject("Label");
-        textObj.transform.SetParent(go.transform, false);
-        var txt = textObj.AddComponent<Text>();
-        txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        txt.text = label;
-        txt.color = Color.white;
 
         var slider = go.GetComponentInChildren<Slider>(true);
         Object.DestroyImmediate(slider.GetComponent<MenuAudioSlider>());
@@ -52,23 +73,70 @@ public static class ShadeSettingsMenu
         slider.onValueChanged.RemoveAllListeners();
         Object.DestroyImmediate(go.GetComponent<MenuButton>());
         var rect = go.GetComponent<RectTransform>();
-        rect.anchorMin = new Vector2(0, 1);
-        rect.anchorMax = new Vector2(1, 1);
-        rect.pivot = new Vector2(0.5f, 1);
-        rect.anchoredPosition = Vector2.zero;
-        var le = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
-        le.preferredHeight = rect.sizeDelta.y;
+        rect.anchorMin = new Vector2(0f, 0.5f);
+        rect.anchorMax = new Vector2(0f, 0.5f);
+        rect.pivot = new Vector2(0f, 0.5f);
+        var sliderLe = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
+        sliderLe.preferredWidth = 400f;
+
+        // value text to the right of slider
+        var valueObj = new GameObject("Value");
+        valueObj.transform.SetParent(row.transform, false);
+        var valueTxt = valueObj.AddComponent<Text>();
+        valueTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        valueTxt.color = Color.white;
+        valueTxt.alignment = TextAnchor.MiddleRight;
+        var valueLe = valueObj.AddComponent<LayoutElement>();
+        valueLe.preferredWidth = 80f;
+
         slider.minValue = min;
         slider.maxValue = max;
-        slider.SetValueWithoutNotify(value);
         slider.wholeNumbers = whole;
-        slider.onValueChanged.AddListener(onChange.Invoke);
+        slider.SetValueWithoutNotify(value);
+        valueTxt.text = whole ? Mathf.RoundToInt(value).ToString() : value.ToString("0.00");
+        slider.onValueChanged.AddListener(v =>
+        {
+            onChange.Invoke(v);
+            valueTxt.text = whole ? Mathf.RoundToInt(v).ToString() : v.ToString("0.00");
+        });
+
+        var rowLe = row.AddComponent<LayoutElement>();
+        rowLe.preferredHeight = rect.sizeDelta.y;
+        rowLe.minHeight = rect.sizeDelta.y;
+
         return slider;
     }
 
     private static Toggle CreateToggle(Transform parent, Toggle template, string label, bool value, System.Action<bool> onChange)
     {
-        var go = Object.Instantiate(template.gameObject, parent);
+        // container row stretching full width
+        var row = new GameObject(label + "Row");
+        var rowRect = row.AddComponent<RectTransform>();
+        rowRect.SetParent(parent, false);
+        rowRect.anchorMin = new Vector2(0f, 1f);
+        rowRect.anchorMax = new Vector2(1f, 1f);
+        rowRect.pivot = new Vector2(0.5f, 1f);
+        var hLayout = row.AddComponent<HorizontalLayoutGroup>();
+        hLayout.childControlHeight = true;
+        hLayout.childControlWidth = false;
+        hLayout.childForceExpandHeight = false;
+        hLayout.childForceExpandWidth = false;
+        hLayout.spacing = 20f;
+        hLayout.childAlignment = TextAnchor.MiddleLeft;
+
+        // label text
+        var labelObj = new GameObject("Label");
+        labelObj.transform.SetParent(row.transform, false);
+        var labelTxt = labelObj.AddComponent<Text>();
+        labelTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        labelTxt.text = label;
+        labelTxt.color = Color.white;
+        labelTxt.alignment = TextAnchor.MiddleLeft;
+        var labelLe = labelObj.AddComponent<LayoutElement>();
+        labelLe.preferredWidth = 250f;
+
+        // toggle instance
+        var go = Object.Instantiate(template.gameObject, row.transform, false);
         go.name = label + "Toggle";
         foreach (var t in go.GetComponentsInChildren<Text>(true))
             Object.DestroyImmediate(t.gameObject);
@@ -79,26 +147,25 @@ public static class ShadeSettingsMenu
             foreach (var tmp in tmps)
                 Object.DestroyImmediate(tmp.gameObject);
         }
-        var textObj = new GameObject("Label");
-        textObj.transform.SetParent(go.transform, false);
-        var txt = textObj.AddComponent<Text>();
-        txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        txt.text = label;
-        txt.color = Color.white;
 
         var toggle = go.GetComponentInChildren<Toggle>(true);
         Object.DestroyImmediate(toggle.GetComponent<MenuPreventDeselect>());
         Object.DestroyImmediate(go.GetComponent<MenuButton>());
         var rect = go.GetComponent<RectTransform>();
-        rect.anchorMin = new Vector2(0, 1);
-        rect.anchorMax = new Vector2(1, 1);
-        rect.pivot = new Vector2(0.5f, 1);
-        rect.anchoredPosition = Vector2.zero;
-        var le = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
-        le.preferredHeight = rect.sizeDelta.y;
+        rect.anchorMin = new Vector2(0f, 0.5f);
+        rect.anchorMax = new Vector2(0f, 0.5f);
+        rect.pivot = new Vector2(0f, 0.5f);
+        var toggleLe = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
+        toggleLe.preferredWidth = 60f;
+
         toggle.onValueChanged.RemoveAllListeners();
         toggle.isOn = value;
         toggle.onValueChanged.AddListener(onChange.Invoke);
+
+        var rowLe = row.AddComponent<LayoutElement>();
+        rowLe.preferredHeight = rect.sizeDelta.y;
+        rowLe.minHeight = rect.sizeDelta.y;
+
         return toggle;
     }
 
@@ -208,11 +275,18 @@ public static class ShadeSettingsMenu
         }
 
         var content = new GameObject("Content");
-        content.transform.SetParent(ms.transform, false);
+        var contentRect = content.AddComponent<RectTransform>();
+        contentRect.SetParent(ms.transform, false);
+        contentRect.anchorMin = new Vector2(0f, 1f);
+        contentRect.anchorMax = new Vector2(1f, 1f);
+        contentRect.pivot = new Vector2(0.5f, 1f);
+        contentRect.anchoredPosition = Vector2.zero;
         var layout = content.AddComponent<VerticalLayoutGroup>();
         layout.childControlHeight = true;
         layout.childControlWidth = true;
-        layout.spacing = 10f;
+        layout.childForceExpandHeight = false;
+        layout.childForceExpandWidth = true;
+        layout.spacing = 15f;
 
         firstSelectable = CreateSlider(content.transform, sliderTemplate, "Hornet Damage", 0.2f, 2f, ModConfig.Instance.hornetDamageMultiplier, v => ModConfig.Instance.hornetDamageMultiplier = v);
         CreateSlider(content.transform, sliderTemplate, "Shade Damage", 0.2f, 2f, ModConfig.Instance.shadeDamageMultiplier, v => ModConfig.Instance.shadeDamageMultiplier = v);
