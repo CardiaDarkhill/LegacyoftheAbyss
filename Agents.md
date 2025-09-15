@@ -30,6 +30,7 @@
 - In game configurable controls for the shade
 - Support a second controller, so both Hornet and the Shade can be played using a controller
 - A menu option in the silksong pause menu that provides a default hotkey setup that allows both the Shade and Hornet to be controlled using a single keyboard
+- Improved damage logging for the shade, on each launch, create a log file in the assets folder, each time a new unique event deals damage to the shade, log it in one section, each new unique event attempts to damage the shade and fails to do so, log that in a seperate section
 
 
 ## Testing:
