@@ -38,10 +38,25 @@ internal static class LoggingManager
         {
             entry = new DamageEntry();
             damage[source] = entry;
-            AppendHeader(succeeded);
-            AppendLine($"- {source}");
         }
-        if (succeeded) entry.success++; else entry.blocked++;
+        if (succeeded)
+        {
+            if (entry.success == 0)
+            {
+                AppendHeader(true);
+                AppendLine($"- {source}");
+            }
+            entry.success++;
+        }
+        else
+        {
+            if (entry.blocked == 0)
+            {
+                AppendHeader(false);
+                AppendLine($"- {source}");
+            }
+            entry.blocked++;
+        }
     }
 
     private static void AppendHeader(bool succeeded)

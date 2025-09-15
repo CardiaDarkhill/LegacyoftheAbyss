@@ -1546,27 +1546,28 @@ public partial class LegacyHelper
                 var dh = col.GetComponentInParent<DamageHero>();
                 if (dh != null)
                 {
-                    if (ShouldIgnoreDamageSource(col) || ShouldIgnoreDamageSource(dh)) return;
+                    if (ShouldIgnoreDamageSource(col) || ShouldIgnoreDamageSource(dh)) { LogShadeDamage(dh, col, false); return; }
                     bool canDamage = false;
                     try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
-                    if (!canDamage) return;
+                    if (!canDamage) { LogShadeDamage(dh, col, false); return; }
                     var hz = GetHazardType(dh);
-                    if (IsTerrainHazard(hz)) { LogShadeDamage(dh, col); OnShadeHitHazard(); return; }
+                    if (IsTerrainHazard(hz)) { LogShadeDamage(dh, col, canTakeDamage); OnShadeHitHazard(); return; }
                     int dmg = 0; try { dmg = dh.damageDealt; } catch { }
-                    if (dmg > 0) { LogShadeDamage(dh, col); OnShadeHitEnemy(dh); }
+                    if (dmg > 0) { LogShadeDamage(dh, col, canTakeDamage); OnShadeHitEnemy(dh); }
+                    else { LogShadeDamage(dh, col, false); }
                 }
             }
             catch { }
         }
 
-        private void LogShadeDamage(DamageHero dh, Collider2D src)
+        private void LogShadeDamage(DamageHero dh, Collider2D src, bool succeeded)
         {
             try
             {
                 string obj = dh ? dh.gameObject?.name ?? dh.name : "<null>";
                 string colName = src ? src.name : "<null>";
                 string source = $"{obj} via {colName}";
-                LoggingManager.LogShadeDamage(source, canTakeDamage);
+                LoggingManager.LogShadeDamage(source, succeeded);
             }
             catch { }
         }
@@ -1664,15 +1665,15 @@ public partial class LegacyHelper
                 var dh = c.GetComponentInParent<DamageHero>();
                 if (dh != null)
                 {
-                    if (ShouldIgnoreDamageSource(c) || ShouldIgnoreDamageSource(dh)) continue;
+                    if (ShouldIgnoreDamageSource(c) || ShouldIgnoreDamageSource(dh)) { LogShadeDamage(dh, c, false); continue; }
                     bool canDamage = false;
                     try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
-                    if (!canDamage) continue;
+                    if (!canDamage) { LogShadeDamage(dh, c, false); continue; }
                     var hz = GetHazardType(dh);
-                    if (IsTerrainHazard(hz)) { LogShadeDamage(dh, c); OnShadeHitHazard(); return; }
+                    if (IsTerrainHazard(hz)) { LogShadeDamage(dh, c, canTakeDamage); OnShadeHitHazard(); return; }
                     int dmg = 0; try { dmg = dh.damageDealt; } catch { }
-                    if (dmg > 0) { LogShadeDamage(dh, c); OnShadeHitEnemy(dh); return; }
-                    else continue;
+                    if (dmg > 0) { LogShadeDamage(dh, c, canTakeDamage); OnShadeHitEnemy(dh); return; }
+                    LogShadeDamage(dh, c, false);
                 }
             }
         }
