@@ -30,20 +30,34 @@ public static class ShadeSettingsMenu
     {
         var go = Object.Instantiate(template.gameObject, parent);
         go.name = label + "Slider";
-        var txt = go.GetComponentInChildren<Text>(true);
-        if (txt == null)
+        foreach (var t in go.GetComponentsInChildren<Text>(true))
+            Object.DestroyImmediate(t.gameObject);
+        var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
+        if (tmpType != null)
         {
-            var textObj = new GameObject("Label");
-            textObj.transform.SetParent(go.transform, false);
-            txt = textObj.AddComponent<Text>();
-            txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            var tmps = go.GetComponentsInChildren(tmpType, true);
+            foreach (var tmp in tmps)
+                Object.DestroyImmediate(tmp.gameObject);
         }
+        var textObj = new GameObject("Label");
+        textObj.transform.SetParent(go.transform, false);
+        var txt = textObj.AddComponent<Text>();
+        txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
         txt.text = label;
         txt.color = Color.white;
+
         var slider = go.GetComponentInChildren<Slider>(true);
         Object.DestroyImmediate(slider.GetComponent<MenuAudioSlider>());
+        Object.DestroyImmediate(slider.GetComponent<MenuPreventDeselect>());
         slider.onValueChanged.RemoveAllListeners();
         Object.DestroyImmediate(go.GetComponent<MenuButton>());
+        var rect = go.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0, 1);
+        rect.anchorMax = new Vector2(1, 1);
+        rect.pivot = new Vector2(0.5f, 1);
+        rect.anchoredPosition = Vector2.zero;
+        var le = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
+        le.preferredHeight = rect.sizeDelta.y;
         slider.minValue = min;
         slider.maxValue = max;
         slider.SetValueWithoutNotify(value);
@@ -56,18 +70,32 @@ public static class ShadeSettingsMenu
     {
         var go = Object.Instantiate(template.gameObject, parent);
         go.name = label + "Toggle";
-        var txt = go.GetComponentInChildren<Text>(true);
-        if (txt == null)
+        foreach (var t in go.GetComponentsInChildren<Text>(true))
+            Object.DestroyImmediate(t.gameObject);
+        var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
+        if (tmpType != null)
         {
-            var textObj = new GameObject("Label");
-            textObj.transform.SetParent(go.transform, false);
-            txt = textObj.AddComponent<Text>();
-            txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            var tmps = go.GetComponentsInChildren(tmpType, true);
+            foreach (var tmp in tmps)
+                Object.DestroyImmediate(tmp.gameObject);
         }
+        var textObj = new GameObject("Label");
+        textObj.transform.SetParent(go.transform, false);
+        var txt = textObj.AddComponent<Text>();
+        txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
         txt.text = label;
         txt.color = Color.white;
+
         var toggle = go.GetComponentInChildren<Toggle>(true);
+        Object.DestroyImmediate(toggle.GetComponent<MenuPreventDeselect>());
         Object.DestroyImmediate(go.GetComponent<MenuButton>());
+        var rect = go.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0, 1);
+        rect.anchorMax = new Vector2(1, 1);
+        rect.pivot = new Vector2(0.5f, 1);
+        rect.anchoredPosition = Vector2.zero;
+        var le = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
+        le.preferredHeight = rect.sizeDelta.y;
         toggle.onValueChanged.RemoveAllListeners();
         toggle.isOn = value;
         toggle.onValueChanged.AddListener(onChange.Invoke);
@@ -207,6 +235,8 @@ public static class ShadeSettingsMenu
             Object.DestroyImmediate(mbl);
         }
 
+        LayoutRebuilder.ForceRebuildLayoutImmediate(content.GetComponent<RectTransform>());
+
         built = true;
         log.LogInfo("Shade settings page built");
     }
@@ -264,7 +294,7 @@ public static class ShadeSettingsMenu
         MenuButtonList list = null;
         foreach (var b in buttons)
         {
-            var l = b.GetComponentInParent<MenuButtonList>();
+            var l = b.GetComponentInParent<MenuButtonList>(true);
             if (l != null)
             {
                 template = b;
