@@ -114,10 +114,10 @@ public static class ShadeSettingsMenu
         rowRect.pivot = new Vector2(0.5f, 1f);
         var hLayout = row.AddComponent<HorizontalLayoutGroup>();
         hLayout.childControlHeight = true;
-        hLayout.childControlWidth = false;
+        hLayout.childControlWidth = true;
         hLayout.childForceExpandHeight = false;
         hLayout.childForceExpandWidth = false;
-        hLayout.spacing = 20f;
+        hLayout.spacing = 40f;
         hLayout.childAlignment = TextAnchor.MiddleLeft;
 
         // label text
@@ -129,7 +129,8 @@ public static class ShadeSettingsMenu
         labelTxt.color = Color.white;
         labelTxt.alignment = TextAnchor.MiddleLeft;
         var labelLe = labelObj.AddComponent<LayoutElement>();
-        labelLe.preferredWidth = 250f;
+        labelLe.minWidth = 300f;
+        labelLe.preferredWidth = 300f;
 
         // slider instance
         var go = Object.Instantiate(template.gameObject, row.transform, false);
@@ -153,7 +154,8 @@ public static class ShadeSettingsMenu
         rect.anchorMax = new Vector2(0f, 0.5f);
         rect.pivot = new Vector2(0f, 0.5f);
         var sliderLe = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
-        sliderLe.preferredWidth = 400f;
+        sliderLe.minWidth = 200f;
+        sliderLe.flexibleWidth = 1f;
 
         // value text to the right of slider
         var valueObj = new GameObject("Value");
@@ -163,6 +165,7 @@ public static class ShadeSettingsMenu
         valueTxt.color = Color.white;
         valueTxt.alignment = TextAnchor.MiddleRight;
         var valueLe = valueObj.AddComponent<LayoutElement>();
+        valueLe.minWidth = 80f;
         valueLe.preferredWidth = 80f;
 
         slider.minValue = min;
@@ -188,6 +191,11 @@ public static class ShadeSettingsMenu
             Object.Destroy(row);
             return null;
         }
+        selectable.OnSelected += _ =>
+        {
+            slider.Select();
+            slider.navigation = selectable.navigation;
+        };
         return selectable;
     }
 
@@ -202,10 +210,10 @@ public static class ShadeSettingsMenu
         rowRect.pivot = new Vector2(0.5f, 1f);
         var hLayout = row.AddComponent<HorizontalLayoutGroup>();
         hLayout.childControlHeight = true;
-        hLayout.childControlWidth = false;
+        hLayout.childControlWidth = true;
         hLayout.childForceExpandHeight = false;
         hLayout.childForceExpandWidth = false;
-        hLayout.spacing = 20f;
+        hLayout.spacing = 40f;
         hLayout.childAlignment = TextAnchor.MiddleLeft;
 
         // label text
@@ -217,7 +225,8 @@ public static class ShadeSettingsMenu
         labelTxt.color = Color.white;
         labelTxt.alignment = TextAnchor.MiddleLeft;
         var labelLe = labelObj.AddComponent<LayoutElement>();
-        labelLe.preferredWidth = 250f;
+        labelLe.minWidth = 300f;
+        labelLe.preferredWidth = 300f;
 
         // toggle instance
         var go = Object.Instantiate(template.gameObject, row.transform, false);
@@ -239,7 +248,7 @@ public static class ShadeSettingsMenu
         rect.anchorMax = new Vector2(0f, 0.5f);
         rect.pivot = new Vector2(0f, 0.5f);
         var toggleLe = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
-        toggleLe.preferredWidth = 60f;
+        toggleLe.minWidth = 60f;
 
         toggle.onValueChanged.RemoveAllListeners();
         toggle.isOn = value;
@@ -256,6 +265,11 @@ public static class ShadeSettingsMenu
             Object.Destroy(row);
             return null;
         }
+        selectable.OnSelected += _ =>
+        {
+            toggle.Select();
+            toggle.navigation = selectable.navigation;
+        };
         return selectable;
     }
 
