@@ -31,11 +31,15 @@ public static class ShadeSettingsMenu
         var go = Object.Instantiate(template.gameObject, parent);
         go.name = label + "Slider";
         var txt = go.GetComponentInChildren<Text>(true);
-        if (txt != null)
+        if (txt == null)
         {
-            txt.text = label;
-            txt.color = Color.white;
+            var textObj = new GameObject("Label");
+            textObj.transform.SetParent(go.transform, false);
+            txt = textObj.AddComponent<Text>();
+            txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
         }
+        txt.text = label;
+        txt.color = Color.white;
         var slider = go.GetComponentInChildren<Slider>(true);
         slider.minValue = min;
         slider.maxValue = max;
@@ -50,11 +54,15 @@ public static class ShadeSettingsMenu
         var go = Object.Instantiate(template.gameObject, parent);
         go.name = label + "Toggle";
         var txt = go.GetComponentInChildren<Text>(true);
-        if (txt != null)
+        if (txt == null)
         {
-            txt.text = label;
-            txt.color = Color.white;
+            var textObj = new GameObject("Label");
+            textObj.transform.SetParent(go.transform, false);
+            txt = textObj.AddComponent<Text>();
+            txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
         }
+        txt.text = label;
+        txt.color = Color.white;
         var toggle = go.GetComponentInChildren<Toggle>(true);
         toggle.isOn = value;
         toggle.onValueChanged.AddListener(onChange.Invoke);
@@ -108,12 +116,18 @@ public static class ShadeSettingsMenu
         {
             if (!loggedMissingSliderTemplate)
             {
-                log.LogWarning("slider template not found in options menu, searching globally");
+                log.LogWarning("slider template not found in options menu; using default");
                 loggedMissingSliderTemplate = true;
             }
             var sliders = Resources.FindObjectsOfTypeAll<Slider>();
             if (sliders != null && sliders.Length > 0)
                 sliderTemplate = sliders[0];
+            if (sliderTemplate == null)
+            {
+                var sliderGO = DefaultControls.CreateSlider(new DefaultControls.Resources());
+                sliderGO.SetActive(false);
+                sliderTemplate = sliderGO.GetComponent<Slider>();
+            }
         }
 
         var toggleTemplate = optionsScreen != null ? optionsScreen.GetComponentInChildren<Toggle>(true) : null;
@@ -121,12 +135,18 @@ public static class ShadeSettingsMenu
         {
             if (!loggedMissingToggleTemplate)
             {
-                log.LogWarning("toggle template not found in options menu, searching globally");
+                log.LogWarning("toggle template not found in options menu; using default");
                 loggedMissingToggleTemplate = true;
             }
             var toggles = Resources.FindObjectsOfTypeAll<Toggle>();
             if (toggles != null && toggles.Length > 0)
                 toggleTemplate = toggles[0];
+            if (toggleTemplate == null)
+            {
+                var toggleGO = DefaultControls.CreateToggle(new DefaultControls.Resources());
+                toggleGO.SetActive(false);
+                toggleTemplate = toggleGO.GetComponent<Toggle>();
+            }
         }
 
         if (sliderTemplate == null || toggleTemplate == null)
