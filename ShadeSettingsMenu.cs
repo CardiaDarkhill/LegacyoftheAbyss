@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Reflection;
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
@@ -26,6 +27,38 @@ public static class ShadeSettingsMenu
     private static bool loggedNoPauseButtonTemplates;
     private static bool loggedNoMenuButtonList;
     private static bool loggedNullEntries;
+    private const float FractionalSliderStep = 0.1f;
+
+    private struct ShadowStyle
+    {
+        public Type Type;
+        public Color EffectColor;
+        public Vector2 EffectDistance;
+        public bool UseGraphicAlpha;
+    }
+
+    private struct TextStyle
+    {
+        public Font Font;
+        public int FontSize;
+        public FontStyle FontStyle;
+        public TextAnchor Alignment;
+        public Color Color;
+        public bool RichText;
+        public bool BestFit;
+        public int BestFitMin;
+        public int BestFitMax;
+        public float LineSpacing;
+        public bool AlignByGeometry;
+        public HorizontalWrapMode HorizontalOverflow;
+        public VerticalWrapMode VerticalOverflow;
+        public List<ShadowStyle> Shadows;
+    }
+
+    private static TextStyle? sliderLabelStyle;
+    private static TextStyle? sliderValueStyle;
+    private static TextStyle? toggleLabelStyle;
+    private static Font fallbackFont;
 
     private class CancelToPause : MonoBehaviour, ICancelHandler
     {
@@ -60,7 +93,15 @@ public static class ShadeSettingsMenu
         var background = new GameObject("Background");
         background.transform.SetParent(sliderGo.transform, false);
         var bgImage = background.AddComponent<Image>();
-        bgImage.color = Color.white;
+        var uiSprite = Resources.GetBuiltinResource<Sprite>("UISprite.psd");
+        bgImage.sprite = uiSprite;
+        bgImage.type = Image.Type.Sliced;
+        bgImage.color = new Color(0.12f, 0.12f, 0.12f, 0.9f);
+        var backgroundRt = background.GetComponent<RectTransform>();
+        backgroundRt.anchorMin = Vector2.zero;
+        backgroundRt.anchorMax = Vector2.one;
+        backgroundRt.offsetMin = Vector2.zero;
+        backgroundRt.offsetMax = Vector2.zero;
 
         var fillArea = new GameObject("Fill Area");
         fillArea.transform.SetParent(sliderGo.transform, false);
@@ -72,6 +113,14 @@ public static class ShadeSettingsMenu
         var fill = new GameObject("Fill");
         fill.transform.SetParent(fillArea.transform, false);
         var fillImg = fill.AddComponent<Image>();
+        fillImg.sprite = uiSprite;
+        fillImg.type = Image.Type.Sliced;
+        fillImg.color = new Color(0.75f, 0.75f, 0.78f, 0.95f);
+        var fillRt = fill.GetComponent<RectTransform>();
+        fillRt.anchorMin = new Vector2(0f, 0f);
+        fillRt.anchorMax = new Vector2(1f, 1f);
+        fillRt.offsetMin = Vector2.zero;
+        fillRt.offsetMax = Vector2.zero;
 
         var handleArea = new GameObject("Handle Slide Area");
         handleArea.transform.SetParent(sliderGo.transform, false);
@@ -83,12 +132,25 @@ public static class ShadeSettingsMenu
         var handle = new GameObject("Handle");
         handle.transform.SetParent(handleArea.transform, false);
         var handleImg = handle.AddComponent<Image>();
+        var knobSprite = Resources.GetBuiltinResource<Sprite>("Knob.psd");
+        handleImg.sprite = knobSprite;
+        handleImg.color = Color.white;
+        var handleRt = handle.GetComponent<RectTransform>();
+        handleRt.sizeDelta = new Vector2(20f, 20f);
 
         var slider = sliderGo.AddComponent<Slider>();
         slider.fillRect = fill.GetComponent<RectTransform>();
         slider.handleRect = handle.GetComponent<RectTransform>();
         slider.targetGraphic = handleImg;
         slider.direction = Slider.Direction.LeftToRight;
+        slider.transition = Selectable.Transition.ColorTint;
+        var colors = slider.colors;
+        colors.normalColor = Color.white;
+        colors.highlightedColor = new Color(1f, 0.95f, 0.78f, 1f);
+        colors.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
+        colors.selectedColor = colors.normalColor;
+        colors.disabledColor = new Color(0.2f, 0.2f, 0.2f, 0.6f);
+        slider.colors = colors;
 
         root.SetActive(false);
         return selectable;
@@ -109,17 +171,204 @@ public static class ShadeSettingsMenu
         var background = new GameObject("Background");
         background.transform.SetParent(toggleGo.transform, false);
         var bgImage = background.AddComponent<Image>();
+        var uiSprite = Resources.GetBuiltinResource<Sprite>("UISprite.psd");
+        bgImage.sprite = uiSprite;
+        bgImage.type = Image.Type.Sliced;
+        bgImage.color = new Color(0.12f, 0.12f, 0.12f, 0.9f);
+        var backgroundRt = background.GetComponent<RectTransform>();
+        backgroundRt.anchorMin = Vector2.zero;
+        backgroundRt.anchorMax = Vector2.one;
+        backgroundRt.offsetMin = Vector2.zero;
+        backgroundRt.offsetMax = Vector2.zero;
 
         var checkmark = new GameObject("Checkmark");
         checkmark.transform.SetParent(background.transform, false);
         var checkImg = checkmark.AddComponent<Image>();
+        var checkSprite = Resources.GetBuiltinResource<Sprite>("Checkmark.psd");
+        checkImg.sprite = checkSprite;
+        checkImg.color = new Color(0.9f, 0.9f, 0.9f, 1f);
+        var checkRt = checkmark.GetComponent<RectTransform>();
+        checkRt.anchorMin = new Vector2(0.2f, 0.2f);
+        checkRt.anchorMax = new Vector2(0.8f, 0.8f);
+        checkRt.offsetMin = Vector2.zero;
+        checkRt.offsetMax = Vector2.zero;
 
         var toggle = toggleGo.AddComponent<Toggle>();
         toggle.graphic = checkImg;
         toggle.targetGraphic = bgImage;
+        toggle.transition = Selectable.Transition.ColorTint;
+        var colors = toggle.colors;
+        colors.normalColor = Color.white;
+        colors.highlightedColor = new Color(1f, 0.95f, 0.78f, 1f);
+        colors.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
+        colors.selectedColor = colors.normalColor;
+        colors.disabledColor = new Color(0.2f, 0.2f, 0.2f, 0.6f);
+        toggle.colors = colors;
 
         root.SetActive(false);
         return selectable;
+    }
+
+    private static List<ShadowStyle> CaptureShadowStyles(Graphic graphic)
+    {
+        var list = new List<ShadowStyle>();
+        foreach (var shadow in graphic.GetComponents<Shadow>())
+        {
+            list.Add(new ShadowStyle
+            {
+                Type = shadow.GetType(),
+                EffectColor = shadow.effectColor,
+                EffectDistance = shadow.effectDistance,
+                UseGraphicAlpha = shadow.useGraphicAlpha
+            });
+        }
+        return list;
+    }
+
+    private static TextStyle CaptureTextStyle(Text text)
+    {
+        return new TextStyle
+        {
+            Font = text.font,
+            FontSize = text.fontSize,
+            FontStyle = text.fontStyle,
+            Alignment = text.alignment,
+            Color = text.color,
+            RichText = text.supportRichText,
+            BestFit = text.resizeTextForBestFit,
+            BestFitMin = text.resizeTextMinSize,
+            BestFitMax = text.resizeTextMaxSize,
+            LineSpacing = text.lineSpacing,
+            AlignByGeometry = text.alignByGeometry,
+            HorizontalOverflow = text.horizontalOverflow,
+            VerticalOverflow = text.verticalOverflow,
+            Shadows = CaptureShadowStyles(text)
+        };
+    }
+
+    private static void ClearAndApplyShadows(Graphic graphic, List<ShadowStyle> styles)
+    {
+        foreach (var shadow in graphic.GetComponents<Shadow>())
+            Object.DestroyImmediate(shadow);
+
+        if (styles == null)
+            return;
+
+        foreach (var style in styles)
+        {
+            if (style.Type == null)
+                continue;
+            if (!(graphic.gameObject.AddComponent(style.Type) is Shadow newShadow))
+                continue;
+            newShadow.effectColor = style.EffectColor;
+            newShadow.effectDistance = style.EffectDistance;
+            newShadow.useGraphicAlpha = style.UseGraphicAlpha;
+        }
+    }
+
+    private static void ApplyTextStyle(Text text, TextStyle? style, TextAnchor defaultAlignment, Color defaultColor)
+    {
+        var resolved = style.GetValueOrDefault();
+        bool hasStyle = style.HasValue;
+
+        var fontToUse = resolved.Font != null ? resolved.Font : fallbackFont;
+        if (fontToUse == null)
+            fontToUse = Resources.GetBuiltinResource<Font>("Arial.ttf");
+
+        text.font = fontToUse;
+        text.color = hasStyle ? resolved.Color : defaultColor;
+        text.alignment = hasStyle ? resolved.Alignment : defaultAlignment;
+        text.fontSize = hasStyle && resolved.FontSize > 0 ? resolved.FontSize : 24;
+        text.fontStyle = hasStyle ? resolved.FontStyle : FontStyle.Normal;
+        text.supportRichText = hasStyle ? resolved.RichText : true;
+        text.lineSpacing = hasStyle ? resolved.LineSpacing : 1f;
+        text.resizeTextForBestFit = hasStyle && resolved.BestFit;
+        text.resizeTextMinSize = hasStyle && resolved.BestFit ? resolved.BestFitMin : 10;
+        text.resizeTextMaxSize = hasStyle && resolved.BestFit ? resolved.BestFitMax : 40;
+        text.alignByGeometry = hasStyle ? resolved.AlignByGeometry : false;
+        text.horizontalOverflow = hasStyle ? resolved.HorizontalOverflow : HorizontalWrapMode.Overflow;
+        text.verticalOverflow = hasStyle ? resolved.VerticalOverflow : VerticalWrapMode.Overflow;
+
+        ClearAndApplyShadows(text, hasStyle ? resolved.Shadows : null);
+    }
+
+    private static void CacheTextStyles(MenuSelectable sliderTemplate, MenuSelectable toggleTemplate)
+    {
+        sliderLabelStyle = null;
+        sliderValueStyle = null;
+        toggleLabelStyle = null;
+        fallbackFont = null;
+
+        if (sliderTemplate != null)
+        {
+            foreach (var text in sliderTemplate.GetComponentsInChildren<Text>(true))
+            {
+                if (text == null)
+                    continue;
+                var hasAuto = text.GetComponent<AutoLocalizeTextUI>() != null;
+                if (hasAuto)
+                {
+                    if (!sliderLabelStyle.HasValue)
+                    {
+                        sliderLabelStyle = CaptureTextStyle(text);
+                        if (text.font != null)
+                            fallbackFont ??= text.font;
+                    }
+                }
+                else
+                {
+                    if (!sliderValueStyle.HasValue)
+                    {
+                        sliderValueStyle = CaptureTextStyle(text);
+                        if (text.font != null)
+                            fallbackFont ??= text.font;
+                    }
+                }
+            }
+        }
+
+        if (toggleTemplate != null)
+        {
+            foreach (var text in toggleTemplate.GetComponentsInChildren<Text>(true))
+            {
+                if (text == null)
+                    continue;
+                if (!toggleLabelStyle.HasValue)
+                {
+                    toggleLabelStyle = CaptureTextStyle(text);
+                    if (text.font != null)
+                        fallbackFont ??= text.font;
+                }
+            }
+        }
+
+        if (fallbackFont == null)
+            fallbackFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+    }
+
+    private static float SnapSliderValue(float value, float min, float max, bool whole)
+    {
+        value = Mathf.Clamp(value, min, max);
+        if (whole)
+        {
+            var rounded = Mathf.Round(value);
+            if (rounded < min)
+                rounded = min;
+            if (rounded > max)
+                rounded = max;
+            return rounded;
+        }
+
+        float snapped = Mathf.Round((value - min) / FractionalSliderStep) * FractionalSliderStep + min;
+        snapped = Mathf.Clamp(snapped, min, max);
+        float multiplier = 1f / FractionalSliderStep;
+        snapped = Mathf.Round(snapped * multiplier) / multiplier;
+        return snapped;
+    }
+
+    private static string FormatSliderValue(float value, bool whole)
+    {
+        return whole ? Mathf.RoundToInt(value).ToString() : value.ToString("0.0", CultureInfo.InvariantCulture);
     }
 
     private static MenuSelectable CreateSlider(Transform parent, MenuSelectable template, string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
@@ -136,20 +385,18 @@ public static class ShadeSettingsMenu
         hLayout.childControlWidth = true;
         hLayout.childForceExpandHeight = false;
         hLayout.childForceExpandWidth = false;
-        hLayout.spacing = 40f;
+        hLayout.spacing = 36f;
         hLayout.childAlignment = TextAnchor.MiddleLeft;
 
         // label text
         var labelObj = new GameObject("Label");
         labelObj.transform.SetParent(row.transform, false);
         var labelTxt = labelObj.AddComponent<Text>();
-        labelTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        ApplyTextStyle(labelTxt, sliderLabelStyle, TextAnchor.MiddleLeft, Color.white);
         labelTxt.text = label;
-        labelTxt.color = Color.white;
-        labelTxt.alignment = TextAnchor.MiddleLeft;
         var labelLe = labelObj.AddComponent<LayoutElement>();
-        labelLe.minWidth = 300f;
-        labelLe.preferredWidth = 300f;
+        labelLe.minWidth = 340f;
+        labelLe.preferredWidth = 340f;
 
         // slider instance
         var go = Object.Instantiate(template.gameObject, row.transform, false);
@@ -164,6 +411,8 @@ public static class ShadeSettingsMenu
             foreach (var tmp in tmps)
                 Object.DestroyImmediate(tmp);
         }
+        foreach (var auto in go.GetComponentsInChildren<AutoLocalizeTextUI>(true))
+            Object.DestroyImmediate(auto);
 
         var slider = go.GetComponentInChildren<Slider>(true);
         Object.DestroyImmediate(slider.GetComponent<MenuAudioSlider>());
@@ -188,22 +437,35 @@ public static class ShadeSettingsMenu
         var valueObj = new GameObject("Value");
         valueObj.transform.SetParent(row.transform, false);
         var valueTxt = valueObj.AddComponent<Text>();
-        valueTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        valueTxt.color = Color.white;
-        valueTxt.alignment = TextAnchor.MiddleRight;
+        ApplyTextStyle(valueTxt, sliderValueStyle, TextAnchor.MiddleRight, Color.white);
         var valueLe = valueObj.AddComponent<LayoutElement>();
-        valueLe.minWidth = 80f;
-        valueLe.preferredWidth = 80f;
+        valueLe.minWidth = 110f;
+        valueLe.preferredWidth = 110f;
 
         slider.minValue = min;
         slider.maxValue = max;
         slider.wholeNumbers = whole;
-        slider.SetValueWithoutNotify(value);
-        valueTxt.text = whole ? Mathf.RoundToInt(value).ToString() : value.ToString("0.00");
+        float initialValue = SnapSliderValue(value, min, max, whole);
+        slider.SetValueWithoutNotify(initialValue);
+        valueTxt.text = FormatSliderValue(initialValue, whole);
+        if (!Mathf.Approximately(initialValue, value))
+        {
+            try
+            {
+                onChange.Invoke(initialValue);
+            }
+            catch (Exception e)
+            {
+                log.LogWarning($"Error normalizing slider '{label}' value: {e}");
+            }
+        }
         slider.onValueChanged.AddListener(v =>
         {
-            onChange.Invoke(v);
-            valueTxt.text = whole ? Mathf.RoundToInt(v).ToString() : v.ToString("0.00");
+            var snapped = SnapSliderValue(v, min, max, whole);
+            if (!Mathf.Approximately(snapped, v))
+                slider.SetValueWithoutNotify(snapped);
+            onChange.Invoke(snapped);
+            valueTxt.text = FormatSliderValue(snapped, whole);
         });
 
         var rowLe = row.AddComponent<LayoutElement>();
@@ -242,20 +504,18 @@ public static class ShadeSettingsMenu
         hLayout.childControlWidth = true;
         hLayout.childForceExpandHeight = false;
         hLayout.childForceExpandWidth = false;
-        hLayout.spacing = 40f;
+        hLayout.spacing = 36f;
         hLayout.childAlignment = TextAnchor.MiddleLeft;
 
         // label text
         var labelObj = new GameObject("Label");
         labelObj.transform.SetParent(row.transform, false);
         var labelTxt = labelObj.AddComponent<Text>();
-        labelTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        ApplyTextStyle(labelTxt, toggleLabelStyle, TextAnchor.MiddleLeft, Color.white);
         labelTxt.text = label;
-        labelTxt.color = Color.white;
-        labelTxt.alignment = TextAnchor.MiddleLeft;
         var labelLe = labelObj.AddComponent<LayoutElement>();
-        labelLe.minWidth = 300f;
-        labelLe.preferredWidth = 300f;
+        labelLe.minWidth = 340f;
+        labelLe.preferredWidth = 340f;
 
         // toggle instance
         var go = Object.Instantiate(template.gameObject, row.transform, false);
@@ -270,6 +530,8 @@ public static class ShadeSettingsMenu
             foreach (var tmp in tmps)
                 Object.DestroyImmediate(tmp);
         }
+        foreach (var auto in go.GetComponentsInChildren<AutoLocalizeTextUI>(true))
+            Object.DestroyImmediate(auto);
 
         var toggle = go.GetComponentInChildren<Toggle>(true);
         Object.DestroyImmediate(toggle.GetComponent<MenuPreventDeselect>());
@@ -279,6 +541,7 @@ public static class ShadeSettingsMenu
         rect.pivot = new Vector2(0f, 0.5f);
         var toggleLe = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
         toggleLe.minWidth = 60f;
+        toggleLe.preferredWidth = 60f;
 
         toggle.onValueChanged.RemoveAllListeners();
         toggle.isOn = value;
@@ -397,6 +660,8 @@ public static class ShadeSettingsMenu
             createdToggleTemplate = true;
         }
 
+        CacheTextStyles(sliderTemplate, toggleTemplate);
+
         screen = Object.Instantiate(templateScreen, templateScreen.transform.parent);
         screen.name = "ShadeSettingsPage";
         screen.SetActive(false);
@@ -440,7 +705,8 @@ public static class ShadeSettingsMenu
         layout.childControlWidth = true;
         layout.childForceExpandHeight = false;
         layout.childForceExpandWidth = true;
-        layout.spacing = 15f;
+        layout.spacing = 24f;
+        layout.padding = new RectOffset(60, 60, 40, 60);
 
         var selectables = new List<MenuSelectable>();
         MenuSelectable s;
@@ -664,8 +930,20 @@ public static class ShadeSettingsMenu
             return;
         log.LogInfo("Hiding Shade settings page");
         screen.SetActive(false);
-        if (ui != null && ui.pauseMenuScreen != null)
-            ui.pauseMenuScreen.gameObject.SetActive(true);
+        var targetUi = ui ?? UIManager.instance;
+        if (targetUi != null)
+        {
+            if (targetUi.pauseMenuScreen != null)
+                targetUi.pauseMenuScreen.gameObject.SetActive(true);
+            try
+            {
+                targetUi.UIGoToPauseMenu();
+            }
+            catch (Exception e)
+            {
+                log.LogWarning($"Failed to navigate back to pause menu: {e}");
+            }
+        }
         ModConfig.Save();
     }
 
@@ -685,5 +963,9 @@ public static class ShadeSettingsMenu
         built = false;
         builtFor = null;
         firstSelectable = null;
+        sliderLabelStyle = null;
+        sliderValueStyle = null;
+        toggleLabelStyle = null;
+        fallbackFont = null;
     }
 }
