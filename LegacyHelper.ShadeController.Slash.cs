@@ -255,6 +255,7 @@ public partial class LegacyHelper
                     }
 
                     int nailDmg = Mathf.Max(1, GetHornetNailDamage());
+                    nailDmg = Mathf.Max(1, Mathf.RoundToInt(nailDmg * ModConfig.Instance.shadeDamageMultiplier));
                     foreach (var d in damagers)
                     {
                         if (!d) continue;

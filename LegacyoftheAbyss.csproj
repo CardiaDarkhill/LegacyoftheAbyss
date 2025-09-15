@@ -17,6 +17,9 @@
     <Compile Remove="decomp_fix/**" />
     <EmbeddedResource Remove="decomp_fix/**" />
     <None Remove="decomp_fix/**" />
+    <Compile Remove="Tests/**" />
+    <EmbeddedResource Remove="Tests/**" />
+    <None Remove="Tests/**" />
   </ItemGroup>
 
   <ItemGroup>

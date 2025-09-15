@@ -522,7 +522,7 @@ public partial class LegacyHelper
                 if (dist <= 6f)
                 {
                     int before = shadeHP;
-                    shadeHP = Mathf.Min(shadeHP + 2, shadeMaxHP);
+                    shadeHP = Mathf.Min(shadeHP + ModConfig.Instance.bindShadeHeal, shadeMaxHP);
                     if (shadeHP != before)
                     {
                         if (shadeHP > 0)
@@ -958,7 +958,7 @@ public partial class LegacyHelper
         {
             int nail = Mathf.Max(1, GetHornetNailDamage());
             float mult = upgraded ? baseMult : baseMult * 0.7f; // Soul variant = 30% less
-            int dmg = Mathf.RoundToInt(nail * mult);
+            int dmg = Mathf.RoundToInt(nail * mult * ModConfig.Instance.shadeDamageMultiplier);
             return Mathf.Max(1, dmg);
         }
 
@@ -1858,7 +1858,8 @@ public partial class LegacyHelper
                 if (focusTimer > 0f) return;
 
                 // Complete focus
-                int canHeal = (shadeHP < shadeMaxHP) ? 1 : 0;
+                int healAmt = ModConfig.Instance.focusShadeHeal;
+                int canHeal = (shadeHP < shadeMaxHP && healAmt > 0) ? Mathf.Min(healAmt, shadeMaxHP - shadeHP) : 0;
                 if (canHeal > 0)
                 {
                     int before = shadeHP;
@@ -1883,7 +1884,8 @@ public partial class LegacyHelper
                             if (dist <= focusHealRange)
                             {
                                 // Avoid exceeding max via AddHealth handling
-                                hc.AddHealth(1);
+                                if (ModConfig.Instance.focusHornetHeal > 0)
+                                    hc.AddHealth(ModConfig.Instance.focusHornetHeal);
                             }
                         }
                     }

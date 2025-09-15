@@ -2,6 +2,8 @@ using System.Collections;
 using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 public partial class LegacyHelper
 {
@@ -135,14 +137,51 @@ public partial class LegacyHelper
         }
     }
 
+    [HarmonyPatch(typeof(DamageEnemies), "Start")]
+    private class DamageEnemies_Start_Mod
+    {
+        private static void Postfix(DamageEnemies __instance)
+        {
+            try
+            {
+                var t = typeof(DamageEnemies);
+                bool src = false; bool hero = false;
+                try { src = (bool)(t.GetField("sourceIsHero", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(__instance) ?? false); } catch { }
+                try { hero = (bool)(t.GetField("isHeroDamage", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(__instance) ?? false); } catch { }
+                if (src || hero)
+                {
+                    __instance.damageDealt = Mathf.Max(1, Mathf.RoundToInt(__instance.damageDealt * ModConfig.Instance.hornetDamageMultiplier));
+                }
+            }
+            catch { }
+        }
+    }
+
     // Trigger shade heal on explicit Bind completion event
     [HarmonyPatch(typeof(HeroController), "BindCompleted")]
     private class HeroController_BindCompleted_Patch
     {
-        private static void Postfix(HeroController __instance)
+        private static void Prefix(HeroController __instance, out int __state)
+        {
+            __state = 0;
+            try { if (__instance != null && __instance.playerData != null) __state = __instance.playerData.health; } catch { }
+        }
+
+        private static void Postfix(HeroController __instance, int __state)
         {
             try
             {
+                var pd = __instance?.playerData;
+                if (pd != null)
+                {
+                    int healed = pd.health - __state;
+                    int desired = ModConfig.Instance.bindHornetHeal;
+                    if (healed != desired)
+                    {
+                        pd.health = Mathf.Clamp(__state + desired, 0, pd.maxHealth);
+                    }
+                }
+
                 if (helper != null)
                 {
                     var sc = helper.GetComponent<ShadeController>();
@@ -252,6 +291,26 @@ public partial class LegacyHelper
         private static bool Prefix(NailSlash __instance)
         {
             return __instance.transform.GetComponentInParent<ShadeController>() == null;
+        }
+    }
+
+    [HarmonyPatch(typeof(PauseMenuButton), "OnSubmit")]
+    private class PauseMenuButton_OnSubmit_Shade
+    {
+        private static bool Prefix(PauseMenuButton __instance, BaseEventData eventData)
+        {
+            if (__instance != null && __instance.gameObject.name == "ShadeSettingsButton")
+            {
+                try
+                {
+                    var ui = UIManager.instance;
+                    if (ui != null)
+                        ui.StartCoroutine(ShadeSettingsMenu.Show(ui));
+                }
+                catch { }
+                return false;
+            }
+            return true;
         }
     }
 }

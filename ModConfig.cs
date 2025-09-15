@@ -9,15 +9,21 @@ internal static class ModPaths
     internal static readonly string Config = Path.Combine(Assets, "config.json");
 }
 
-internal class ModConfig
+public class ModConfig
 {
     public bool logDamage = true;
+    public float hornetDamageMultiplier = 1f;
+    public float shadeDamageMultiplier = 1f;
+    public int bindHornetHeal = 3;
+    public int bindShadeHeal = 2;
+    public int focusHornetHeal = 1;
+    public int focusShadeHeal = 1;
 
     private static ModConfig instance;
 
-    internal static ModConfig Instance => instance ??= Load();
+    public static ModConfig Instance => instance ??= Load();
 
-    internal static ModConfig Load()
+    public static ModConfig Load()
     {
         try
         {
@@ -39,7 +45,7 @@ internal class ModConfig
         return instance;
     }
 
-    internal static void Save()
+    public static void Save()
     {
         try
         {

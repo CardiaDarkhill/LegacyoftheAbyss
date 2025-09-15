@@ -58,6 +58,15 @@ public partial class LegacyHelper : BaseUnityPlugin
     private void Update()
     {
         LoggingManager.Update();
+        if (!shadeMenuInit)
+        {
+            var ui = UIManager.instance;
+            if (ui != null && ui.pauseMenuScreen != null)
+            {
+                ShadeSettingsMenu.Inject(ui);
+                shadeMenuInit = true;
+            }
+        }
     }
 
     private void OnDestroy()
@@ -65,6 +74,8 @@ public partial class LegacyHelper : BaseUnityPlugin
         LoggingManager.Flush();
         ModConfig.Save();
     }
+
+    private static bool shadeMenuInit;
     
 
     private static void HandleFinishedEnteringScene()

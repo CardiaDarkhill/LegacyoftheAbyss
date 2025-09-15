@@ -25,6 +25,7 @@ public partial class LegacyHelper
             sr = GetComponent<SpriteRenderer>();
             hitSet = new HashSet<Collider2D>();
             terrainLayer = LayerMask.NameToLayer("Terrain");
+            damage = Mathf.RoundToInt(damage * ModConfig.Instance.shadeDamageMultiplier);
         }
 
         void Start()
@@ -95,6 +96,7 @@ public partial class LegacyHelper
         void Awake()
         {
             hitSet = new HashSet<Collider2D>();
+            damage = Mathf.RoundToInt(damage * ModConfig.Instance.shadeDamageMultiplier);
         }
 
         void Start()
