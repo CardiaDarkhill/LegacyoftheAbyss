@@ -27,7 +27,7 @@ public static class ShadeSettingsMenu
     private static bool loggedNoMenuButtonList;
     private static bool loggedNullEntries;
 
-    private static MenuSelectable CreateSlider(Transform parent, Slider template, string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
+    private static Selectable CreateSlider(Transform parent, Slider template, string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
     {
         // container row stretching full width
         var row = new GameObject(label + "Row");
@@ -104,10 +104,18 @@ public static class ShadeSettingsMenu
         rowLe.preferredHeight = rect.sizeDelta.y;
         rowLe.minHeight = rect.sizeDelta.y;
 
-        return go.GetComponent<MenuSelectable>();
+        // return whichever Selectable component exists (MenuSelectable if present)
+        var selectable = go.GetComponent<Selectable>();
+        if (selectable == null)
+        {
+            log.LogError($"Created slider '{label}' missing Selectable component");
+            Object.Destroy(row);
+            return null;
+        }
+        return selectable;
     }
 
-    private static MenuSelectable CreateToggle(Transform parent, Toggle template, string label, bool value, System.Action<bool> onChange)
+    private static Selectable CreateToggle(Transform parent, Toggle template, string label, bool value, System.Action<bool> onChange)
     {
         // container row stretching full width
         var row = new GameObject(label + "Row");
@@ -165,7 +173,14 @@ public static class ShadeSettingsMenu
         rowLe.preferredHeight = rect.sizeDelta.y;
         rowLe.minHeight = rect.sizeDelta.y;
 
-        return go.GetComponent<MenuSelectable>();
+        var selectable = go.GetComponent<Selectable>();
+        if (selectable == null)
+        {
+            log.LogError($"Created toggle '{label}' missing Selectable component");
+            Object.Destroy(row);
+            return null;
+        }
+        return selectable;
     }
 
     private static void Build(UIManager ui)
@@ -295,14 +310,22 @@ public static class ShadeSettingsMenu
         layout.childForceExpandWidth = true;
         layout.spacing = 15f;
 
-        var selectables = new List<MenuSelectable>();
-        selectables.Add(CreateSlider(content.transform, sliderTemplate, "Hornet Damage", 0.2f, 2f, ModConfig.Instance.hornetDamageMultiplier, v => ModConfig.Instance.hornetDamageMultiplier = v));
-        selectables.Add(CreateSlider(content.transform, sliderTemplate, "Shade Damage", 0.2f, 2f, ModConfig.Instance.shadeDamageMultiplier, v => ModConfig.Instance.shadeDamageMultiplier = v));
-        selectables.Add(CreateSlider(content.transform, sliderTemplate, "Shade Heal (Bind)", 0f, 6f, ModConfig.Instance.bindShadeHeal, v => ModConfig.Instance.bindShadeHeal = Mathf.RoundToInt(v), true));
-        selectables.Add(CreateSlider(content.transform, sliderTemplate, "Hornet Heal (Bind)", 0f, 6f, ModConfig.Instance.bindHornetHeal, v => ModConfig.Instance.bindHornetHeal = Mathf.RoundToInt(v), true));
-        selectables.Add(CreateSlider(content.transform, sliderTemplate, "Shade Focus Heal", 0f, 6f, ModConfig.Instance.focusShadeHeal, v => ModConfig.Instance.focusShadeHeal = Mathf.RoundToInt(v), true));
-        selectables.Add(CreateSlider(content.transform, sliderTemplate, "Hornet Focus Heal", 0f, 6f, ModConfig.Instance.focusHornetHeal, v => ModConfig.Instance.focusHornetHeal = Mathf.RoundToInt(v), true));
-        selectables.Add(CreateToggle(content.transform, toggleTemplate, "Damage Logging", ModConfig.Instance.logDamage, v => ModConfig.Instance.logDamage = v));
+        var selectables = new List<Selectable>();
+        Selectable s;
+        s = CreateSlider(content.transform, sliderTemplate, "Hornet Damage", 0.2f, 2f, ModConfig.Instance.hornetDamageMultiplier, v => ModConfig.Instance.hornetDamageMultiplier = v);
+        if (s != null) selectables.Add(s);
+        s = CreateSlider(content.transform, sliderTemplate, "Shade Damage", 0.2f, 2f, ModConfig.Instance.shadeDamageMultiplier, v => ModConfig.Instance.shadeDamageMultiplier = v);
+        if (s != null) selectables.Add(s);
+        s = CreateSlider(content.transform, sliderTemplate, "Shade Heal (Bind)", 0f, 6f, ModConfig.Instance.bindShadeHeal, v => ModConfig.Instance.bindShadeHeal = Mathf.RoundToInt(v), true);
+        if (s != null) selectables.Add(s);
+        s = CreateSlider(content.transform, sliderTemplate, "Hornet Heal (Bind)", 0f, 6f, ModConfig.Instance.bindHornetHeal, v => ModConfig.Instance.bindHornetHeal = Mathf.RoundToInt(v), true);
+        if (s != null) selectables.Add(s);
+        s = CreateSlider(content.transform, sliderTemplate, "Shade Focus Heal", 0f, 6f, ModConfig.Instance.focusShadeHeal, v => ModConfig.Instance.focusShadeHeal = Mathf.RoundToInt(v), true);
+        if (s != null) selectables.Add(s);
+        s = CreateSlider(content.transform, sliderTemplate, "Hornet Focus Heal", 0f, 6f, ModConfig.Instance.focusHornetHeal, v => ModConfig.Instance.focusHornetHeal = Mathf.RoundToInt(v), true);
+        if (s != null) selectables.Add(s);
+        s = CreateToggle(content.transform, toggleTemplate, "Damage Logging", ModConfig.Instance.logDamage, v => ModConfig.Instance.logDamage = v);
+        if (s != null) selectables.Add(s);
         if (selectables.Count > 0)
             firstSelectable = selectables[0];
 
