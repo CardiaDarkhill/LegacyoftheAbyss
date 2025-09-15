@@ -207,37 +207,65 @@ public static class ShadeSettingsMenu
 
         // Need an options menu screen to clone for consistent styling
         var optionsScreen = ui.optionsMenuScreen;
+        GameObject templateScreen;
         if (optionsScreen == null)
         {
             if (!loggedMissingOptionsMenu)
             {
-                log.LogWarning("optionsMenuScreen not yet available");
+                log.LogWarning("optionsMenuScreen not yet available; using pause menu as template");
                 loggedMissingOptionsMenu = true;
             }
-            return;
+            templateScreen = ui.pauseMenuScreen.gameObject;
         }
-        var templateScreen = optionsScreen.gameObject;
+        else
+        {
+            templateScreen = optionsScreen.gameObject;
+        }
 
-        var sliderTemplate = optionsScreen.GetComponentInChildren<Slider>(true);
+        var sliderTemplate = optionsScreen != null ? optionsScreen.GetComponentInChildren<Slider>(true) : null;
         if (sliderTemplate == null || sliderTemplate.GetComponent<MenuSelectable>() == null)
         {
             if (!loggedMissingSliderTemplate)
             {
-                log.LogError("slider template missing MenuSelectable; cannot build settings page");
+                log.LogWarning("slider template not found in options menu, searching globally");
                 loggedMissingSliderTemplate = true;
             }
-            return;
+            foreach (var slide in Object.FindObjectsOfType<Slider>(true))
+            {
+                if (slide.GetComponent<MenuSelectable>() != null)
+                {
+                    sliderTemplate = slide;
+                    break;
+                }
+            }
+            if (sliderTemplate == null)
+            {
+                log.LogError("required slider template missing; cannot build settings page");
+                return;
+            }
         }
 
-        var toggleTemplate = optionsScreen.GetComponentInChildren<Toggle>(true);
+        var toggleTemplate = optionsScreen != null ? optionsScreen.GetComponentInChildren<Toggle>(true) : null;
         if (toggleTemplate == null || toggleTemplate.GetComponent<MenuSelectable>() == null)
         {
             if (!loggedMissingToggleTemplate)
             {
-                log.LogError("toggle template missing MenuSelectable; cannot build settings page");
+                log.LogWarning("toggle template not found in options menu, searching globally");
                 loggedMissingToggleTemplate = true;
             }
-            return;
+            foreach (var tog in Object.FindObjectsOfType<Toggle>(true))
+            {
+                if (tog.GetComponent<MenuSelectable>() != null)
+                {
+                    toggleTemplate = tog;
+                    break;
+                }
+            }
+            if (toggleTemplate == null)
+            {
+                log.LogError("required toggle template missing; cannot build settings page");
+                return;
+            }
         }
 
         screen = Object.Instantiate(templateScreen, templateScreen.transform.parent);
@@ -344,6 +372,8 @@ public static class ShadeSettingsMenu
 
         // Ensure a screen exists for this UI
         Build(ui);
+        if (screen == null)
+            return;
 
         // Avoid duplicate buttons by scanning entire hierarchy
         foreach (Transform child in ui.pauseMenuScreen.GetComponentsInChildren<Transform>(true))
