@@ -13,6 +13,8 @@ public partial class LegacyHelper : BaseUnityPlugin
     private static bool loggedStartupFields;
     private static SimpleHUD hud;
     private static bool registeredEnterSceneHandler;
+    private bool loggedMissingUI;
+    private bool loggedMissingPauseMenu;
 
     // Persist shade state across scene transitions
     internal static int savedShadeHP = -1;
@@ -59,10 +61,27 @@ public partial class LegacyHelper : BaseUnityPlugin
     {
         LoggingManager.Update();
         var ui = UnityEngine.Object.FindObjectOfType<UIManager>();
-        if (ui != null && ui.pauseMenuScreen != null)
+        if (ui == null)
         {
-            ShadeSettingsMenu.Inject(ui);
+            if (!loggedMissingUI)
+            {
+                Logger.LogInfo("UIManager not found yet");
+                loggedMissingUI = true;
+            }
+            return;
         }
+        if (ui.pauseMenuScreen == null)
+        {
+            if (!loggedMissingPauseMenu)
+            {
+                Logger.LogInfo("pauseMenuScreen not available yet");
+                loggedMissingPauseMenu = true;
+            }
+            return;
+        }
+        loggedMissingUI = false;
+        loggedMissingPauseMenu = false;
+        ShadeSettingsMenu.Inject(ui);
     }
 
     private void OnDestroy()

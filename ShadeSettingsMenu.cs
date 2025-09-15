@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using Object = UnityEngine.Object;
+using BepInEx.Logging;
 
 public static class ShadeSettingsMenu
 {
@@ -12,6 +13,7 @@ public static class ShadeSettingsMenu
     private static bool built;
     private static UIManager builtFor;
     private static Selectable firstSelectable;
+    private static readonly ManualLogSource log = BepInEx.Logging.Logger.CreateLogSource("ShadeSettingsMenu");
 
     private static Slider CreateSlider(Transform parent, Slider template, string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
     {
@@ -50,10 +52,16 @@ public static class ShadeSettingsMenu
 
     private static void Build(UIManager ui)
     {
-        if (built && screen != null && builtFor == ui) return;
+        log.LogDebug("Build called");
+        if (built && screen != null && builtFor == ui)
+        {
+            log.LogDebug("Settings page already built for this UI");
+            return;
+        }
 
         if (screen != null && builtFor != ui)
         {
+            log.LogDebug("UIManager changed, destroying previous settings page");
             Object.Destroy(screen);
             screen = null;
         }
@@ -63,24 +71,37 @@ public static class ShadeSettingsMenu
 
         // Need an options menu screen to clone for consistent styling
         if (ui.optionsMenuScreen == null)
+        {
+            log.LogDebug("optionsMenuScreen missing");
             return;
+        }
 
         var sliderTemplate = ui.optionsMenuScreen.GetComponentInChildren<Slider>(true);
         if (sliderTemplate == null)
+        {
+            log.LogDebug("slider template not found in options menu, searching globally");
             sliderTemplate = Object.FindObjectOfType<Slider>(true);
+        }
 
         var toggleTemplate = ui.optionsMenuScreen.GetComponentInChildren<Toggle>(true);
         if (toggleTemplate == null)
+        {
+            log.LogDebug("toggle template not found in options menu, searching globally");
             toggleTemplate = Object.FindObjectOfType<Toggle>(true);
+        }
 
         if (sliderTemplate == null || toggleTemplate == null)
+        {
+            log.LogDebug("required templates missing; cannot build settings page");
             return;
+        }
 
         built = true;
         var templateScreen = ui.optionsMenuScreen.gameObject;
         screen = Object.Instantiate(templateScreen, templateScreen.transform.parent);
         screen.name = "ShadeSettingsPage";
         screen.SetActive(false);
+        log.LogDebug("Instantiated ShadeSettingsPage");
 
         var ms = screen.GetComponent<MenuScreen>();
 
@@ -109,19 +130,32 @@ public static class ShadeSettingsMenu
 
         if (ms.backButton != null)
         {
+            log.LogDebug("Wiring back button");
             ms.backButton.OnSubmitPressed.AddListener(() => ui.StartCoroutine(Hide(ui)));
         }
 
         var mbl = screen.GetComponent<MenuButtonList>();
         if (mbl != null)
         {
+            log.LogDebug("Removing inherited MenuButtonList from settings page");
             Object.Destroy(mbl);
         }
+
+        log.LogInfo("Shade settings page built");
     }
 
     internal static void Inject(UIManager ui)
     {
-        if (ui == null || ui.pauseMenuScreen == null) return;
+        if (ui == null)
+        {
+            log.LogDebug("Inject called with null UIManager");
+            return;
+        }
+        if (ui.pauseMenuScreen == null)
+        {
+            log.LogDebug("pauseMenuScreen not yet available");
+            return;
+        }
 
         // Ensure a screen exists for this UI
         Build(ui);
@@ -130,20 +164,33 @@ public static class ShadeSettingsMenu
         foreach (Transform child in ui.pauseMenuScreen.GetComponentsInChildren<Transform>(true))
         {
             if (child.name == "ShadeSettingsButton")
+            {
+                log.LogDebug("ShadeSettingsButton already present; skipping injection");
                 return;
+            }
         }
 
         var buttons = ui.pauseMenuScreen.GetComponentsInChildren<PauseMenuButton>(true);
-        if (buttons.Length == 0) return;
+        if (buttons.Length == 0)
+        {
+            log.LogDebug("No PauseMenuButton templates found");
+            return;
+        }
         var template = buttons[buttons.Length - 1];
 
         var list = template.transform.parent.GetComponent<MenuButtonList>();
         if (list == null)
+        {
+            log.LogDebug("MenuButtonList not found on template parent");
             return;
+        }
         var field = typeof(MenuButtonList).GetField("entries", BindingFlags.NonPublic | BindingFlags.Instance);
         var entries = (Array)field.GetValue(list);
         if (entries == null)
+        {
+            log.LogDebug("MenuButtonList entries field null");
             return;
+        }
 
         var go = Object.Instantiate(template.gameObject, template.transform.parent);
         go.name = "ShadeSettingsButton";
@@ -187,14 +234,19 @@ public static class ShadeSettingsMenu
         dirtyField?.SetValue(list, true);
 
         list.SetupActive();
+        log.LogInfo("Injected ShadeSettingsButton into pause menu");
     }
 
     internal static IEnumerator Show(UIManager ui)
     {
         Build(ui);
         if (screen == null)
+        {
+            log.LogDebug("Show called but screen is null");
             yield break;
+        }
 
+        log.LogDebug("Showing Shade settings page");
         ui.pauseMenuScreen.gameObject.SetActive(false);
         screen.SetActive(true);
         if (firstSelectable != null)
@@ -206,6 +258,7 @@ public static class ShadeSettingsMenu
 
     internal static IEnumerator Hide(UIManager ui)
     {
+        log.LogDebug("Hiding Shade settings page");
         screen.SetActive(false);
         ui.pauseMenuScreen.gameObject.SetActive(true);
         ModConfig.Save();
