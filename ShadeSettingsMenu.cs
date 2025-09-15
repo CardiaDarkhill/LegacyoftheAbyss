@@ -20,7 +20,6 @@ public static class ShadeSettingsMenu
     private static bool loggedBuildAttempt;
     private static bool loggedMissingOptionsMenu;
     private static bool loggedMissingSliderTemplate;
-    private static bool loggedMissingToggleTemplate;
     private static bool loggedNullUI;
     private static bool loggedNoPauseMenu;
     private static bool loggedButtonAlreadyPresent;
@@ -59,6 +58,9 @@ public static class ShadeSettingsMenu
     private static TextStyle? sliderValueStyle;
     private static TextStyle? toggleLabelStyle;
     private static Font fallbackFont;
+    private static Sprite fallbackSlicedSprite;
+    private static Sprite fallbackKnobSprite;
+    private static Sprite fallbackCheckSprite;
 
     private class CancelToPause : MonoBehaviour, ICancelHandler
     {
@@ -78,6 +80,28 @@ public static class ShadeSettingsMenu
 
     internal static bool IsShowing => screen != null && screen.activeSelf;
 
+    private static Sprite GetFallbackSprite(ref Sprite cache, string spriteName, bool sliced)
+    {
+        if (cache != null)
+            return cache;
+
+        const int size = 16;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        var colors = new Color32[size * size];
+        for (int i = 0; i < colors.Length; i++)
+            colors[i] = new Color32(255, 255, 255, 255);
+        tex.SetPixels32(colors);
+        tex.Apply();
+        tex.name = spriteName + "Tex";
+        tex.hideFlags = HideFlags.HideAndDontSave;
+
+        Vector4 border = sliced ? new Vector4(6f, 6f, 6f, 6f) : Vector4.zero;
+        cache = Sprite.Create(tex, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), size, 0, SpriteMeshType.FullRect, border);
+        cache.name = spriteName;
+        cache.hideFlags = HideFlags.HideAndDontSave;
+        return cache;
+    }
+
     private static MenuSelectable CreateDefaultSliderTemplate()
     {
         var root = new GameObject("DefaultSlider");
@@ -93,7 +117,7 @@ public static class ShadeSettingsMenu
         var background = new GameObject("Background");
         background.transform.SetParent(sliderGo.transform, false);
         var bgImage = background.AddComponent<Image>();
-        var uiSprite = Resources.GetBuiltinResource<Sprite>("UISprite.psd");
+        var uiSprite = GetFallbackSprite(ref fallbackSlicedSprite, "ShadeSettingsSliderBg", true);
         bgImage.sprite = uiSprite;
         bgImage.type = Image.Type.Sliced;
         bgImage.color = new Color(0.12f, 0.12f, 0.12f, 0.9f);
@@ -132,7 +156,7 @@ public static class ShadeSettingsMenu
         var handle = new GameObject("Handle");
         handle.transform.SetParent(handleArea.transform, false);
         var handleImg = handle.AddComponent<Image>();
-        var knobSprite = Resources.GetBuiltinResource<Sprite>("Knob.psd");
+        var knobSprite = GetFallbackSprite(ref fallbackKnobSprite, "ShadeSettingsSliderKnob", false);
         handleImg.sprite = knobSprite;
         handleImg.color = Color.white;
         var handleRt = handle.GetComponent<RectTransform>();
@@ -171,7 +195,7 @@ public static class ShadeSettingsMenu
         var background = new GameObject("Background");
         background.transform.SetParent(toggleGo.transform, false);
         var bgImage = background.AddComponent<Image>();
-        var uiSprite = Resources.GetBuiltinResource<Sprite>("UISprite.psd");
+        var uiSprite = GetFallbackSprite(ref fallbackSlicedSprite, "ShadeSettingsToggleBg", true);
         bgImage.sprite = uiSprite;
         bgImage.type = Image.Type.Sliced;
         bgImage.color = new Color(0.12f, 0.12f, 0.12f, 0.9f);
@@ -184,7 +208,7 @@ public static class ShadeSettingsMenu
         var checkmark = new GameObject("Checkmark");
         checkmark.transform.SetParent(background.transform, false);
         var checkImg = checkmark.AddComponent<Image>();
-        var checkSprite = Resources.GetBuiltinResource<Sprite>("Checkmark.psd");
+        var checkSprite = GetFallbackSprite(ref fallbackCheckSprite, "ShadeSettingsToggleCheck", false);
         checkImg.sprite = checkSprite;
         checkImg.color = new Color(0.9f, 0.9f, 0.9f, 1f);
         var checkRt = checkmark.GetComponent<RectTransform>();
@@ -648,17 +672,6 @@ public static class ShadeSettingsMenu
                 }
             }
         }
-        bool createdToggleTemplate = false;
-        if (toggleTemplate == null)
-        {
-            if (!loggedMissingToggleTemplate)
-            {
-                log.LogWarning("toggle template not found in options menu; using default");
-                loggedMissingToggleTemplate = true;
-            }
-            toggleTemplate = CreateDefaultToggleTemplate();
-            createdToggleTemplate = true;
-        }
 
         CacheTextStyles(sliderTemplate, toggleTemplate);
 
@@ -722,8 +735,6 @@ public static class ShadeSettingsMenu
         if (s != null) selectables.Add(s);
         s = CreateSlider(content.transform, sliderTemplate, "Hornet Focus Heal", 0f, 6f, ModConfig.Instance.focusHornetHeal, v => ModConfig.Instance.focusHornetHeal = Mathf.RoundToInt(v), true);
         if (s != null) selectables.Add(s);
-        s = CreateToggle(content.transform, toggleTemplate, "Damage Logging", ModConfig.Instance.logDamage, v => ModConfig.Instance.logDamage = v);
-        if (s != null) selectables.Add(s);
         if (selectables.Count > 0)
         {
             firstSelectable = selectables[0];
@@ -755,8 +766,6 @@ public static class ShadeSettingsMenu
 
         if (createdSliderTemplate)
             Object.Destroy(sliderTemplate.gameObject);
-        if (createdToggleTemplate)
-            Object.Destroy(toggleTemplate.gameObject);
 
         built = true;
         log.LogInfo("Shade settings page built");

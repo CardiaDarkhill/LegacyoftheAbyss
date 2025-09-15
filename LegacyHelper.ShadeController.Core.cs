@@ -96,6 +96,9 @@ public partial class LegacyHelper
         private const KeyCode SprintKeySecondary = KeyCode.RightShift;
         private const KeyCode DamageToggleKey = KeyCode.Alpha0;
         private bool canTakeDamage = true;
+        private Vector2 capturedMoveInput;
+        private float capturedHorizontalInput;
+        private bool capturedSprintHeld;
         // Spells use FireKey + W (Shriek) or FireKey + S (Descending Dark)
 
         // Teleport channel
@@ -488,7 +491,7 @@ public partial class LegacyHelper
             CheckSprintUnlock();
             AdjustLeashForCamera();
 
-            HandleMovementAndFacing();
+            CaptureMovementInput();
             // Allow starting focus even when not casting other spells; focusing itself sets isCastingSpell
             if (!inHardLeash && !isChannelingTeleport && !isInactive)
             {
@@ -510,6 +513,12 @@ public partial class LegacyHelper
             PersistIfChanged();
             CheckFocusReadySfx();
             HandleAnimation();
+        }
+
+        private void FixedUpdate()
+        {
+            if (hornetTransform == null) return;
+            HandleMovementAndFacing(Time.fixedDeltaTime);
         }
 
         public void ApplyBindHealFromHornet(Transform hornet)
@@ -563,7 +572,22 @@ public partial class LegacyHelper
             }
         }
 
-        private void HandleMovementAndFacing()
+        private void CaptureMovementInput()
+        {
+            float h = (Input.GetKey(KeyCode.A) ? -1f : 0f) + (Input.GetKey(KeyCode.D) ? 1f : 0f);
+            float v = (Input.GetKey(KeyCode.S) ? -1f : 0f) + (Input.GetKey(KeyCode.W) ? 1f : 0f);
+            Vector2 input = new Vector2(h, v);
+            if (input.sqrMagnitude > 1f) input.Normalize();
+            if (isChannelingTeleport)
+                input = Vector2.zero;
+            capturedMoveInput = input;
+            capturedHorizontalInput = h;
+            capturedSprintHeld = sprintUnlocked &&
+                                 (Input.GetKey(SprintKeyPrimary) || Input.GetKey(SprintKeySecondary)) &&
+                                 input.sqrMagnitude > 0f;
+        }
+
+        private void HandleMovementAndFacing(float deltaTime)
         {
             if (isCastingSpell || isFocusing)
             {
@@ -575,13 +599,8 @@ public partial class LegacyHelper
                 hardLeashTimer = 0f;
                 return;
             }
-            float h = (Input.GetKey(KeyCode.A) ? -1f : 0f) + (Input.GetKey(KeyCode.D) ? 1f : 0f);
-            float v = (Input.GetKey(KeyCode.S) ? -1f : 0f) + (Input.GetKey(KeyCode.W) ? 1f : 0f);
-            Vector2 input = new Vector2(h, v);
-            if (input.sqrMagnitude > 1f) input.Normalize();
-
-            // Freeze manual input while channeling teleport
-            if (isChannelingTeleport) input = Vector2.zero;
+            Vector2 input = capturedMoveInput;
+            float h = capturedHorizontalInput;
 
             Vector2 to = (Vector2)(hornetTransform.position - transform.position);
             float dist = to.magnitude;
@@ -598,17 +617,17 @@ public partial class LegacyHelper
             {
                 float t = Mathf.InverseLerp(softLeashRadius, hardLeashRadius, dist);
                 Vector2 pullDir = to.normalized;
-                moveDelta += pullDir * (Mathf.Lerp(softPullSpeed, softPullSpeed * 1.5f, t)) * Time.deltaTime;
+                moveDelta += pullDir * (Mathf.Lerp(softPullSpeed, softPullSpeed * 1.5f, t)) * deltaTime;
                 inHardLeash = false; hardLeashTimer = 0f; EnableCollisions(true);
             }
 
             if (dist > hardLeashRadius)
             {
                 inHardLeash = true;
-                hardLeashTimer += Time.deltaTime;
+                hardLeashTimer += deltaTime;
                 EnableCollisions(false);
                 Vector2 dir = to.normalized;
-                moveDelta = dir * hardPullSpeed * Time.deltaTime;
+                moveDelta = dir * hardPullSpeed * deltaTime;
                 if (hardLeashTimer >= hardLeashTimeout)
                 {
                     TeleportToHornet();
@@ -624,9 +643,7 @@ public partial class LegacyHelper
             if (!inHardLeash)
             {
                 float speed = moveSpeed;
-                bool sprinting = sprintUnlocked &&
-                                 (Input.GetKey(SprintKeyPrimary) || Input.GetKey(SprintKeySecondary)) &&
-                                 input.sqrMagnitude > 0f;
+                bool sprinting = capturedSprintHeld && input.sqrMagnitude > 0f;
                 bool startedSprint = sprinting && !isSprinting;
                 if (startedSprint)
                 {
@@ -641,7 +658,7 @@ public partial class LegacyHelper
                 if (sprintDashTimer > 0f)
                 {
                     speed *= sprintDashMultiplier;
-                    sprintDashTimer -= Time.deltaTime;
+                    sprintDashTimer -= deltaTime;
                     if (activeDashPs)
                     {
                         var emit = new ParticleSystem.EmitParams();
@@ -659,9 +676,9 @@ public partial class LegacyHelper
                     }
                 }
                 if (sprintDashCooldownTimer > 0f)
-                    sprintDashCooldownTimer -= Time.deltaTime;
+                    sprintDashCooldownTimer -= deltaTime;
 
-                moveDelta += input * speed * Time.deltaTime;
+                moveDelta += input * speed * deltaTime;
                 isSprinting = sprinting;
             }
             else
@@ -672,9 +689,9 @@ public partial class LegacyHelper
 
             if (knockbackTimer > 0f)
             {
-                moveDelta += knockbackVelocity * Time.deltaTime;
-                knockbackVelocity = Vector2.Lerp(knockbackVelocity, Vector2.zero, 10f * Time.deltaTime);
-                knockbackTimer -= Time.deltaTime;
+                moveDelta += knockbackVelocity * deltaTime;
+                knockbackVelocity = Vector2.Lerp(knockbackVelocity, Vector2.zero, 10f * deltaTime);
+                knockbackTimer -= deltaTime;
             }
 
             // Compute proposed next position and clamp against transition gates at map edges
