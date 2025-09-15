@@ -26,6 +26,82 @@ public static class ShadeSettingsMenu
     private static bool loggedNoMenuButtonList;
     private static bool loggedNullEntries;
 
+    private static Slider CreateDefaultSliderTemplate()
+    {
+        var go = new GameObject("DefaultSlider");
+        go.hideFlags = HideFlags.HideAndDontSave;
+        var rt = go.AddComponent<RectTransform>();
+
+        var background = new GameObject("Background");
+        background.transform.SetParent(go.transform, false);
+        var bgImage = background.AddComponent<Image>();
+        bgImage.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Background.psd");
+        bgImage.type = Image.Type.Sliced;
+        bgImage.color = Color.white;
+
+        var fillArea = new GameObject("Fill Area");
+        fillArea.transform.SetParent(go.transform, false);
+        var fillAreaRt = fillArea.AddComponent<RectTransform>();
+        fillAreaRt.anchorMin = new Vector2(0f, 0.25f);
+        fillAreaRt.anchorMax = new Vector2(1f, 0.75f);
+        fillAreaRt.sizeDelta = new Vector2(-20f, 0f);
+
+        var fill = new GameObject("Fill");
+        fill.transform.SetParent(fillArea.transform, false);
+        var fillImg = fill.AddComponent<Image>();
+        fillImg.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/UISprite.psd");
+        fillImg.type = Image.Type.Sliced;
+
+        var handleArea = new GameObject("Handle Slide Area");
+        handleArea.transform.SetParent(go.transform, false);
+        var handleAreaRt = handleArea.AddComponent<RectTransform>();
+        handleAreaRt.anchorMin = new Vector2(0f, 0f);
+        handleAreaRt.anchorMax = new Vector2(1f, 1f);
+        handleAreaRt.sizeDelta = new Vector2(-20f, 0f);
+
+        var handle = new GameObject("Handle");
+        handle.transform.SetParent(handleArea.transform, false);
+        var handleImg = handle.AddComponent<Image>();
+        handleImg.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Knob.psd");
+        handleImg.type = Image.Type.Sliced;
+
+        var slider = go.AddComponent<Slider>();
+        slider.fillRect = fill.GetComponent<RectTransform>();
+        slider.handleRect = handle.GetComponent<RectTransform>();
+        slider.targetGraphic = handleImg;
+        slider.direction = Slider.Direction.LeftToRight;
+
+        go.AddComponent<MenuSelectable>();
+        go.SetActive(false);
+        return slider;
+    }
+
+    private static Toggle CreateDefaultToggleTemplate()
+    {
+        var go = new GameObject("DefaultToggle");
+        go.hideFlags = HideFlags.HideAndDontSave;
+        var rt = go.AddComponent<RectTransform>();
+
+        var background = new GameObject("Background");
+        background.transform.SetParent(go.transform, false);
+        var bgImage = background.AddComponent<Image>();
+        bgImage.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Background.psd");
+        bgImage.type = Image.Type.Sliced;
+
+        var checkmark = new GameObject("Checkmark");
+        checkmark.transform.SetParent(background.transform, false);
+        var checkImg = checkmark.AddComponent<Image>();
+        checkImg.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Checkmark.psd");
+
+        var toggle = go.AddComponent<Toggle>();
+        toggle.graphic = checkImg;
+        toggle.targetGraphic = bgImage;
+
+        go.AddComponent<MenuSelectable>();
+        go.SetActive(false);
+        return toggle;
+    }
+
     private static Selectable CreateSlider(Transform parent, Slider template, string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
     {
         // container row stretching full width
@@ -223,49 +299,29 @@ public static class ShadeSettingsMenu
         }
 
         var sliderTemplate = optionsScreen != null ? optionsScreen.GetComponentInChildren<Slider>(true) : null;
+        bool createdSliderTemplate = false;
         if (sliderTemplate == null || sliderTemplate.GetComponent<MenuSelectable>() == null)
         {
             if (!loggedMissingSliderTemplate)
             {
-                log.LogWarning("slider template not found in options menu, searching globally");
+                log.LogWarning("slider template not found in options menu; using default");
                 loggedMissingSliderTemplate = true;
             }
-            foreach (var slide in Object.FindObjectsOfType<Slider>(true))
-            {
-                if (slide.GetComponent<MenuSelectable>() != null)
-                {
-                    sliderTemplate = slide;
-                    break;
-                }
-            }
-            if (sliderTemplate == null)
-            {
-                log.LogError("required slider template missing; cannot build settings page");
-                return;
-            }
+            sliderTemplate = CreateDefaultSliderTemplate();
+            createdSliderTemplate = true;
         }
 
         var toggleTemplate = optionsScreen != null ? optionsScreen.GetComponentInChildren<Toggle>(true) : null;
+        bool createdToggleTemplate = false;
         if (toggleTemplate == null || toggleTemplate.GetComponent<MenuSelectable>() == null)
         {
             if (!loggedMissingToggleTemplate)
             {
-                log.LogWarning("toggle template not found in options menu, searching globally");
+                log.LogWarning("toggle template not found in options menu; using default");
                 loggedMissingToggleTemplate = true;
             }
-            foreach (var tog in Object.FindObjectsOfType<Toggle>(true))
-            {
-                if (tog.GetComponent<MenuSelectable>() != null)
-                {
-                    toggleTemplate = tog;
-                    break;
-                }
-            }
-            if (toggleTemplate == null)
-            {
-                log.LogError("required toggle template missing; cannot build settings page");
-                return;
-            }
+            toggleTemplate = CreateDefaultToggleTemplate();
+            createdToggleTemplate = true;
         }
 
         screen = Object.Instantiate(templateScreen, templateScreen.transform.parent);
@@ -344,6 +400,11 @@ public static class ShadeSettingsMenu
         mbl.SetupActive();
 
         LayoutRebuilder.ForceRebuildLayoutImmediate(content.GetComponent<RectTransform>());
+
+        if (createdSliderTemplate)
+            Object.Destroy(sliderTemplate.gameObject);
+        if (createdToggleTemplate)
+            Object.Destroy(toggleTemplate.gameObject);
 
         built = true;
         log.LogInfo("Shade settings page built");
