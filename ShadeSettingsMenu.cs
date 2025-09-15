@@ -85,17 +85,25 @@ public static class ShadeSettingsMenu
         builtFor = ui;
 
         // Need an options menu screen to clone for consistent styling
-        if (ui.optionsMenuScreen == null)
+        var optionsScreen = ui.optionsMenuScreen;
+        var templateScreen = optionsScreen != null ? optionsScreen.gameObject : ui.pauseMenuScreen?.gameObject;
+        if (templateScreen == null)
         {
             if (!loggedMissingOptionsMenu)
             {
-                log.LogWarning("optionsMenuScreen missing");
+                log.LogWarning("optionsMenuScreen missing and no pauseMenuScreen available");
                 loggedMissingOptionsMenu = true;
             }
             return;
         }
 
-        var sliderTemplate = ui.optionsMenuScreen.GetComponentInChildren<Slider>(true);
+        if (optionsScreen == null && !loggedMissingOptionsMenu)
+        {
+            log.LogWarning("optionsMenuScreen missing; using pause menu as template");
+            loggedMissingOptionsMenu = true;
+        }
+
+        var sliderTemplate = optionsScreen != null ? optionsScreen.GetComponentInChildren<Slider>(true) : null;
         if (sliderTemplate == null)
         {
             if (!loggedMissingSliderTemplate)
@@ -108,7 +116,7 @@ public static class ShadeSettingsMenu
                 sliderTemplate = sliders[0];
         }
 
-        var toggleTemplate = ui.optionsMenuScreen.GetComponentInChildren<Toggle>(true);
+        var toggleTemplate = optionsScreen != null ? optionsScreen.GetComponentInChildren<Toggle>(true) : null;
         if (toggleTemplate == null)
         {
             if (!loggedMissingToggleTemplate)
@@ -132,7 +140,6 @@ public static class ShadeSettingsMenu
         }
 
         built = true;
-        var templateScreen = ui.optionsMenuScreen.gameObject;
         screen = Object.Instantiate(templateScreen, templateScreen.transform.parent);
         screen.name = "ShadeSettingsPage";
         screen.SetActive(false);
@@ -262,28 +269,14 @@ public static class ShadeSettingsMenu
         }
 
         var pauseBtn = go.GetComponent<PauseMenuButton>();
-        Animator flash = null;
-        if (pauseBtn != null)
-        {
-            flash = pauseBtn.flashEffect;
-            Object.DestroyImmediate(pauseBtn);
-        }
 
         foreach (var cond in go.GetComponents<MenuButtonListCondition>())
             Object.Destroy(cond);
 
-        var menuBtn = go.AddComponent<MenuButton>();
-        if (flash != null)
-            menuBtn.flashEffect = flash;
-        // Ensure event exists before adding listener to avoid null reference
-        if (menuBtn.OnSubmitPressed == null)
-            menuBtn.OnSubmitPressed = new UnityEngine.Events.UnityEvent();
-        menuBtn.OnSubmitPressed.AddListener(() => ui.StartCoroutine(Show(ui)));
-
         var entryType = entries.GetType().GetElementType();
         var newEntry = Activator.CreateInstance(entryType);
         var selField = entryType.GetField("selectable", BindingFlags.NonPublic | BindingFlags.Instance);
-        selField.SetValue(newEntry, menuBtn);
+        selField.SetValue(newEntry, pauseBtn);
         var arr = Array.CreateInstance(entryType, entries.Length + 1);
         entries.CopyTo(arr, 0);
         arr.SetValue(newEntry, entries.Length);
