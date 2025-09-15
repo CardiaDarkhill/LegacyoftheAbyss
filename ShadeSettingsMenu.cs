@@ -19,7 +19,6 @@ public static class ShadeSettingsMenu
     private static bool loggedMissingOptionsMenu;
     private static bool loggedMissingSliderTemplate;
     private static bool loggedMissingToggleTemplate;
-    private static bool loggedMissingTemplates;
     private static bool loggedNullUI;
     private static bool loggedNoPauseMenu;
     private static bool loggedButtonAlreadyPresent;
@@ -208,67 +207,35 @@ public static class ShadeSettingsMenu
 
         // Need an options menu screen to clone for consistent styling
         var optionsScreen = ui.optionsMenuScreen;
-        var templateScreen = optionsScreen != null ? optionsScreen.gameObject : ui.pauseMenuScreen?.gameObject;
-        if (templateScreen == null)
+        if (optionsScreen == null)
         {
             if (!loggedMissingOptionsMenu)
             {
-                log.LogWarning("optionsMenuScreen missing and no pauseMenuScreen available");
+                log.LogWarning("optionsMenuScreen not yet available");
                 loggedMissingOptionsMenu = true;
             }
             return;
         }
+        var templateScreen = optionsScreen.gameObject;
 
-        if (optionsScreen == null && !loggedMissingOptionsMenu)
-        {
-            log.LogWarning("optionsMenuScreen missing; using pause menu as template");
-            loggedMissingOptionsMenu = true;
-        }
-
-        var sliderTemplate = optionsScreen != null ? optionsScreen.GetComponentInChildren<Slider>(true) : null;
-        if (sliderTemplate == null)
+        var sliderTemplate = optionsScreen.GetComponentInChildren<Slider>(true);
+        if (sliderTemplate == null || sliderTemplate.GetComponent<MenuSelectable>() == null)
         {
             if (!loggedMissingSliderTemplate)
             {
-                log.LogWarning("slider template not found in options menu; using default");
+                log.LogError("slider template missing MenuSelectable; cannot build settings page");
                 loggedMissingSliderTemplate = true;
             }
-            var sliders = Resources.FindObjectsOfTypeAll<Slider>();
-            if (sliders != null && sliders.Length > 0)
-                sliderTemplate = sliders[0];
-            if (sliderTemplate == null)
-            {
-                var sliderGO = DefaultControls.CreateSlider(new DefaultControls.Resources());
-                sliderGO.SetActive(false);
-                sliderTemplate = sliderGO.GetComponent<Slider>();
-            }
+            return;
         }
 
-        var toggleTemplate = optionsScreen != null ? optionsScreen.GetComponentInChildren<Toggle>(true) : null;
-        if (toggleTemplate == null)
+        var toggleTemplate = optionsScreen.GetComponentInChildren<Toggle>(true);
+        if (toggleTemplate == null || toggleTemplate.GetComponent<MenuSelectable>() == null)
         {
             if (!loggedMissingToggleTemplate)
             {
-                log.LogWarning("toggle template not found in options menu; using default");
+                log.LogError("toggle template missing MenuSelectable; cannot build settings page");
                 loggedMissingToggleTemplate = true;
-            }
-            var toggles = Resources.FindObjectsOfTypeAll<Toggle>();
-            if (toggles != null && toggles.Length > 0)
-                toggleTemplate = toggles[0];
-            if (toggleTemplate == null)
-            {
-                var toggleGO = DefaultControls.CreateToggle(new DefaultControls.Resources());
-                toggleGO.SetActive(false);
-                toggleTemplate = toggleGO.GetComponent<Toggle>();
-            }
-        }
-
-        if (sliderTemplate == null || toggleTemplate == null)
-        {
-            if (!loggedMissingTemplates)
-            {
-                log.LogError("required templates missing; cannot build settings page");
-                loggedMissingTemplates = true;
             }
             return;
         }
