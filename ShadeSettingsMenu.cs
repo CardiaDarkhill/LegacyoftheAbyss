@@ -103,7 +103,9 @@ public static class ShadeSettingsMenu
                 log.LogWarning("slider template not found in options menu, searching globally");
                 loggedMissingSliderTemplate = true;
             }
-            sliderTemplate = Object.FindObjectOfType<Slider>(true);
+            var sliders = Resources.FindObjectsOfTypeAll<Slider>();
+            if (sliders != null && sliders.Length > 0)
+                sliderTemplate = sliders[0];
         }
 
         var toggleTemplate = ui.optionsMenuScreen.GetComponentInChildren<Toggle>(true);
@@ -114,7 +116,9 @@ public static class ShadeSettingsMenu
                 log.LogWarning("toggle template not found in options menu, searching globally");
                 loggedMissingToggleTemplate = true;
             }
-            toggleTemplate = Object.FindObjectOfType<Toggle>(true);
+            var toggles = Resources.FindObjectsOfTypeAll<Toggle>();
+            if (toggles != null && toggles.Length > 0)
+                toggleTemplate = toggles[0];
         }
 
         if (sliderTemplate == null || toggleTemplate == null)
@@ -225,7 +229,7 @@ public static class ShadeSettingsMenu
         }
         var template = buttons[buttons.Length - 1];
 
-        var list = template.transform.parent.GetComponent<MenuButtonList>();
+        var list = template.GetComponentInParent<MenuButtonList>();
         if (list == null)
         {
             if (!loggedNoMenuButtonList)

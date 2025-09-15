@@ -323,7 +323,7 @@ public partial class LegacyHelper
             {
                 try
                 {
-                    var ui = UIManager.instance;
+                    var ui = UnityEngine.Object.FindObjectOfType<UIManager>();
                     if (ui != null)
                         ui.StartCoroutine(ShadeSettingsMenu.Show(ui));
                 }
