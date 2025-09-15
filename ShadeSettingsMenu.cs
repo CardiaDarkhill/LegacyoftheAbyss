@@ -26,19 +26,25 @@ public static class ShadeSettingsMenu
     private static bool loggedNoMenuButtonList;
     private static bool loggedNullEntries;
 
-    private static Slider CreateDefaultSliderTemplate()
+    private static MenuSelectable CreateDefaultSliderTemplate()
     {
-        var go = new GameObject("DefaultSlider");
-        go.hideFlags = HideFlags.HideAndDontSave;
-        var rt = go.AddComponent<RectTransform>();
+        var root = new GameObject("DefaultSlider");
+        root.hideFlags = HideFlags.HideAndDontSave;
+        root.AddComponent<RectTransform>();
+        var selectable = root.AddComponent<MenuSelectable>();
+
+        var sliderGo = new GameObject("Slider");
+        sliderGo.transform.SetParent(root.transform, false);
+        var sliderRt = sliderGo.AddComponent<RectTransform>();
+        sliderRt.sizeDelta = new Vector2(160f, 20f);
 
         var background = new GameObject("Background");
-        background.transform.SetParent(go.transform, false);
+        background.transform.SetParent(sliderGo.transform, false);
         var bgImage = background.AddComponent<Image>();
         bgImage.color = Color.white;
 
         var fillArea = new GameObject("Fill Area");
-        fillArea.transform.SetParent(go.transform, false);
+        fillArea.transform.SetParent(sliderGo.transform, false);
         var fillAreaRt = fillArea.AddComponent<RectTransform>();
         fillAreaRt.anchorMin = new Vector2(0f, 0.25f);
         fillAreaRt.anchorMax = new Vector2(1f, 0.75f);
@@ -47,10 +53,9 @@ public static class ShadeSettingsMenu
         var fill = new GameObject("Fill");
         fill.transform.SetParent(fillArea.transform, false);
         var fillImg = fill.AddComponent<Image>();
-        // leave sprites null to avoid resource load errors
 
         var handleArea = new GameObject("Handle Slide Area");
-        handleArea.transform.SetParent(go.transform, false);
+        handleArea.transform.SetParent(sliderGo.transform, false);
         var handleAreaRt = handleArea.AddComponent<RectTransform>();
         handleAreaRt.anchorMin = new Vector2(0f, 0f);
         handleAreaRt.anchorMax = new Vector2(1f, 1f);
@@ -59,45 +64,46 @@ public static class ShadeSettingsMenu
         var handle = new GameObject("Handle");
         handle.transform.SetParent(handleArea.transform, false);
         var handleImg = handle.AddComponent<Image>();
-        // leave knob sprite null
 
-        var slider = go.AddComponent<Slider>();
+        var slider = sliderGo.AddComponent<Slider>();
         slider.fillRect = fill.GetComponent<RectTransform>();
         slider.handleRect = handle.GetComponent<RectTransform>();
         slider.targetGraphic = handleImg;
         slider.direction = Slider.Direction.LeftToRight;
 
-        go.AddComponent<MenuSelectable>();
-        go.SetActive(false);
-        return slider;
+        root.SetActive(false);
+        return selectable;
     }
 
-    private static Toggle CreateDefaultToggleTemplate()
+    private static MenuSelectable CreateDefaultToggleTemplate()
     {
-        var go = new GameObject("DefaultToggle");
-        go.hideFlags = HideFlags.HideAndDontSave;
-        var rt = go.AddComponent<RectTransform>();
+        var root = new GameObject("DefaultToggle");
+        root.hideFlags = HideFlags.HideAndDontSave;
+        root.AddComponent<RectTransform>();
+        var selectable = root.AddComponent<MenuSelectable>();
+
+        var toggleGo = new GameObject("Toggle");
+        toggleGo.transform.SetParent(root.transform, false);
+        var toggleRt = toggleGo.AddComponent<RectTransform>();
+        toggleRt.sizeDelta = new Vector2(20f, 20f);
 
         var background = new GameObject("Background");
-        background.transform.SetParent(go.transform, false);
+        background.transform.SetParent(toggleGo.transform, false);
         var bgImage = background.AddComponent<Image>();
-        // background sprite left null
 
         var checkmark = new GameObject("Checkmark");
         checkmark.transform.SetParent(background.transform, false);
         var checkImg = checkmark.AddComponent<Image>();
-        // no checkmark sprite
 
-        var toggle = go.AddComponent<Toggle>();
+        var toggle = toggleGo.AddComponent<Toggle>();
         toggle.graphic = checkImg;
         toggle.targetGraphic = bgImage;
 
-        go.AddComponent<MenuSelectable>();
-        go.SetActive(false);
-        return toggle;
+        root.SetActive(false);
+        return selectable;
     }
 
-    private static MenuSelectable CreateSlider(Transform parent, Slider template, string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
+    private static MenuSelectable CreateSlider(Transform parent, MenuSelectable template, string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
     {
         // container row stretching full width
         var row = new GameObject(label + "Row");
@@ -185,7 +191,7 @@ public static class ShadeSettingsMenu
         return selectable;
     }
 
-    private static MenuSelectable CreateToggle(Transform parent, Toggle template, string label, bool value, System.Action<bool> onChange)
+    private static MenuSelectable CreateToggle(Transform parent, MenuSelectable template, string label, bool value, System.Action<bool> onChange)
     {
         // container row stretching full width
         var row = new GameObject(label + "Row");
@@ -293,9 +299,21 @@ public static class ShadeSettingsMenu
             templateScreen = optionsScreen.gameObject;
         }
 
-        var sliderTemplate = optionsScreen != null ? optionsScreen.GetComponentInChildren<Slider>(true) : null;
+        MenuSelectable sliderTemplate = null;
+        if (optionsScreen != null)
+        {
+            var candidates = optionsScreen.GetComponentsInChildren<MenuSelectable>(true);
+            foreach (var cand in candidates)
+            {
+                if (cand.GetComponentInChildren<Slider>(true) != null)
+                {
+                    sliderTemplate = cand;
+                    break;
+                }
+            }
+        }
         bool createdSliderTemplate = false;
-        if (sliderTemplate == null || sliderTemplate.GetComponent<MenuSelectable>() == null)
+        if (sliderTemplate == null)
         {
             if (!loggedMissingSliderTemplate)
             {
@@ -306,9 +324,21 @@ public static class ShadeSettingsMenu
             createdSliderTemplate = true;
         }
 
-        var toggleTemplate = optionsScreen != null ? optionsScreen.GetComponentInChildren<Toggle>(true) : null;
+        MenuSelectable toggleTemplate = null;
+        if (optionsScreen != null)
+        {
+            var candidates = optionsScreen.GetComponentsInChildren<MenuSelectable>(true);
+            foreach (var cand in candidates)
+            {
+                if (cand.GetComponentInChildren<Toggle>(true) != null)
+                {
+                    toggleTemplate = cand;
+                    break;
+                }
+            }
+        }
         bool createdToggleTemplate = false;
-        if (toggleTemplate == null || toggleTemplate.GetComponent<MenuSelectable>() == null)
+        if (toggleTemplate == null)
         {
             if (!loggedMissingToggleTemplate)
             {
