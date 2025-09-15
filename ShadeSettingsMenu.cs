@@ -13,7 +13,7 @@ public static class ShadeSettingsMenu
     private static GameObject screen;
     private static bool built;
     private static UIManager builtFor;
-    private static Selectable firstSelectable;
+    private static MenuSelectable firstSelectable;
     private static readonly ManualLogSource log = BepInEx.Logging.Logger.CreateLogSource("ShadeSettingsMenu");
     private static bool loggedBuildAttempt;
     private static bool loggedMissingOptionsMenu;
@@ -35,8 +35,6 @@ public static class ShadeSettingsMenu
         var background = new GameObject("Background");
         background.transform.SetParent(go.transform, false);
         var bgImage = background.AddComponent<Image>();
-        bgImage.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Background.psd");
-        bgImage.type = Image.Type.Sliced;
         bgImage.color = Color.white;
 
         var fillArea = new GameObject("Fill Area");
@@ -49,8 +47,7 @@ public static class ShadeSettingsMenu
         var fill = new GameObject("Fill");
         fill.transform.SetParent(fillArea.transform, false);
         var fillImg = fill.AddComponent<Image>();
-        fillImg.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/UISprite.psd");
-        fillImg.type = Image.Type.Sliced;
+        // leave sprites null to avoid resource load errors
 
         var handleArea = new GameObject("Handle Slide Area");
         handleArea.transform.SetParent(go.transform, false);
@@ -62,8 +59,7 @@ public static class ShadeSettingsMenu
         var handle = new GameObject("Handle");
         handle.transform.SetParent(handleArea.transform, false);
         var handleImg = handle.AddComponent<Image>();
-        handleImg.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Knob.psd");
-        handleImg.type = Image.Type.Sliced;
+        // leave knob sprite null
 
         var slider = go.AddComponent<Slider>();
         slider.fillRect = fill.GetComponent<RectTransform>();
@@ -85,13 +81,12 @@ public static class ShadeSettingsMenu
         var background = new GameObject("Background");
         background.transform.SetParent(go.transform, false);
         var bgImage = background.AddComponent<Image>();
-        bgImage.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Background.psd");
-        bgImage.type = Image.Type.Sliced;
+        // background sprite left null
 
         var checkmark = new GameObject("Checkmark");
         checkmark.transform.SetParent(background.transform, false);
         var checkImg = checkmark.AddComponent<Image>();
-        checkImg.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Checkmark.psd");
+        // no checkmark sprite
 
         var toggle = go.AddComponent<Toggle>();
         toggle.graphic = checkImg;
@@ -102,7 +97,7 @@ public static class ShadeSettingsMenu
         return toggle;
     }
 
-    private static Selectable CreateSlider(Transform parent, Slider template, string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
+    private static MenuSelectable CreateSlider(Transform parent, Slider template, string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
     {
         // container row stretching full width
         var row = new GameObject(label + "Row");
@@ -134,13 +129,13 @@ public static class ShadeSettingsMenu
         var go = Object.Instantiate(template.gameObject, row.transform, false);
         go.name = label + "Slider";
         foreach (var t in go.GetComponentsInChildren<Text>(true))
-            Object.DestroyImmediate(t.gameObject);
+            Object.DestroyImmediate(t);
         var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
         if (tmpType != null)
         {
             var tmps = go.GetComponentsInChildren(tmpType, true);
             foreach (var tmp in tmps)
-                Object.DestroyImmediate(tmp.gameObject);
+                Object.DestroyImmediate(tmp);
         }
 
         var slider = go.GetComponentInChildren<Slider>(true);
@@ -180,7 +175,7 @@ public static class ShadeSettingsMenu
         rowLe.minHeight = rect.sizeDelta.y;
 
         // return whichever Selectable component exists (MenuSelectable if present)
-        var selectable = go.GetComponent<Selectable>();
+        var selectable = go.GetComponent<MenuSelectable>();
         if (selectable == null)
         {
             log.LogError($"Created slider '{label}' missing Selectable component");
@@ -190,7 +185,7 @@ public static class ShadeSettingsMenu
         return selectable;
     }
 
-    private static Selectable CreateToggle(Transform parent, Toggle template, string label, bool value, System.Action<bool> onChange)
+    private static MenuSelectable CreateToggle(Transform parent, Toggle template, string label, bool value, System.Action<bool> onChange)
     {
         // container row stretching full width
         var row = new GameObject(label + "Row");
@@ -222,13 +217,13 @@ public static class ShadeSettingsMenu
         var go = Object.Instantiate(template.gameObject, row.transform, false);
         go.name = label + "Toggle";
         foreach (var t in go.GetComponentsInChildren<Text>(true))
-            Object.DestroyImmediate(t.gameObject);
+            Object.DestroyImmediate(t);
         var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
         if (tmpType != null)
         {
             var tmps = go.GetComponentsInChildren(tmpType, true);
             foreach (var tmp in tmps)
-                Object.DestroyImmediate(tmp.gameObject);
+                Object.DestroyImmediate(tmp);
         }
 
         var toggle = go.GetComponentInChildren<Toggle>(true);
@@ -248,7 +243,7 @@ public static class ShadeSettingsMenu
         rowLe.preferredHeight = rect.sizeDelta.y;
         rowLe.minHeight = rect.sizeDelta.y;
 
-        var selectable = go.GetComponent<Selectable>();
+        var selectable = go.GetComponent<MenuSelectable>();
         if (selectable == null)
         {
             log.LogError($"Created toggle '{label}' missing Selectable component");
@@ -361,8 +356,8 @@ public static class ShadeSettingsMenu
         layout.childForceExpandWidth = true;
         layout.spacing = 15f;
 
-        var selectables = new List<Selectable>();
-        Selectable s;
+        var selectables = new List<MenuSelectable>();
+        MenuSelectable s;
         s = CreateSlider(content.transform, sliderTemplate, "Hornet Damage", 0.2f, 2f, ModConfig.Instance.hornetDamageMultiplier, v => ModConfig.Instance.hornetDamageMultiplier = v);
         if (s != null) selectables.Add(s);
         s = CreateSlider(content.transform, sliderTemplate, "Shade Damage", 0.2f, 2f, ModConfig.Instance.shadeDamageMultiplier, v => ModConfig.Instance.shadeDamageMultiplier = v);
