@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Reflection;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
@@ -26,7 +27,7 @@ public static class ShadeSettingsMenu
     private static bool loggedNoMenuButtonList;
     private static bool loggedNullEntries;
 
-    private static Slider CreateSlider(Transform parent, Slider template, string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
+    private static MenuSelectable CreateSlider(Transform parent, Slider template, string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
     {
         // container row stretching full width
         var row = new GameObject(label + "Row");
@@ -71,7 +72,6 @@ public static class ShadeSettingsMenu
         Object.DestroyImmediate(slider.GetComponent<MenuAudioSlider>());
         Object.DestroyImmediate(slider.GetComponent<MenuPreventDeselect>());
         slider.onValueChanged.RemoveAllListeners();
-        Object.DestroyImmediate(go.GetComponent<MenuButton>());
         var rect = go.GetComponent<RectTransform>();
         rect.anchorMin = new Vector2(0f, 0.5f);
         rect.anchorMax = new Vector2(0f, 0.5f);
@@ -104,10 +104,10 @@ public static class ShadeSettingsMenu
         rowLe.preferredHeight = rect.sizeDelta.y;
         rowLe.minHeight = rect.sizeDelta.y;
 
-        return slider;
+        return go.GetComponent<MenuSelectable>();
     }
 
-    private static Toggle CreateToggle(Transform parent, Toggle template, string label, bool value, System.Action<bool> onChange)
+    private static MenuSelectable CreateToggle(Transform parent, Toggle template, string label, bool value, System.Action<bool> onChange)
     {
         // container row stretching full width
         var row = new GameObject(label + "Row");
@@ -150,7 +150,6 @@ public static class ShadeSettingsMenu
 
         var toggle = go.GetComponentInChildren<Toggle>(true);
         Object.DestroyImmediate(toggle.GetComponent<MenuPreventDeselect>());
-        Object.DestroyImmediate(go.GetComponent<MenuButton>());
         var rect = go.GetComponent<RectTransform>();
         rect.anchorMin = new Vector2(0f, 0.5f);
         rect.anchorMax = new Vector2(0f, 0.5f);
@@ -166,7 +165,7 @@ public static class ShadeSettingsMenu
         rowLe.preferredHeight = rect.sizeDelta.y;
         rowLe.minHeight = rect.sizeDelta.y;
 
-        return toggle;
+        return go.GetComponent<MenuSelectable>();
     }
 
     private static void Build(UIManager ui)
@@ -264,6 +263,14 @@ public static class ShadeSettingsMenu
         screen.SetActive(false);
         log.LogDebug("Instantiated ShadeSettingsPage");
 
+        var rt = screen.GetComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = Vector2.zero;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
         var ms = screen.GetComponent<MenuScreen>();
 
         // remove existing children except back button
@@ -288,13 +295,16 @@ public static class ShadeSettingsMenu
         layout.childForceExpandWidth = true;
         layout.spacing = 15f;
 
-        firstSelectable = CreateSlider(content.transform, sliderTemplate, "Hornet Damage", 0.2f, 2f, ModConfig.Instance.hornetDamageMultiplier, v => ModConfig.Instance.hornetDamageMultiplier = v);
-        CreateSlider(content.transform, sliderTemplate, "Shade Damage", 0.2f, 2f, ModConfig.Instance.shadeDamageMultiplier, v => ModConfig.Instance.shadeDamageMultiplier = v);
-        CreateSlider(content.transform, sliderTemplate, "Shade Heal (Bind)", 0f, 6f, ModConfig.Instance.bindShadeHeal, v => ModConfig.Instance.bindShadeHeal = Mathf.RoundToInt(v), true);
-        CreateSlider(content.transform, sliderTemplate, "Hornet Heal (Bind)", 0f, 6f, ModConfig.Instance.bindHornetHeal, v => ModConfig.Instance.bindHornetHeal = Mathf.RoundToInt(v), true);
-        CreateSlider(content.transform, sliderTemplate, "Shade Focus Heal", 0f, 6f, ModConfig.Instance.focusShadeHeal, v => ModConfig.Instance.focusShadeHeal = Mathf.RoundToInt(v), true);
-        CreateSlider(content.transform, sliderTemplate, "Hornet Focus Heal", 0f, 6f, ModConfig.Instance.focusHornetHeal, v => ModConfig.Instance.focusHornetHeal = Mathf.RoundToInt(v), true);
-        CreateToggle(content.transform, toggleTemplate, "Damage Logging", ModConfig.Instance.logDamage, v => ModConfig.Instance.logDamage = v);
+        var selectables = new List<MenuSelectable>();
+        selectables.Add(CreateSlider(content.transform, sliderTemplate, "Hornet Damage", 0.2f, 2f, ModConfig.Instance.hornetDamageMultiplier, v => ModConfig.Instance.hornetDamageMultiplier = v));
+        selectables.Add(CreateSlider(content.transform, sliderTemplate, "Shade Damage", 0.2f, 2f, ModConfig.Instance.shadeDamageMultiplier, v => ModConfig.Instance.shadeDamageMultiplier = v));
+        selectables.Add(CreateSlider(content.transform, sliderTemplate, "Shade Heal (Bind)", 0f, 6f, ModConfig.Instance.bindShadeHeal, v => ModConfig.Instance.bindShadeHeal = Mathf.RoundToInt(v), true));
+        selectables.Add(CreateSlider(content.transform, sliderTemplate, "Hornet Heal (Bind)", 0f, 6f, ModConfig.Instance.bindHornetHeal, v => ModConfig.Instance.bindHornetHeal = Mathf.RoundToInt(v), true));
+        selectables.Add(CreateSlider(content.transform, sliderTemplate, "Shade Focus Heal", 0f, 6f, ModConfig.Instance.focusShadeHeal, v => ModConfig.Instance.focusShadeHeal = Mathf.RoundToInt(v), true));
+        selectables.Add(CreateSlider(content.transform, sliderTemplate, "Hornet Focus Heal", 0f, 6f, ModConfig.Instance.focusHornetHeal, v => ModConfig.Instance.focusHornetHeal = Mathf.RoundToInt(v), true));
+        selectables.Add(CreateToggle(content.transform, toggleTemplate, "Damage Logging", ModConfig.Instance.logDamage, v => ModConfig.Instance.logDamage = v));
+        if (selectables.Count > 0)
+            firstSelectable = selectables[0];
 
         if (ms.backButton != null)
         {
@@ -302,12 +312,18 @@ public static class ShadeSettingsMenu
             ms.backButton.OnSubmitPressed.AddListener(() => ui.StartCoroutine(Hide(ui)));
         }
 
-        var mbl = screen.GetComponent<MenuButtonList>();
-        if (mbl != null)
+        var mbl = screen.GetComponent<MenuButtonList>() ?? screen.AddComponent<MenuButtonList>();
+        var entryField = typeof(MenuButtonList).GetField("entries", BindingFlags.NonPublic | BindingFlags.Instance);
+        var entryType = entryField.FieldType.GetElementType();
+        var arr = Array.CreateInstance(entryType, selectables.Count);
+        for (int i = 0; i < selectables.Count; i++)
         {
-            log.LogDebug("Removing inherited MenuButtonList from settings page");
-            Object.DestroyImmediate(mbl);
+            var e = Activator.CreateInstance(entryType);
+            entryType.GetField("selectable", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(e, selectables[i]);
+            arr.SetValue(e, i);
         }
+        entryField.SetValue(mbl, arr);
+        mbl.SetupActive();
 
         LayoutRebuilder.ForceRebuildLayoutImmediate(content.GetComponent<RectTransform>());
 
