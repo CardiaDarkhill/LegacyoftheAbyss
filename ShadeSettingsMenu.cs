@@ -126,13 +126,25 @@ public static class ShadeSettingsMenu
         // Ensure a screen exists for this UI
         Build(ui);
 
-        // Avoid duplicate buttons
-        if (ui.pauseMenuScreen.transform.Find("ShadeSettingsButton") != null)
-            return;
+        // Avoid duplicate buttons by scanning entire hierarchy
+        foreach (Transform child in ui.pauseMenuScreen.GetComponentsInChildren<Transform>(true))
+        {
+            if (child.name == "ShadeSettingsButton")
+                return;
+        }
 
         var buttons = ui.pauseMenuScreen.GetComponentsInChildren<PauseMenuButton>(true);
         if (buttons.Length == 0) return;
         var template = buttons[buttons.Length - 1];
+
+        var list = template.transform.parent.GetComponent<MenuButtonList>();
+        if (list == null)
+            return;
+        var field = typeof(MenuButtonList).GetField("entries", BindingFlags.NonPublic | BindingFlags.Instance);
+        var entries = (Array)field.GetValue(list);
+        if (entries == null)
+            return;
+
         var go = Object.Instantiate(template.gameObject, template.transform.parent);
         go.name = "ShadeSettingsButton";
         Object.Destroy(go.GetComponentInChildren<AutoLocalizeTextUI>());
@@ -153,27 +165,24 @@ public static class ShadeSettingsMenu
         var menuBtn = go.AddComponent<MenuButton>();
         if (flash != null)
             menuBtn.flashEffect = flash;
+        // Ensure event exists before adding listener to avoid null reference
+        if (menuBtn.OnSubmitPressed == null)
+            menuBtn.OnSubmitPressed = new UnityEngine.Events.UnityEvent();
         menuBtn.OnSubmitPressed.AddListener(() => ui.StartCoroutine(Show(ui)));
 
-        var list = template.transform.parent.GetComponent<MenuButtonList>();
-        if (list != null)
-        {
-            var field = typeof(MenuButtonList).GetField("entries", BindingFlags.NonPublic | BindingFlags.Instance);
-            var entries = (Array)field.GetValue(list);
-            var entryType = entries.GetType().GetElementType();
-            var newEntry = Activator.CreateInstance(entryType);
-            var selField = entryType.GetField("selectable", BindingFlags.NonPublic | BindingFlags.Instance);
-            selField.SetValue(newEntry, menuBtn);
-            var arr = Array.CreateInstance(entryType, entries.Length + 1);
-            entries.CopyTo(arr, 0);
-            arr.SetValue(newEntry, entries.Length);
-            field.SetValue(list, arr);
+        var entryType = entries.GetType().GetElementType();
+        var newEntry = Activator.CreateInstance(entryType);
+        var selField = entryType.GetField("selectable", BindingFlags.NonPublic | BindingFlags.Instance);
+        selField.SetValue(newEntry, menuBtn);
+        var arr = Array.CreateInstance(entryType, entries.Length + 1);
+        entries.CopyTo(arr, 0);
+        arr.SetValue(newEntry, entries.Length);
+        field.SetValue(list, arr);
 
-            var dirtyField = typeof(MenuButtonList).GetField("isDirty", BindingFlags.NonPublic | BindingFlags.Instance);
-            dirtyField?.SetValue(list, true);
+        var dirtyField = typeof(MenuButtonList).GetField("isDirty", BindingFlags.NonPublic | BindingFlags.Instance);
+        dirtyField?.SetValue(list, true);
 
-            list.SetupActive();
-        }
+        list.SetupActive();
     }
 
     internal static IEnumerator Show(UIManager ui)
