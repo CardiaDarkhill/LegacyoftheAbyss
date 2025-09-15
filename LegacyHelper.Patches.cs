@@ -294,6 +294,26 @@ public partial class LegacyHelper
         }
     }
 
+    [HarmonyPatch(typeof(UIManager), nameof(UIManager.ShowMenu))]
+    private class UIManager_ShowMenu_AddShadeButton
+    {
+        private static IEnumerator Postfix(IEnumerator __result, UIManager __instance, MenuScreen menu)
+        {
+            while (__result.MoveNext())
+            {
+                yield return __result.Current;
+            }
+            try
+            {
+                if (menu == __instance.pauseMenuScreen)
+                {
+                    ShadeSettingsMenu.Inject(__instance);
+                }
+            }
+            catch { }
+        }
+    }
+
     [HarmonyPatch(typeof(PauseMenuButton), "OnSubmit")]
     private class PauseMenuButton_OnSubmit_Shade
     {
