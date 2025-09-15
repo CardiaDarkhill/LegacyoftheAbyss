@@ -60,7 +60,7 @@ public partial class LegacyHelper : BaseUnityPlugin
         LoggingManager.Update();
         if (!shadeMenuInit)
         {
-            var ui = UIManager.instance;
+            var ui = UnityEngine.Object.FindObjectOfType<UIManager>();
             if (ui != null && ui.pauseMenuScreen != null)
             {
                 ShadeSettingsMenu.Inject(ui);

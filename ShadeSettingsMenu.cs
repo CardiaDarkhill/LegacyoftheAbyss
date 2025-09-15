@@ -1,30 +1,24 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
 public static class ShadeSettingsMenu
 {
     private static GameObject screen;
     private static bool built;
 
-    private static Slider CreateSlider(Transform parent, string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
+    private static Slider CreateSlider(Transform parent, Slider template, string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
     {
-        var container = new GameObject(label + "Container");
-        container.transform.SetParent(parent, false);
-        var layout = container.AddComponent<VerticalLayoutGroup>();
-        layout.childControlHeight = true;
-        layout.childControlWidth = true;
-
-        var textGo = new GameObject(label + "Label");
-        textGo.transform.SetParent(container.transform, false);
-        var txt = textGo.AddComponent<Text>();
-        txt.text = label;
-        txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        txt.alignment = TextAnchor.MiddleCenter;
-
-        var sliderGo = new GameObject(label + "Slider");
-        sliderGo.transform.SetParent(container.transform, false);
-        var slider = sliderGo.AddComponent<Slider>();
+        var go = Object.Instantiate(template.gameObject, parent);
+        go.name = label + "Slider";
+        var txt = go.GetComponentInChildren<Text>(true);
+        if (txt != null)
+        {
+            txt.text = label;
+            txt.color = Color.white;
+        }
+        var slider = go.GetComponentInChildren<Slider>(true);
         slider.minValue = min;
         slider.maxValue = max;
         slider.value = value;
@@ -33,16 +27,19 @@ public static class ShadeSettingsMenu
         return slider;
     }
 
-    private static Toggle CreateToggle(Transform parent, string label, bool value, System.Action<bool> onChange)
+    private static Toggle CreateToggle(Transform parent, Toggle template, string label, bool value, System.Action<bool> onChange)
     {
-        var go = new GameObject(label + "Toggle");
-        go.transform.SetParent(parent, false);
-        var toggle = go.AddComponent<Toggle>();
+        var go = Object.Instantiate(template.gameObject, parent);
+        go.name = label + "Toggle";
+        var txt = go.GetComponentInChildren<Text>(true);
+        if (txt != null)
+        {
+            txt.text = label;
+            txt.color = Color.white;
+        }
+        var toggle = go.GetComponentInChildren<Toggle>(true);
         toggle.isOn = value;
         toggle.onValueChanged.AddListener(onChange.Invoke);
-        var txt = go.AddComponent<Text>();
-        txt.text = label;
-        txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
         return toggle;
     }
 
@@ -50,31 +47,43 @@ public static class ShadeSettingsMenu
     {
         if (built) return;
         built = true;
-        screen = new GameObject("ShadeSettingsPage");
-        screen.transform.SetParent(ui.UICanvas.transform, false);
+        var templateScreen = ui.optionsMenuScreen.gameObject;
+        screen = Object.Instantiate(templateScreen, templateScreen.transform.parent);
+        screen.name = "ShadeSettingsPage";
         screen.SetActive(false);
-        var cg = screen.AddComponent<CanvasGroup>();
-        cg.interactable = true;
-        cg.blocksRaycasts = true;
-        var layout = screen.AddComponent<VerticalLayoutGroup>();
+
+        var ms = screen.GetComponent<MenuScreen>();
+
+        // remove existing children except back button
+        foreach (Transform child in ms.transform)
+        {
+            if (ms.backButton != null && child.gameObject == ms.backButton.gameObject)
+                continue;
+            Object.Destroy(child.gameObject);
+        }
+
+        var content = new GameObject("Content");
+        content.transform.SetParent(ms.transform, false);
+        var layout = content.AddComponent<VerticalLayoutGroup>();
         layout.childControlHeight = true;
         layout.childControlWidth = true;
+        layout.spacing = 10f;
 
-        CreateSlider(screen.transform, "Hornet Damage", 0.2f, 2f, ModConfig.Instance.hornetDamageMultiplier, v => ModConfig.Instance.hornetDamageMultiplier = v);
-        CreateSlider(screen.transform, "Shade Damage", 0.2f, 2f, ModConfig.Instance.shadeDamageMultiplier, v => ModConfig.Instance.shadeDamageMultiplier = v);
-        CreateSlider(screen.transform, "Shade Heal (Bind)", 0f, 6f, ModConfig.Instance.bindShadeHeal, v => ModConfig.Instance.bindShadeHeal = Mathf.RoundToInt(v), true);
-        CreateSlider(screen.transform, "Hornet Heal (Bind)", 0f, 6f, ModConfig.Instance.bindHornetHeal, v => ModConfig.Instance.bindHornetHeal = Mathf.RoundToInt(v), true);
-        CreateSlider(screen.transform, "Shade Focus Heal", 0f, 6f, ModConfig.Instance.focusShadeHeal, v => ModConfig.Instance.focusShadeHeal = Mathf.RoundToInt(v), true);
-        CreateSlider(screen.transform, "Hornet Focus Heal", 0f, 6f, ModConfig.Instance.focusHornetHeal, v => ModConfig.Instance.focusHornetHeal = Mathf.RoundToInt(v), true);
-        CreateToggle(screen.transform, "Damage Logging", ModConfig.Instance.logDamage, v => ModConfig.Instance.logDamage = v);
+        var sliderTemplate = ui.optionsMenuScreen.GetComponentInChildren<Slider>(true);
+        var toggleTemplate = ui.optionsMenuScreen.GetComponentInChildren<Toggle>(true);
 
-        var backGo = new GameObject("BackButton");
-        backGo.transform.SetParent(screen.transform, false);
-        var back = backGo.AddComponent<Button>();
-        var backText = backGo.AddComponent<Text>();
-        backText.text = "Back";
-        backText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        back.onClick.AddListener(() => ui.StartCoroutine(Hide(ui)));
+        CreateSlider(content.transform, sliderTemplate, "Hornet Damage", 0.2f, 2f, ModConfig.Instance.hornetDamageMultiplier, v => ModConfig.Instance.hornetDamageMultiplier = v);
+        CreateSlider(content.transform, sliderTemplate, "Shade Damage", 0.2f, 2f, ModConfig.Instance.shadeDamageMultiplier, v => ModConfig.Instance.shadeDamageMultiplier = v);
+        CreateSlider(content.transform, sliderTemplate, "Shade Heal (Bind)", 0f, 6f, ModConfig.Instance.bindShadeHeal, v => ModConfig.Instance.bindShadeHeal = Mathf.RoundToInt(v), true);
+        CreateSlider(content.transform, sliderTemplate, "Hornet Heal (Bind)", 0f, 6f, ModConfig.Instance.bindHornetHeal, v => ModConfig.Instance.bindHornetHeal = Mathf.RoundToInt(v), true);
+        CreateSlider(content.transform, sliderTemplate, "Shade Focus Heal", 0f, 6f, ModConfig.Instance.focusShadeHeal, v => ModConfig.Instance.focusShadeHeal = Mathf.RoundToInt(v), true);
+        CreateSlider(content.transform, sliderTemplate, "Hornet Focus Heal", 0f, 6f, ModConfig.Instance.focusHornetHeal, v => ModConfig.Instance.focusHornetHeal = Mathf.RoundToInt(v), true);
+        CreateToggle(content.transform, toggleTemplate, "Damage Logging", ModConfig.Instance.logDamage, v => ModConfig.Instance.logDamage = v);
+
+        if (ms.backButton != null)
+        {
+            ms.backButton.OnSubmitPressed.AddListener(() => ui.StartCoroutine(Hide(ui)));
+        }
     }
 
     internal static void Inject(UIManager ui)
@@ -86,8 +95,13 @@ public static class ShadeSettingsMenu
         var template = buttons[buttons.Length - 1];
         var go = Object.Instantiate(template.gameObject, template.transform.parent);
         go.name = "ShadeSettingsButton";
-        var txt = go.GetComponentInChildren<Text>();
-        if (txt) txt.text = "Shade Settings";
+        Object.Destroy(go.GetComponentInChildren<AutoLocalizeTextUI>());
+        var txt = go.GetComponentInChildren<Text>(true);
+        if (txt != null)
+        {
+            txt.text = "Legacy of the Abyss";
+            txt.color = Color.white;
+        }
     }
 
     internal static IEnumerator Show(UIManager ui)
