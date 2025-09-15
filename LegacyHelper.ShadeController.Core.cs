@@ -95,6 +95,29 @@ public partial class LegacyHelper
         private const KeyCode SprintKeyPrimary = KeyCode.LeftShift;
         private const KeyCode SprintKeySecondary = KeyCode.RightShift;
         private const KeyCode DamageToggleKey = KeyCode.Alpha0;
+
+        private struct AxisLeashLimits
+        {
+            public float NegativeSoft;
+            public float PositiveSoft;
+            public float NegativeHard;
+            public float PositiveHard;
+            public float NegativeSnap;
+            public float PositiveSnap;
+        }
+
+        private struct DynamicLeashLimits
+        {
+            public AxisLeashLimits X;
+            public AxisLeashLimits Y;
+        }
+
+        private const float LeashScreenPadding = 0.75f;
+        private const float SoftLimitRatio = 0.9f;
+        private const float SnapExtraMultiplier = 1.2f;
+        private const float SnapExtraMin = 0.75f;
+        private const float SnapMinWhenNoRoom = 0.25f;
+
         private bool canTakeDamage = true;
         private Vector2 capturedMoveInput;
         private float capturedHorizontalInput;
@@ -587,6 +610,140 @@ public partial class LegacyHelper
                                  input.sqrMagnitude > 0f;
         }
 
+        private DynamicLeashLimits GetDynamicLeashLimits(Vector3 hornetWorld)
+        {
+            var limits = new DynamicLeashLimits
+            {
+                X = new AxisLeashLimits
+                {
+                    NegativeSoft = softLeashRadius,
+                    PositiveSoft = softLeashRadius,
+                    NegativeHard = hardLeashRadius,
+                    PositiveHard = hardLeashRadius,
+                    NegativeSnap = snapLeashRadius,
+                    PositiveSnap = snapLeashRadius
+                },
+                Y = new AxisLeashLimits
+                {
+                    NegativeSoft = softLeashRadius,
+                    PositiveSoft = softLeashRadius,
+                    NegativeHard = hardLeashRadius,
+                    PositiveHard = hardLeashRadius,
+                    NegativeSnap = snapLeashRadius,
+                    PositiveSnap = snapLeashRadius
+                }
+            };
+
+            try
+            {
+                var gm = GameManager.instance;
+                var camCtrl = gm != null ? gm.cameraCtrl : null;
+                var cam = camCtrl != null ? camCtrl.cam : null;
+                if (cam != null)
+                {
+                    Vector3 viewport = cam.WorldToViewportPoint(hornetWorld);
+                    float depth = viewport.z;
+                    if (depth > 0f)
+                    {
+                        Vector3 leftWorld = cam.ViewportToWorldPoint(new Vector3(0f, viewport.y, depth));
+                        Vector3 rightWorld = cam.ViewportToWorldPoint(new Vector3(1f, viewport.y, depth));
+                        Vector3 bottomWorld = cam.ViewportToWorldPoint(new Vector3(viewport.x, 0f, depth));
+                        Vector3 topWorld = cam.ViewportToWorldPoint(new Vector3(viewport.x, 1f, depth));
+
+                        float leftRoom = Mathf.Max(0f, hornetWorld.x - leftWorld.x - LeashScreenPadding);
+                        float rightRoom = Mathf.Max(0f, rightWorld.x - hornetWorld.x - LeashScreenPadding);
+                        float downRoom = Mathf.Max(0f, hornetWorld.y - bottomWorld.y - LeashScreenPadding);
+                        float upRoom = Mathf.Max(0f, topWorld.y - hornetWorld.y - LeashScreenPadding);
+
+                        ApplyAxisLimit(ref limits.X.NegativeSoft, ref limits.X.NegativeHard, ref limits.X.NegativeSnap, leftRoom);
+                        ApplyAxisLimit(ref limits.X.PositiveSoft, ref limits.X.PositiveHard, ref limits.X.PositiveSnap, rightRoom);
+                        ApplyAxisLimit(ref limits.Y.NegativeSoft, ref limits.Y.NegativeHard, ref limits.Y.NegativeSnap, downRoom);
+                        ApplyAxisLimit(ref limits.Y.PositiveSoft, ref limits.Y.PositiveHard, ref limits.Y.PositiveSnap, upRoom);
+                    }
+                }
+            }
+            catch { }
+
+            return limits;
+        }
+
+        private static void ApplyAxisLimit(ref float soft, ref float hard, ref float snap, float available)
+        {
+            soft = Mathf.Max(0f, soft);
+            hard = Mathf.Max(0f, hard);
+            snap = Mathf.Max(0f, snap);
+
+            if (available <= 0f)
+            {
+                soft = 0f;
+                hard = Mathf.Min(hard, 0f);
+                snap = Mathf.Max(hard, Mathf.Min(snap, SnapMinWhenNoRoom));
+                return;
+            }
+
+            float clampedHard = Mathf.Min(hard, available);
+            hard = clampedHard;
+            float clampedSoft = Mathf.Min(soft, clampedHard * SoftLimitRatio);
+            soft = clampedSoft;
+            float desiredSnap = Mathf.Max(clampedHard * SnapExtraMultiplier, clampedHard + SnapExtraMin);
+            snap = Mathf.Max(clampedHard, Mathf.Min(snap, desiredSnap));
+        }
+
+        private static bool BeyondAxis(float value, float negativeLimit, float positiveLimit)
+        {
+            if (value > 0f)
+                return positiveLimit >= 0f && value > positiveLimit;
+            if (value < 0f)
+                return negativeLimit >= 0f && -value > negativeLimit;
+            return false;
+        }
+
+        private static bool BeyondSnap(float value, float negativeSnap, float positiveSnap)
+        {
+            if (value > 0f)
+                return positiveSnap >= 0f && value > positiveSnap;
+            if (value < 0f)
+                return negativeSnap >= 0f && -value > negativeSnap;
+            return false;
+        }
+
+        private static float ComputeAxisRatio(float value, float negativeSoft, float positiveSoft, float negativeHard, float positiveHard)
+        {
+            if (value > 0f)
+            {
+                float soft = Mathf.Max(0f, positiveSoft);
+                if (value <= soft)
+                    return 0f;
+                float hard = Mathf.Max(soft, positiveHard);
+                if (hard <= soft + Mathf.Epsilon)
+                    return 1f;
+                float clamped = Mathf.Min(value, hard);
+                return (clamped - soft) / Mathf.Max(0.0001f, hard - soft);
+            }
+            if (value < 0f)
+            {
+                float abs = -value;
+                float soft = Mathf.Max(0f, negativeSoft);
+                if (abs <= soft)
+                    return 0f;
+                float hard = Mathf.Max(soft, negativeHard);
+                if (hard <= soft + Mathf.Epsilon)
+                    return 1f;
+                float clamped = Mathf.Min(abs, hard);
+                return (clamped - soft) / Mathf.Max(0.0001f, hard - soft);
+            }
+            return 0f;
+        }
+
+        private static float ClampAxis(float value, float negativeLimit, float positiveLimit)
+        {
+            float min = negativeLimit > 0f ? -negativeLimit : 0f;
+            float max = positiveLimit > 0f ? positiveLimit : 0f;
+            if (negativeLimit <= 0f && positiveLimit <= 0f)
+                return 0f;
+            return Mathf.Clamp(value, min, max);
+        }
+
         private void HandleMovementAndFacing(float deltaTime)
         {
             if (isCastingSpell || isFocusing)
@@ -602,10 +759,18 @@ public partial class LegacyHelper
             Vector2 input = capturedMoveInput;
             float h = capturedHorizontalInput;
 
-            Vector2 to = (Vector2)(hornetTransform.position - transform.position);
-            float dist = to.magnitude;
+            Vector3 hornetWorld = hornetTransform.position;
+            Vector2 hornetPos2D = new Vector2(hornetWorld.x, hornetWorld.y);
+            Vector2 currentPos = rb ? rb.position : (Vector2)transform.position;
+            Vector2 offsetFromHornet = currentPos - hornetPos2D;
+            Vector2 toHornet = -offsetFromHornet;
+            float dist = toHornet.magnitude;
 
-            if (dist > snapLeashRadius)
+            var leash = GetDynamicLeashLimits(hornetWorld);
+
+            if (BeyondSnap(offsetFromHornet.x, leash.X.NegativeSnap, leash.X.PositiveSnap) ||
+                BeyondSnap(offsetFromHornet.y, leash.Y.NegativeSnap, leash.Y.PositiveSnap) ||
+                dist > snapLeashRadius)
             {
                 TeleportToHornet();
                 inHardLeash = false; hardLeashTimer = 0f; EnableCollisions(true);
@@ -613,20 +778,14 @@ public partial class LegacyHelper
             }
 
             Vector2 moveDelta = Vector2.zero;
-            if (dist > softLeashRadius && dist <= hardLeashRadius)
-            {
-                float t = Mathf.InverseLerp(softLeashRadius, hardLeashRadius, dist);
-                Vector2 pullDir = to.normalized;
-                moveDelta += pullDir * (Mathf.Lerp(softPullSpeed, softPullSpeed * 1.5f, t)) * deltaTime;
-                inHardLeash = false; hardLeashTimer = 0f; EnableCollisions(true);
-            }
 
-            if (dist > hardLeashRadius)
+            if (BeyondAxis(offsetFromHornet.x, leash.X.NegativeHard, leash.X.PositiveHard) ||
+                BeyondAxis(offsetFromHornet.y, leash.Y.NegativeHard, leash.Y.PositiveHard))
             {
                 inHardLeash = true;
                 hardLeashTimer += deltaTime;
                 EnableCollisions(false);
-                Vector2 dir = to.normalized;
+                Vector2 dir = toHornet.sqrMagnitude > 0.0001f ? toHornet.normalized : Vector2.zero;
                 moveDelta = dir * hardPullSpeed * deltaTime;
                 if (hardLeashTimer >= hardLeashTimeout)
                 {
@@ -635,9 +794,23 @@ public partial class LegacyHelper
                     return;
                 }
             }
-            else if (inHardLeash)
+            else
             {
-                inHardLeash = false; hardLeashTimer = 0f; EnableCollisions(true);
+                if (inHardLeash)
+                {
+                    inHardLeash = false;
+                    hardLeashTimer = 0f;
+                    EnableCollisions(true);
+                }
+
+                float ratioX = ComputeAxisRatio(offsetFromHornet.x, leash.X.NegativeSoft, leash.X.PositiveSoft, leash.X.NegativeHard, leash.X.PositiveHard);
+                float ratioY = ComputeAxisRatio(offsetFromHornet.y, leash.Y.NegativeSoft, leash.Y.PositiveSoft, leash.Y.NegativeHard, leash.Y.PositiveHard);
+                float pullStrength = Mathf.Max(ratioX, ratioY);
+                if (pullStrength > 0f)
+                {
+                    Vector2 dir = toHornet.sqrMagnitude > 0.0001f ? toHornet.normalized : Vector2.zero;
+                    moveDelta += dir * Mathf.Lerp(softPullSpeed, softPullSpeed * 1.5f, pullStrength) * deltaTime;
+                }
             }
 
             if (!inHardLeash)
@@ -694,27 +867,33 @@ public partial class LegacyHelper
                 knockbackTimer -= deltaTime;
             }
 
-            // Compute proposed next position and clamp against transition gates at map edges
-            Vector2 curPos = rb ? rb.position : (Vector2)transform.position;
-            Vector2 proposed = curPos + moveDelta;
+            Vector2 proposed = currentPos + moveDelta;
             proposed = ClampAgainstTransitionGates(proposed);
 
-            if (rb) rb.MovePosition(proposed);
-            else transform.position = proposed;
-            lastMoveDelta = proposed - curPos;
+            Vector2 proposedOffset = proposed - hornetPos2D;
+            proposedOffset.x = ClampAxis(proposedOffset.x, leash.X.NegativeHard, leash.X.PositiveHard);
+            proposedOffset.y = ClampAxis(proposedOffset.y, leash.Y.NegativeHard, leash.Y.PositiveHard);
+            Vector2 clampedPos = hornetPos2D + proposedOffset;
 
-            // Update facing only from player's horizontal input.
-            // Do not auto-face Hornet when idle; preserve last manual facing.
+            Vector2 finalToHornet = hornetPos2D - clampedPos;
+            float finalDist = finalToHornet.magnitude;
+            if (finalDist > maxDistance && finalDist > 0f)
+            {
+                clampedPos = hornetPos2D - finalToHornet.normalized * maxDistance;
+                Vector2 clampedOffset = clampedPos - hornetPos2D;
+                clampedOffset.x = ClampAxis(clampedOffset.x, leash.X.NegativeHard, leash.X.PositiveHard);
+                clampedOffset.y = ClampAxis(clampedOffset.y, leash.Y.NegativeHard, leash.Y.PositiveHard);
+                clampedPos = hornetPos2D + clampedOffset;
+            }
+
+            if (rb) rb.MovePosition(clampedPos);
+            else transform.position = clampedPos;
+            lastMoveDelta = clampedPos - currentPos;
+
             if (h > 0.1f) facing = 1;
             else if (h < -0.1f) facing = -1;
 
             if (sr != null) sr.flipX = (facing == 1);
-
-            if (dist > maxDistance)
-            {
-                Vector3 toShade = transform.position - hornetTransform.position;
-                transform.position = hornetTransform.position + toShade.normalized * maxDistance;
-            }
         }
 
         private void CheckSprintUnlock()

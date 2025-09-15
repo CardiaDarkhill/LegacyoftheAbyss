@@ -71,14 +71,92 @@ public static class ShadeSettingsMenu
         }
     }
 
-    private static IEnumerator FocusSelectableNextFrame(Selectable target, MenuSelectable wrapper)
+    internal static bool IsShowing => screen != null && screen.activeSelf;
+
+    private sealed class SliderMenuDriver : MonoBehaviour, IMoveHandler, ISubmitHandler
     {
-        yield return null;
-        EventSystem.current.SetSelectedGameObject(target.gameObject);
-        target.navigation = wrapper.navigation;
+        public Slider slider;
+        public bool wholeNumbers;
+
+        public void Initialize(Slider s, bool whole)
+        {
+            slider = s;
+            wholeNumbers = whole;
+        }
+
+        private void Step(float direction)
+        {
+            if (slider == null)
+                return;
+            float delta = wholeNumbers ? 1f : FractionalSliderStep;
+            float target = slider.value + delta * direction;
+            float snapped = SnapSliderValue(target, slider.minValue, slider.maxValue, wholeNumbers);
+            if (!Mathf.Approximately(snapped, slider.value))
+            {
+                slider.value = snapped;
+            }
+        }
+
+        public void OnMove(AxisEventData eventData)
+        {
+            if (slider == null || eventData == null)
+                return;
+            if (eventData.moveDir == MoveDirection.Left)
+            {
+                Step(-1f);
+                eventData.Use();
+            }
+            else if (eventData.moveDir == MoveDirection.Right)
+            {
+                Step(1f);
+                eventData.Use();
+            }
+        }
+
+        public void OnSubmit(BaseEventData eventData)
+        {
+            if (slider == null)
+                return;
+            Step(1f);
+            eventData?.Use();
+        }
     }
 
-    internal static bool IsShowing => screen != null && screen.activeSelf;
+    private sealed class ToggleMenuDriver : MonoBehaviour, IMoveHandler, ISubmitHandler
+    {
+        public Toggle toggle;
+
+        public void Initialize(Toggle t)
+        {
+            toggle = t;
+        }
+
+        public void OnMove(AxisEventData eventData)
+        {
+            if (toggle == null || eventData == null)
+                return;
+            if (eventData.moveDir == MoveDirection.Left)
+            {
+                if (toggle.isOn)
+                    toggle.isOn = false;
+                eventData.Use();
+            }
+            else if (eventData.moveDir == MoveDirection.Right)
+            {
+                if (!toggle.isOn)
+                    toggle.isOn = true;
+                eventData.Use();
+            }
+        }
+
+        public void OnSubmit(BaseEventData eventData)
+        {
+            if (toggle == null)
+                return;
+            toggle.isOn = !toggle.isOn;
+            eventData?.Use();
+        }
+    }
 
     private static Sprite GetFallbackSprite(ref Sprite cache, string spriteName, bool sliced)
     {
@@ -492,6 +570,10 @@ public static class ShadeSettingsMenu
             valueTxt.text = FormatSliderValue(snapped, whole);
         });
 
+        var nav = slider.navigation;
+        nav.mode = Navigation.Mode.None;
+        slider.navigation = nav;
+
         var rowLe = row.AddComponent<LayoutElement>();
         rowLe.preferredHeight = rect.sizeDelta.y;
         rowLe.minHeight = rect.sizeDelta.y;
@@ -507,10 +589,8 @@ public static class ShadeSettingsMenu
         selectable.DontPlaySelectSound = true;
         selectable.cancelAction = CancelAction.GoToPauseMenu;
         slider.gameObject.AddComponent<CancelToPause>();
-        selectable.OnSelected += _ =>
-        {
-            selectable.StartCoroutine(FocusSelectableNextFrame(slider, selectable));
-        };
+        var driver = go.GetComponent<SliderMenuDriver>() ?? go.AddComponent<SliderMenuDriver>();
+        driver.Initialize(slider, whole);
         return selectable;
     }
 
@@ -574,6 +654,10 @@ public static class ShadeSettingsMenu
         toggle.onValueChanged.AddListener(onChange.Invoke);
         toggle.gameObject.AddComponent<CancelToPause>();
 
+        var toggleNav = toggle.navigation;
+        toggleNav.mode = Navigation.Mode.None;
+        toggle.navigation = toggleNav;
+
         var rowLe = row.AddComponent<LayoutElement>();
         rowLe.preferredHeight = rect.sizeDelta.y;
         rowLe.minHeight = rect.sizeDelta.y;
@@ -587,10 +671,8 @@ public static class ShadeSettingsMenu
         }
         selectable.DontPlaySelectSound = true;
         selectable.cancelAction = CancelAction.GoToPauseMenu;
-        selectable.OnSelected += _ =>
-        {
-            selectable.StartCoroutine(FocusSelectableNextFrame(toggle, selectable));
-        };
+        var driver = go.GetComponent<ToggleMenuDriver>() ?? go.AddComponent<ToggleMenuDriver>();
+        driver.Initialize(toggle);
         return selectable;
     }
 
