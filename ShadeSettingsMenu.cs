@@ -1,12 +1,16 @@
+using System;
 using System.Collections;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
+using Object = UnityEngine.Object;
 
 public static class ShadeSettingsMenu
 {
     private static GameObject screen;
     private static bool built;
+    private static Selectable firstSelectable;
 
     private static Slider CreateSlider(Transform parent, Slider template, string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
     {
@@ -46,6 +50,14 @@ public static class ShadeSettingsMenu
     private static void Build(UIManager ui)
     {
         if (built) return;
+
+        var sliderTemplate = ui.optionsMenuScreen != null ? ui.optionsMenuScreen.GetComponentInChildren<Slider>(true) : null;
+        if (sliderTemplate == null)
+            sliderTemplate = Object.FindObjectOfType<Slider>(true);
+        var toggleTemplate = ui.optionsMenuScreen != null ? ui.optionsMenuScreen.GetComponentInChildren<Toggle>(true) : null;
+        if (sliderTemplate == null || toggleTemplate == null)
+            return;
+
         built = true;
         var templateScreen = ui.optionsMenuScreen.gameObject;
         screen = Object.Instantiate(templateScreen, templateScreen.transform.parent);
@@ -69,10 +81,7 @@ public static class ShadeSettingsMenu
         layout.childControlWidth = true;
         layout.spacing = 10f;
 
-        var sliderTemplate = ui.optionsMenuScreen.GetComponentInChildren<Slider>(true);
-        var toggleTemplate = ui.optionsMenuScreen.GetComponentInChildren<Toggle>(true);
-
-        CreateSlider(content.transform, sliderTemplate, "Hornet Damage", 0.2f, 2f, ModConfig.Instance.hornetDamageMultiplier, v => ModConfig.Instance.hornetDamageMultiplier = v);
+        firstSelectable = CreateSlider(content.transform, sliderTemplate, "Hornet Damage", 0.2f, 2f, ModConfig.Instance.hornetDamageMultiplier, v => ModConfig.Instance.hornetDamageMultiplier = v);
         CreateSlider(content.transform, sliderTemplate, "Shade Damage", 0.2f, 2f, ModConfig.Instance.shadeDamageMultiplier, v => ModConfig.Instance.shadeDamageMultiplier = v);
         CreateSlider(content.transform, sliderTemplate, "Shade Heal (Bind)", 0f, 6f, ModConfig.Instance.bindShadeHeal, v => ModConfig.Instance.bindShadeHeal = Mathf.RoundToInt(v), true);
         CreateSlider(content.transform, sliderTemplate, "Hornet Heal (Bind)", 0f, 6f, ModConfig.Instance.bindHornetHeal, v => ModConfig.Instance.bindHornetHeal = Mathf.RoundToInt(v), true);
@@ -83,6 +92,12 @@ public static class ShadeSettingsMenu
         if (ms.backButton != null)
         {
             ms.backButton.OnSubmitPressed.AddListener(() => ui.StartCoroutine(Hide(ui)));
+        }
+
+        var mbl = screen.GetComponent<MenuButtonList>();
+        if (mbl != null)
+        {
+            Object.Destroy(mbl);
         }
     }
 
@@ -102,6 +117,23 @@ public static class ShadeSettingsMenu
             txt.text = "Legacy of the Abyss";
             txt.color = Color.white;
         }
+        var btn = go.GetComponent<PauseMenuButton>();
+
+        var list = template.transform.parent.GetComponent<MenuButtonList>();
+        if (list != null && btn != null)
+        {
+            var field = typeof(MenuButtonList).GetField("entries", BindingFlags.NonPublic | BindingFlags.Instance);
+            var entries = (Array)field.GetValue(list);
+            var entryType = entries.GetType().GetElementType();
+            var newEntry = Activator.CreateInstance(entryType);
+            var selField = entryType.GetField("selectable", BindingFlags.NonPublic | BindingFlags.Instance);
+            selField.SetValue(newEntry, btn);
+            var arr = Array.CreateInstance(entryType, entries.Length + 1);
+            entries.CopyTo(arr, 0);
+            arr.SetValue(newEntry, entries.Length);
+            field.SetValue(list, arr);
+            list.SetupActive();
+        }
     }
 
     internal static IEnumerator Show(UIManager ui)
@@ -109,6 +141,10 @@ public static class ShadeSettingsMenu
         Build(ui);
         ui.pauseMenuScreen.gameObject.SetActive(false);
         screen.SetActive(true);
+        if (firstSelectable != null)
+        {
+            EventSystem.current.SetSelectedGameObject(firstSelectable.gameObject);
+        }
         yield break;
     }
 
