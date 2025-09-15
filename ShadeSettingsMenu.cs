@@ -51,10 +51,18 @@ public static class ShadeSettingsMenu
     {
         if (built) return;
 
-        var sliderTemplate = ui.optionsMenuScreen != null ? ui.optionsMenuScreen.GetComponentInChildren<Slider>(true) : null;
+        // Need an options menu screen to clone for consistent styling
+        if (ui.optionsMenuScreen == null)
+            return;
+
+        var sliderTemplate = ui.optionsMenuScreen.GetComponentInChildren<Slider>(true);
         if (sliderTemplate == null)
             sliderTemplate = Object.FindObjectOfType<Slider>(true);
-        var toggleTemplate = ui.optionsMenuScreen != null ? ui.optionsMenuScreen.GetComponentInChildren<Toggle>(true) : null;
+
+        var toggleTemplate = ui.optionsMenuScreen.GetComponentInChildren<Toggle>(true);
+        if (toggleTemplate == null)
+            toggleTemplate = Object.FindObjectOfType<Toggle>(true);
+
         if (sliderTemplate == null || toggleTemplate == null)
             return;
 
@@ -132,6 +140,11 @@ public static class ShadeSettingsMenu
             entries.CopyTo(arr, 0);
             arr.SetValue(newEntry, entries.Length);
             field.SetValue(list, arr);
+
+            // Mark dirty so navigation rebuilds when the menu is shown
+            var dirtyField = typeof(MenuButtonList).GetField("isDirty", BindingFlags.NonPublic | BindingFlags.Instance);
+            dirtyField?.SetValue(list, true);
+
             list.SetupActive();
         }
     }
@@ -139,6 +152,9 @@ public static class ShadeSettingsMenu
     internal static IEnumerator Show(UIManager ui)
     {
         Build(ui);
+        if (screen == null)
+            yield break;
+
         ui.pauseMenuScreen.gameObject.SetActive(false);
         screen.SetActive(true);
         if (firstSelectable != null)
