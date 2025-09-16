@@ -1043,7 +1043,7 @@ public partial class LegacyHelper
                 battleCheckTimer -= Time.deltaTime;
                 if (battleCheckTimer <= 0f || cachedBattle == null)
                 {
-                    cachedBattle = GameObject.FindObjectOfType<BattleScene>();
+                    cachedBattle = Object.FindFirstObjectByType<BattleScene>();
                     battleCheckTimer = 1f;
                 }
                 if (cachedBattle != null)
@@ -1772,7 +1772,12 @@ public partial class LegacyHelper
 
                 // Ignore physical collisions with enemies (objects with HealthManager) but keep triggers for damage/hazards
                 HealthManager[] enemies = null;
-                try { enemies = Object.FindObjectsOfType<HealthManager>(); }
+                try
+                {
+                    enemies = Object.FindObjectsByType<HealthManager>(
+                        FindObjectsInactive.Exclude,
+                        FindObjectsSortMode.None);
+                }
                 catch { enemies = null; }
                 if (enemies != null)
                 {

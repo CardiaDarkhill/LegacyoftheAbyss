@@ -59,7 +59,7 @@ public partial class LegacyHelper : BaseUnityPlugin
     private void Update()
     {
         LoggingManager.Update();
-        var ui = UnityEngine.Object.FindObjectOfType<UIManager>();
+        var ui = UnityEngine.Object.FindFirstObjectByType<UIManager>();
         if (ui == null)
         {
             if (!loggedMissingUI)

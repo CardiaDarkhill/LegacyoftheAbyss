@@ -403,7 +403,7 @@ public static class ShadeInput
         {
             if (c == '_')
             {
-                if (sb.Length > 0 && sb[^1] != ' ')
+                if (sb.Length > 0 && sb[sb.Length - 1] != ' ')
                     sb.Append(' ');
                 previous = c;
                 continue;

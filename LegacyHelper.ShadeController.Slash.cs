@@ -13,7 +13,7 @@ public partial class LegacyHelper
             if (nailTimer > 0f) return;
 
             float forcedV = 0f;
-            bool pressed = Input.GetMouseButtonDown(0) || Input.GetKeyDown(NailKey);
+            bool pressed = Input.GetMouseButtonDown(0) || ShadeInput.WasActionPressed(ShadeAction.Nail);
             if (Input.GetKeyDown(KeyCode.Q)) { pressed = true; forcedV = -1f; }
             else if (Input.GetKeyDown(KeyCode.E)) { pressed = true; forcedV = 1f; }
             if (pressed)
@@ -32,7 +32,8 @@ public partial class LegacyHelper
             GameObject source = null;
             float v = forcedV;
             if (v == 0f)
-                v = (Input.GetKey(KeyCode.S) ? -1f : 0f) + (Input.GetKey(KeyCode.W) ? 1f : 0f);
+                v = (ShadeInput.IsActionHeld(ShadeAction.MoveDown) ? -1f : 0f) +
+                    (ShadeInput.IsActionHeld(ShadeAction.MoveUp) ? 1f : 0f);
 
             try
             {
