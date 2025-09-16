@@ -24,6 +24,8 @@ public static class ShadeSettingsMenu
     private static readonly Dictionary<MenuScreen, MenuSelectable> screenFirstSelectables = new();
     private static GameObject templateSource;
     private static bool templateSourceWasActive;
+    private static bool pauseMenuWasActive;
+    private static bool optionsMenuWasActive;
     private static readonly ManualLogSource log = BepInEx.Logging.Logger.CreateLogSource("ShadeSettingsMenu");
     private static bool loggedBuildAttempt;
     private static bool loggedMissingOptionsMenu;
@@ -531,6 +533,7 @@ public static class ShadeSettingsMenu
         var labelTxt = labelObj.AddComponent<Text>();
         ApplyTextStyle(labelTxt, sliderLabelStyle, TextAnchor.MiddleLeft, Color.white);
         labelTxt.text = label;
+        labelTxt.raycastTarget = false;
         var labelLe = labelObj.AddComponent<LayoutElement>();
         labelLe.minWidth = 340f;
         labelLe.preferredWidth = 340f;
@@ -575,6 +578,7 @@ public static class ShadeSettingsMenu
         valueObj.transform.SetParent(row.transform, false);
         var valueTxt = valueObj.AddComponent<Text>();
         ApplyTextStyle(valueTxt, sliderValueStyle, TextAnchor.MiddleRight, Color.white);
+        valueTxt.raycastTarget = false;
         var valueLe = valueObj.AddComponent<LayoutElement>();
         valueLe.minWidth = 110f;
         valueLe.preferredWidth = 110f;
@@ -622,7 +626,7 @@ public static class ShadeSettingsMenu
             return null;
         }
         selectable.DontPlaySelectSound = true;
-        selectable.cancelAction = cancelTarget == CancelTarget.PauseMenu ? CancelAction.GoToPauseMenu : CancelAction.Custom;
+        selectable.cancelAction = CancelAction.DoNothing;
         var router = go.GetComponent<CancelRouter>() ?? go.AddComponent<CancelRouter>();
         router.target = cancelTarget;
         var driver = go.GetComponent<SliderMenuDriver>() ?? go.AddComponent<SliderMenuDriver>();
@@ -653,6 +657,7 @@ public static class ShadeSettingsMenu
         var labelTxt = labelObj.AddComponent<Text>();
         ApplyTextStyle(labelTxt, toggleLabelStyle, TextAnchor.MiddleLeft, Color.white);
         labelTxt.text = label;
+        labelTxt.raycastTarget = false;
         var labelLe = labelObj.AddComponent<LayoutElement>();
         labelLe.minWidth = 340f;
         labelLe.preferredWidth = 340f;
@@ -705,7 +710,7 @@ public static class ShadeSettingsMenu
             return null;
         }
         selectable.DontPlaySelectSound = true;
-        selectable.cancelAction = cancelTarget == CancelTarget.PauseMenu ? CancelAction.GoToPauseMenu : CancelAction.Custom;
+        selectable.cancelAction = CancelAction.DoNothing;
         var router = go.GetComponent<CancelRouter>() ?? go.AddComponent<CancelRouter>();
         router.target = cancelTarget;
         var driver = go.GetComponent<ToggleMenuDriver>() ?? go.AddComponent<ToggleMenuDriver>();
@@ -730,6 +735,46 @@ public static class ShadeSettingsMenu
         screen = null;
         templateSource = null;
         templateSourceWasActive = false;
+        pauseMenuWasActive = false;
+        optionsMenuWasActive = false;
+    }
+
+    private static void StripTemplateComponents(MenuScreen ms)
+    {
+        if (ms == null)
+            return;
+
+        foreach (var comp in ms.GetComponents<MonoBehaviour>())
+        {
+            if (comp == null)
+                continue;
+            var type = comp.GetType();
+            if (type == typeof(MenuScreen) || type == typeof(CanvasGroup) || type == typeof(MenuButtonList) || type == typeof(Animator) || type == typeof(GraphicRaycaster) || comp is CancelRouter)
+                continue;
+            var ns = type.Namespace ?? string.Empty;
+            if (ns.StartsWith("UnityEngine"))
+                continue;
+            Object.DestroyImmediate(comp);
+        }
+
+        foreach (var comp in ms.GetComponentsInChildren<MonoBehaviour>(true))
+        {
+            if (comp == null)
+                continue;
+            if (ms.backButton != null && comp.gameObject == ms.backButton.gameObject)
+                continue;
+            if (comp is CancelRouter || comp is SliderMenuDriver || comp is ToggleMenuDriver)
+                continue;
+            var type = comp.GetType();
+            string fullName = type.FullName ?? string.Empty;
+            bool shouldDestroy = false;
+            if (fullName.Contains("MenuOptions") || fullName.Contains("MenuOption") || fullName.Contains("PauseMenu"))
+                shouldDestroy = true;
+            if (!shouldDestroy && (type.GetInterface("HKMenu.IMenuOptionLayout") != null || type.GetInterface("IMenuOptionLayout") != null))
+                shouldDestroy = true;
+            if (shouldDestroy)
+                Object.DestroyImmediate(comp);
+        }
     }
 
     private static void InitializeScreen(MenuScreen ms)
@@ -754,6 +799,7 @@ public static class ShadeSettingsMenu
             rt.offsetMax = Vector2.zero;
         }
         ms.transform.SetAsLastSibling();
+        StripTemplateComponents(ms);
     }
 
     private static RectTransform CreateContentRoot(MenuScreen ms)
@@ -801,7 +847,12 @@ public static class ShadeSettingsMenu
         {
             ms.backButton.OnSubmitPressed.AddListener(ShowMainMenu);
         }
-        ms.backButton.cancelAction = cancelTarget == CancelTarget.PauseMenu ? CancelAction.GoToPauseMenu : CancelAction.Custom;
+        foreach (var cond in ms.backButton.GetComponents<MenuButtonListCondition>())
+            Object.DestroyImmediate(cond);
+        var pauseMenuComponent = ms.backButton.GetComponent<PauseMenuButton>();
+        if (pauseMenuComponent != null)
+            Object.DestroyImmediate(pauseMenuComponent);
+        ms.backButton.cancelAction = CancelAction.DoNothing;
         var router = ms.backButton.gameObject.GetComponent<CancelRouter>() ?? ms.backButton.gameObject.AddComponent<CancelRouter>();
         router.target = cancelTarget;
     }
@@ -811,6 +862,10 @@ public static class ShadeSettingsMenu
         if (ms == null)
             return;
         var mbl = ms.GetComponent<MenuButtonList>() ?? ms.gameObject.AddComponent<MenuButtonList>();
+        var topField = typeof(MenuButtonList).GetField("isTopLevelMenu", BindingFlags.NonPublic | BindingFlags.Instance);
+        topField?.SetValue(mbl, false);
+        var skipField = typeof(MenuButtonList).GetField("skipDisabled", BindingFlags.NonPublic | BindingFlags.Instance);
+        skipField?.SetValue(mbl, false);
         mbl.ClearLastSelected();
         var entryField = typeof(MenuButtonList).GetField("entries", BindingFlags.NonPublic | BindingFlags.Instance);
         if (entryField == null)
@@ -852,6 +907,7 @@ public static class ShadeSettingsMenu
             return null;
         var go = Object.Instantiate(template.gameObject, parent, false);
         go.SetActive(true);
+        go.transform.localScale = Vector3.one;
         go.name = label.Replace(" ", string.Empty) + "Button";
         foreach (var auto in go.GetComponentsInChildren<AutoLocalizeTextUI>(true))
             Object.DestroyImmediate(auto);
@@ -861,6 +917,9 @@ public static class ShadeSettingsMenu
         {
             text.text = label;
             text.color = Color.white;
+            text.gameObject.SetActive(true);
+            text.enabled = true;
+            text.raycastTarget = false;
             hasLabel = true;
         }
         else
@@ -873,6 +932,12 @@ public static class ShadeSettingsMenu
                 {
                     tmpType.GetProperty("text")?.SetValue(tmp, label);
                     tmpType.GetProperty("color")?.SetValue(tmp, Color.white);
+                    if (tmp is Component tmpComp)
+                    {
+                        tmpComp.gameObject.SetActive(true);
+                        var enabledProp = tmpType.GetProperty("enabled");
+                        enabledProp?.SetValue(tmp, true);
+                    }
                     hasLabel = true;
                 }
             }
@@ -884,19 +949,35 @@ public static class ShadeSettingsMenu
             var fallback = labelObj.AddComponent<Text>();
             ApplyTextStyle(fallback, sliderLabelStyle, TextAnchor.MiddleCenter, Color.white);
             fallback.text = label;
+            fallback.raycastTarget = false;
         }
         foreach (var cond in go.GetComponents<MenuButtonListCondition>())
             Object.DestroyImmediate(cond);
+        var pauseMenuButton = go.GetComponent<PauseMenuButton>();
+        if (pauseMenuButton != null)
+            Object.DestroyImmediate(pauseMenuButton);
         var btn = go.GetComponent<MenuButton>();
         if (btn == null)
         {
             Object.Destroy(go);
             return null;
         }
+        var image = go.GetComponent<Image>();
+        if (image != null)
+        {
+            image.enabled = true;
+            if (image.sprite == null)
+            {
+                image.sprite = GetFallbackSprite(ref fallbackSlicedSprite, "ShadeSettingsButtonBg", true);
+                image.type = Image.Type.Sliced;
+            }
+            if (image.color.a <= 0.01f)
+                image.color = new Color(0.12f, 0.12f, 0.12f, 0.9f);
+        }
         btn.OnSubmitPressed.RemoveAllListeners();
         if (onSubmit != null)
             btn.OnSubmitPressed.AddListener(() => onSubmit());
-        btn.cancelAction = cancelTarget == CancelTarget.PauseMenu ? CancelAction.GoToPauseMenu : CancelAction.Custom;
+        btn.cancelAction = CancelAction.DoNothing;
         var router = go.GetComponent<CancelRouter>() ?? go.AddComponent<CancelRouter>();
         router.target = cancelTarget;
         btn.DontPlaySelectSound = true;
@@ -1122,29 +1203,17 @@ public static class ShadeSettingsMenu
         activeScreen = null;
 
         var optionsScreen = ui.optionsMenuScreen;
-        GameObject templateScreen;
-        templateSource = optionsScreen != null ? optionsScreen.gameObject : null;
+        if (optionsScreen == null && !loggedMissingOptionsMenu)
+        {
+            LogMenuWarning("optionsMenuScreen not yet available; using pause menu as template");
+            loggedMissingOptionsMenu = true;
+        }
+        var pauseScreen = ui.pauseMenuScreen;
+        templateSource = optionsScreen != null ? optionsScreen.gameObject : (pauseScreen != null ? pauseScreen.gameObject : null);
         templateSourceWasActive = templateSource != null && templateSource.activeSelf;
-        if (optionsScreen == null)
-        {
-            if (!loggedMissingOptionsMenu)
-            {
-                LogMenuWarning("optionsMenuScreen not yet available; using pause menu as template");
-                loggedMissingOptionsMenu = true;
-            }
-            templateScreen = ui.pauseMenuScreen != null ? ui.pauseMenuScreen.gameObject : null;
-            if (templateScreen == null)
-            {
-                templateSource = null;
-                templateSourceWasActive = false;
-            }
-        }
-        else
-        {
-            templateScreen = optionsScreen.gameObject;
-        }
 
-        if (templateScreen == null)
+        GameObject screenTemplate = pauseScreen != null ? pauseScreen.gameObject : templateSource;
+        if (screenTemplate == null)
         {
             LogMenuWarning("Template screen not available; aborting build");
             return;
@@ -1210,7 +1279,7 @@ public static class ShadeSettingsMenu
         }
         if (buttonTemplate == null)
         {
-            var templateMenuScreen = templateScreen.GetComponent<MenuScreen>();
+            var templateMenuScreen = screenTemplate.GetComponent<MenuScreen>();
             if (templateMenuScreen != null && templateMenuScreen.backButton != null)
             {
                 buttonTemplate = Object.Instantiate(templateMenuScreen.backButton.gameObject).GetComponent<MenuButton>();
@@ -1228,10 +1297,10 @@ public static class ShadeSettingsMenu
             buttonTemplate.gameObject.SetActive(false);
         }
 
-        mainScreen = Object.Instantiate(templateScreen, templateScreen.transform.parent).GetComponent<MenuScreen>();
-        difficultyScreen = Object.Instantiate(templateScreen, templateScreen.transform.parent).GetComponent<MenuScreen>();
-        controlsScreen = Object.Instantiate(templateScreen, templateScreen.transform.parent).GetComponent<MenuScreen>();
-        loggingScreen = Object.Instantiate(templateScreen, templateScreen.transform.parent).GetComponent<MenuScreen>();
+        mainScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
+        difficultyScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
+        controlsScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
+        loggingScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
 
         if (mainScreen != null)
         {
@@ -1431,11 +1500,20 @@ public static class ShadeSettingsMenu
         }
 
         LogMenuInfo("Showing Shade settings page");
+        bool templateWasActive = templateSource != null && templateSource.activeSelf;
         if (ui.pauseMenuScreen != null)
+        {
+            pauseMenuWasActive = ui.pauseMenuScreen.gameObject.activeSelf;
             ui.pauseMenuScreen.gameObject.SetActive(false);
+        }
+        if (ui.optionsMenuScreen != null)
+        {
+            optionsMenuWasActive = ui.optionsMenuScreen.gameObject.activeSelf;
+            ui.optionsMenuScreen.gameObject.SetActive(false);
+        }
         if (templateSource != null)
         {
-            templateSourceWasActive = templateSource.activeSelf;
+            templateSourceWasActive = templateWasActive;
             templateSource.SetActive(false);
         }
         ShowScreen(mainScreen);
@@ -1458,6 +1536,8 @@ public static class ShadeSettingsMenu
         {
             if (targetUi.pauseMenuScreen != null)
                 targetUi.pauseMenuScreen.gameObject.SetActive(true);
+            if (targetUi.optionsMenuScreen != null)
+                targetUi.optionsMenuScreen.gameObject.SetActive(optionsMenuWasActive);
             if (templateSource != null)
                 templateSource.SetActive(templateSourceWasActive);
             try
@@ -1469,6 +1549,8 @@ public static class ShadeSettingsMenu
                 LogMenuWarning($"Failed to navigate back to pause menu: {e}");
             }
         }
+        pauseMenuWasActive = false;
+        optionsMenuWasActive = false;
         ModConfig.Save();
     }
 

@@ -555,6 +555,21 @@ public partial class LegacyHelper
         {
             if (hornetTransform == null) return;
 
+            if (GameIsPaused())
+            {
+                capturedMoveInput = Vector2.zero;
+                capturedHorizontalInput = 0f;
+                capturedSprintHeld = false;
+                if (rb)
+                    rb.linearVelocity = Vector2.zero;
+                lastMoveDelta = Vector2.zero;
+                isSprinting = false;
+                sprintDashTimer = 0f;
+                inHardLeash = false;
+                hardLeashTimer = 0f;
+                return;
+            }
+
             if (hazardCooldown > 0f) hazardCooldown = Mathf.Max(0f, hazardCooldown - Time.deltaTime);
             if (hurtCooldown > 0f) hurtCooldown = Mathf.Max(0f, hurtCooldown - Time.deltaTime);
             if (Input.GetKeyDown(DamageToggleKey))
@@ -621,6 +636,13 @@ public partial class LegacyHelper
         private void FixedUpdate()
         {
             if (hornetTransform == null) return;
+            if (GameIsPaused())
+            {
+                if (rb)
+                    rb.linearVelocity = Vector2.zero;
+                lastMoveDelta = Vector2.zero;
+                return;
+            }
             HandleMovementAndFacing(Time.fixedDeltaTime);
         }
 
@@ -688,6 +710,19 @@ public partial class LegacyHelper
             capturedSprintHeld = sprintUnlocked &&
                                  (Input.GetKey(SprintKeyPrimary) || Input.GetKey(SprintKeySecondary)) &&
                                  input.sqrMagnitude > 0f;
+        }
+
+        private static bool GameIsPaused()
+        {
+            try
+            {
+                var gm = GameManager.instance;
+                return gm != null && gm.IsGamePaused();
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private DynamicLeashLimits GetDynamicLeashLimits(Vector3 hornetWorld)
