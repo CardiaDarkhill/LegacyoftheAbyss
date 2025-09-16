@@ -102,9 +102,20 @@ public partial class SimpleHUD
         if (cur < previousShadeHealth)
         {
             int lost = previousShadeHealth - cur;
-            TryPlayPinnedHurtSfx(lost);
+            if (suppressNextDamageSound)
+            {
+                suppressNextDamageSound = false;
+            }
+            else
+            {
+                TryPlayPinnedHurtSfx(lost);
+            }
             for (int i = cur; i < previousShadeHealth && i < maskImages.Length; i++)
                 StartCoroutine(LoseHealth(maskImages[i]));
+        }
+        else if (suppressNextDamageSound)
+        {
+            suppressNextDamageSound = false;
         }
         for (int i = 0; i < cur && i < maskImages.Length; i++)
         {

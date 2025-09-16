@@ -4,12 +4,23 @@ public partial class SimpleHUD
 {
     private void ComputeShadeFromPlayer()
     {
-        if (playerData == null) { shadeMax = 0; shadeHealth = 0; return; }
+        if (playerData == null)
+        {
+            shadeMax = 0;
+            shadeHealth = 0;
+            prevHornetMax = 0;
+            prevHornetHealth = 0;
+            suppressNextDamageSound = false;
+            return;
+        }
         shadeMax = (playerData.maxHealth + 1) / 2;
         prevHornetMax = playerData.maxHealth;
         prevHornetHealth = playerData.health;
-        if (previousShadeHealth == 0 && shadeHealth == 0)
+        if (!hasExplicitShadeStats)
+        {
             shadeHealth = (playerData.health + 1) / 2;
+            suppressNextDamageSound = true;
+        }
     }
 
     private void SyncShadeFromPlayer()

@@ -29,6 +29,8 @@ public partial class SimpleHUD : MonoBehaviour
     private int previousShadeHealth;
     private int prevHornetHealth;
     private int prevHornetMax;
+    private bool hasExplicitShadeStats;
+    private bool suppressNextDamageSound;
 
     // UI containers
     private GameObject healthContainer;
@@ -189,6 +191,7 @@ public partial class SimpleHUD : MonoBehaviour
     // Allow ShadeController to drive Shade HP and max
     public void SetShadeStats(int current, int max)
     {
+        hasExplicitShadeStats = true;
         int newMax = Mathf.Max(1, max);
         int newCur = Mathf.Clamp(current, 0, newMax);
         bool maxChanged = (newMax != shadeMax);

@@ -26,6 +26,7 @@ public static class ShadeSettingsMenu
     private static bool templateSourceWasActive;
     private static bool pauseMenuWasActive;
     private static bool optionsMenuWasActive;
+    private static bool gameOptionsMenuWasActive;
     private static readonly ManualLogSource log = BepInEx.Logging.Logger.CreateLogSource("ShadeSettingsMenu");
     private static bool loggedBuildAttempt;
     private static bool loggedMissingOptionsMenu;
@@ -37,6 +38,9 @@ public static class ShadeSettingsMenu
     private static bool loggedNoMenuButtonList;
     private static bool loggedNullEntries;
     private const float FractionalSliderStep = 0.1f;
+    private const float SliderRowHeight = 68f;
+    private const float ToggleRowHeight = 56f;
+    private const float ContentSpacing = 32f;
 
     private struct ShadowStyle
     {
@@ -416,6 +420,8 @@ public static class ShadeSettingsMenu
 
         text.font = fontToUse;
         text.color = hasStyle ? resolved.Color : defaultColor;
+        text.enabled = true;
+        text.raycastTarget = false;
         text.alignment = hasStyle ? resolved.Alignment : defaultAlignment;
         text.fontSize = hasStyle && resolved.FontSize > 0 ? resolved.FontSize : 24;
         text.fontStyle = hasStyle ? resolved.FontStyle : FontStyle.Normal;
@@ -427,6 +433,11 @@ public static class ShadeSettingsMenu
         text.alignByGeometry = hasStyle ? resolved.AlignByGeometry : false;
         text.horizontalOverflow = hasStyle ? resolved.HorizontalOverflow : HorizontalWrapMode.Overflow;
         text.verticalOverflow = hasStyle ? resolved.VerticalOverflow : VerticalWrapMode.Overflow;
+
+        if (text.color.a <= 0.01f)
+        {
+            text.color = new Color(text.color.r, text.color.g, text.color.b, 1f);
+        }
 
         ClearAndApplyShadows(text, hasStyle ? resolved.Shadows : null);
     }
@@ -485,6 +496,71 @@ public static class ShadeSettingsMenu
             fallbackFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
     }
 
+    private static void SanitizeSelectableHierarchy(GameObject root)
+    {
+        if (root == null)
+            return;
+
+        foreach (var comp in root.GetComponentsInChildren<MonoBehaviour>(true))
+        {
+            if (comp == null)
+                continue;
+            if (comp is CancelRouter || comp is SliderMenuDriver || comp is ToggleMenuDriver)
+                continue;
+            var type = comp.GetType();
+            string ns = type.Namespace ?? string.Empty;
+            if (ns.StartsWith("UnityEngine"))
+                continue;
+            Object.DestroyImmediate(comp);
+        }
+
+        foreach (var group in root.GetComponentsInChildren<CanvasGroup>(true))
+        {
+            if (group == null)
+                continue;
+            group.alpha = 1f;
+            group.interactable = true;
+            group.blocksRaycasts = true;
+        }
+    }
+
+    private static Font FindFontInObject(GameObject root)
+    {
+        if (root == null)
+            return null;
+        foreach (var text in root.GetComponentsInChildren<Text>(true))
+        {
+            if (text != null && text.font != null)
+                return text.font;
+        }
+        return null;
+    }
+
+    private static void ApplyPreferredFont(Font font)
+    {
+        if (font == null)
+            return;
+        fallbackFont = font;
+        if (sliderLabelStyle.HasValue)
+        {
+            var style = sliderLabelStyle.Value;
+            style.Font = font;
+            sliderLabelStyle = style;
+        }
+        if (sliderValueStyle.HasValue)
+        {
+            var style = sliderValueStyle.Value;
+            style.Font = font;
+            sliderValueStyle = style;
+        }
+        if (toggleLabelStyle.HasValue)
+        {
+            var style = toggleLabelStyle.Value;
+            style.Font = font;
+            toggleLabelStyle = style;
+        }
+    }
+
     private static float SnapSliderValue(float value, float min, float max, bool whole)
     {
         value = Mathf.Clamp(value, min, max);
@@ -524,7 +600,7 @@ public static class ShadeSettingsMenu
         hLayout.childControlWidth = true;
         hLayout.childForceExpandHeight = false;
         hLayout.childForceExpandWidth = false;
-        hLayout.spacing = 36f;
+        hLayout.spacing = 48f;
         hLayout.childAlignment = TextAnchor.MiddleLeft;
 
         // label text
@@ -537,6 +613,7 @@ public static class ShadeSettingsMenu
         var labelLe = labelObj.AddComponent<LayoutElement>();
         labelLe.minWidth = 340f;
         labelLe.preferredWidth = 340f;
+        labelLe.flexibleWidth = 0f;
 
         // slider instance
         var go = Object.Instantiate(template.gameObject, row.transform, false);
@@ -554,7 +631,15 @@ public static class ShadeSettingsMenu
         foreach (var auto in go.GetComponentsInChildren<AutoLocalizeTextUI>(true))
             Object.DestroyImmediate(auto);
 
+        SanitizeSelectableHierarchy(go);
+
         var slider = go.GetComponentInChildren<Slider>(true);
+        if (slider == null)
+        {
+            LogMenuError($"Created slider '{label}' missing Slider component");
+            Object.DestroyImmediate(row);
+            return null;
+        }
         Object.DestroyImmediate(slider.GetComponent<MenuAudioSlider>());
         Object.DestroyImmediate(slider.GetComponent<MenuPreventDeselect>());
         slider.onValueChanged.RemoveAllListeners();
@@ -582,6 +667,7 @@ public static class ShadeSettingsMenu
         var valueLe = valueObj.AddComponent<LayoutElement>();
         valueLe.minWidth = 110f;
         valueLe.preferredWidth = 110f;
+        valueLe.flexibleWidth = 0f;
 
         slider.minValue = min;
         slider.maxValue = max;
@@ -614,8 +700,22 @@ public static class ShadeSettingsMenu
         slider.navigation = nav;
 
         var rowLe = row.AddComponent<LayoutElement>();
-        rowLe.preferredHeight = rect.sizeDelta.y;
-        rowLe.minHeight = rect.sizeDelta.y;
+        float baseHeight = 0f;
+        if (rect != null)
+        {
+            baseHeight = rect.rect.height;
+            if (baseHeight <= 0f)
+                baseHeight = rect.sizeDelta.y;
+        }
+        if (baseHeight <= 0f)
+            baseHeight = SliderRowHeight;
+        else
+            baseHeight = Mathf.Max(baseHeight, SliderRowHeight);
+        rowLe.preferredHeight = baseHeight;
+        rowLe.minHeight = baseHeight;
+        rowRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, baseHeight);
+        if (rect != null)
+            rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, baseHeight);
 
         // return whichever Selectable component exists (MenuSelectable if present)
         var selectable = go.GetComponent<MenuSelectable>();
@@ -648,7 +748,7 @@ public static class ShadeSettingsMenu
         hLayout.childControlWidth = true;
         hLayout.childForceExpandHeight = false;
         hLayout.childForceExpandWidth = false;
-        hLayout.spacing = 36f;
+        hLayout.spacing = 48f;
         hLayout.childAlignment = TextAnchor.MiddleLeft;
 
         // label text
@@ -661,6 +761,7 @@ public static class ShadeSettingsMenu
         var labelLe = labelObj.AddComponent<LayoutElement>();
         labelLe.minWidth = 340f;
         labelLe.preferredWidth = 340f;
+        labelLe.flexibleWidth = 0f;
 
         // toggle instance
         var go = Object.Instantiate(template.gameObject, row.transform, false);
@@ -678,7 +779,15 @@ public static class ShadeSettingsMenu
         foreach (var auto in go.GetComponentsInChildren<AutoLocalizeTextUI>(true))
             Object.DestroyImmediate(auto);
 
+        SanitizeSelectableHierarchy(go);
+
         var toggle = go.GetComponentInChildren<Toggle>(true);
+        if (toggle == null)
+        {
+            LogMenuError($"Created toggle '{label}' missing Toggle component");
+            Object.DestroyImmediate(row);
+            return null;
+        }
         Object.DestroyImmediate(toggle.GetComponent<MenuPreventDeselect>());
         var rect = go.GetComponent<RectTransform>();
         rect.anchorMin = new Vector2(0f, 0.5f);
@@ -687,6 +796,7 @@ public static class ShadeSettingsMenu
         var toggleLe = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
         toggleLe.minWidth = 60f;
         toggleLe.preferredWidth = 60f;
+        toggleLe.flexibleWidth = 0f;
 
         toggle.onValueChanged.RemoveAllListeners();
         toggle.isOn = value;
@@ -699,8 +809,22 @@ public static class ShadeSettingsMenu
         toggle.navigation = toggleNav;
 
         var rowLe = row.AddComponent<LayoutElement>();
-        rowLe.preferredHeight = rect.sizeDelta.y;
-        rowLe.minHeight = rect.sizeDelta.y;
+        float baseHeight = 0f;
+        if (rect != null)
+        {
+            baseHeight = rect.rect.height;
+            if (baseHeight <= 0f)
+                baseHeight = rect.sizeDelta.y;
+        }
+        if (baseHeight <= 0f)
+            baseHeight = ToggleRowHeight;
+        else
+            baseHeight = Mathf.Max(baseHeight, ToggleRowHeight);
+        rowLe.preferredHeight = baseHeight;
+        rowLe.minHeight = baseHeight;
+        rowRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, baseHeight);
+        if (rect != null)
+            rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, baseHeight);
 
         var selectable = go.GetComponent<MenuSelectable>();
         if (selectable == null)
@@ -737,6 +861,7 @@ public static class ShadeSettingsMenu
         templateSourceWasActive = false;
         pauseMenuWasActive = false;
         optionsMenuWasActive = false;
+        gameOptionsMenuWasActive = false;
     }
 
     private static void StripTemplateComponents(MenuScreen ms)
@@ -827,8 +952,8 @@ public static class ShadeSettingsMenu
         layout.childControlWidth = true;
         layout.childForceExpandHeight = false;
         layout.childForceExpandWidth = true;
-        layout.spacing = 24f;
-        layout.padding = new RectOffset(0, 0, 0, 0);
+        layout.spacing = ContentSpacing;
+        layout.padding = new RectOffset(0, 0, 10, 10);
         layout.childAlignment = TextAnchor.UpperLeft;
         return contentRect;
     }
@@ -915,11 +1040,9 @@ public static class ShadeSettingsMenu
         var text = go.GetComponentInChildren<Text>(true);
         if (text != null)
         {
-            text.text = label;
-            text.color = Color.white;
             text.gameObject.SetActive(true);
-            text.enabled = true;
-            text.raycastTarget = false;
+            ApplyTextStyle(text, sliderLabelStyle, TextAnchor.MiddleCenter, Color.white);
+            text.text = label;
             hasLabel = true;
         }
         else
@@ -956,6 +1079,7 @@ public static class ShadeSettingsMenu
         var pauseMenuButton = go.GetComponent<PauseMenuButton>();
         if (pauseMenuButton != null)
             Object.DestroyImmediate(pauseMenuButton);
+        SanitizeSelectableHierarchy(go);
         var btn = go.GetComponent<MenuButton>();
         if (btn == null)
         {
@@ -1297,6 +1421,11 @@ public static class ShadeSettingsMenu
             buttonTemplate.gameObject.SetActive(false);
         }
 
+        Font preferredFont = FindFontInObject(buttonTemplate != null ? buttonTemplate.gameObject : null);
+        if (preferredFont == null && pauseScreen != null)
+            preferredFont = FindFontInObject(pauseScreen.gameObject);
+        ApplyPreferredFont(preferredFont);
+
         mainScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
         difficultyScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
         controlsScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
@@ -1511,6 +1640,11 @@ public static class ShadeSettingsMenu
             optionsMenuWasActive = ui.optionsMenuScreen.gameObject.activeSelf;
             ui.optionsMenuScreen.gameObject.SetActive(false);
         }
+        if (ui.gameOptionsMenuScreen != null)
+        {
+            gameOptionsMenuWasActive = ui.gameOptionsMenuScreen.gameObject.activeSelf;
+            ui.gameOptionsMenuScreen.gameObject.SetActive(false);
+        }
         if (templateSource != null)
         {
             templateSourceWasActive = templateWasActive;
@@ -1535,9 +1669,11 @@ public static class ShadeSettingsMenu
         if (targetUi != null)
         {
             if (targetUi.pauseMenuScreen != null)
-                targetUi.pauseMenuScreen.gameObject.SetActive(true);
+                targetUi.pauseMenuScreen.gameObject.SetActive(pauseMenuWasActive);
             if (targetUi.optionsMenuScreen != null)
                 targetUi.optionsMenuScreen.gameObject.SetActive(optionsMenuWasActive);
+            if (targetUi.gameOptionsMenuScreen != null)
+                targetUi.gameOptionsMenuScreen.gameObject.SetActive(gameOptionsMenuWasActive);
             if (templateSource != null)
                 templateSource.SetActive(templateSourceWasActive);
             try
@@ -1551,6 +1687,7 @@ public static class ShadeSettingsMenu
         }
         pauseMenuWasActive = false;
         optionsMenuWasActive = false;
+        gameOptionsMenuWasActive = false;
         ModConfig.Save();
     }
 
