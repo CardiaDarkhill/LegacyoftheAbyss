@@ -113,7 +113,7 @@ public partial class LegacyHelper : BaseUnityPlugin
 
         try
         {
-            Object.Destroy(helper);
+            UnityEngine.Object.Destroy(helper);
         }
         catch
         {
