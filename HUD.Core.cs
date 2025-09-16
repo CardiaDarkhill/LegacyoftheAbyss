@@ -191,12 +191,18 @@ public partial class SimpleHUD : MonoBehaviour
     // Allow ShadeController to drive Shade HP and max
     public void SetShadeStats(int current, int max)
     {
+        bool firstExplicit = !hasExplicitShadeStats;
         hasExplicitShadeStats = true;
         int newMax = Mathf.Max(1, max);
         int newCur = Mathf.Clamp(current, 0, newMax);
         bool maxChanged = (newMax != shadeMax);
         shadeMax = newMax;
         shadeHealth = newCur;
+        if (firstExplicit)
+        {
+            previousShadeHealth = newCur;
+            suppressNextDamageSound = false;
+        }
         if (maxChanged) RebuildMasks();
         RefreshHealth();
     }
