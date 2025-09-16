@@ -17,3 +17,4 @@ Assets/logs/*
 *.AssemblyInfo.cs
 *.GlobalUsings.g.cs
 *.CoreCompileInputs.cache
+obj/Release/LegacyoftheAbyss.csproj.CoreCompileInputs.cache

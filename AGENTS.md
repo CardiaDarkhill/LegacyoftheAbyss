@@ -19,19 +19,16 @@
 - At time of writing the following features requests need to be actioned:
 
 - Support for using two controllers instead of forcing mouse and keyboard + controller
-- Menu based difficulty tweaks (Which is to say, find a way to add additional options to the Silksong pause menu so people can change things there.)
 - Hotkey based logging (We have a lot of logging right now, both currently in use and some that we've either removed due to spam or disabled because we're not currently using it. I'd like to set up some hotkeys to enable different types of logging based on what we're testing for)
 - Better testing/debugging tools (Ideally we can turn these on/off in the Silksong pause menu using the same tech that we'll be using for the difficulty tweaks)
-- Settings saved via an external file in the assets folder, configurable using the main silksong menu system
 - Charms, notches and other progression items for the shade, independant of just using Hornet's progression
 - Demo video of gameplay for the Nexusmods page
-- Unit testing
 - Ability unlock pop-ups for when the shade gets new abilities
 - In game configurable controls for the shade
-- Support a second controller, so both Hornet and the Shade can be played using a controller
 - A menu option in the silksong pause menu that provides a default hotkey setup that allows both the Shade and Hornet to be controlled using a single keyboard
 - Improved damage logging for the shade, for some reason, certain hits that should be damaging the shade are both not damaging it and not showing up in the logs as a blocked hit
 - Currently we have logging for shade damage toggled based on pressing F1, I'd like to set up a similar hotkey for the shades nail-attack (IE. Make it toggle when F2 is pressed), and the same system for all future logging we set up.
+- Make it so the shade leash uses a maximum X distance and a maximum Y distance, that are seperately configurable, rather than using a single total distance, so the Shade's leash isn't longer than the top and bottom of the screen.
 
 
 ## Testing:
