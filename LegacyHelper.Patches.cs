@@ -87,6 +87,58 @@ public partial class LegacyHelper
         }
     }
 
+    [HarmonyPatch(typeof(GameManager), nameof(GameManager.PauseGameToggle))]
+    private class GameManager_PauseGameToggle_Patch
+    {
+        private static bool Prefix(GameManager __instance, bool _, ref IEnumerator __result)
+        {
+            try
+            {
+                var ui = UIManager.instance;
+                if (ui == null && __instance != null)
+                    ui = __instance.ui;
+                if (ui != null && ShadeSettingsMenu.HandlePauseToggle(ui))
+                {
+                    __result = Skip();
+                    return false;
+                }
+            }
+            catch { }
+            return true;
+        }
+
+        private static IEnumerator Skip()
+        {
+            yield break;
+        }
+    }
+
+    [HarmonyPatch(typeof(GameManager), nameof(GameManager.PauseGameToggleByMenu))]
+    private class GameManager_PauseGameToggleByMenu_Patch
+    {
+        private static bool Prefix(GameManager __instance, ref IEnumerator __result)
+        {
+            try
+            {
+                var ui = UIManager.instance;
+                if (ui == null && __instance != null)
+                    ui = __instance.ui;
+                if (ui != null && ShadeSettingsMenu.HandlePauseToggle(ui))
+                {
+                    __result = Skip();
+                    return false;
+                }
+            }
+            catch { }
+            return true;
+        }
+
+        private static IEnumerator Skip()
+        {
+            yield break;
+        }
+    }
+
     [HarmonyPatch(typeof(UIManager), nameof(UIManager.ShowMenu))]
     private class UIManager_ShowMenu_Patch
     {
