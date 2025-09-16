@@ -1909,6 +1909,13 @@ public static class ShadeSettingsMenu
 
         bindingDrivers.Clear();
 
+        if (content != null)
+        {
+            var anchored = content.anchoredPosition;
+            anchored.y += Mathf.Round(Screen.height * 0.15f);
+            content.anchoredPosition = anchored;
+        }
+
         var info = new GameObject("ControlsInfo");
         info.transform.SetParent(content, false);
         var infoText = info.AddComponent<Text>();
@@ -1924,8 +1931,10 @@ public static class ShadeSettingsMenu
         var presetRect = presetRow.AddComponent<RectTransform>();
         presetRect.SetParent(content, false);
         var presetLayout = presetRow.AddComponent<HorizontalLayoutGroup>();
-        presetLayout.spacing = 56f;
-        presetLayout.padding = new RectOffset(16, 16, 0, 0);
+        float presetSpacing = Mathf.Clamp(Screen.width * 0.045f, 70f, 140f);
+        int sidePadding = Mathf.RoundToInt(Mathf.Clamp(Screen.width * 0.125f, 80f, Screen.width * 0.25f));
+        presetLayout.spacing = presetSpacing;
+        presetLayout.padding = new RectOffset(sidePadding, sidePadding, 0, 0);
         presetLayout.childControlWidth = true;
         presetLayout.childControlHeight = false;
         presetLayout.childForceExpandWidth = true;
@@ -1952,8 +1961,8 @@ public static class ShadeSettingsMenu
             optionLayout.childAlignment = TextAnchor.UpperCenter;
 
             var optionLayoutElement = optionRoot.AddComponent<LayoutElement>();
-            optionLayoutElement.minWidth = 360f;
-            optionLayoutElement.preferredWidth = 420f;
+            optionLayoutElement.minWidth = 0f;
+            optionLayoutElement.preferredWidth = 0f;
             optionLayoutElement.flexibleWidth = 1f;
             optionLayoutElement.flexibleHeight = 1f;
 
