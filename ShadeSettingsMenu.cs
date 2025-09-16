@@ -341,6 +341,7 @@ public static class ShadeSettingsMenu
     private static void ApplyDefaultPreset()
     {
         ShadeInput.Config.ResetToDefaults();
+        HornetInput.ApplyControllerDefaults();
         ModConfig.Save();
         NotifyBindingChanged();
     }
@@ -348,6 +349,7 @@ public static class ShadeSettingsMenu
     private static void ApplyDualControllerPresetOption()
     {
         ShadeInput.Config.ApplyDualControllerPreset();
+        HornetInput.ApplyControllerDefaults();
         ModConfig.Save();
         NotifyBindingChanged();
     }
@@ -355,6 +357,15 @@ public static class ShadeSettingsMenu
     private static void ApplyKeyboardOnlyPresetOption()
     {
         ShadeInput.Config.ApplyKeyboardOnlyPreset();
+        HornetInput.ApplyKeyboardDefaults(true);
+        ModConfig.Save();
+        NotifyBindingChanged();
+    }
+
+    private static void ApplyShadeControllerPresetOption()
+    {
+        ShadeInput.Config.ApplyShadeControllerPreset();
+        HornetInput.ApplyKeyboardDefaults(true);
         ModConfig.Save();
         NotifyBindingChanged();
     }
@@ -1422,7 +1433,7 @@ public static class ShadeSettingsMenu
         contentRect.pivot = new Vector2(0.5f, 1f);
         contentRect.anchoredPosition = Vector2.zero;
         contentRect.offsetMin = new Vector2(60f, 80f);
-        contentRect.offsetMax = new Vector2(-60f, -140f);
+        contentRect.offsetMax = new Vector2(-60f, -70f);
         var layout = content.AddComponent<VerticalLayoutGroup>();
         layout.childControlHeight = true;
         layout.childControlWidth = true;
@@ -1784,31 +1795,67 @@ public static class ShadeSettingsMenu
         presetLayout.childControlHeight = true;
         presetLayout.childForceExpandWidth = true;
         presetLayout.childForceExpandHeight = false;
-        presetLayout.childAlignment = TextAnchor.MiddleCenter;
+        presetLayout.childAlignment = TextAnchor.UpperCenter;
         var presetLayoutElement = presetRow.AddComponent<LayoutElement>();
-        presetLayoutElement.minHeight = ButtonRowHeight;
-        presetLayoutElement.preferredHeight = ButtonRowHeight;
+        presetLayoutElement.minHeight = ButtonRowHeight * 1.5f;
+        presetLayoutElement.preferredHeight = ButtonRowHeight * 2f;
         presetLayoutElement.flexibleHeight = 0f;
 
-        void AddPresetButton(string label, System.Action onSubmit)
+        void AddPresetOption(string label, string description, System.Action onSubmit)
         {
-            var selectable = CreateMenuButton(presetRow.transform, buttonTemplate, label, onSubmit, CancelTarget.ShadeMain);
-            if (selectable != null)
+            var optionRoot = new GameObject(label.Replace(' ', '_'));
+            var optionRect = optionRoot.AddComponent<RectTransform>();
+            optionRect.SetParent(presetRow.transform, false);
+
+            var optionLayout = optionRoot.AddComponent<VerticalLayoutGroup>();
+            optionLayout.spacing = 12f;
+            optionLayout.childControlWidth = true;
+            optionLayout.childControlHeight = true;
+            optionLayout.childForceExpandWidth = true;
+            optionLayout.childForceExpandHeight = false;
+            optionLayout.childAlignment = TextAnchor.UpperCenter;
+
+            var optionLayoutElement = optionRoot.AddComponent<LayoutElement>();
+            optionLayoutElement.minWidth = 0f;
+            optionLayoutElement.preferredWidth = 0f;
+            optionLayoutElement.flexibleWidth = 1f;
+
+            var selectable = CreateMenuButton(optionRoot.transform, buttonTemplate, label, onSubmit, CancelTarget.ShadeMain);
+            if (selectable is MenuButton button)
             {
-                var layout = selectable.GetComponent<LayoutElement>();
+                var layout = button.GetComponent<LayoutElement>();
                 if (layout != null)
                 {
                     layout.minWidth = 0f;
                     layout.preferredWidth = 0f;
                     layout.flexibleWidth = 1f;
                 }
+                selectables.Add(button);
+            }
+            else if (selectable != null)
+            {
                 selectables.Add(selectable);
             }
+
+            var descriptionObject = new GameObject("Description");
+            var descriptionRect = descriptionObject.AddComponent<RectTransform>();
+            descriptionRect.SetParent(optionRoot.transform, false);
+            var descriptionText = descriptionObject.AddComponent<Text>();
+            ApplyTextStyle(descriptionText, sliderLabelStyle, TextAnchor.UpperCenter, Color.white);
+            descriptionText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            descriptionText.verticalOverflow = VerticalWrapMode.Truncate;
+            descriptionText.text = description;
+            var descriptionLayout = descriptionObject.AddComponent<LayoutElement>();
+            descriptionLayout.minHeight = 0f;
+            descriptionLayout.preferredHeight = 72f;
+            descriptionLayout.flexibleHeight = 0f;
+            ScaleTextElements(descriptionObject, 0.72f);
         }
 
-        AddPresetButton("Preset 1: Default", ApplyDefaultPreset);
-        AddPresetButton("Preset 2: Two Controllers", ApplyDualControllerPresetOption);
-        AddPresetButton("Preset 3: Keyboard Only", ApplyKeyboardOnlyPresetOption);
+        AddPresetOption("Preset 1: Default", "Shade keeps the original keyboard layout. Hornet stays on controller and keyboard hotkeys stay disabled.", ApplyDefaultPreset);
+        AddPresetOption("Preset 2: Two Controllers", "Shade uses the second controller while Hornet remains on the first controller.", ApplyDualControllerPresetOption);
+        AddPresetOption("Preset 3: Keyboard Only", "Shade moves to the keypad and Hornet switches to default keyboard hotkeys. Controllers are disabled.", ApplyKeyboardOnlyPresetOption);
+        AddPresetOption("Preset 4: Shade Controller", "Shade uses the controller layout and Hornet swaps to default keyboard hotkeys with the controller disabled.", ApplyShadeControllerPresetOption);
 
         var bindingsContainer = new GameObject("BindingColumns");
         var bindingsRect = bindingsContainer.AddComponent<RectTransform>();
@@ -1877,8 +1924,12 @@ public static class ShadeSettingsMenu
 
         void AddBindingRow(Transform parent, ShadeAction action, string label)
         {
-            AddBindingButton(parent, action, label + " (Primary)", false);
-            AddBindingButton(parent, action, label + " (Alt)", true);
+            string primaryLabel = action == ShadeAction.Nail ? label + " (Primary)" : label;
+            AddBindingButton(parent, action, primaryLabel, false);
+            if (action == ShadeAction.Nail)
+            {
+                AddBindingButton(parent, action, label + " (Alt)", true);
+            }
         }
 
         var bindingRows = new (ShadeAction action, string label)[]

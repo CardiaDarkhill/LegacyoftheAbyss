@@ -291,13 +291,52 @@ public partial class LegacyHelper
     [HarmonyPatch(typeof(InputHandler), "MapKeyboardLayoutFromGameSettings")]
     private class BlockKeyboardRebinding
     {
-        private static bool Prefix() => false; // skip
+        private static bool Prefix()
+        {
+            try
+            {
+                var cfg = ModConfig.Instance;
+                return cfg != null && cfg.hornetKeyboardEnabled;
+            }
+            catch
+            {
+                return false;
+            }
+        }
     }
 
     [HarmonyPatch(typeof(InputHandler), "MapDefaultKeyboardLayout")]
     private class BlockDefaultKeyboardMap
     {
-        private static bool Prefix() => false; // skip
+        private static bool Prefix()
+        {
+            try
+            {
+                var cfg = ModConfig.Instance;
+                return cfg != null && cfg.hornetKeyboardEnabled;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(InputHandler), "MapControllerButtons")]
+    private class ControlControllerMapping
+    {
+        private static bool Prefix()
+        {
+            try
+            {
+                var cfg = ModConfig.Instance;
+                return cfg == null || cfg.hornetControllerEnabled;
+            }
+            catch
+            {
+                return true;
+            }
+        }
     }
 
     // When a SpellGetOrb completes collection (appears during spell acquisition sequences),

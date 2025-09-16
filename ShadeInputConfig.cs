@@ -111,15 +111,15 @@ public class ShadeInputConfig
         controllerDeviceIndex = 1;
         controllerDeadzone = Mathf.Clamp(controllerDeadzone <= 0f ? 0.25f : controllerDeadzone, 0.01f, 1f);
 
-        moveLeft = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.A), ShadeBindingOption.FromControl(InputControlType.LeftStickLeft));
-        moveRight = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.D), ShadeBindingOption.FromControl(InputControlType.LeftStickRight));
-        moveUp = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.W), ShadeBindingOption.FromControl(InputControlType.LeftStickUp));
-        moveDown = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.S), ShadeBindingOption.FromControl(InputControlType.LeftStickDown));
-        fire = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Space), ShadeBindingOption.FromControl(InputControlType.RightTrigger));
-        nail = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.J), ShadeBindingOption.FromControl(InputControlType.Action1));
-        teleport = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.K), ShadeBindingOption.FromControl(InputControlType.Action3));
-        focus = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.H), ShadeBindingOption.FromControl(InputControlType.LeftTrigger));
-        sprint = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.LeftShift), ShadeBindingOption.FromControl(InputControlType.LeftBumper));
+        moveLeft = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.A), ShadeBindingOption.None());
+        moveRight = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.D), ShadeBindingOption.None());
+        moveUp = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.W), ShadeBindingOption.None());
+        moveDown = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.S), ShadeBindingOption.None());
+        fire = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Space), ShadeBindingOption.None());
+        nail = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.J), ShadeBindingOption.FromKey(KeyCode.Mouse0));
+        teleport = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.K), ShadeBindingOption.None());
+        focus = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.H), ShadeBindingOption.None());
+        sprint = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.LeftShift), ShadeBindingOption.None());
         damageToggle = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Alpha0), ShadeBindingOption.None());
     }
 
@@ -128,36 +128,55 @@ public class ShadeInputConfig
         controllerDeviceIndex = 1;
         controllerDeadzone = Mathf.Clamp(controllerDeadzone <= 0f ? 0.25f : controllerDeadzone, 0.01f, 1f);
 
-        moveLeft = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickLeft), ShadeBindingOption.FromControl(InputControlType.DPadLeft));
-        moveRight = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickRight), ShadeBindingOption.FromControl(InputControlType.DPadRight));
-        moveUp = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickUp), ShadeBindingOption.FromControl(InputControlType.DPadUp));
-        moveDown = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickDown), ShadeBindingOption.FromControl(InputControlType.DPadDown));
-        fire = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightTrigger), ShadeBindingOption.FromControl(InputControlType.Action4));
+        moveLeft = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickLeft), ShadeBindingOption.None());
+        moveRight = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickRight), ShadeBindingOption.None());
+        moveUp = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickUp), ShadeBindingOption.None());
+        moveDown = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickDown), ShadeBindingOption.None());
+        fire = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightTrigger), ShadeBindingOption.None());
         nail = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action1), ShadeBindingOption.FromControl(InputControlType.RightBumper));
-        teleport = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action2), ShadeBindingOption.FromControl(InputControlType.Action3));
-        focus = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftTrigger), ShadeBindingOption.FromControl(InputControlType.LeftBumper));
-        sprint = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftBumper), ShadeBindingOption.FromControl(InputControlType.RightStickButton));
-        damageToggle = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Start), ShadeBindingOption.FromControl(InputControlType.Back));
+        teleport = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action2), ShadeBindingOption.None());
+        focus = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftTrigger), ShadeBindingOption.None());
+        sprint = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftBumper), ShadeBindingOption.None());
+        damageToggle = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Start), ShadeBindingOption.None());
     }
 
     public void ApplyKeyboardOnlyPreset()
     {
         controllerDeviceIndex = -1;
+        controllerDeadzone = Mathf.Clamp(controllerDeadzone <= 0f ? 0.25f : controllerDeadzone, 0.01f, 1f);
+
         moveLeft = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.LeftArrow), ShadeBindingOption.None());
         moveRight = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.RightArrow), ShadeBindingOption.None());
         moveUp = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.UpArrow), ShadeBindingOption.None());
         moveDown = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.DownArrow), ShadeBindingOption.None());
-        fire = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad1), ShadeBindingOption.FromKey(KeyCode.RightControl));
+        fire = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad1), ShadeBindingOption.None());
         nail = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad2), ShadeBindingOption.FromKey(KeyCode.RightShift));
-        teleport = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad3), ShadeBindingOption.FromKey(KeyCode.RightAlt));
+        teleport = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad3), ShadeBindingOption.None());
         focus = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.KeypadEnter), ShadeBindingOption.None());
-        sprint = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad0), ShadeBindingOption.FromKey(KeyCode.KeypadPeriod));
-        damageToggle = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad5), ShadeBindingOption.FromKey(KeyCode.KeypadPlus));
+        sprint = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad0), ShadeBindingOption.None());
+        damageToggle = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad5), ShadeBindingOption.None());
     }
 
     public void ApplySharedKeyboardPreset()
     {
         ApplyKeyboardOnlyPreset();
+    }
+
+    public void ApplyShadeControllerPreset()
+    {
+        controllerDeviceIndex = 1;
+        controllerDeadzone = Mathf.Clamp(controllerDeadzone <= 0f ? 0.25f : controllerDeadzone, 0.01f, 1f);
+
+        moveLeft = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickLeft), ShadeBindingOption.None());
+        moveRight = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickRight), ShadeBindingOption.None());
+        moveUp = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickUp), ShadeBindingOption.None());
+        moveDown = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickDown), ShadeBindingOption.None());
+        fire = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightTrigger), ShadeBindingOption.None());
+        nail = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action1), ShadeBindingOption.FromControl(InputControlType.RightBumper));
+        teleport = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action3), ShadeBindingOption.None());
+        focus = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftTrigger), ShadeBindingOption.None());
+        sprint = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftBumper), ShadeBindingOption.None());
+        damageToggle = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Start), ShadeBindingOption.None());
     }
 
     public ShadeBinding GetBinding(ShadeAction action) => action switch
