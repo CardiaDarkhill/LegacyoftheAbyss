@@ -53,6 +53,7 @@ public static class ShadeSettingsMenu
     private static readonly Color ButtonHighlightColor = new Color(1f, 0.95f, 0.78f, 0.35f);
     private static readonly Color ButtonPressedColor = new Color(0.95f, 0.9f, 0.8f, 0.45f);
     private static readonly Color ButtonDisabledColor = new Color(1f, 1f, 1f, 0.15f);
+    private static bool justReturnedToMain;
 
     private struct ShadowStyle
     {
@@ -211,6 +212,54 @@ public static class ShadeSettingsMenu
         }
     }
 
+    private sealed class RowHighlightDriver : MonoBehaviour, ISelectHandler, IDeselectHandler, IPointerEnterHandler, IPointerExitHandler
+    {
+        public GameObject highlight;
+
+        public void Initialize(GameObject highlightGo)
+        {
+            highlight = highlightGo;
+            SetActive(false);
+        }
+
+        private void SetActive(bool active)
+        {
+            if (highlight == null)
+                return;
+            if (highlight.activeSelf != active)
+                highlight.SetActive(active);
+        }
+
+        public void OnSelect(BaseEventData eventData)
+        {
+            SetActive(true);
+        }
+
+        public void OnDeselect(BaseEventData eventData)
+        {
+            SetActive(false);
+        }
+
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != gameObject)
+                EventSystem.current.SetSelectedGameObject(gameObject);
+            SetActive(true);
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject == gameObject)
+                return;
+            SetActive(false);
+        }
+
+        private void OnDisable()
+        {
+            SetActive(false);
+        }
+    }
+
     private static Sprite GetFallbackSprite(ref Sprite cache, string spriteName, bool sliced)
     {
         if (cache != null)
@@ -362,6 +411,95 @@ public static class ShadeSettingsMenu
 
         root.SetActive(false);
         return selectable;
+    }
+
+    private static GameObject CreateRowHighlight(Transform parent, MenuButton buttonTemplate, float height, string label)
+    {
+        if (parent == null)
+            return null;
+
+        GameObject highlight;
+        if (buttonTemplate != null)
+        {
+            highlight = Object.Instantiate(buttonTemplate.gameObject, parent, false);
+            highlight.name = string.IsNullOrEmpty(label) ? "Highlight" : label.Replace(" ", string.Empty) + "Highlight";
+
+            foreach (var cond in highlight.GetComponents<MenuButtonListCondition>())
+                Object.DestroyImmediate(cond);
+            var pauseComponent = highlight.GetComponent<PauseMenuButton>();
+            if (pauseComponent != null)
+                Object.DestroyImmediate(pauseComponent);
+            var selectable = highlight.GetComponent<MenuSelectable>();
+            if (selectable != null)
+                Object.DestroyImmediate(selectable);
+            var menuButton = highlight.GetComponent<MenuButton>();
+            if (menuButton != null)
+                Object.DestroyImmediate(menuButton);
+            foreach (var auto in highlight.GetComponentsInChildren<AutoLocalizeTextUI>(true))
+                Object.DestroyImmediate(auto);
+            foreach (var text in highlight.GetComponentsInChildren<Text>(true))
+                Object.DestroyImmediate(text);
+            var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
+            if (tmpType != null)
+            {
+                var tmps = highlight.GetComponentsInChildren(tmpType, true);
+                foreach (var tmp in tmps)
+                {
+                    if (tmp is Component comp)
+                        Object.DestroyImmediate(comp);
+                }
+            }
+            foreach (var comp in highlight.GetComponentsInChildren<MonoBehaviour>(true))
+            {
+                if (comp == null)
+                    continue;
+                var type = comp.GetType();
+                string ns = type.Namespace ?? string.Empty;
+                if (ns.StartsWith("UnityEngine"))
+                    continue;
+                Object.DestroyImmediate(comp);
+            }
+            foreach (var graphic in highlight.GetComponentsInChildren<Graphic>(true))
+            {
+                if (graphic == null)
+                    continue;
+                graphic.raycastTarget = false;
+            }
+        }
+        else
+        {
+            highlight = new GameObject(string.IsNullOrEmpty(label) ? "Highlight" : label.Replace(" ", string.Empty) + "Highlight");
+            highlight.transform.SetParent(parent, false);
+            var image = highlight.AddComponent<Image>();
+            image.sprite = GetFallbackSprite(ref fallbackSlicedSprite, "ShadeSettingsButtonBg", true);
+            image.type = Image.Type.Sliced;
+            image.color = ButtonHighlightColor;
+            image.raycastTarget = false;
+        }
+
+        var rect = highlight.GetComponent<RectTransform>();
+        if (rect == null)
+            rect = highlight.AddComponent<RectTransform>();
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+        rect.localScale = Vector3.one;
+        rect.anchoredPosition3D = Vector3.zero;
+
+        var layout = highlight.GetComponent<LayoutElement>() ?? highlight.AddComponent<LayoutElement>();
+        layout.ignoreLayout = true;
+        layout.minHeight = height;
+        layout.preferredHeight = height;
+        layout.flexibleHeight = 0f;
+        layout.minWidth = 0f;
+        layout.preferredWidth = 0f;
+        layout.flexibleWidth = 0f;
+
+        highlight.transform.SetAsFirstSibling();
+        highlight.SetActive(false);
+        return highlight;
     }
 
     private static List<ShadowStyle> CaptureShadowStyles(Graphic graphic)
@@ -645,7 +783,7 @@ public static class ShadeSettingsMenu
         return whole ? Mathf.RoundToInt(value).ToString() : value.ToString("0.0", CultureInfo.InvariantCulture);
     }
 
-    private static MenuSelectable CreateSlider(Transform parent, MenuSelectable template, string label, float min, float max, float value, System.Action<float> onChange, CancelTarget cancelTarget, bool whole = false)
+    private static MenuSelectable CreateSlider(Transform parent, MenuSelectable template, MenuButton buttonTemplate, string label, float min, float max, float value, System.Action<float> onChange, CancelTarget cancelTarget, bool whole = false)
     {
         // container row stretching full width
         var row = new GameObject(label + "Row");
@@ -790,10 +928,14 @@ public static class ShadeSettingsMenu
         router.target = cancelTarget;
         var driver = go.GetComponent<SliderMenuDriver>() ?? go.AddComponent<SliderMenuDriver>();
         driver.Initialize(slider, whole);
+
+        var highlight = CreateRowHighlight(row.transform, buttonTemplate, baseHeight, label);
+        var highlightDriver = go.GetComponent<RowHighlightDriver>() ?? go.AddComponent<RowHighlightDriver>();
+        highlightDriver.Initialize(highlight);
         return selectable;
     }
 
-    private static MenuSelectable CreateToggle(Transform parent, MenuSelectable template, string label, bool value, System.Action<bool> onChange, CancelTarget cancelTarget)
+    private static MenuSelectable CreateToggle(Transform parent, MenuSelectable template, MenuButton buttonTemplate, string label, bool value, System.Action<bool> onChange, CancelTarget cancelTarget)
     {
         // container row stretching full width
         var row = new GameObject(label + "Row");
@@ -898,6 +1040,10 @@ public static class ShadeSettingsMenu
         router.target = cancelTarget;
         var driver = go.GetComponent<ToggleMenuDriver>() ?? go.AddComponent<ToggleMenuDriver>();
         driver.Initialize(toggle);
+
+        var highlight = CreateRowHighlight(row.transform, buttonTemplate, baseHeight, label);
+        var highlightDriver = go.GetComponent<RowHighlightDriver>() ?? go.AddComponent<RowHighlightDriver>();
+        highlightDriver.Initialize(highlight);
         return selectable;
     }
 
@@ -921,6 +1067,7 @@ public static class ShadeSettingsMenu
         pauseMenuWasActive = false;
         optionsMenuWasActive = false;
         gameOptionsMenuWasActive = false;
+        justReturnedToMain = false;
     }
 
     private static void StripTemplateComponents(MenuScreen ms)
@@ -1302,7 +1449,7 @@ public static class ShadeSettingsMenu
         LayoutRebuilder.ForceRebuildLayoutImmediate(content);
     }
 
-    private static void BuildDifficultyMenu(UIManager ui, MenuScreen ms, MenuSelectable sliderTemplate)
+    private static void BuildDifficultyMenu(UIManager ui, MenuScreen ms, MenuSelectable sliderTemplate, MenuButton buttonTemplate)
     {
         if (ms == null || sliderTemplate == null)
             return;
@@ -1312,7 +1459,7 @@ public static class ShadeSettingsMenu
         var selectables = new List<MenuSelectable>();
         void AddSlider(string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
         {
-            var s = CreateSlider(content, sliderTemplate, label, min, max, value, onChange, CancelTarget.ShadeMain, whole);
+            var s = CreateSlider(content, sliderTemplate, buttonTemplate, label, min, max, value, onChange, CancelTarget.ShadeMain, whole);
             if (s != null) selectables.Add(s);
         }
         AddSlider("Hornet Damage", 0.2f, 2f, ModConfig.Instance.hornetDamageMultiplier, v => ModConfig.Instance.hornetDamageMultiplier = v);
@@ -1361,7 +1508,7 @@ public static class ShadeSettingsMenu
         LayoutRebuilder.ForceRebuildLayoutImmediate(content);
     }
 
-    private static void BuildLoggingMenu(UIManager ui, MenuScreen ms, MenuSelectable toggleTemplate)
+    private static void BuildLoggingMenu(UIManager ui, MenuScreen ms, MenuSelectable toggleTemplate, MenuButton buttonTemplate)
     {
         if (ms == null || toggleTemplate == null)
             return;
@@ -1371,7 +1518,7 @@ public static class ShadeSettingsMenu
         var selectables = new List<MenuSelectable>();
         void AddToggle(string label, bool value, System.Action<bool> onChange)
         {
-            var t = CreateToggle(content, toggleTemplate, label, value, onChange, CancelTarget.ShadeMain);
+            var t = CreateToggle(content, toggleTemplate, buttonTemplate, label, value, onChange, CancelTarget.ShadeMain);
             if (t != null) selectables.Add(t);
         }
         AddToggle("General Logs", ModConfig.Instance.logGeneral, v => ModConfig.Instance.logGeneral = v);
@@ -1414,6 +1561,7 @@ public static class ShadeSettingsMenu
             return;
         EnsureBaseMenusHidden();
         target.transform.SetAsLastSibling();
+        var previous = activeScreen;
         foreach (var ms in allScreens)
         {
             if (ms == null)
@@ -1422,6 +1570,15 @@ public static class ShadeSettingsMenu
             ms.gameObject.SetActive(show);
         }
         activeScreen = target;
+        if (target == mainScreen)
+        {
+            if (previous != null && previous != mainScreen)
+                justReturnedToMain = true;
+        }
+        else if (target != null && target != mainScreen)
+        {
+            justReturnedToMain = false;
+        }
         var highlight = GetPreferredHighlight(target);
         if (highlight != null)
         {
@@ -1444,6 +1601,12 @@ public static class ShadeSettingsMenu
         if (activeScreen != null && mainScreen != null && activeScreen != mainScreen)
         {
             ShowMainMenu();
+            return true;
+        }
+
+        if (justReturnedToMain)
+        {
+            justReturnedToMain = false;
             return true;
         }
 
@@ -1613,9 +1776,9 @@ public static class ShadeSettingsMenu
         screen = mainScreen != null ? mainScreen.gameObject : null;
 
         BuildMainMenu(ui, mainScreen, buttonTemplate);
-        BuildDifficultyMenu(ui, difficultyScreen, sliderTemplate);
+        BuildDifficultyMenu(ui, difficultyScreen, sliderTemplate, buttonTemplate);
         BuildControlsMenu(ui, controlsScreen);
-        BuildLoggingMenu(ui, loggingScreen, toggleTemplate);
+        BuildLoggingMenu(ui, loggingScreen, toggleTemplate, buttonTemplate);
 
         if (createdSliderTemplate && sliderTemplate != null)
             Object.Destroy(sliderTemplate.gameObject);
@@ -1874,6 +2037,7 @@ public static class ShadeSettingsMenu
         if (allScreens.Count == 0)
             return;
         LogMenuInfo("Hiding Shade settings page");
+        justReturnedToMain = false;
         foreach (var ms in allScreens)
         {
             if (ms != null)
