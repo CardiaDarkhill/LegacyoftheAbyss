@@ -22,6 +22,8 @@ public static class ShadeSettingsMenu
     private static MenuScreen activeScreen;
     private static readonly List<MenuScreen> allScreens = new();
     private static readonly Dictionary<MenuScreen, MenuSelectable> screenFirstSelectables = new();
+    private static GameObject templateSource;
+    private static bool templateSourceWasActive;
     private static readonly ManualLogSource log = BepInEx.Logging.Logger.CreateLogSource("ShadeSettingsMenu");
     private static bool loggedBuildAttempt;
     private static bool loggedMissingOptionsMenu;
@@ -726,6 +728,8 @@ public static class ShadeSettingsMenu
         loggingScreen = null;
         activeScreen = null;
         screen = null;
+        templateSource = null;
+        templateSourceWasActive = false;
     }
 
     private static void InitializeScreen(MenuScreen ms)
@@ -749,6 +753,7 @@ public static class ShadeSettingsMenu
             rt.offsetMin = Vector2.zero;
             rt.offsetMax = Vector2.zero;
         }
+        ms.transform.SetAsLastSibling();
     }
 
     private static RectTransform CreateContentRoot(MenuScreen ms)
@@ -765,17 +770,20 @@ public static class ShadeSettingsMenu
         var content = new GameObject("Content");
         var contentRect = content.AddComponent<RectTransform>();
         contentRect.SetParent(ms.transform, false);
-        contentRect.anchorMin = new Vector2(0f, 1f);
+        contentRect.anchorMin = new Vector2(0f, 0f);
         contentRect.anchorMax = new Vector2(1f, 1f);
         contentRect.pivot = new Vector2(0.5f, 1f);
         contentRect.anchoredPosition = Vector2.zero;
+        contentRect.offsetMin = new Vector2(60f, 80f);
+        contentRect.offsetMax = new Vector2(-60f, -140f);
         var layout = content.AddComponent<VerticalLayoutGroup>();
         layout.childControlHeight = true;
         layout.childControlWidth = true;
         layout.childForceExpandHeight = false;
         layout.childForceExpandWidth = true;
         layout.spacing = 24f;
-        layout.padding = new RectOffset(60, 60, 40, 60);
+        layout.padding = new RectOffset(0, 0, 0, 0);
+        layout.childAlignment = TextAnchor.UpperLeft;
         return contentRect;
     }
 
@@ -1065,6 +1073,7 @@ public static class ShadeSettingsMenu
     {
         if (target == null)
             return;
+        target.transform.SetAsLastSibling();
         foreach (var ms in allScreens)
         {
             if (ms == null)
@@ -1114,6 +1123,8 @@ public static class ShadeSettingsMenu
 
         var optionsScreen = ui.optionsMenuScreen;
         GameObject templateScreen;
+        templateSource = optionsScreen != null ? optionsScreen.gameObject : null;
+        templateSourceWasActive = templateSource != null && templateSource.activeSelf;
         if (optionsScreen == null)
         {
             if (!loggedMissingOptionsMenu)
@@ -1122,6 +1133,11 @@ public static class ShadeSettingsMenu
                 loggedMissingOptionsMenu = true;
             }
             templateScreen = ui.pauseMenuScreen != null ? ui.pauseMenuScreen.gameObject : null;
+            if (templateScreen == null)
+            {
+                templateSource = null;
+                templateSourceWasActive = false;
+            }
         }
         else
         {
@@ -1417,6 +1433,11 @@ public static class ShadeSettingsMenu
         LogMenuInfo("Showing Shade settings page");
         if (ui.pauseMenuScreen != null)
             ui.pauseMenuScreen.gameObject.SetActive(false);
+        if (templateSource != null)
+        {
+            templateSourceWasActive = templateSource.activeSelf;
+            templateSource.SetActive(false);
+        }
         ShowScreen(mainScreen);
         yield break;
     }
@@ -1437,6 +1458,8 @@ public static class ShadeSettingsMenu
         {
             if (targetUi.pauseMenuScreen != null)
                 targetUi.pauseMenuScreen.gameObject.SetActive(true);
+            if (templateSource != null)
+                templateSource.SetActive(templateSourceWasActive);
             try
             {
                 targetUi.UIGoToPauseMenu();

@@ -77,6 +77,9 @@ public partial class LegacyHelper
         private Sprite[] currentAnimFrames;
         private int animFrameIndex;
         private float animTimer;
+        private Coroutine spawnRoutine;
+        private bool pendingSpawnAnimation;
+        private bool isSpawning;
         private const float AnimFrameTime = 0.1f;
         private Vector2 lastMoveDelta;
         private Renderer[] shadeLightRenderers;
@@ -288,6 +291,7 @@ public partial class LegacyHelper
             lastSavedHP = lastSavedMax = lastSavedSoul = -999;
             PersistIfChanged();
             lastSoulForReady = shadeSoul;
+            TryPlaySpawnAnimation();
         }
 
         private void LoadShadeSprites()
@@ -350,6 +354,76 @@ public partial class LegacyHelper
             return sprites;
         }
 
+        public void TriggerSpawnEntrance()
+        {
+            pendingSpawnAnimation = true;
+            TryPlaySpawnAnimation();
+        }
+
+        private void TryPlaySpawnAnimation()
+        {
+            if (!pendingSpawnAnimation)
+                return;
+            if (!isActiveAndEnabled)
+                return;
+            if (!sr)
+                sr = GetComponent<SpriteRenderer>();
+            if (sr == null)
+                return;
+            if (deathAnimFrames == null || deathAnimFrames.Length == 0)
+                return;
+
+            StopSpawnAnimation();
+            spawnRoutine = StartCoroutine(SpawnAppearanceRoutine());
+            pendingSpawnAnimation = false;
+        }
+
+        private void StopSpawnAnimation()
+        {
+            if (spawnRoutine != null)
+            {
+                StopCoroutine(spawnRoutine);
+                spawnRoutine = null;
+            }
+            isSpawning = false;
+            pendingSpawnAnimation = false;
+        }
+
+        private IEnumerator SpawnAppearanceRoutine()
+        {
+            isSpawning = true;
+            var frames = deathAnimFrames;
+            if (frames != null && frames.Length > 0)
+            {
+                float perFrame = 0.5f / frames.Length;
+                for (int i = frames.Length - 1; i >= 0; i--)
+                {
+                    if (sr != null)
+                        sr.sprite = frames[i];
+                    yield return new WaitForSeconds(perFrame);
+                }
+            }
+            else
+            {
+                yield return null;
+            }
+            spawnRoutine = null;
+            isSpawning = false;
+            currentAnimFrames = null;
+            if (sr != null)
+            {
+                var c = sr.color;
+                c.a = 0.9f;
+                sr.color = c;
+                if (idleAnimFrames != null && idleAnimFrames.Length > 0)
+                {
+                    sr.sprite = idleAnimFrames[0];
+                    animFrameIndex = 0;
+                    animTimer = 0f;
+                }
+            }
+        }
+
         private static bool TryLoadImage(Texture2D tex, byte[] bytes)
         {
             try
@@ -384,6 +458,9 @@ public partial class LegacyHelper
         {
             if (sr == null) return;
             sr.flipX = (facing == 1);
+
+            if (isSpawning)
+                return;
 
             if (isCastingSpell && currentAnimFrames != null)
                 return;
@@ -700,12 +777,12 @@ public partial class LegacyHelper
                 return;
             }
 
-            float clampedHard = Mathf.Min(hard, available);
+            float clampedHard = Mathf.Max(0f, available);
             hard = clampedHard;
-            float clampedSoft = Mathf.Min(soft, clampedHard * SoftLimitRatio);
-            soft = clampedSoft;
+            float desiredSoft = Mathf.Clamp(clampedHard * SoftLimitRatio, 0f, clampedHard);
+            soft = desiredSoft;
             float desiredSnap = Mathf.Max(clampedHard * SnapExtraMultiplier, clampedHard + SnapExtraMin);
-            snap = Mathf.Max(clampedHard, Mathf.Min(snap, desiredSnap));
+            snap = Mathf.Max(clampedHard, Mathf.Max(snap, desiredSnap));
         }
 
         private static bool BeyondAxis(float value, float negativeLimit, float positiveLimit)
@@ -1963,6 +2040,7 @@ public partial class LegacyHelper
         private void StartDeathAnimation()
         {
             if (isDying) return;
+            StopSpawnAnimation();
             if (deathRoutine != null) StopCoroutine(deathRoutine);
             isDying = true;
             deathRoutine = StartCoroutine(DeathAnimationRoutine());
