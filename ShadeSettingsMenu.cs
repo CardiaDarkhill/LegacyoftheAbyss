@@ -542,6 +542,19 @@ public static class ShadeSettingsMenu
             group.interactable = true;
             group.blocksRaycasts = true;
         }
+
+        var selectable = root.GetComponent<MenuSelectable>();
+        if (selectable != null && selectable.targetGraphic == null)
+        {
+            var graphic = root.GetComponent<Graphic>();
+            if (graphic == null)
+                graphic = root.GetComponentInChildren<Graphic>(true);
+            if (graphic != null)
+            {
+                selectable.targetGraphic = graphic;
+                graphic.raycastTarget = true;
+            }
+        }
     }
 
     private static Font FindFontInObject(GameObject root)
@@ -955,7 +968,7 @@ public static class ShadeSettingsMenu
         {
             if (ms.backButton != null && child.gameObject == ms.backButton.gameObject)
                 continue;
-            Object.Destroy(child.gameObject);
+            Object.DestroyImmediate(child.gameObject);
         }
 
         var content = new GameObject("Content");
@@ -1004,9 +1017,19 @@ public static class ShadeSettingsMenu
         backLayout.minHeight = ButtonRowHeight;
         backLayout.preferredHeight = ButtonRowHeight;
         backLayout.flexibleHeight = 0f;
+        backLayout.minWidth = 0f;
+        backLayout.preferredWidth = 0f;
+        backLayout.flexibleWidth = 1f;
         var backRect = ms.backButton.GetComponent<RectTransform>();
         if (backRect != null)
+        {
+            backRect.anchorMin = new Vector2(0f, 0.5f);
+            backRect.anchorMax = new Vector2(1f, 0.5f);
+            backRect.pivot = new Vector2(0.5f, 0.5f);
+            backRect.offsetMin = new Vector2(0f, backRect.offsetMin.y);
+            backRect.offsetMax = new Vector2(0f, backRect.offsetMax.y);
             backRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, ButtonRowHeight);
+        }
         var backText = ms.backButton.GetComponentInChildren<Text>(true);
         if (backText != null)
         {
@@ -1068,6 +1091,16 @@ public static class ShadeSettingsMenu
         go.SetActive(true);
         go.transform.localScale = Vector3.one;
         go.name = label.Replace(" ", string.Empty) + "Button";
+        var goRect = go.GetComponent<RectTransform>();
+        if (goRect != null)
+        {
+            goRect.anchorMin = new Vector2(0f, 0.5f);
+            goRect.anchorMax = new Vector2(1f, 0.5f);
+            goRect.pivot = new Vector2(0.5f, 0.5f);
+            goRect.offsetMin = new Vector2(0f, goRect.offsetMin.y);
+            goRect.offsetMax = new Vector2(0f, goRect.offsetMax.y);
+            goRect.sizeDelta = new Vector2(0f, goRect.sizeDelta.y);
+        }
         foreach (var auto in go.GetComponentsInChildren<AutoLocalizeTextUI>(true))
             Object.DestroyImmediate(auto);
         bool hasLabel = false;
@@ -1120,13 +1153,17 @@ public static class ShadeSettingsMenu
             Object.Destroy(go);
             return null;
         }
-        var goRect = go.GetComponent<RectTransform>();
         if (goRect != null)
             goRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, ButtonRowHeight);
         var image = go.GetComponent<Image>();
+        if (image == null)
+        {
+            image = go.AddComponent<Image>();
+        }
         if (image != null)
         {
             image.enabled = true;
+            image.raycastTarget = true;
             if (image.sprite == null)
             {
                 image.sprite = GetFallbackSprite(ref fallbackSlicedSprite, "ShadeSettingsButtonBg", true);
@@ -1146,7 +1183,9 @@ public static class ShadeSettingsMenu
         layout.minHeight = ButtonRowHeight;
         layout.preferredHeight = ButtonRowHeight;
         layout.flexibleHeight = 0f;
-        layout.flexibleWidth = 0f;
+        layout.minWidth = 0f;
+        layout.preferredWidth = 0f;
+        layout.flexibleWidth = 1f;
         return btn;
     }
 

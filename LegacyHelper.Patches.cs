@@ -72,6 +72,50 @@ public partial class LegacyHelper
         }
     }
 
+    [HarmonyPatch(typeof(UIManager), nameof(UIManager.TogglePauseGame))]
+    private class UIManager_TogglePauseGame_Patch
+    {
+        private static bool Prefix(UIManager __instance)
+        {
+            try
+            {
+                if (ShadeSettingsMenu.IsShowing)
+                {
+                    ShadeSettingsMenu.HideImmediate(__instance);
+                    return false;
+                }
+            }
+            catch { }
+            return true;
+        }
+    }
+
+    [HarmonyPatch(typeof(UIManager), nameof(UIManager.ShowMenu))]
+    private class UIManager_ShowMenu_Patch
+    {
+        private static bool Prefix(UIManager __instance, MenuScreen menu, ref IEnumerator __result)
+        {
+            try
+            {
+                if (!ShadeSettingsMenu.IsShowing || menu == null || __instance == null)
+                    return true;
+
+                if (menu == __instance.pauseMenuScreen || menu == __instance.optionsMenuScreen || menu == __instance.gameOptionsMenuScreen)
+                {
+                    __result = EmptyEnumerator();
+                    return false;
+                }
+            }
+            catch { }
+            return true;
+        }
+
+        private static IEnumerator EmptyEnumerator()
+        {
+            yield break;
+        }
+    }
+
     [HarmonyPatch(typeof(GameManager), "Awake")]
     private class GameManager_Awake_Patch
     {
