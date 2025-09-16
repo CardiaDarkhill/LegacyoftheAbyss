@@ -90,7 +90,7 @@ public partial class LegacyHelper
     [HarmonyPatch(typeof(GameManager), nameof(GameManager.PauseGameToggle))]
     private class GameManager_PauseGameToggle_Patch
     {
-        private static bool Prefix(GameManager __instance, bool _, ref IEnumerator __result)
+        private static bool Prefix(GameManager __instance, ref IEnumerator __result)
         {
             try
             {
