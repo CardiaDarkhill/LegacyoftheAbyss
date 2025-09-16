@@ -1931,8 +1931,10 @@ public static class ShadeSettingsMenu
         var presetRect = presetRow.AddComponent<RectTransform>();
         presetRect.SetParent(content, false);
         var presetLayout = presetRow.AddComponent<HorizontalLayoutGroup>();
-        float presetSpacing = Mathf.Clamp(Screen.width * 0.045f, 70f, 140f);
-        int sidePadding = Mathf.RoundToInt(Mathf.Clamp(Screen.width * 0.125f, 80f, Screen.width * 0.25f));
+        float presetSpacing = Mathf.Clamp(Screen.width * 0.045f, 40f, 110f);
+        int sidePadding = Mathf.RoundToInt(Mathf.Clamp(Screen.width * 0.07f, 48f, Screen.width * 0.16f));
+        float presetCardPreferredWidth = Mathf.Clamp(Screen.width * 0.23f, 260f, 430f);
+        float presetCardMinWidth = Mathf.Clamp(Screen.width * 0.16f, 200f, presetCardPreferredWidth);
         presetLayout.spacing = presetSpacing;
         presetLayout.padding = new RectOffset(sidePadding, sidePadding, 0, 0);
         presetLayout.childControlWidth = true;
@@ -1961,8 +1963,8 @@ public static class ShadeSettingsMenu
             optionLayout.childAlignment = TextAnchor.UpperCenter;
 
             var optionLayoutElement = optionRoot.AddComponent<LayoutElement>();
-            optionLayoutElement.minWidth = 0f;
-            optionLayoutElement.preferredWidth = 0f;
+            optionLayoutElement.minWidth = presetCardMinWidth;
+            optionLayoutElement.preferredWidth = presetCardPreferredWidth;
             optionLayoutElement.flexibleWidth = 1f;
             optionLayoutElement.flexibleHeight = 1f;
 
@@ -1972,8 +1974,11 @@ public static class ShadeSettingsMenu
                 var layout = button.GetComponent<LayoutElement>();
                 if (layout != null)
                 {
-                    layout.minWidth = 0f;
-                    layout.preferredWidth = 0f;
+                    float buttonPadding = optionLayout.padding.left + optionLayout.padding.right;
+                    float buttonMinWidth = Mathf.Max(0f, presetCardMinWidth - buttonPadding);
+                    float buttonPreferredWidth = Mathf.Max(buttonMinWidth, presetCardPreferredWidth - buttonPadding);
+                    layout.minWidth = buttonMinWidth;
+                    layout.preferredWidth = buttonPreferredWidth;
                     layout.flexibleWidth = 1f;
                 }
                 selectables.Add(button);
@@ -1995,6 +2000,9 @@ public static class ShadeSettingsMenu
             descriptionText.verticalOverflow = VerticalWrapMode.Overflow;
             descriptionText.text = description;
             var descriptionLayout = descriptionObject.AddComponent<LayoutElement>();
+            descriptionLayout.minWidth = presetCardMinWidth;
+            descriptionLayout.preferredWidth = presetCardPreferredWidth;
+            descriptionLayout.flexibleWidth = 0f;
             descriptionLayout.minHeight = 0f;
             descriptionLayout.preferredHeight = 0f;
             descriptionLayout.flexibleHeight = 1f;
