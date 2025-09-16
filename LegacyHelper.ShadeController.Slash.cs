@@ -135,7 +135,8 @@ public partial class LegacyHelper
                     }
                 }
                 catch { }
-                UnityEngine.Debug.Log($"[ShadeDebug] Shade slash spawned: {slash.name} scale={ls} parent={tr.parent?.name}\n{System.Environment.StackTrace}");
+                if (ModConfig.Instance.logShade)
+                    UnityEngine.Debug.Log($"[ShadeDebug] Shade slash spawned: {slash.name} scale={ls} parent={tr.parent?.name}\n{System.Environment.StackTrace}");
             }
             catch { }
 
