@@ -53,7 +53,7 @@ public static class ShadeSettingsMenu
     private static readonly Color ButtonHighlightColor = new Color(1f, 0.95f, 0.78f, 0.35f);
     private static readonly Color ButtonPressedColor = new Color(0.95f, 0.9f, 0.8f, 0.45f);
     private static readonly Color ButtonDisabledColor = new Color(1f, 1f, 1f, 0.15f);
-    private static bool justReturnedToMain;
+    private static bool consumeNextToggle;
 
     private struct ShadowStyle
     {
@@ -215,19 +215,57 @@ public static class ShadeSettingsMenu
     private sealed class RowHighlightDriver : MonoBehaviour, ISelectHandler, IDeselectHandler, IPointerEnterHandler, IPointerExitHandler
     {
         public GameObject highlight;
+        private readonly List<Animator> animators = new();
+        private static readonly int ShowTrigger = Animator.StringToHash("show");
+        private static readonly int HideTrigger = Animator.StringToHash("hide");
 
-        public void Initialize(GameObject highlightGo)
+        public void Initialize(GameObject highlightGo, IEnumerable<Animator> highlightAnimators)
         {
             highlight = highlightGo;
-            SetActive(false);
+            animators.Clear();
+            if (highlightAnimators != null)
+            {
+                foreach (var animator in highlightAnimators)
+                {
+                    if (animator != null)
+                        animators.Add(animator);
+                }
+            }
+            SetActive(false, true);
         }
 
-        private void SetActive(bool active)
+        private void SetActive(bool active, bool instant = false)
         {
-            if (highlight == null)
-                return;
-            if (highlight.activeSelf != active)
+            bool useFallback = highlight != null && animators.Count == 0;
+            if (useFallback && highlight.activeSelf != active)
                 highlight.SetActive(active);
+
+            if (animators.Count == 0)
+                return;
+
+            foreach (var animator in animators)
+            {
+                if (animator == null)
+                    continue;
+                try
+                {
+                    if (active)
+                    {
+                        animator.ResetTrigger(HideTrigger);
+                        animator.SetTrigger(ShowTrigger);
+                    }
+                    else
+                    {
+                        animator.ResetTrigger(ShowTrigger);
+                        animator.SetTrigger(HideTrigger);
+                    }
+                    if (instant)
+                        animator.Update(0f);
+                }
+                catch
+                {
+                }
+            }
         }
 
         public void OnSelect(BaseEventData eventData)
@@ -256,7 +294,7 @@ public static class ShadeSettingsMenu
 
         private void OnDisable()
         {
-            SetActive(false);
+            SetActive(false, true);
         }
     }
 
@@ -413,73 +451,71 @@ public static class ShadeSettingsMenu
         return selectable;
     }
 
-    private static GameObject CreateRowHighlight(Transform parent, MenuButton buttonTemplate, float height, string label)
+    private static Animator CloneAnimator(Animator source, Transform parent, string nameSuffix)
     {
+        if (source == null || parent == null)
+            return null;
+
+        var clone = Object.Instantiate(source.gameObject, parent, false);
+        clone.name = string.IsNullOrEmpty(nameSuffix) ? source.gameObject.name : nameSuffix;
+        var layout = clone.GetComponent<LayoutElement>() ?? clone.AddComponent<LayoutElement>();
+        layout.ignoreLayout = true;
+        layout.minWidth = 0f;
+        layout.preferredWidth = 0f;
+        layout.flexibleWidth = 0f;
+        layout.minHeight = 0f;
+        layout.preferredHeight = 0f;
+        layout.flexibleHeight = 0f;
+
+        var sourceRect = source.GetComponent<RectTransform>();
+        var cloneRect = clone.GetComponent<RectTransform>();
+        if (sourceRect != null && cloneRect != null)
+        {
+            cloneRect.anchorMin = sourceRect.anchorMin;
+            cloneRect.anchorMax = sourceRect.anchorMax;
+            cloneRect.pivot = sourceRect.pivot;
+            cloneRect.sizeDelta = sourceRect.sizeDelta;
+            cloneRect.anchoredPosition = sourceRect.anchoredPosition;
+            cloneRect.anchoredPosition3D = sourceRect.anchoredPosition3D;
+            cloneRect.localScale = sourceRect.localScale;
+            cloneRect.localRotation = sourceRect.localRotation;
+        }
+
+        foreach (var graphic in clone.GetComponentsInChildren<Graphic>(true))
+        {
+            if (graphic != null)
+                graphic.raycastTarget = false;
+        }
+
+        var animator = clone.GetComponent<Animator>();
+        if (animator != null)
+        {
+            try
+            {
+                animator.ResetTrigger("show");
+                animator.ResetTrigger("hide");
+                animator.Update(0f);
+            }
+            catch
+            {
+            }
+        }
+        return animator;
+    }
+
+    private static GameObject CreateRowHighlight(Transform parent, MenuButton buttonTemplate, float height, string label, out Animator leftCursor, out Animator rightCursor, out Animator selectHighlight)
+    {
+        leftCursor = null;
+        rightCursor = null;
+        selectHighlight = null;
+
         if (parent == null)
             return null;
 
-        GameObject highlight;
-        if (buttonTemplate != null)
-        {
-            highlight = Object.Instantiate(buttonTemplate.gameObject, parent, false);
-            highlight.name = string.IsNullOrEmpty(label) ? "Highlight" : label.Replace(" ", string.Empty) + "Highlight";
-
-            foreach (var cond in highlight.GetComponents<MenuButtonListCondition>())
-                Object.DestroyImmediate(cond);
-            var pauseComponent = highlight.GetComponent<PauseMenuButton>();
-            if (pauseComponent != null)
-                Object.DestroyImmediate(pauseComponent);
-            var selectable = highlight.GetComponent<MenuSelectable>();
-            if (selectable != null)
-                Object.DestroyImmediate(selectable);
-            var menuButton = highlight.GetComponent<MenuButton>();
-            if (menuButton != null)
-                Object.DestroyImmediate(menuButton);
-            foreach (var auto in highlight.GetComponentsInChildren<AutoLocalizeTextUI>(true))
-                Object.DestroyImmediate(auto);
-            foreach (var text in highlight.GetComponentsInChildren<Text>(true))
-                Object.DestroyImmediate(text);
-            var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
-            if (tmpType != null)
-            {
-                var tmps = highlight.GetComponentsInChildren(tmpType, true);
-                foreach (var tmp in tmps)
-                {
-                    if (tmp is Component comp)
-                        Object.DestroyImmediate(comp);
-                }
-            }
-            foreach (var comp in highlight.GetComponentsInChildren<MonoBehaviour>(true))
-            {
-                if (comp == null)
-                    continue;
-                var type = comp.GetType();
-                string ns = type.Namespace ?? string.Empty;
-                if (ns.StartsWith("UnityEngine"))
-                    continue;
-                Object.DestroyImmediate(comp);
-            }
-            foreach (var graphic in highlight.GetComponentsInChildren<Graphic>(true))
-            {
-                if (graphic == null)
-                    continue;
-                graphic.raycastTarget = false;
-            }
-        }
-        else
-        {
-            highlight = new GameObject(string.IsNullOrEmpty(label) ? "Highlight" : label.Replace(" ", string.Empty) + "Highlight");
-            highlight.transform.SetParent(parent, false);
-            var image = highlight.AddComponent<Image>();
-            image.sprite = GetFallbackSprite(ref fallbackSlicedSprite, "ShadeSettingsButtonBg", true);
-            image.type = Image.Type.Sliced;
-            image.color = ButtonHighlightColor;
-            image.raycastTarget = false;
-        }
-
-        var rect = highlight.GetComponent<RectTransform>();
-        if (rect == null)
-            rect = highlight.AddComponent<RectTransform>();
+        string baseName = string.IsNullOrEmpty(label) ? "Highlight" : label.Replace(" ", string.Empty) + "Highlight";
+        var highlight = new GameObject(baseName);
+        var rect = highlight.AddComponent<RectTransform>();
+        highlight.transform.SetParent(parent, false);
         rect.anchorMin = Vector2.zero;
         rect.anchorMax = Vector2.one;
         rect.pivot = new Vector2(0.5f, 0.5f);
@@ -488,7 +524,7 @@ public static class ShadeSettingsMenu
         rect.localScale = Vector3.one;
         rect.anchoredPosition3D = Vector3.zero;
 
-        var layout = highlight.GetComponent<LayoutElement>() ?? highlight.AddComponent<LayoutElement>();
+        var layout = highlight.AddComponent<LayoutElement>();
         layout.ignoreLayout = true;
         layout.minHeight = height;
         layout.preferredHeight = height;
@@ -497,8 +533,24 @@ public static class ShadeSettingsMenu
         layout.preferredWidth = 0f;
         layout.flexibleWidth = 0f;
 
+        if (buttonTemplate != null)
+        {
+            leftCursor = CloneAnimator(buttonTemplate.leftCursor, highlight.transform, baseName + "Left");
+            rightCursor = CloneAnimator(buttonTemplate.rightCursor, highlight.transform, baseName + "Right");
+            selectHighlight = CloneAnimator(buttonTemplate.selectHighlight, highlight.transform, baseName + "Center");
+        }
+
+        if (leftCursor == null && rightCursor == null && selectHighlight == null)
+        {
+            var image = highlight.AddComponent<Image>();
+            image.sprite = GetFallbackSprite(ref fallbackSlicedSprite, "ShadeSettingsButtonBg", true);
+            image.type = Image.Type.Sliced;
+            image.color = ButtonHighlightColor;
+            image.raycastTarget = false;
+            highlight.SetActive(false);
+        }
+
         highlight.transform.SetAsFirstSibling();
-        highlight.SetActive(false);
         return highlight;
     }
 
@@ -929,9 +981,12 @@ public static class ShadeSettingsMenu
         var driver = go.GetComponent<SliderMenuDriver>() ?? go.AddComponent<SliderMenuDriver>();
         driver.Initialize(slider, whole);
 
-        var highlight = CreateRowHighlight(row.transform, buttonTemplate, baseHeight, label);
+        var highlight = CreateRowHighlight(row.transform, buttonTemplate, baseHeight, label, out var leftCursor, out var rightCursor, out var selectHighlight);
         var highlightDriver = go.GetComponent<RowHighlightDriver>() ?? go.AddComponent<RowHighlightDriver>();
-        highlightDriver.Initialize(highlight);
+        highlightDriver.Initialize(highlight, new[] { leftCursor, rightCursor, selectHighlight });
+        selectable.leftCursor = leftCursor;
+        selectable.rightCursor = rightCursor;
+        selectable.selectHighlight = selectHighlight;
         return selectable;
     }
 
@@ -1041,9 +1096,12 @@ public static class ShadeSettingsMenu
         var driver = go.GetComponent<ToggleMenuDriver>() ?? go.AddComponent<ToggleMenuDriver>();
         driver.Initialize(toggle);
 
-        var highlight = CreateRowHighlight(row.transform, buttonTemplate, baseHeight, label);
+        var highlight = CreateRowHighlight(row.transform, buttonTemplate, baseHeight, label, out var leftCursor, out var rightCursor, out var selectHighlight);
         var highlightDriver = go.GetComponent<RowHighlightDriver>() ?? go.AddComponent<RowHighlightDriver>();
-        highlightDriver.Initialize(highlight);
+        highlightDriver.Initialize(highlight, new[] { leftCursor, rightCursor, selectHighlight });
+        selectable.leftCursor = leftCursor;
+        selectable.rightCursor = rightCursor;
+        selectable.selectHighlight = selectHighlight;
         return selectable;
     }
 
@@ -1067,7 +1125,7 @@ public static class ShadeSettingsMenu
         pauseMenuWasActive = false;
         optionsMenuWasActive = false;
         gameOptionsMenuWasActive = false;
-        justReturnedToMain = false;
+        consumeNextToggle = false;
     }
 
     private static void StripTemplateComponents(MenuScreen ms)
@@ -1573,11 +1631,11 @@ public static class ShadeSettingsMenu
         if (target == mainScreen)
         {
             if (previous != null && previous != mainScreen)
-                justReturnedToMain = true;
+                consumeNextToggle = true;
         }
         else if (target != null && target != mainScreen)
         {
-            justReturnedToMain = false;
+            consumeNextToggle = false;
         }
         var highlight = GetPreferredHighlight(target);
         if (highlight != null)
@@ -1595,18 +1653,18 @@ public static class ShadeSettingsMenu
 
     internal static bool HandlePauseToggle(UIManager ui)
     {
+        if (consumeNextToggle)
+        {
+            consumeNextToggle = false;
+            return true;
+        }
+
         if (!IsShowing)
             return false;
 
         if (activeScreen != null && mainScreen != null && activeScreen != mainScreen)
         {
             ShowMainMenu();
-            return true;
-        }
-
-        if (justReturnedToMain)
-        {
-            justReturnedToMain = false;
             return true;
         }
 
@@ -1981,6 +2039,7 @@ public static class ShadeSettingsMenu
     internal static IEnumerator Show(UIManager ui)
     {
         Build(ui);
+        consumeNextToggle = false;
         if (mainScreen == null)
         {
             LogMenuWarning("Show called but main screen is null");
@@ -2037,7 +2096,7 @@ public static class ShadeSettingsMenu
         if (allScreens.Count == 0)
             return;
         LogMenuInfo("Hiding Shade settings page");
-        justReturnedToMain = false;
+        consumeNextToggle = true;
         foreach (var ms in allScreens)
         {
             if (ms != null)
