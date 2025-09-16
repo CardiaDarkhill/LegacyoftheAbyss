@@ -242,11 +242,13 @@ public partial class LegacyHelper
                 var tr = __instance.transform;
                 var scale = tr.localScale;
                 string parent = tr.parent ? tr.parent.name : "(null)";
-                UnityEngine.Debug.Log($"[ShadeDebug] NailSlash spawned: {__instance.name} scale={scale} parent={parent}\n{System.Environment.StackTrace}");
+                if (ModConfig.Instance.logShade)
+                    UnityEngine.Debug.Log($"[ShadeDebug] NailSlash spawned: {__instance.name} scale={scale} parent={parent}\n{System.Environment.StackTrace}");
             }
             catch (System.Exception ex)
             {
-                UnityEngine.Debug.Log($"[ShadeDebug] NailSlash log error: {ex}");
+                if (ModConfig.Instance.logShade)
+                    UnityEngine.Debug.Log($"[ShadeDebug] NailSlash log error: {ex}");
             }
         }
     }

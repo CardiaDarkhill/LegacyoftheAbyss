@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Reflection;
 using BepInEx;
 using HarmonyLib;
@@ -65,7 +64,8 @@ public partial class LegacyHelper : BaseUnityPlugin
         {
             if (!loggedMissingUI)
             {
-                Logger.LogInfo("UIManager not found yet");
+                if (ModConfig.Instance.logGeneral)
+                    Logger.LogInfo("UIManager not found yet");
                 loggedMissingUI = true;
             }
             return;
@@ -74,7 +74,8 @@ public partial class LegacyHelper : BaseUnityPlugin
         {
             if (!loggedMissingPauseMenu)
             {
-                Logger.LogInfo("pauseMenuScreen not available yet");
+                if (ModConfig.Instance.logGeneral)
+                    Logger.LogInfo("pauseMenuScreen not available yet");
                 loggedMissingPauseMenu = true;
             }
             return;
@@ -100,16 +101,15 @@ public partial class LegacyHelper : BaseUnityPlugin
             var gm = GameManager.instance;
             if (gm == null || gm.hero_ctrl == null) return;
             Vector3 spawnPosAtControl = gm.hero_ctrl.transform.position;
-            gm.StartCoroutine(SpawnShadeAfterDelay(spawnPosAtControl, 0.5f));
+            SpawnShadeAtPosition(spawnPosAtControl);
         }
         catch { }
     }
 
-    private static IEnumerator SpawnShadeAfterDelay(Vector3 pos, float delay)
+    private static void SpawnShadeAtPosition(Vector3 pos)
     {
-        yield return new WaitForSeconds(delay);
         var gm = GameManager.instance;
-        if (gm == null || gm.hero_ctrl == null) yield break;
+        if (gm == null || gm.hero_ctrl == null) return;
 
         if (helper != null)
         {
@@ -119,6 +119,7 @@ public partial class LegacyHelper : BaseUnityPlugin
                 if (sc != null)
                 {
                     sc.TeleportToPosition(pos);
+                    sc.TriggerSpawnEntrance();
                     SaveShadeState(sc.GetCurrentHP(), sc.GetMaxHP(), sc.GetShadeSoul(), sc.GetCanTakeDamage());
                 }
                 else
@@ -127,7 +128,7 @@ public partial class LegacyHelper : BaseUnityPlugin
                 }
             }
             catch { }
-            yield break;
+            return;
         }
 
         // Create fresh helper at the captured position
@@ -150,6 +151,8 @@ public partial class LegacyHelper : BaseUnityPlugin
             sr.sortingLayerID = hornetRenderer.sortingLayerID;
             sr.sortingOrder = hornetRenderer.sortingOrder + 1;
         }
+
+        scNew.TriggerSpawnEntrance();
     }
 
     internal static void DisableStartup(GameManager gm)
