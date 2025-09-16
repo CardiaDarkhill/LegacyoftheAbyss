@@ -79,11 +79,8 @@ public partial class LegacyHelper
         {
             try
             {
-                if (ShadeSettingsMenu.IsShowing)
-                {
-                    ShadeSettingsMenu.HideImmediate(__instance);
+                if (ShadeSettingsMenu.HandlePauseToggle(__instance))
                     return false;
-                }
             }
             catch { }
             return true;

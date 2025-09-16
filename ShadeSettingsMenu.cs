@@ -49,6 +49,10 @@ public static class ShadeSettingsMenu
     private const float LabelColumnWidth = 420f;
     private const float ValueColumnWidth = 140f;
     private const float MenuFontScale = 1.5f;
+    private static readonly Color ButtonNormalColor = new Color(1f, 1f, 1f, 0f);
+    private static readonly Color ButtonHighlightColor = new Color(1f, 0.95f, 0.78f, 0.35f);
+    private static readonly Color ButtonPressedColor = new Color(0.95f, 0.9f, 0.8f, 0.45f);
+    private static readonly Color ButtonDisabledColor = new Color(1f, 1f, 1f, 0.15f);
 
     private struct ShadowStyle
     {
@@ -460,6 +464,28 @@ public static class ShadeSettingsMenu
         }
 
         ClearAndApplyShadows(text, hasStyle ? resolved.Shadows : null);
+    }
+
+    private static void ApplyButtonColors(Selectable selectable)
+    {
+        if (selectable == null)
+            return;
+
+        selectable.transition = Selectable.Transition.ColorTint;
+        var colors = selectable.colors;
+        colors.normalColor = ButtonNormalColor;
+        colors.highlightedColor = ButtonHighlightColor;
+        colors.selectedColor = ButtonHighlightColor;
+        colors.pressedColor = ButtonPressedColor;
+        colors.disabledColor = ButtonDisabledColor;
+        colors.colorMultiplier = 1f;
+        selectable.colors = colors;
+
+        if (selectable.targetGraphic != null)
+        {
+            selectable.targetGraphic.color = ButtonNormalColor;
+            selectable.targetGraphic.raycastTarget = true;
+        }
     }
 
     private static void CacheTextStyles(MenuSelectable sliderTemplate, MenuSelectable toggleTemplate)
@@ -1087,6 +1113,7 @@ public static class ShadeSettingsMenu
     {
         if (template == null)
             return null;
+        var templateImage = template.targetGraphic as Image;
         var go = Object.Instantiate(template.gameObject, parent, false);
         go.SetActive(true);
         go.transform.localScale = Vector3.one;
@@ -1164,13 +1191,29 @@ public static class ShadeSettingsMenu
         {
             image.enabled = true;
             image.raycastTarget = true;
-            if (image.sprite == null)
+            if (templateImage != null && templateImage.sprite != null)
+            {
+                image.sprite = templateImage.sprite;
+                image.type = templateImage.type;
+                image.pixelsPerUnitMultiplier = templateImage.pixelsPerUnitMultiplier;
+                image.preserveAspect = templateImage.preserveAspect;
+                image.fillCenter = templateImage.fillCenter;
+                image.maskable = templateImage.maskable;
+                image.material = templateImage.material;
+                image.useSpriteMesh = templateImage.useSpriteMesh;
+                image.alphaHitTestMinimumThreshold = templateImage.alphaHitTestMinimumThreshold;
+            }
+            else if (image.sprite == null)
             {
                 image.sprite = GetFallbackSprite(ref fallbackSlicedSprite, "ShadeSettingsButtonBg", true);
                 image.type = Image.Type.Sliced;
             }
-            if (image.color.a <= 0.01f)
-                image.color = new Color(0.12f, 0.12f, 0.12f, 0.9f);
+            image.color = ButtonNormalColor;
+        }
+        if (btn != null)
+        {
+            btn.targetGraphic = image;
+            ApplyButtonColors(btn);
         }
         btn.OnSubmitPressed.RemoveAllListeners();
         if (onSubmit != null)
@@ -1199,16 +1242,11 @@ public static class ShadeSettingsMenu
         var sprite = GetFallbackSprite(ref fallbackSlicedSprite, "ShadeSettingsButtonBg", true);
         image.sprite = sprite;
         image.type = Image.Type.Sliced;
-        image.color = new Color(0.12f, 0.12f, 0.12f, 0.9f);
+        image.color = ButtonNormalColor;
+        image.raycastTarget = true;
         var button = root.AddComponent<MenuButton>();
-        button.transition = Selectable.Transition.ColorTint;
-        var colors = button.colors;
-        colors.normalColor = Color.white;
-        colors.highlightedColor = new Color(1f, 0.95f, 0.78f, 1f);
-        colors.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
-        colors.selectedColor = colors.normalColor;
-        colors.disabledColor = new Color(0.2f, 0.2f, 0.2f, 0.6f);
-        button.colors = colors;
+        button.targetGraphic = image;
+        ApplyButtonColors(button);
         var layout = root.AddComponent<LayoutElement>();
         layout.minHeight = ButtonRowHeight;
         layout.preferredHeight = ButtonRowHeight;
@@ -1396,6 +1434,21 @@ public static class ShadeSettingsMenu
     private static void ShowMainMenu()
     {
         ShowScreen(mainScreen);
+    }
+
+    internal static bool HandlePauseToggle(UIManager ui)
+    {
+        if (!IsShowing)
+            return false;
+
+        if (activeScreen != null && mainScreen != null && activeScreen != mainScreen)
+        {
+            ShowMainMenu();
+            return true;
+        }
+
+        HideImmediate(ui);
+        return true;
     }
 
     private static void Build(UIManager ui)
@@ -1647,6 +1700,7 @@ public static class ShadeSettingsMenu
             }
             return;
         }
+        var templateTargetImage = template.targetGraphic as Image;
         var field = typeof(MenuButtonList).GetField("entries", BindingFlags.NonPublic | BindingFlags.Instance);
         var entries = (Array)field.GetValue(list);
         if (entries == null)
@@ -1697,6 +1751,33 @@ public static class ShadeSettingsMenu
             t.color = Color.white;
         }
 
+        var background = go.GetComponent<Image>();
+        if (background == null)
+            background = go.AddComponent<Image>();
+        if (background != null)
+        {
+            background.enabled = true;
+            background.raycastTarget = true;
+            if (templateTargetImage != null && templateTargetImage.sprite != null)
+            {
+                background.sprite = templateTargetImage.sprite;
+                background.type = templateTargetImage.type;
+                background.pixelsPerUnitMultiplier = templateTargetImage.pixelsPerUnitMultiplier;
+                background.preserveAspect = templateTargetImage.preserveAspect;
+                background.fillCenter = templateTargetImage.fillCenter;
+                background.maskable = templateTargetImage.maskable;
+                background.material = templateTargetImage.material;
+                background.useSpriteMesh = templateTargetImage.useSpriteMesh;
+                background.alphaHitTestMinimumThreshold = templateTargetImage.alphaHitTestMinimumThreshold;
+            }
+            else if (background.sprite == null)
+            {
+                background.sprite = GetFallbackSprite(ref fallbackSlicedSprite, "ShadeSettingsButtonBg", true);
+                background.type = Image.Type.Sliced;
+            }
+            background.color = ButtonNormalColor;
+        }
+
         var goLayout = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
         goLayout.minHeight = ButtonRowHeight;
         goLayout.preferredHeight = ButtonRowHeight;
@@ -1707,6 +1788,13 @@ public static class ShadeSettingsMenu
             goRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, ButtonRowHeight);
 
         var pauseBtn = go.GetComponent<PauseMenuButton>();
+
+        var pauseSelectable = go.GetComponent<Selectable>();
+        if (pauseSelectable != null)
+        {
+            pauseSelectable.targetGraphic = background;
+            ApplyButtonColors(pauseSelectable);
+        }
 
         foreach (var cond in go.GetComponents<MenuButtonListCondition>())
             Object.DestroyImmediate(cond);
