@@ -11,10 +11,12 @@ public enum ShadeAction
     MoveDown,
     Fire,
     Nail,
+    NailUp,
+    NailDown,
     Teleport,
     Focus,
     Sprint,
-    DamageToggle
+    AssistMode
 }
 
 public enum ShadeBindingOptionType
@@ -94,10 +96,12 @@ public class ShadeInputConfig
     public ShadeBinding moveDown = new();
     public ShadeBinding fire = new();
     public ShadeBinding nail = new();
+    public ShadeBinding nailUp = new();
+    public ShadeBinding nailDown = new();
     public ShadeBinding teleport = new();
     public ShadeBinding focus = new();
     public ShadeBinding sprint = new();
-    public ShadeBinding damageToggle = new();
+    public ShadeBinding assistMode = new();
 
     public ShadeInputConfig()
     {
@@ -117,10 +121,12 @@ public class ShadeInputConfig
         moveDown = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.S), ShadeBindingOption.None());
         fire = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Space), ShadeBindingOption.None());
         nail = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.J), ShadeBindingOption.FromKey(KeyCode.Mouse0));
+        nailUp = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.E), ShadeBindingOption.None());
+        nailDown = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Q), ShadeBindingOption.None());
         teleport = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.K), ShadeBindingOption.None());
         focus = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.H), ShadeBindingOption.None());
         sprint = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.LeftShift), ShadeBindingOption.None());
-        damageToggle = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Alpha0), ShadeBindingOption.None());
+        assistMode = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Alpha0), ShadeBindingOption.None());
     }
 
     public void ApplyDualControllerPreset()
@@ -132,12 +138,14 @@ public class ShadeInputConfig
         moveRight = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickRight), ShadeBindingOption.None());
         moveUp = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickUp), ShadeBindingOption.None());
         moveDown = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickDown), ShadeBindingOption.None());
-        fire = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightTrigger), ShadeBindingOption.None());
-        nail = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action1), ShadeBindingOption.FromControl(InputControlType.RightBumper));
-        teleport = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action2), ShadeBindingOption.None());
-        focus = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftTrigger), ShadeBindingOption.None());
-        sprint = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftBumper), ShadeBindingOption.None());
-        damageToggle = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Start), ShadeBindingOption.None());
+        fire = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightBumper), ShadeBindingOption.None());
+        nail = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action3), ShadeBindingOption.None());
+        nailUp = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action4), ShadeBindingOption.None());
+        nailDown = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action1), ShadeBindingOption.None());
+        teleport = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickButton), ShadeBindingOption.None());
+        focus = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action2), ShadeBindingOption.None());
+        sprint = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightTrigger), ShadeBindingOption.None());
+        assistMode = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightStickButton), ShadeBindingOption.None());
     }
 
     public void ApplyKeyboardOnlyPreset()
@@ -151,10 +159,12 @@ public class ShadeInputConfig
         moveDown = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.DownArrow), ShadeBindingOption.None());
         fire = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad1), ShadeBindingOption.None());
         nail = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad2), ShadeBindingOption.FromKey(KeyCode.RightShift));
+        nailUp = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad8), ShadeBindingOption.None());
+        nailDown = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad5), ShadeBindingOption.None());
         teleport = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad3), ShadeBindingOption.None());
         focus = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.KeypadEnter), ShadeBindingOption.None());
         sprint = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad0), ShadeBindingOption.None());
-        damageToggle = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad5), ShadeBindingOption.None());
+        assistMode = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad9), ShadeBindingOption.None());
     }
 
     public void ApplySharedKeyboardPreset()
@@ -164,19 +174,21 @@ public class ShadeInputConfig
 
     public void ApplyShadeControllerPreset()
     {
-        controllerDeviceIndex = 1;
+        controllerDeviceIndex = 0;
         controllerDeadzone = Mathf.Clamp(controllerDeadzone <= 0f ? 0.25f : controllerDeadzone, 0.01f, 1f);
 
         moveLeft = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickLeft), ShadeBindingOption.None());
         moveRight = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickRight), ShadeBindingOption.None());
         moveUp = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickUp), ShadeBindingOption.None());
         moveDown = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickDown), ShadeBindingOption.None());
-        fire = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightTrigger), ShadeBindingOption.None());
-        nail = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action1), ShadeBindingOption.FromControl(InputControlType.RightBumper));
-        teleport = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action3), ShadeBindingOption.None());
-        focus = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftTrigger), ShadeBindingOption.None());
-        sprint = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftBumper), ShadeBindingOption.None());
-        damageToggle = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Start), ShadeBindingOption.None());
+        fire = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightBumper), ShadeBindingOption.None());
+        nail = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action3), ShadeBindingOption.None());
+        nailUp = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action4), ShadeBindingOption.None());
+        nailDown = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action1), ShadeBindingOption.None());
+        teleport = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickButton), ShadeBindingOption.None());
+        focus = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action2), ShadeBindingOption.None());
+        sprint = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightTrigger), ShadeBindingOption.None());
+        assistMode = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightStickButton), ShadeBindingOption.None());
     }
 
     public ShadeBinding GetBinding(ShadeAction action) => action switch
@@ -187,10 +199,12 @@ public class ShadeInputConfig
         ShadeAction.MoveDown => moveDown,
         ShadeAction.Fire => fire,
         ShadeAction.Nail => nail,
+        ShadeAction.NailUp => nailUp,
+        ShadeAction.NailDown => nailDown,
         ShadeAction.Teleport => teleport,
         ShadeAction.Focus => focus,
         ShadeAction.Sprint => sprint,
-        ShadeAction.DamageToggle => damageToggle,
+        ShadeAction.AssistMode => assistMode,
         _ => moveLeft
     };
 
@@ -216,6 +230,12 @@ public class ShadeInputConfig
             case ShadeAction.Nail:
                 nail = binding;
                 break;
+            case ShadeAction.NailUp:
+                nailUp = binding;
+                break;
+            case ShadeAction.NailDown:
+                nailDown = binding;
+                break;
             case ShadeAction.Teleport:
                 teleport = binding;
                 break;
@@ -225,8 +245,8 @@ public class ShadeInputConfig
             case ShadeAction.Sprint:
                 sprint = binding;
                 break;
-            case ShadeAction.DamageToggle:
-                damageToggle = binding;
+            case ShadeAction.AssistMode:
+                assistMode = binding;
                 break;
         }
     }

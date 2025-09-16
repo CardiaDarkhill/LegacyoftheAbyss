@@ -36,6 +36,7 @@ public partial class SimpleHUD : MonoBehaviour
     private GameObject healthContainer;
     private Canvas canvas;
     private CanvasScaler scaler;
+    private CanvasGroup canvasGroup;
 
     private const KeyCode DebugDamageKey = KeyCode.None; // disabled
     private const KeyCode DebugHealKey = KeyCode.None; // disabled
@@ -71,6 +72,8 @@ public partial class SimpleHUD : MonoBehaviour
 
     private void Update()
     {
+        UpdatePauseFade();
+
         if (playerData == null) return;
 
         // Debug: Shade HP adjust
@@ -178,6 +181,31 @@ public partial class SimpleHUD : MonoBehaviour
         SyncShadeFromPlayer();
         RefreshHealth();
         RefreshSoul();
+    }
+
+    private void UpdatePauseFade()
+    {
+        if (canvasGroup == null)
+            return;
+
+        bool paused = false;
+        try
+        {
+            var gm = GameManager.instance;
+            paused = gm != null && gm.IsGamePaused();
+        }
+        catch
+        {
+            paused = false;
+        }
+
+        float target = paused ? 0.35f : 1f;
+        float current = canvasGroup.alpha;
+        if (!Mathf.Approximately(current, target))
+        {
+            float step = Mathf.Max(0.01f, Time.unscaledDeltaTime * 5f);
+            canvasGroup.alpha = Mathf.MoveTowards(current, target, step);
+        }
     }
 
     // ShadeController drives this to show Shade's soul pool in the HUD

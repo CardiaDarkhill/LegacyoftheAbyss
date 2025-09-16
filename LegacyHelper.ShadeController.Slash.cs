@@ -13,9 +13,17 @@ public partial class LegacyHelper
             if (nailTimer > 0f) return;
 
             float forcedV = 0f;
-            bool pressed = Input.GetMouseButtonDown(0) || ShadeInput.WasActionPressed(ShadeAction.Nail);
-            if (Input.GetKeyDown(KeyCode.Q)) { pressed = true; forcedV = -1f; }
-            else if (Input.GetKeyDown(KeyCode.E)) { pressed = true; forcedV = 1f; }
+            bool pressed = ShadeInput.WasActionPressed(ShadeAction.Nail) || Input.GetMouseButtonDown(0);
+            if (ShadeInput.WasActionPressed(ShadeAction.NailUp))
+            {
+                pressed = true;
+                forcedV = 1f;
+            }
+            else if (ShadeInput.WasActionPressed(ShadeAction.NailDown))
+            {
+                pressed = true;
+                forcedV = -1f;
+            }
             if (pressed)
             {
                 nailTimer = nailCooldown;
@@ -31,9 +39,6 @@ public partial class LegacyHelper
             // Choose slash variant based on input: up / down / side
             GameObject source = null;
             float v = forcedV;
-            if (v == 0f)
-                v = (ShadeInput.IsActionHeld(ShadeAction.MoveDown) ? -1f : 0f) +
-                    (ShadeInput.IsActionHeld(ShadeAction.MoveUp) ? 1f : 0f);
 
             try
             {

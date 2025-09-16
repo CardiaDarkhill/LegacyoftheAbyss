@@ -17,6 +17,12 @@ public partial class SimpleHUD
         scaler.matchWidthOrHeight = 1f; // height bias
         gameObject.AddComponent<GraphicRaycaster>();
 
+        canvasGroup = gameObject.GetComponent<CanvasGroup>();
+        if (canvasGroup == null)
+            canvasGroup = gameObject.AddComponent<CanvasGroup>();
+        canvasGroup.interactable = false;
+        canvasGroup.blocksRaycasts = false;
+
         // Soul orb root
         soulOrbRoot = new GameObject("SoulOrb").AddComponent<RectTransform>();
         soulOrbRoot.SetParent(canvas.transform, false);

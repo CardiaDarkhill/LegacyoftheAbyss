@@ -565,12 +565,13 @@ public partial class LegacyHelper
 
             if (hazardCooldown > 0f) hazardCooldown = Mathf.Max(0f, hazardCooldown - Time.deltaTime);
             if (hurtCooldown > 0f) hurtCooldown = Mathf.Max(0f, hurtCooldown - Time.deltaTime);
-            if (ShadeInput.WasActionPressed(ShadeAction.DamageToggle))
+            if (ShadeInput.WasActionPressed(ShadeAction.AssistMode))
             {
                 canTakeDamage = !canTakeDamage;
                 if (ModConfig.Instance.logShade)
                 {
-                    try { UnityEngine.Debug.Log($"[ShadeDebug] Damage {(canTakeDamage ? "enabled" : "disabled")}"); } catch { }
+                    string assistState = canTakeDamage ? "disabled" : "enabled";
+                    try { UnityEngine.Debug.Log($"[ShadeDebug] Assist Mode {assistState}"); } catch { }
                 }
                 PersistIfChanged();
             }
@@ -2799,7 +2800,10 @@ public partial class LegacyHelper
 
             // Cancel on movement or attack input
             if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(0) ||
-                ShadeInput.WasActionPressed(ShadeAction.Nail) || ShadeInput.WasActionPressed(ShadeAction.Fire))
+                ShadeInput.WasActionPressed(ShadeAction.Nail) ||
+                ShadeInput.WasActionPressed(ShadeAction.NailUp) ||
+                ShadeInput.WasActionPressed(ShadeAction.NailDown) ||
+                ShadeInput.WasActionPressed(ShadeAction.Fire))
             {
                 isChannelingTeleport = false;
                 try { if (sr) { var c = sr.color; c.a = 0.9f; sr.color = c; } } catch { }

@@ -1790,15 +1790,16 @@ public static class ShadeSettingsMenu
         var presetRect = presetRow.AddComponent<RectTransform>();
         presetRect.SetParent(content, false);
         var presetLayout = presetRow.AddComponent<HorizontalLayoutGroup>();
-        presetLayout.spacing = 36f;
-        presetLayout.childControlWidth = true;
+        presetLayout.spacing = 48f;
+        presetLayout.padding = new RectOffset(16, 16, 0, 0);
+        presetLayout.childControlWidth = false;
         presetLayout.childControlHeight = true;
-        presetLayout.childForceExpandWidth = true;
+        presetLayout.childForceExpandWidth = false;
         presetLayout.childForceExpandHeight = false;
         presetLayout.childAlignment = TextAnchor.UpperCenter;
         var presetLayoutElement = presetRow.AddComponent<LayoutElement>();
-        presetLayoutElement.minHeight = ButtonRowHeight * 1.5f;
-        presetLayoutElement.preferredHeight = ButtonRowHeight * 2f;
+        presetLayoutElement.minHeight = ButtonRowHeight * 1.75f;
+        presetLayoutElement.preferredHeight = ButtonRowHeight * 2.4f;
         presetLayoutElement.flexibleHeight = 0f;
 
         void AddPresetOption(string label, string description, System.Action onSubmit)
@@ -1809,6 +1810,7 @@ public static class ShadeSettingsMenu
 
             var optionLayout = optionRoot.AddComponent<VerticalLayoutGroup>();
             optionLayout.spacing = 12f;
+            optionLayout.padding = new RectOffset(8, 8, 0, 0);
             optionLayout.childControlWidth = true;
             optionLayout.childControlHeight = true;
             optionLayout.childForceExpandWidth = true;
@@ -1816,8 +1818,8 @@ public static class ShadeSettingsMenu
             optionLayout.childAlignment = TextAnchor.UpperCenter;
 
             var optionLayoutElement = optionRoot.AddComponent<LayoutElement>();
-            optionLayoutElement.minWidth = 0f;
-            optionLayoutElement.preferredWidth = 0f;
+            optionLayoutElement.minWidth = 320f;
+            optionLayoutElement.preferredWidth = 360f;
             optionLayoutElement.flexibleWidth = 1f;
 
             var selectable = CreateMenuButton(optionRoot.transform, buttonTemplate, label, onSubmit, CancelTarget.ShadeMain);
@@ -1843,19 +1845,22 @@ public static class ShadeSettingsMenu
             var descriptionText = descriptionObject.AddComponent<Text>();
             ApplyTextStyle(descriptionText, sliderLabelStyle, TextAnchor.UpperCenter, Color.white);
             descriptionText.horizontalOverflow = HorizontalWrapMode.Wrap;
-            descriptionText.verticalOverflow = VerticalWrapMode.Truncate;
+            descriptionText.verticalOverflow = VerticalWrapMode.Overflow;
             descriptionText.text = description;
             var descriptionLayout = descriptionObject.AddComponent<LayoutElement>();
             descriptionLayout.minHeight = 0f;
-            descriptionLayout.preferredHeight = 72f;
+            descriptionLayout.preferredHeight = 0f;
             descriptionLayout.flexibleHeight = 0f;
-            ScaleTextElements(descriptionObject, 0.72f);
+            var fitter = descriptionObject.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            ScaleTextElements(descriptionObject, 0.64f);
         }
 
         AddPresetOption("Preset 1: Default", "Shade keeps the original keyboard layout. Hornet stays on controller and keyboard hotkeys stay disabled.", ApplyDefaultPreset);
-        AddPresetOption("Preset 2: Two Controllers", "Shade uses the second controller while Hornet remains on the first controller.", ApplyDualControllerPresetOption);
-        AddPresetOption("Preset 3: Keyboard Only", "Shade moves to the keypad and Hornet switches to default keyboard hotkeys. Controllers are disabled.", ApplyKeyboardOnlyPresetOption);
-        AddPresetOption("Preset 4: Shade Controller", "Shade uses the controller layout and Hornet swaps to default keyboard hotkeys with the controller disabled.", ApplyShadeControllerPresetOption);
+        AddPresetOption("Preset 2: Two Controllers", "Shade uses the second controller with dedicated buttons while Hornet remains on the first controller.", ApplyDualControllerPresetOption);
+        AddPresetOption("Preset 3: Keyboard Only", "Shade moves to the keypad while Hornet's controls jump to the left side of the keyboard. Controllers are disabled.", ApplyKeyboardOnlyPresetOption);
+        AddPresetOption("Preset 4: Shade Controller", "Shade uses the first controller layout and Hornet swaps to left-side keyboard hotkeys with the controller disabled.", ApplyShadeControllerPresetOption);
 
         var bindingsContainer = new GameObject("BindingColumns");
         var bindingsRect = bindingsContainer.AddComponent<RectTransform>();
@@ -1938,12 +1943,14 @@ public static class ShadeSettingsMenu
             (ShadeAction.MoveRight, "Move Right"),
             (ShadeAction.MoveUp, "Move Up"),
             (ShadeAction.MoveDown, "Move Down"),
-            (ShadeAction.Nail, "Nail Attack"),
+            (ShadeAction.Nail, "Side Slash"),
+            (ShadeAction.NailUp, "Up Slash"),
+            (ShadeAction.NailDown, "Down Slash"),
             (ShadeAction.Fire, "Spellcast"),
             (ShadeAction.Teleport, "Teleport"),
             (ShadeAction.Focus, "Focus"),
             (ShadeAction.Sprint, "Sprint"),
-            (ShadeAction.DamageToggle, "Toggle Damage")
+            (ShadeAction.AssistMode, "Assist Mode")
         };
 
         int leftCount = (bindingRows.Length + 1) / 2;
