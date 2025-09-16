@@ -483,7 +483,10 @@ public partial class LegacyHelper
             if (Input.GetKeyDown(DamageToggleKey))
             {
                 canTakeDamage = !canTakeDamage;
-                try { UnityEngine.Debug.Log($"[ShadeDebug] Damage {(canTakeDamage ? "enabled" : "disabled")}"); } catch { }
+                if (ModConfig.Instance.logShade)
+                {
+                    try { UnityEngine.Debug.Log($"[ShadeDebug] Damage {(canTakeDamage ? "enabled" : "disabled")}"); } catch { }
+                }
                 PersistIfChanged();
             }
             ignoreRefreshTimer -= Time.deltaTime;
@@ -667,6 +670,22 @@ public partial class LegacyHelper
             return limits;
         }
 
+        private float GetRadialHardLimit(DynamicLeashLimits limits)
+        {
+            float axisMax = Mathf.Max(
+                Mathf.Max(limits.X.NegativeHard, limits.X.PositiveHard),
+                Mathf.Max(limits.Y.NegativeHard, limits.Y.PositiveHard));
+            return Mathf.Max(maxDistance, axisMax);
+        }
+
+        private float GetRadialSnapLimit(DynamicLeashLimits limits)
+        {
+            float axisMax = Mathf.Max(
+                Mathf.Max(limits.X.NegativeSnap, limits.X.PositiveSnap),
+                Mathf.Max(limits.Y.NegativeSnap, limits.Y.PositiveSnap));
+            return Mathf.Max(snapLeashRadius, axisMax);
+        }
+
         private static void ApplyAxisLimit(ref float soft, ref float hard, ref float snap, float available)
         {
             soft = Mathf.Max(0f, soft);
@@ -767,10 +786,12 @@ public partial class LegacyHelper
             float dist = toHornet.magnitude;
 
             var leash = GetDynamicLeashLimits(hornetWorld);
+            float radialHardLimit = GetRadialHardLimit(leash);
+            float radialSnapLimit = GetRadialSnapLimit(leash);
 
             if (BeyondSnap(offsetFromHornet.x, leash.X.NegativeSnap, leash.X.PositiveSnap) ||
                 BeyondSnap(offsetFromHornet.y, leash.Y.NegativeSnap, leash.Y.PositiveSnap) ||
-                dist > snapLeashRadius)
+                dist > radialSnapLimit)
             {
                 TeleportToHornet();
                 inHardLeash = false; hardLeashTimer = 0f; EnableCollisions(true);
@@ -877,9 +898,9 @@ public partial class LegacyHelper
 
             Vector2 finalToHornet = hornetPos2D - clampedPos;
             float finalDist = finalToHornet.magnitude;
-            if (finalDist > maxDistance && finalDist > 0f)
+            if (finalDist > radialHardLimit && finalDist > 0f)
             {
-                clampedPos = hornetPos2D - finalToHornet.normalized * maxDistance;
+                clampedPos = hornetPos2D - finalToHornet.normalized * radialHardLimit;
                 Vector2 clampedOffset = clampedPos - hornetPos2D;
                 clampedOffset.x = ClampAxis(clampedOffset.x, leash.X.NegativeHard, leash.X.PositiveHard);
                 clampedOffset.y = ClampAxis(clampedOffset.y, leash.Y.NegativeHard, leash.Y.PositiveHard);
@@ -1345,7 +1366,8 @@ public partial class LegacyHelper
                 try { if (h.collider.GetComponentInParent<DamageHero>() != null) continue; } catch { }
                 // otherwise this is acceptable ground
                 pick = h;
-                UnityEngine.Debug.Log($"[ShadeDebug] Descending Dark ground hit {h.collider.name} tag={h.collider.tag} layer={h.collider.gameObject.layer}");
+                if (ModConfig.Instance.logShade)
+                    UnityEngine.Debug.Log($"[ShadeDebug] Descending Dark ground hit {h.collider.name} tag={h.collider.tag} layer={h.collider.gameObject.layer}");
                 break;
             }
 

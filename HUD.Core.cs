@@ -72,8 +72,22 @@ public partial class SimpleHUD : MonoBehaviour
         if (playerData == null) return;
 
         // Debug: Shade HP adjust
-        if (Input.GetKeyDown(DebugDamageKey)) { shadeHealth = Mathf.Max(0, shadeHealth - 1); try { Debug.Log("[SimpleHUD] Debug: Shade HP -1"); } catch { } }
-        if (Input.GetKeyDown(DebugHealKey))   { shadeHealth = Mathf.Min(shadeMax, shadeHealth + 1); try { Debug.Log("[SimpleHUD] Debug: Shade HP +1"); } catch { } }
+        if (Input.GetKeyDown(DebugDamageKey))
+        {
+            shadeHealth = Mathf.Max(0, shadeHealth - 1);
+            if (ModConfig.Instance.logHud)
+            {
+                try { Debug.Log("[SimpleHUD] Debug: Shade HP -1"); } catch { }
+            }
+        }
+        if (Input.GetKeyDown(DebugHealKey))
+        {
+            shadeHealth = Mathf.Min(shadeMax, shadeHealth + 1);
+            if (ModConfig.Instance.logHud)
+            {
+                try { Debug.Log("[SimpleHUD] Debug: Shade HP +1"); } catch { }
+            }
+        }
 
         // Debug soul controls (UI or Shade override)
         float sMax = shadeSoulOverride ? Mathf.Max(1f, shadeSoulMax) : Mathf.Max(1f, playerData.silkMax);
@@ -89,14 +103,20 @@ public partial class SimpleHUD : MonoBehaviour
                 }
                 catch { }
                 shadeSoul = Mathf.Min(shadeSoul + 11f, Mathf.Max(1f, shadeSoulMax));
-                try { Debug.Log("[SimpleHUD] Debug: Shade Soul +11"); } catch { }
+                if (ModConfig.Instance.logHud)
+                {
+                    try { Debug.Log("[SimpleHUD] Debug: Shade Soul +11"); } catch { }
+                }
             }
             else
             {
                 float baseVal = debugUseCustomSilk ? debugSilk : playerData.silk;
                 debugUseCustomSilk = true;
                 debugSilk = Mathf.Min(baseVal + step, sMax);
-                try { Debug.Log("[SimpleHUD] Debug: Hornet Silk +step"); } catch { }
+                if (ModConfig.Instance.logHud)
+                {
+                    try { Debug.Log("[SimpleHUD] Debug: Hornet Silk +step"); } catch { }
+                }
             }
         }
         if (Input.GetKeyDown(DebugSoulDecKey))
@@ -110,14 +130,20 @@ public partial class SimpleHUD : MonoBehaviour
                 }
                 catch { }
                 shadeSoul = Mathf.Max(shadeSoul - 11f, 0f);
-                try { Debug.Log("[SimpleHUD] Debug: Shade Soul -11"); } catch { }
+                if (ModConfig.Instance.logHud)
+                {
+                    try { Debug.Log("[SimpleHUD] Debug: Shade Soul -11"); } catch { }
+                }
             }
             else
             {
                 float baseVal = debugUseCustomSilk ? debugSilk : playerData.silk;
                 debugUseCustomSilk = true;
                 debugSilk = Mathf.Max(baseVal - step, 0f);
-                try { Debug.Log("[SimpleHUD] Debug: Hornet Silk -step"); } catch { }
+                if (ModConfig.Instance.logHud)
+                {
+                    try { Debug.Log("[SimpleHUD] Debug: Hornet Silk -step"); } catch { }
+                }
             }
         }
         if (Input.GetKeyDown(DebugSoulResetKey))
@@ -131,13 +157,19 @@ public partial class SimpleHUD : MonoBehaviour
                 }
                 catch { }
                 shadeSoul = 0f;
-                try { Debug.Log("[SimpleHUD] Debug: Shade Soul reset"); } catch { }
+                if (ModConfig.Instance.logHud)
+                {
+                    try { Debug.Log("[SimpleHUD] Debug: Shade Soul reset"); } catch { }
+                }
             }
             else
             {
                 debugUseCustomSilk = false;
                 debugSilk = playerData.silk;
-                try { Debug.Log("[SimpleHUD] Debug: Hornet Silk reset"); } catch { }
+                if (ModConfig.Instance.logHud)
+                {
+                    try { Debug.Log("[SimpleHUD] Debug: Hornet Silk reset"); } catch { }
+                }
             }
         }
 

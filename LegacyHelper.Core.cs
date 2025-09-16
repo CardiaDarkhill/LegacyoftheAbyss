@@ -65,7 +65,8 @@ public partial class LegacyHelper : BaseUnityPlugin
         {
             if (!loggedMissingUI)
             {
-                Logger.LogInfo("UIManager not found yet");
+                if (ModConfig.Instance.logGeneral)
+                    Logger.LogInfo("UIManager not found yet");
                 loggedMissingUI = true;
             }
             return;
@@ -74,7 +75,8 @@ public partial class LegacyHelper : BaseUnityPlugin
         {
             if (!loggedMissingPauseMenu)
             {
-                Logger.LogInfo("pauseMenuScreen not available yet");
+                if (ModConfig.Instance.logGeneral)
+                    Logger.LogInfo("pauseMenuScreen not available yet");
                 loggedMissingPauseMenu = true;
             }
             return;

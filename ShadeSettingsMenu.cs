@@ -15,7 +15,13 @@ public static class ShadeSettingsMenu
     private static GameObject screen;
     private static bool built;
     private static UIManager builtFor;
-    private static MenuSelectable firstSelectable;
+    private static MenuScreen mainScreen;
+    private static MenuScreen difficultyScreen;
+    private static MenuScreen controlsScreen;
+    private static MenuScreen loggingScreen;
+    private static MenuScreen activeScreen;
+    private static readonly List<MenuScreen> allScreens = new();
+    private static readonly Dictionary<MenuScreen, MenuSelectable> screenFirstSelectables = new();
     private static readonly ManualLogSource log = BepInEx.Logging.Logger.CreateLogSource("ShadeSettingsMenu");
     private static bool loggedBuildAttempt;
     private static bool loggedMissingOptionsMenu;
@@ -62,16 +68,43 @@ public static class ShadeSettingsMenu
     private static Sprite fallbackKnobSprite;
     private static Sprite fallbackCheckSprite;
 
-    private class CancelToPause : MonoBehaviour, ICancelHandler
+    private static void LogMenu(LogLevel level, string message)
     {
+        if (!ModConfig.Instance.logMenu)
+            return;
+        log.Log(level, message);
+    }
+
+    private static void LogMenuDebug(string message) => LogMenu(LogLevel.Debug, message);
+    private static void LogMenuInfo(string message) => LogMenu(LogLevel.Info, message);
+    private static void LogMenuWarning(string message) => LogMenu(LogLevel.Warning, message);
+    private static void LogMenuError(string message) => LogMenu(LogLevel.Error, message);
+
+    private enum CancelTarget
+    {
+        PauseMenu,
+        ShadeMain
+    }
+
+    private class CancelRouter : MonoBehaviour, ICancelHandler
+    {
+        public CancelTarget target;
+
         public void OnCancel(BaseEventData eventData)
         {
-            if (builtFor != null)
+            eventData?.Use();
+            if (target == CancelTarget.ShadeMain)
+            {
+                ShowMainMenu();
+            }
+            else if (builtFor != null)
+            {
                 HideImmediate(builtFor);
+            }
         }
     }
 
-    internal static bool IsShowing => screen != null && screen.activeSelf;
+    internal static bool IsShowing => activeScreen != null && activeScreen.gameObject != null && activeScreen.gameObject.activeSelf;
 
     private sealed class SliderMenuDriver : MonoBehaviour, IMoveHandler, ISubmitHandler
     {
@@ -473,7 +506,7 @@ public static class ShadeSettingsMenu
         return whole ? Mathf.RoundToInt(value).ToString() : value.ToString("0.0", CultureInfo.InvariantCulture);
     }
 
-    private static MenuSelectable CreateSlider(Transform parent, MenuSelectable template, string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
+    private static MenuSelectable CreateSlider(Transform parent, MenuSelectable template, string label, float min, float max, float value, System.Action<float> onChange, CancelTarget cancelTarget, bool whole = false)
     {
         // container row stretching full width
         var row = new GameObject(label + "Row");
@@ -558,7 +591,7 @@ public static class ShadeSettingsMenu
             }
             catch (Exception e)
             {
-                log.LogWarning($"Error normalizing slider '{label}' value: {e}");
+                LogMenuWarning($"Error normalizing slider '{label}' value: {e}");
             }
         }
         slider.onValueChanged.AddListener(v =>
@@ -571,7 +604,7 @@ public static class ShadeSettingsMenu
         });
 
         var nav = slider.navigation;
-        nav.mode = Navigation.Mode.None;
+        nav.mode = Navigation.Mode.Explicit;
         slider.navigation = nav;
 
         var rowLe = row.AddComponent<LayoutElement>();
@@ -582,19 +615,20 @@ public static class ShadeSettingsMenu
         var selectable = go.GetComponent<MenuSelectable>();
         if (selectable == null)
         {
-            log.LogError($"Created slider '{label}' missing Selectable component");
+            LogMenuError($"Created slider '{label}' missing Selectable component");
             Object.Destroy(row);
             return null;
         }
         selectable.DontPlaySelectSound = true;
-        selectable.cancelAction = CancelAction.GoToPauseMenu;
-        slider.gameObject.AddComponent<CancelToPause>();
+        selectable.cancelAction = cancelTarget == CancelTarget.PauseMenu ? CancelAction.GoToPauseMenu : CancelAction.Custom;
+        var router = go.GetComponent<CancelRouter>() ?? go.AddComponent<CancelRouter>();
+        router.target = cancelTarget;
         var driver = go.GetComponent<SliderMenuDriver>() ?? go.AddComponent<SliderMenuDriver>();
         driver.Initialize(slider, whole);
         return selectable;
     }
 
-    private static MenuSelectable CreateToggle(Transform parent, MenuSelectable template, string label, bool value, System.Action<bool> onChange)
+    private static MenuSelectable CreateToggle(Transform parent, MenuSelectable template, string label, bool value, System.Action<bool> onChange, CancelTarget cancelTarget)
     {
         // container row stretching full width
         var row = new GameObject(label + "Row");
@@ -652,10 +686,9 @@ public static class ShadeSettingsMenu
         toggle.interactable = true;
         toggle.enabled = true;
         toggle.onValueChanged.AddListener(onChange.Invoke);
-        toggle.gameObject.AddComponent<CancelToPause>();
 
         var toggleNav = toggle.navigation;
-        toggleNav.mode = Navigation.Mode.None;
+        toggleNav.mode = Navigation.Mode.Explicit;
         toggle.navigation = toggleNav;
 
         var rowLe = row.AddComponent<LayoutElement>();
@@ -665,122 +698,63 @@ public static class ShadeSettingsMenu
         var selectable = go.GetComponent<MenuSelectable>();
         if (selectable == null)
         {
-            log.LogError($"Created toggle '{label}' missing Selectable component");
+            LogMenuError($"Created toggle '{label}' missing Selectable component");
             Object.Destroy(row);
             return null;
         }
         selectable.DontPlaySelectSound = true;
-        selectable.cancelAction = CancelAction.GoToPauseMenu;
+        selectable.cancelAction = cancelTarget == CancelTarget.PauseMenu ? CancelAction.GoToPauseMenu : CancelAction.Custom;
+        var router = go.GetComponent<CancelRouter>() ?? go.AddComponent<CancelRouter>();
+        router.target = cancelTarget;
         var driver = go.GetComponent<ToggleMenuDriver>() ?? go.AddComponent<ToggleMenuDriver>();
         driver.Initialize(toggle);
         return selectable;
     }
 
-    private static void Build(UIManager ui)
+    private static void DestroyScreens()
     {
-        if (!loggedBuildAttempt)
+        foreach (var ms in allScreens)
         {
-            log.LogInfo("Attempting to build Shade settings page");
-            loggedBuildAttempt = true;
+            if (ms != null)
+                Object.Destroy(ms.gameObject);
         }
-        if (built && screen != null && builtFor == ui)
-        {
-            log.LogDebug("Settings page already built for this UI");
+        allScreens.Clear();
+        screenFirstSelectables.Clear();
+        mainScreen = null;
+        difficultyScreen = null;
+        controlsScreen = null;
+        loggingScreen = null;
+        activeScreen = null;
+        screen = null;
+    }
+
+    private static void InitializeScreen(MenuScreen ms)
+    {
+        if (ms == null)
             return;
-        }
-
-        if (screen != null && builtFor != ui)
-        {
-            log.LogDebug("UIManager changed, destroying previous settings page");
-            Object.Destroy(screen);
-            screen = null;
-        }
-
-        built = false;
-        builtFor = ui;
-
-        // Need an options menu screen to clone for consistent styling
-        var optionsScreen = ui.optionsMenuScreen;
-        GameObject templateScreen;
-        if (optionsScreen == null)
-        {
-            if (!loggedMissingOptionsMenu)
-            {
-                log.LogWarning("optionsMenuScreen not yet available; using pause menu as template");
-                loggedMissingOptionsMenu = true;
-            }
-            templateScreen = ui.pauseMenuScreen.gameObject;
-        }
-        else
-        {
-            templateScreen = optionsScreen.gameObject;
-        }
-
-        MenuSelectable sliderTemplate = null;
-        if (optionsScreen != null)
-        {
-            var candidates = optionsScreen.GetComponentsInChildren<MenuSelectable>(true);
-            foreach (var cand in candidates)
-            {
-                if (cand.GetComponentInChildren<Slider>(true) != null)
-                {
-                    sliderTemplate = cand;
-                    break;
-                }
-            }
-        }
-        bool createdSliderTemplate = false;
-        if (sliderTemplate == null)
-        {
-            if (!loggedMissingSliderTemplate)
-            {
-                log.LogWarning("slider template not found in options menu; using default");
-                loggedMissingSliderTemplate = true;
-            }
-            sliderTemplate = CreateDefaultSliderTemplate();
-            createdSliderTemplate = true;
-        }
-
-        MenuSelectable toggleTemplate = null;
-        if (optionsScreen != null)
-        {
-            var candidates = optionsScreen.GetComponentsInChildren<MenuSelectable>(true);
-            foreach (var cand in candidates)
-            {
-                if (cand.GetComponentInChildren<Toggle>(true) != null)
-                {
-                    toggleTemplate = cand;
-                    break;
-                }
-            }
-        }
-
-        CacheTextStyles(sliderTemplate, toggleTemplate);
-
-        screen = Object.Instantiate(templateScreen, templateScreen.transform.parent);
-        screen.name = "ShadeSettingsPage";
-        screen.SetActive(false);
-        log.LogDebug("Instantiated ShadeSettingsPage");
-
-        var canvasGroup = screen.GetComponent<CanvasGroup>();
+        var canvasGroup = ms.ScreenCanvasGroup;
         if (canvasGroup != null)
         {
             canvasGroup.alpha = 1f;
             canvasGroup.interactable = true;
             canvasGroup.blocksRaycasts = true;
         }
+        var rt = ms.GetComponent<RectTransform>();
+        if (rt != null)
+        {
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = Vector2.zero;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+        }
+    }
 
-        var rt = screen.GetComponent<RectTransform>();
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = Vector2.zero;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-
-        var ms = screen.GetComponent<MenuScreen>();
-
-        // remove existing children except back button
+    private static RectTransform CreateContentRoot(MenuScreen ms)
+    {
+        if (ms == null)
+            return null;
         foreach (Transform child in ms.transform)
         {
             if (ms.backButton != null && child.gameObject == ms.backButton.gameObject)
@@ -802,38 +776,46 @@ public static class ShadeSettingsMenu
         layout.childForceExpandWidth = true;
         layout.spacing = 24f;
         layout.padding = new RectOffset(60, 60, 40, 60);
+        return contentRect;
+    }
 
-        var selectables = new List<MenuSelectable>();
-        MenuSelectable s;
-        s = CreateSlider(content.transform, sliderTemplate, "Hornet Damage", 0.2f, 2f, ModConfig.Instance.hornetDamageMultiplier, v => ModConfig.Instance.hornetDamageMultiplier = v);
-        if (s != null) selectables.Add(s);
-        s = CreateSlider(content.transform, sliderTemplate, "Shade Damage", 0.2f, 2f, ModConfig.Instance.shadeDamageMultiplier, v => ModConfig.Instance.shadeDamageMultiplier = v);
-        if (s != null) selectables.Add(s);
-        s = CreateSlider(content.transform, sliderTemplate, "Shade Heal (Bind)", 0f, 6f, ModConfig.Instance.bindShadeHeal, v => ModConfig.Instance.bindShadeHeal = Mathf.RoundToInt(v), true);
-        if (s != null) selectables.Add(s);
-        s = CreateSlider(content.transform, sliderTemplate, "Hornet Heal (Bind)", 0f, 6f, ModConfig.Instance.bindHornetHeal, v => ModConfig.Instance.bindHornetHeal = Mathf.RoundToInt(v), true);
-        if (s != null) selectables.Add(s);
-        s = CreateSlider(content.transform, sliderTemplate, "Shade Focus Heal", 0f, 6f, ModConfig.Instance.focusShadeHeal, v => ModConfig.Instance.focusShadeHeal = Mathf.RoundToInt(v), true);
-        if (s != null) selectables.Add(s);
-        s = CreateSlider(content.transform, sliderTemplate, "Hornet Focus Heal", 0f, 6f, ModConfig.Instance.focusHornetHeal, v => ModConfig.Instance.focusHornetHeal = Mathf.RoundToInt(v), true);
-        if (s != null) selectables.Add(s);
-        if (selectables.Count > 0)
+    private static void ConfigureBackButton(MenuScreen ms, CancelTarget cancelTarget, UIManager ui)
+    {
+        if (ms?.backButton == null)
+            return;
+        ms.backButton.OnSubmitPressed.RemoveAllListeners();
+        if (cancelTarget == CancelTarget.PauseMenu)
         {
-            firstSelectable = selectables[0];
-            if (ms != null)
-                ms.defaultHighlight = firstSelectable;
+            if (ui != null)
+                ms.backButton.OnSubmitPressed.AddListener(() => ui.StartCoroutine(Hide(ui)));
         }
-
-        if (ms.backButton != null)
+        else
         {
-            log.LogDebug("Wiring back button");
-            ms.backButton.OnSubmitPressed.AddListener(() => ui.StartCoroutine(Hide(ui)));
+            ms.backButton.OnSubmitPressed.AddListener(ShowMainMenu);
         }
+        ms.backButton.cancelAction = cancelTarget == CancelTarget.PauseMenu ? CancelAction.GoToPauseMenu : CancelAction.Custom;
+        var router = ms.backButton.gameObject.GetComponent<CancelRouter>() ?? ms.backButton.gameObject.AddComponent<CancelRouter>();
+        router.target = cancelTarget;
+    }
 
-        var mbl = screen.GetComponent<MenuButtonList>() ?? screen.AddComponent<MenuButtonList>();
+    private static void SetupButtonList(MenuScreen ms, List<MenuSelectable> selectables)
+    {
+        if (ms == null)
+            return;
+        var mbl = ms.GetComponent<MenuButtonList>() ?? ms.gameObject.AddComponent<MenuButtonList>();
         mbl.ClearLastSelected();
         var entryField = typeof(MenuButtonList).GetField("entries", BindingFlags.NonPublic | BindingFlags.Instance);
+        if (entryField == null)
+        {
+            LogMenuWarning("MenuButtonList entries field null");
+            return;
+        }
         var entryType = entryField.FieldType.GetElementType();
+        if (entryType == null)
+        {
+            LogMenuWarning("MenuButtonList entry type null");
+            return;
+        }
         var arr = Array.CreateInstance(entryType, selectables.Count);
         for (int i = 0; i < selectables.Count; i++)
         {
@@ -843,14 +825,443 @@ public static class ShadeSettingsMenu
         }
         entryField.SetValue(mbl, arr);
         mbl.SetupActive();
+    }
 
-        LayoutRebuilder.ForceRebuildLayoutImmediate(content.GetComponent<RectTransform>());
+    private static MenuSelectable GetPreferredHighlight(MenuScreen ms)
+    {
+        if (ms == null)
+            return null;
+        if (screenFirstSelectables.TryGetValue(ms, out var selectable) && selectable != null)
+            return selectable;
+        if (ms.backButton != null)
+            return ms.backButton;
+        return null;
+    }
 
-        if (createdSliderTemplate)
+    private static MenuSelectable CreateMenuButton(Transform parent, MenuButton template, string label, System.Action onSubmit, CancelTarget cancelTarget)
+    {
+        if (template == null)
+            return null;
+        var go = Object.Instantiate(template.gameObject, parent, false);
+        go.SetActive(true);
+        go.name = label.Replace(" ", string.Empty) + "Button";
+        foreach (var auto in go.GetComponentsInChildren<AutoLocalizeTextUI>(true))
+            Object.DestroyImmediate(auto);
+        bool hasLabel = false;
+        var text = go.GetComponentInChildren<Text>(true);
+        if (text != null)
+        {
+            text.text = label;
+            text.color = Color.white;
+            hasLabel = true;
+        }
+        else
+        {
+            var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
+            if (tmpType != null)
+            {
+                var tmp = go.GetComponentInChildren(tmpType, true);
+                if (tmp != null)
+                {
+                    tmpType.GetProperty("text")?.SetValue(tmp, label);
+                    tmpType.GetProperty("color")?.SetValue(tmp, Color.white);
+                    hasLabel = true;
+                }
+            }
+        }
+        if (!hasLabel)
+        {
+            var labelObj = new GameObject("Label");
+            labelObj.transform.SetParent(go.transform, false);
+            var fallback = labelObj.AddComponent<Text>();
+            ApplyTextStyle(fallback, sliderLabelStyle, TextAnchor.MiddleCenter, Color.white);
+            fallback.text = label;
+        }
+        foreach (var cond in go.GetComponents<MenuButtonListCondition>())
+            Object.DestroyImmediate(cond);
+        var btn = go.GetComponent<MenuButton>();
+        if (btn == null)
+        {
+            Object.Destroy(go);
+            return null;
+        }
+        btn.OnSubmitPressed.RemoveAllListeners();
+        if (onSubmit != null)
+            btn.OnSubmitPressed.AddListener(() => onSubmit());
+        btn.cancelAction = cancelTarget == CancelTarget.PauseMenu ? CancelAction.GoToPauseMenu : CancelAction.Custom;
+        var router = go.GetComponent<CancelRouter>() ?? go.AddComponent<CancelRouter>();
+        router.target = cancelTarget;
+        btn.DontPlaySelectSound = true;
+        return btn;
+    }
+
+    private static MenuButton CreateDefaultMenuButtonTemplate()
+    {
+        var root = new GameObject("DefaultMenuButton");
+        root.hideFlags = HideFlags.HideAndDontSave;
+        var rt = root.AddComponent<RectTransform>();
+        rt.sizeDelta = new Vector2(420f, 60f);
+        var image = root.AddComponent<Image>();
+        var sprite = GetFallbackSprite(ref fallbackSlicedSprite, "ShadeSettingsButtonBg", true);
+        image.sprite = sprite;
+        image.type = Image.Type.Sliced;
+        image.color = new Color(0.12f, 0.12f, 0.12f, 0.9f);
+        var button = root.AddComponent<MenuButton>();
+        button.transition = Selectable.Transition.ColorTint;
+        var colors = button.colors;
+        colors.normalColor = Color.white;
+        colors.highlightedColor = new Color(1f, 0.95f, 0.78f, 1f);
+        colors.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
+        colors.selectedColor = colors.normalColor;
+        colors.disabledColor = new Color(0.2f, 0.2f, 0.2f, 0.6f);
+        button.colors = colors;
+        var layout = root.AddComponent<LayoutElement>();
+        layout.minHeight = 60f;
+        layout.preferredHeight = 60f;
+        layout.minWidth = 420f;
+        layout.preferredWidth = 420f;
+        var labelObj = new GameObject("Label");
+        labelObj.transform.SetParent(root.transform, false);
+        var text = labelObj.AddComponent<Text>();
+        ApplyTextStyle(text, sliderLabelStyle, TextAnchor.MiddleCenter, Color.white);
+        text.text = "Button";
+        root.SetActive(false);
+        return button;
+    }
+
+    private static void BuildMainMenu(UIManager ui, MenuScreen ms, MenuButton buttonTemplate)
+    {
+        if (ms == null)
+            return;
+        var content = CreateContentRoot(ms);
+        if (content == null)
+            return;
+        var selectables = new List<MenuSelectable>();
+        if (difficultyScreen != null)
+        {
+            var s = CreateMenuButton(content, buttonTemplate, "Difficulty", () => ShowScreen(difficultyScreen), CancelTarget.PauseMenu);
+            if (s != null) selectables.Add(s);
+        }
+        if (controlsScreen != null)
+        {
+            var s = CreateMenuButton(content, buttonTemplate, "Controls", () => ShowScreen(controlsScreen), CancelTarget.PauseMenu);
+            if (s != null) selectables.Add(s);
+        }
+        if (loggingScreen != null)
+        {
+            var s = CreateMenuButton(content, buttonTemplate, "Logging", () => ShowScreen(loggingScreen), CancelTarget.PauseMenu);
+            if (s != null) selectables.Add(s);
+        }
+        SetupButtonList(ms, selectables);
+        if (selectables.Count > 0)
+        {
+            var first = selectables[0];
+            screenFirstSelectables[ms] = first;
+            ms.defaultHighlight = first;
+        }
+        else if (ms.backButton != null)
+        {
+            screenFirstSelectables[ms] = ms.backButton;
+            ms.defaultHighlight = ms.backButton;
+        }
+        ConfigureBackButton(ms, CancelTarget.PauseMenu, ui);
+        LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+    }
+
+    private static void BuildDifficultyMenu(UIManager ui, MenuScreen ms, MenuSelectable sliderTemplate)
+    {
+        if (ms == null || sliderTemplate == null)
+            return;
+        var content = CreateContentRoot(ms);
+        if (content == null)
+            return;
+        var selectables = new List<MenuSelectable>();
+        void AddSlider(string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
+        {
+            var s = CreateSlider(content, sliderTemplate, label, min, max, value, onChange, CancelTarget.ShadeMain, whole);
+            if (s != null) selectables.Add(s);
+        }
+        AddSlider("Hornet Damage", 0.2f, 2f, ModConfig.Instance.hornetDamageMultiplier, v => ModConfig.Instance.hornetDamageMultiplier = v);
+        AddSlider("Shade Damage", 0.2f, 2f, ModConfig.Instance.shadeDamageMultiplier, v => ModConfig.Instance.shadeDamageMultiplier = v);
+        AddSlider("Shade Heal (Bind)", 0f, 6f, ModConfig.Instance.bindShadeHeal, v => ModConfig.Instance.bindShadeHeal = Mathf.RoundToInt(v), true);
+        AddSlider("Hornet Heal (Bind)", 0f, 6f, ModConfig.Instance.bindHornetHeal, v => ModConfig.Instance.bindHornetHeal = Mathf.RoundToInt(v), true);
+        AddSlider("Shade Focus Heal", 0f, 6f, ModConfig.Instance.focusShadeHeal, v => ModConfig.Instance.focusShadeHeal = Mathf.RoundToInt(v), true);
+        AddSlider("Hornet Focus Heal", 0f, 6f, ModConfig.Instance.focusHornetHeal, v => ModConfig.Instance.focusHornetHeal = Mathf.RoundToInt(v), true);
+        SetupButtonList(ms, selectables);
+        if (selectables.Count > 0)
+        {
+            var first = selectables[0];
+            screenFirstSelectables[ms] = first;
+            ms.defaultHighlight = first;
+        }
+        else if (ms.backButton != null)
+        {
+            screenFirstSelectables[ms] = ms.backButton;
+            ms.defaultHighlight = ms.backButton;
+        }
+        ConfigureBackButton(ms, CancelTarget.ShadeMain, ui);
+        LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+    }
+
+    private static void BuildControlsMenu(UIManager ui, MenuScreen ms)
+    {
+        if (ms == null)
+            return;
+        var content = CreateContentRoot(ms);
+        if (content == null)
+            return;
+        var info = new GameObject("ControlsInfo");
+        info.transform.SetParent(content, false);
+        var text = info.AddComponent<Text>();
+        ApplyTextStyle(text, sliderLabelStyle, TextAnchor.MiddleCenter, Color.white);
+        text.text = "Controller configuration options will appear here in a future update.";
+        var layout = info.AddComponent<LayoutElement>();
+        layout.preferredHeight = 40f;
+        SetupButtonList(ms, new List<MenuSelectable>());
+        if (ms.backButton != null)
+        {
+            screenFirstSelectables[ms] = ms.backButton;
+            ms.defaultHighlight = ms.backButton;
+        }
+        ConfigureBackButton(ms, CancelTarget.ShadeMain, ui);
+        LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+    }
+
+    private static void BuildLoggingMenu(UIManager ui, MenuScreen ms, MenuSelectable toggleTemplate)
+    {
+        if (ms == null || toggleTemplate == null)
+            return;
+        var content = CreateContentRoot(ms);
+        if (content == null)
+            return;
+        var selectables = new List<MenuSelectable>();
+        void AddToggle(string label, bool value, System.Action<bool> onChange)
+        {
+            var t = CreateToggle(content, toggleTemplate, label, value, onChange, CancelTarget.ShadeMain);
+            if (t != null) selectables.Add(t);
+        }
+        AddToggle("General Logs", ModConfig.Instance.logGeneral, v => ModConfig.Instance.logGeneral = v);
+        AddToggle("Menu Logs", ModConfig.Instance.logMenu, v => ModConfig.Instance.logMenu = v);
+        AddToggle("Shade Debug Logs", ModConfig.Instance.logShade, v => ModConfig.Instance.logShade = v);
+        AddToggle("HUD Debug Logs", ModConfig.Instance.logHud, v => ModConfig.Instance.logHud = v);
+        AddToggle("Damage Summary File", ModConfig.Instance.logDamage, v => ModConfig.Instance.logDamage = v);
+        SetupButtonList(ms, selectables);
+        if (selectables.Count > 0)
+        {
+            var first = selectables[0];
+            screenFirstSelectables[ms] = first;
+            ms.defaultHighlight = first;
+        }
+        else if (ms.backButton != null)
+        {
+            screenFirstSelectables[ms] = ms.backButton;
+            ms.defaultHighlight = ms.backButton;
+        }
+        ConfigureBackButton(ms, CancelTarget.ShadeMain, ui);
+        LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+    }
+
+    private static void ShowScreen(MenuScreen target)
+    {
+        if (target == null)
+            return;
+        foreach (var ms in allScreens)
+        {
+            if (ms == null)
+                continue;
+            bool show = ms == target;
+            ms.gameObject.SetActive(show);
+        }
+        activeScreen = target;
+        var highlight = GetPreferredHighlight(target);
+        if (highlight != null)
+        {
+            if (EventSystem.current != null)
+                EventSystem.current.SetSelectedGameObject(highlight.gameObject);
+            UIManager.HighlightSelectableNoSound(highlight.GetFirstInteractable());
+        }
+    }
+
+    private static void ShowMainMenu()
+    {
+        ShowScreen(mainScreen);
+    }
+
+    private static void Build(UIManager ui)
+    {
+        if (!loggedBuildAttempt)
+        {
+            LogMenuInfo("Attempting to build Shade settings page");
+            loggedBuildAttempt = true;
+        }
+        if (built && mainScreen != null && builtFor == ui)
+        {
+            LogMenuDebug("Settings page already built for this UI");
+            return;
+        }
+
+        if ((mainScreen != null || allScreens.Count > 0) && builtFor != ui)
+        {
+            LogMenuDebug("UIManager changed, destroying previous settings page");
+            DestroyScreens();
+        }
+
+        built = false;
+        builtFor = ui;
+        screenFirstSelectables.Clear();
+        allScreens.Clear();
+        activeScreen = null;
+
+        var optionsScreen = ui.optionsMenuScreen;
+        GameObject templateScreen;
+        if (optionsScreen == null)
+        {
+            if (!loggedMissingOptionsMenu)
+            {
+                LogMenuWarning("optionsMenuScreen not yet available; using pause menu as template");
+                loggedMissingOptionsMenu = true;
+            }
+            templateScreen = ui.pauseMenuScreen != null ? ui.pauseMenuScreen.gameObject : null;
+        }
+        else
+        {
+            templateScreen = optionsScreen.gameObject;
+        }
+
+        if (templateScreen == null)
+        {
+            LogMenuWarning("Template screen not available; aborting build");
+            return;
+        }
+
+        MenuSelectable sliderTemplate = null;
+        if (optionsScreen != null)
+        {
+            foreach (var cand in optionsScreen.GetComponentsInChildren<MenuSelectable>(true))
+            {
+                if (cand.GetComponentInChildren<Slider>(true) != null)
+                {
+                    sliderTemplate = cand;
+                    break;
+                }
+            }
+        }
+        bool createdSliderTemplate = false;
+        if (sliderTemplate == null)
+        {
+            if (!loggedMissingSliderTemplate)
+            {
+                LogMenuWarning("slider template not found in options menu; using default");
+                loggedMissingSliderTemplate = true;
+            }
+            sliderTemplate = CreateDefaultSliderTemplate();
+            createdSliderTemplate = true;
+        }
+
+        MenuSelectable toggleTemplate = null;
+        if (optionsScreen != null)
+        {
+            foreach (var cand in optionsScreen.GetComponentsInChildren<MenuSelectable>(true))
+            {
+                if (cand.GetComponentInChildren<Toggle>(true) != null)
+                {
+                    toggleTemplate = cand;
+                    break;
+                }
+            }
+        }
+        bool createdToggleTemplate = false;
+        if (toggleTemplate == null)
+        {
+            toggleTemplate = CreateDefaultToggleTemplate();
+            createdToggleTemplate = true;
+        }
+
+        CacheTextStyles(sliderTemplate, toggleTemplate);
+
+        MenuButton buttonTemplate = null;
+        bool createdButtonTemplate = false;
+        if (optionsScreen != null)
+        {
+            foreach (var cand in optionsScreen.GetComponentsInChildren<MenuButton>(true))
+            {
+                if (optionsScreen.backButton != null && cand == optionsScreen.backButton)
+                    continue;
+                buttonTemplate = Object.Instantiate(cand.gameObject).GetComponent<MenuButton>();
+                createdButtonTemplate = true;
+                break;
+            }
+        }
+        if (buttonTemplate == null)
+        {
+            var templateMenuScreen = templateScreen.GetComponent<MenuScreen>();
+            if (templateMenuScreen != null && templateMenuScreen.backButton != null)
+            {
+                buttonTemplate = Object.Instantiate(templateMenuScreen.backButton.gameObject).GetComponent<MenuButton>();
+                createdButtonTemplate = true;
+            }
+        }
+        if (buttonTemplate == null)
+        {
+            buttonTemplate = CreateDefaultMenuButtonTemplate();
+            createdButtonTemplate = true;
+        }
+        if (buttonTemplate != null)
+        {
+            buttonTemplate.gameObject.hideFlags = HideFlags.HideAndDontSave;
+            buttonTemplate.gameObject.SetActive(false);
+        }
+
+        mainScreen = Object.Instantiate(templateScreen, templateScreen.transform.parent).GetComponent<MenuScreen>();
+        difficultyScreen = Object.Instantiate(templateScreen, templateScreen.transform.parent).GetComponent<MenuScreen>();
+        controlsScreen = Object.Instantiate(templateScreen, templateScreen.transform.parent).GetComponent<MenuScreen>();
+        loggingScreen = Object.Instantiate(templateScreen, templateScreen.transform.parent).GetComponent<MenuScreen>();
+
+        if (mainScreen != null)
+        {
+            mainScreen.gameObject.name = "ShadeSettingsMain";
+            mainScreen.gameObject.SetActive(false);
+            InitializeScreen(mainScreen);
+            allScreens.Add(mainScreen);
+        }
+        if (difficultyScreen != null)
+        {
+            difficultyScreen.gameObject.name = "ShadeSettingsDifficulty";
+            difficultyScreen.gameObject.SetActive(false);
+            InitializeScreen(difficultyScreen);
+            allScreens.Add(difficultyScreen);
+        }
+        if (controlsScreen != null)
+        {
+            controlsScreen.gameObject.name = "ShadeSettingsControls";
+            controlsScreen.gameObject.SetActive(false);
+            InitializeScreen(controlsScreen);
+            allScreens.Add(controlsScreen);
+        }
+        if (loggingScreen != null)
+        {
+            loggingScreen.gameObject.name = "ShadeSettingsLogging";
+            loggingScreen.gameObject.SetActive(false);
+            InitializeScreen(loggingScreen);
+            allScreens.Add(loggingScreen);
+        }
+
+        screen = mainScreen != null ? mainScreen.gameObject : null;
+
+        BuildMainMenu(ui, mainScreen, buttonTemplate);
+        BuildDifficultyMenu(ui, difficultyScreen, sliderTemplate);
+        BuildControlsMenu(ui, controlsScreen);
+        BuildLoggingMenu(ui, loggingScreen, toggleTemplate);
+
+        if (createdSliderTemplate && sliderTemplate != null)
             Object.Destroy(sliderTemplate.gameObject);
+        if (createdToggleTemplate && toggleTemplate != null)
+            Object.Destroy(toggleTemplate.gameObject);
+        if (createdButtonTemplate && buttonTemplate != null)
+            Object.Destroy(buttonTemplate.gameObject);
 
         built = true;
-        log.LogInfo("Shade settings page built");
+        LogMenuInfo("Shade settings page built");
     }
 
     internal static void Inject(UIManager ui)
@@ -859,7 +1270,7 @@ public static class ShadeSettingsMenu
         {
             if (!loggedNullUI)
             {
-                log.LogWarning("Inject called with null UIManager");
+                LogMenuWarning("Inject called with null UIManager");
                 loggedNullUI = true;
             }
             return;
@@ -868,7 +1279,7 @@ public static class ShadeSettingsMenu
         {
             if (!loggedNoPauseMenu)
             {
-                log.LogWarning("pauseMenuScreen not yet available");
+                LogMenuWarning("pauseMenuScreen not yet available");
                 loggedNoPauseMenu = true;
             }
             return;
@@ -876,7 +1287,7 @@ public static class ShadeSettingsMenu
 
         // Ensure a screen exists for this UI
         Build(ui);
-        if (screen == null)
+        if (mainScreen == null)
             return;
 
         // Avoid duplicate buttons by scanning entire hierarchy
@@ -886,7 +1297,7 @@ public static class ShadeSettingsMenu
             {
                 if (!loggedButtonAlreadyPresent)
                 {
-                    log.LogInfo("ShadeSettingsButton already present; skipping injection");
+                    LogMenuInfo("ShadeSettingsButton already present; skipping injection");
                     loggedButtonAlreadyPresent = true;
                 }
                 return;
@@ -898,7 +1309,7 @@ public static class ShadeSettingsMenu
         {
             if (!loggedNoPauseButtonTemplates)
             {
-                log.LogWarning("No PauseMenuButton templates found");
+                LogMenuWarning("No PauseMenuButton templates found");
                 loggedNoPauseButtonTemplates = true;
             }
             return;
@@ -920,7 +1331,7 @@ public static class ShadeSettingsMenu
         {
             if (!loggedNoMenuButtonList)
             {
-                log.LogWarning("MenuButtonList not found on template parent");
+                LogMenuWarning("MenuButtonList not found on template parent");
                 loggedNoMenuButtonList = true;
             }
             return;
@@ -931,7 +1342,7 @@ public static class ShadeSettingsMenu
         {
             if (!loggedNullEntries)
             {
-                log.LogWarning("MenuButtonList entries field null");
+                LogMenuWarning("MenuButtonList entries field null");
                 loggedNullEntries = true;
             }
             return;
@@ -991,36 +1402,36 @@ public static class ShadeSettingsMenu
         dirtyField?.SetValue(list, true);
 
         list.SetupActive();
-        log.LogInfo("Injected ShadeSettingsButton into pause menu");
+        LogMenuInfo("Injected ShadeSettingsButton into pause menu");
     }
 
     internal static IEnumerator Show(UIManager ui)
     {
         Build(ui);
-        if (screen == null)
+        if (mainScreen == null)
         {
-            log.LogWarning("Show called but screen is null");
+            LogMenuWarning("Show called but main screen is null");
             yield break;
         }
 
-        log.LogInfo("Showing Shade settings page");
-        ui.pauseMenuScreen.gameObject.SetActive(false);
-        screen.SetActive(true);
-        if (firstSelectable != null)
-        {
-            if (EventSystem.current != null)
-                EventSystem.current.SetSelectedGameObject(firstSelectable.gameObject);
-            UIManager.HighlightSelectableNoSound(firstSelectable.GetFirstInteractable());
-        }
+        LogMenuInfo("Showing Shade settings page");
+        if (ui.pauseMenuScreen != null)
+            ui.pauseMenuScreen.gameObject.SetActive(false);
+        ShowScreen(mainScreen);
         yield break;
     }
 
     internal static void HideImmediate(UIManager ui)
     {
-        if (screen == null)
+        if (allScreens.Count == 0)
             return;
-        log.LogInfo("Hiding Shade settings page");
-        screen.SetActive(false);
+        LogMenuInfo("Hiding Shade settings page");
+        foreach (var ms in allScreens)
+        {
+            if (ms != null)
+                ms.gameObject.SetActive(false);
+        }
+        activeScreen = null;
         var targetUi = ui ?? UIManager.instance;
         if (targetUi != null)
         {
@@ -1032,7 +1443,7 @@ public static class ShadeSettingsMenu
             }
             catch (Exception e)
             {
-                log.LogWarning($"Failed to navigate back to pause menu: {e}");
+                LogMenuWarning($"Failed to navigate back to pause menu: {e}");
             }
         }
         ModConfig.Save();
@@ -1046,14 +1457,9 @@ public static class ShadeSettingsMenu
 
     internal static void Clear()
     {
-        if (screen != null)
-        {
-            Object.Destroy(screen);
-            screen = null;
-        }
+        DestroyScreens();
         built = false;
         builtFor = null;
-        firstSelectable = null;
         sliderLabelStyle = null;
         sliderValueStyle = null;
         toggleLabelStyle = null;
