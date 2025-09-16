@@ -338,16 +338,23 @@ public static class ShadeSettingsMenu
         }
     }
 
-    private static void ApplySharedKeyboardPreset()
+    private static void ApplyDefaultPreset()
     {
-        ShadeInput.Config.ApplySharedKeyboardPreset();
+        ShadeInput.Config.ResetToDefaults();
         ModConfig.Save();
         NotifyBindingChanged();
     }
 
-    private static void RestoreDefaultBindings()
+    private static void ApplyDualControllerPresetOption()
     {
-        ShadeInput.Config.ResetToDefaults();
+        ShadeInput.Config.ApplyDualControllerPreset();
+        ModConfig.Save();
+        NotifyBindingChanged();
+    }
+
+    private static void ApplyKeyboardOnlyPresetOption()
+    {
+        ShadeInput.Config.ApplyKeyboardOnlyPreset();
         ModConfig.Save();
         NotifyBindingChanged();
     }
@@ -794,6 +801,71 @@ public static class ShadeSettingsMenu
         }
 
         ClearAndApplyShadows(text, hasStyle ? resolved.Shadows : null);
+    }
+
+    private static void ScaleUnityText(Text text, float scale)
+    {
+        if (text == null || scale <= 0f || Mathf.Approximately(scale, 1f))
+            return;
+
+        int adjustedSize = Mathf.Max(1, Mathf.RoundToInt(text.fontSize * scale));
+        text.fontSize = adjustedSize;
+
+        if (text.resizeTextForBestFit)
+        {
+            int min = Mathf.Max(1, Mathf.RoundToInt(text.resizeTextMinSize * scale));
+            int max = Mathf.Max(min, Mathf.RoundToInt(text.resizeTextMaxSize * scale));
+            text.resizeTextMinSize = min;
+            text.resizeTextMaxSize = max;
+        }
+    }
+
+    private static void ScaleTextElements(GameObject root, float scale)
+    {
+        if (root == null || scale <= 0f || Mathf.Approximately(scale, 1f))
+            return;
+
+        foreach (var text in root.GetComponentsInChildren<Text>(true))
+        {
+            ScaleUnityText(text, scale);
+        }
+
+        var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
+        if (tmpType == null)
+            return;
+
+        foreach (var tmp in root.GetComponentsInChildren(tmpType, true))
+        {
+            try
+            {
+                var fontSizeProp = tmpType.GetProperty("fontSize");
+                if (fontSizeProp != null)
+                {
+                    float currentSize = Convert.ToSingle(fontSizeProp.GetValue(tmp, null));
+                    fontSizeProp.SetValue(tmp, currentSize * scale, null);
+                }
+
+                var autoSizeProp = tmpType.GetProperty("enableAutoSizing");
+                if (autoSizeProp != null && autoSizeProp.GetValue(tmp, null) is bool autoSize && autoSize)
+                {
+                    var minProp = tmpType.GetProperty("fontSizeMin");
+                    var maxProp = tmpType.GetProperty("fontSizeMax");
+                    if (minProp != null)
+                    {
+                        float min = Convert.ToSingle(minProp.GetValue(tmp, null));
+                        minProp.SetValue(tmp, min * scale, null);
+                    }
+                    if (maxProp != null)
+                    {
+                        float max = Convert.ToSingle(maxProp.GetValue(tmp, null));
+                        maxProp.SetValue(tmp, max * scale, null);
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
     }
 
     private static void ApplyButtonColors(Selectable selectable)
@@ -1697,48 +1769,138 @@ public static class ShadeSettingsMenu
         var infoText = info.AddComponent<Text>();
         ApplyTextStyle(infoText, sliderLabelStyle, TextAnchor.MiddleCenter, Color.white);
         infoText.text = "Select a binding to change it. Press Backspace to clear or press a controller button to bind.";
+        ScaleTextElements(info, 0.85f);
         var infoLayout = info.AddComponent<LayoutElement>();
-        infoLayout.preferredHeight = 60f;
+        infoLayout.preferredHeight = 48f;
 
         var selectables = new List<MenuSelectable>();
 
-        void AddBindingButton(ShadeAction action, string label, bool secondary)
+        var presetRow = new GameObject("PresetOptions");
+        var presetRect = presetRow.AddComponent<RectTransform>();
+        presetRect.SetParent(content, false);
+        var presetLayout = presetRow.AddComponent<HorizontalLayoutGroup>();
+        presetLayout.spacing = 36f;
+        presetLayout.childControlWidth = true;
+        presetLayout.childControlHeight = true;
+        presetLayout.childForceExpandWidth = true;
+        presetLayout.childForceExpandHeight = false;
+        presetLayout.childAlignment = TextAnchor.MiddleCenter;
+        var presetLayoutElement = presetRow.AddComponent<LayoutElement>();
+        presetLayoutElement.minHeight = ButtonRowHeight;
+        presetLayoutElement.preferredHeight = ButtonRowHeight;
+        presetLayoutElement.flexibleHeight = 0f;
+
+        void AddPresetButton(string label, System.Action onSubmit)
         {
-            var selectable = CreateMenuButton(content, buttonTemplate, string.Empty, null, CancelTarget.ShadeMain);
+            var selectable = CreateMenuButton(presetRow.transform, buttonTemplate, label, onSubmit, CancelTarget.ShadeMain);
+            if (selectable != null)
+            {
+                var layout = selectable.GetComponent<LayoutElement>();
+                if (layout != null)
+                {
+                    layout.minWidth = 0f;
+                    layout.preferredWidth = 0f;
+                    layout.flexibleWidth = 1f;
+                }
+                selectables.Add(selectable);
+            }
+        }
+
+        AddPresetButton("Preset 1: Default", ApplyDefaultPreset);
+        AddPresetButton("Preset 2: Two Controllers", ApplyDualControllerPresetOption);
+        AddPresetButton("Preset 3: Keyboard Only", ApplyKeyboardOnlyPresetOption);
+
+        var bindingsContainer = new GameObject("BindingColumns");
+        var bindingsRect = bindingsContainer.AddComponent<RectTransform>();
+        bindingsRect.SetParent(content, false);
+        var bindingsLayout = bindingsContainer.AddComponent<HorizontalLayoutGroup>();
+        bindingsLayout.spacing = 32f;
+        bindingsLayout.childControlWidth = true;
+        bindingsLayout.childControlHeight = true;
+        bindingsLayout.childForceExpandWidth = true;
+        bindingsLayout.childForceExpandHeight = false;
+        bindingsLayout.childAlignment = TextAnchor.UpperLeft;
+        var bindingsLayoutElement = bindingsContainer.AddComponent<LayoutElement>();
+        bindingsLayoutElement.minHeight = 0f;
+        bindingsLayoutElement.preferredHeight = 0f;
+        bindingsLayoutElement.flexibleHeight = 1f;
+
+        RectTransform CreateBindingColumn(string name)
+        {
+            var column = new GameObject(name);
+            var rect = column.AddComponent<RectTransform>();
+            rect.SetParent(bindingsContainer.transform, false);
+            var layout = column.AddComponent<VerticalLayoutGroup>();
+            layout.childControlHeight = true;
+            layout.childControlWidth = true;
+            layout.childForceExpandHeight = false;
+            layout.childForceExpandWidth = true;
+            layout.spacing = ContentSpacing * 0.5f;
+            layout.padding = new RectOffset(0, 0, 0, 0);
+            var columnLayout = column.AddComponent<LayoutElement>();
+            columnLayout.minWidth = 0f;
+            columnLayout.preferredWidth = 0f;
+            columnLayout.flexibleWidth = 1f;
+            return rect;
+        }
+
+        var leftColumn = CreateBindingColumn("LeftColumn");
+        var rightColumn = CreateBindingColumn("RightColumn");
+
+        void ConfigureBindingButton(MenuButton btn)
+        {
+            if (btn == null)
+                return;
+            ScaleTextElements(btn.gameObject, 0.85f);
+            var layout = btn.GetComponent<LayoutElement>();
+            if (layout != null)
+            {
+                layout.minHeight = 70f;
+                layout.preferredHeight = 70f;
+            }
+            var rect = btn.GetComponent<RectTransform>();
+            if (rect != null)
+                rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 70f);
+        }
+
+        void AddBindingButton(Transform parent, ShadeAction action, string label, bool secondary)
+        {
+            var selectable = CreateMenuButton(parent, buttonTemplate, string.Empty, null, CancelTarget.ShadeMain);
             if (selectable is MenuButton btn)
             {
                 var driver = btn.gameObject.AddComponent<BindingMenuDriver>();
                 driver.Initialize(btn, action, secondary, label);
+                ConfigureBindingButton(btn);
                 selectables.Add(btn);
             }
         }
 
-        void AddBindingRow(ShadeAction action, string label)
+        void AddBindingRow(Transform parent, ShadeAction action, string label)
         {
-            AddBindingButton(action, label + " (Primary)", false);
-            AddBindingButton(action, label + " (Alt)", true);
+            AddBindingButton(parent, action, label + " (Primary)", false);
+            AddBindingButton(parent, action, label + " (Alt)", true);
         }
 
-        AddBindingRow(ShadeAction.MoveLeft, "Move Left");
-        AddBindingRow(ShadeAction.MoveRight, "Move Right");
-        AddBindingRow(ShadeAction.MoveUp, "Move Up");
-        AddBindingRow(ShadeAction.MoveDown, "Move Down");
-        AddBindingRow(ShadeAction.Nail, "Nail Attack");
-        AddBindingRow(ShadeAction.Fire, "Spellcast");
-        AddBindingRow(ShadeAction.Teleport, "Teleport");
-        AddBindingRow(ShadeAction.Focus, "Focus");
-        AddBindingRow(ShadeAction.Sprint, "Sprint");
-        AddBindingRow(ShadeAction.DamageToggle, "Toggle Damage");
-
-        void AddSimpleButton(string label, System.Action onSubmit)
+        var bindingRows = new (ShadeAction action, string label)[]
         {
-            var selectable = CreateMenuButton(content, buttonTemplate, label, onSubmit, CancelTarget.ShadeMain);
-            if (selectable != null)
-                selectables.Add(selectable);
-        }
+            (ShadeAction.MoveLeft, "Move Left"),
+            (ShadeAction.MoveRight, "Move Right"),
+            (ShadeAction.MoveUp, "Move Up"),
+            (ShadeAction.MoveDown, "Move Down"),
+            (ShadeAction.Nail, "Nail Attack"),
+            (ShadeAction.Fire, "Spellcast"),
+            (ShadeAction.Teleport, "Teleport"),
+            (ShadeAction.Focus, "Focus"),
+            (ShadeAction.Sprint, "Sprint"),
+            (ShadeAction.DamageToggle, "Toggle Damage")
+        };
 
-        AddSimpleButton("Preset: Shared Keyboard", ApplySharedKeyboardPreset);
-        AddSimpleButton("Restore Defaults", RestoreDefaultBindings);
+        int leftCount = (bindingRows.Length + 1) / 2;
+        for (int i = 0; i < bindingRows.Length; i++)
+        {
+            var parent = i < leftCount ? leftColumn.transform : rightColumn.transform;
+            AddBindingRow(parent, bindingRows[i].action, bindingRows[i].label);
+        }
 
         SetupButtonList(ms, selectables);
         if (selectables.Count > 0)

@@ -123,19 +123,41 @@ public class ShadeInputConfig
         damageToggle = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Alpha0), ShadeBindingOption.None());
     }
 
-    public void ApplySharedKeyboardPreset()
+    public void ApplyDualControllerPreset()
+    {
+        controllerDeviceIndex = 1;
+        controllerDeadzone = Mathf.Clamp(controllerDeadzone <= 0f ? 0.25f : controllerDeadzone, 0.01f, 1f);
+
+        moveLeft = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickLeft), ShadeBindingOption.FromControl(InputControlType.DPadLeft));
+        moveRight = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickRight), ShadeBindingOption.FromControl(InputControlType.DPadRight));
+        moveUp = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickUp), ShadeBindingOption.FromControl(InputControlType.DPadUp));
+        moveDown = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickDown), ShadeBindingOption.FromControl(InputControlType.DPadDown));
+        fire = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightTrigger), ShadeBindingOption.FromControl(InputControlType.Action4));
+        nail = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action1), ShadeBindingOption.FromControl(InputControlType.RightBumper));
+        teleport = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action2), ShadeBindingOption.FromControl(InputControlType.Action3));
+        focus = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftTrigger), ShadeBindingOption.FromControl(InputControlType.LeftBumper));
+        sprint = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftBumper), ShadeBindingOption.FromControl(InputControlType.RightStickButton));
+        damageToggle = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Start), ShadeBindingOption.FromControl(InputControlType.Back));
+    }
+
+    public void ApplyKeyboardOnlyPreset()
     {
         controllerDeviceIndex = -1;
         moveLeft = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.LeftArrow), ShadeBindingOption.None());
         moveRight = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.RightArrow), ShadeBindingOption.None());
         moveUp = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.UpArrow), ShadeBindingOption.None());
         moveDown = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.DownArrow), ShadeBindingOption.None());
-        fire = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad1), ShadeBindingOption.None());
-        nail = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad2), ShadeBindingOption.None());
-        teleport = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad3), ShadeBindingOption.None());
+        fire = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad1), ShadeBindingOption.FromKey(KeyCode.RightControl));
+        nail = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad2), ShadeBindingOption.FromKey(KeyCode.RightShift));
+        teleport = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad3), ShadeBindingOption.FromKey(KeyCode.RightAlt));
         focus = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.KeypadEnter), ShadeBindingOption.None());
-        sprint = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.RightControl), ShadeBindingOption.FromKey(KeyCode.Keypad0));
-        damageToggle = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.KeypadPeriod), ShadeBindingOption.None());
+        sprint = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad0), ShadeBindingOption.FromKey(KeyCode.KeypadPeriod));
+        damageToggle = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad5), ShadeBindingOption.FromKey(KeyCode.KeypadPlus));
+    }
+
+    public void ApplySharedKeyboardPreset()
+    {
+        ApplyKeyboardOnlyPreset();
     }
 
     public ShadeBinding GetBinding(ShadeAction action) => action switch
