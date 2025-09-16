@@ -106,10 +106,32 @@ public partial class LegacyHelper : BaseUnityPlugin
         catch { }
     }
 
+    private static void DestroyShadeInstance()
+    {
+        if (helper == null)
+            return;
+
+        try
+        {
+            Object.Destroy(helper);
+        }
+        catch
+        {
+        }
+
+        helper = null;
+    }
+
     private static void SpawnShadeAtPosition(Vector3 pos)
     {
         var gm = GameManager.instance;
         if (gm == null || gm.hero_ctrl == null) return;
+
+        if (!ModConfig.Instance.shadeEnabled)
+        {
+            DestroyShadeInstance();
+            return;
+        }
 
         if (helper != null)
         {
@@ -153,6 +175,49 @@ public partial class LegacyHelper : BaseUnityPlugin
         }
 
         scNew.TriggerSpawnEntrance();
+    }
+
+    internal static void SetShadeEnabled(bool enabled)
+    {
+        if (ModConfig.Instance.shadeEnabled == enabled)
+        {
+            ShadeSettingsMenu.NotifyShadeToggleChanged();
+            return;
+        }
+
+        ModConfig.Instance.shadeEnabled = enabled;
+
+        if (!enabled)
+        {
+            DestroyShadeInstance();
+            if (hud != null)
+            {
+                try { hud.SetVisible(false); }
+                catch { }
+            }
+        }
+        else
+        {
+            var gm = GameManager.instance;
+            if (gm != null && gm.hero_ctrl != null)
+            {
+                SpawnShadeAtPosition(gm.hero_ctrl.transform.position);
+            }
+            if (hud != null)
+            {
+                try
+                {
+                    bool gameplay = gm != null && gm.IsGameplayScene();
+                    hud.SetVisible(gameplay);
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        ShadeSettingsMenu.NotifyShadeToggleChanged();
+        ModConfig.Save();
     }
 
     internal static void DisableStartup(GameManager gm)

@@ -16,9 +16,19 @@ public partial class LegacyHelper
             bool gameplay = __instance.IsGameplayScene();
             if (hud != null)
             {
-                try { hud.SetVisible(gameplay); } catch { }
+                try { hud.SetVisible(gameplay && ModConfig.Instance.shadeEnabled); } catch { }
             }
-            if (!gameplay) return;
+            if (!gameplay)
+            {
+                DestroyShadeInstance();
+                return;
+            }
+
+            if (!ModConfig.Instance.shadeEnabled)
+            {
+                DestroyShadeInstance();
+                return;
+            }
 
             if (!registeredEnterSceneHandler)
             {
@@ -52,7 +62,10 @@ public partial class LegacyHelper
         {
             try
             {
-                if (helper != null)
+                if (!ModConfig.Instance.shadeEnabled)
+                    return;
+
+                if (ModConfig.Instance.shadeEnabled && helper != null)
                 {
                     var sc = helper.GetComponent<ShadeController>();
                     if (sc != null)
@@ -216,7 +229,10 @@ public partial class LegacyHelper
             if (!onBench) return;
             try
             {
-                if (helper != null)
+                if (!ModConfig.Instance.shadeEnabled)
+                    return;
+
+                if (ModConfig.Instance.shadeEnabled && helper != null)
                 {
                     var sc = helper.GetComponent<ShadeController>();
                     if (sc != null)
@@ -275,7 +291,7 @@ public partial class LegacyHelper
                     }
                 }
 
-                if (helper != null)
+                if (ModConfig.Instance.shadeEnabled && helper != null)
                 {
                     var sc = helper.GetComponent<ShadeController>();
                     if (sc != null)

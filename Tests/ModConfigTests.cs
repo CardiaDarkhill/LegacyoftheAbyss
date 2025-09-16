@@ -14,6 +14,7 @@ public class ModConfigTests
         cfg.focusHornetHeal = 2;
         cfg.focusShadeHeal = 3;
         cfg.logDamage = true;
+        cfg.shadeEnabled = false;
         ModConfig.Save();
         var loaded = ModConfig.Load();
         Assert.Equal(1.5f, loaded.hornetDamageMultiplier, 3);
@@ -23,6 +24,9 @@ public class ModConfigTests
         Assert.Equal(2, loaded.focusHornetHeal);
         Assert.Equal(3, loaded.focusShadeHeal);
         Assert.True(loaded.logDamage);
+        Assert.False(loaded.shadeEnabled);
+        loaded.shadeEnabled = true;
+        ModConfig.Save();
 }
 
     [Fact]

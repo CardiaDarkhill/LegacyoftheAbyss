@@ -16,6 +16,7 @@ public class ModConfig
     public bool logMenu = true;
     public bool logShade = true;
     public bool logHud = true;
+    public bool shadeEnabled = true;
     public bool hornetKeyboardEnabled = false;
     public bool hornetControllerEnabled = true;
     public float hornetDamageMultiplier = 1f;

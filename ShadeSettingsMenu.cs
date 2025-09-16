@@ -55,6 +55,9 @@ public static class ShadeSettingsMenu
     private static readonly Color ButtonDisabledColor = new Color(1f, 1f, 1f, 0.15f);
     private static bool consumeNextToggle;
     private static readonly List<BindingMenuDriver> bindingDrivers = new();
+    private static ShadeToggleDriver shadeToggleDriver;
+
+    private static string GetShadeToggleLabel() => $"Shade Enabled: {(ModConfig.Instance.shadeEnabled ? "On" : "Off")}";
 
     private struct ShadowStyle
     {
@@ -311,6 +314,68 @@ public static class ShadeSettingsMenu
         }
     }
 
+    private sealed class ShadeToggleDriver : MonoBehaviour
+    {
+        private MenuButton button;
+        private Text uiText;
+        private Component tmpTextComponent;
+        private PropertyInfo tmpTextProperty;
+
+        public void Initialize(MenuButton menuButton)
+        {
+            button = menuButton;
+            uiText = button.GetComponentInChildren<Text>(true);
+            var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
+            if (tmpType != null)
+            {
+                tmpTextComponent = button.GetComponentInChildren(tmpType, true);
+                tmpTextProperty = tmpType.GetProperty("text");
+            }
+
+            button.OnSubmitPressed.RemoveAllListeners();
+            button.OnSubmitPressed.AddListener(ToggleShade);
+            shadeToggleDriver = this;
+            UpdateLabel();
+        }
+
+        private void OnEnable()
+        {
+            if (shadeToggleDriver == null)
+                shadeToggleDriver = this;
+            UpdateLabel();
+        }
+
+        public void UpdateLabel()
+        {
+            SetButtonText(GetShadeToggleLabel());
+        }
+
+        private void ToggleShade()
+        {
+            LegacyHelper.SetShadeEnabled(!ModConfig.Instance.shadeEnabled);
+        }
+
+        private void SetButtonText(string value)
+        {
+            if (uiText != null)
+            {
+                uiText.text = value;
+                return;
+            }
+
+            if (tmpTextComponent != null && tmpTextProperty != null)
+            {
+                tmpTextProperty.SetValue(tmpTextComponent, value);
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (shadeToggleDriver == this)
+                shadeToggleDriver = null;
+        }
+    }
+
     private static void RegisterBindingDriver(BindingMenuDriver driver)
     {
         if (driver != null && !bindingDrivers.Contains(driver))
@@ -336,6 +401,11 @@ public static class ShadeSettingsMenu
             }
             driver.UpdateLabel();
         }
+    }
+
+    internal static void NotifyShadeToggleChanged()
+    {
+        shadeToggleDriver?.UpdateLabel();
     }
 
     private static void ApplyDefaultPreset()
@@ -453,6 +523,36 @@ public static class ShadeSettingsMenu
         private void OnDisable()
         {
             SetActive(false, true);
+        }
+    }
+
+    private sealed class MenuFocusDriver : MonoBehaviour
+    {
+        public MenuScreen screen;
+
+        private void Update()
+        {
+            if (screen == null || !screen.gameObject.activeInHierarchy)
+                return;
+
+            var eventSystem = EventSystem.current;
+            if (eventSystem == null)
+                return;
+
+            var current = eventSystem.currentSelectedGameObject;
+            if (current != null && current.transform.IsChildOf(screen.transform))
+                return;
+
+            var highlight = GetPreferredHighlight(screen);
+            if (highlight == null)
+                return;
+
+            var selectable = highlight.GetFirstInteractable();
+            if (selectable == null)
+                return;
+
+            eventSystem.SetSelectedGameObject(selectable.gameObject);
+            UIManager.HighlightSelectableNoSound(selectable);
         }
     }
 
@@ -996,6 +1096,17 @@ public static class ShadeSettingsMenu
         }
     }
 
+    private static void SetAutomaticNavigation(Selectable selectable)
+    {
+        if (selectable == null)
+            return;
+
+        var navigation = selectable.navigation;
+        navigation.mode = Navigation.Mode.Automatic;
+        navigation.wrapAround = false;
+        selectable.navigation = navigation;
+    }
+
     private static Font FindFontInObject(GameObject root)
     {
         if (root == null)
@@ -1167,9 +1278,7 @@ public static class ShadeSettingsMenu
             valueTxt.text = FormatSliderValue(snapped, whole);
         });
 
-        var nav = slider.navigation;
-        nav.mode = Navigation.Mode.Explicit;
-        slider.navigation = nav;
+        SetAutomaticNavigation(slider);
 
         var rowLe = row.AddComponent<LayoutElement>();
         float baseHeight = 0f;
@@ -1210,6 +1319,7 @@ public static class ShadeSettingsMenu
         selectable.leftCursor = leftCursor;
         selectable.rightCursor = rightCursor;
         selectable.selectHighlight = selectHighlight;
+        SetAutomaticNavigation(selectable);
         return selectable;
     }
 
@@ -1283,9 +1393,7 @@ public static class ShadeSettingsMenu
         toggle.enabled = true;
         toggle.onValueChanged.AddListener(onChange.Invoke);
 
-        var toggleNav = toggle.navigation;
-        toggleNav.mode = Navigation.Mode.Explicit;
-        toggle.navigation = toggleNav;
+        SetAutomaticNavigation(toggle);
 
         var rowLe = row.AddComponent<LayoutElement>();
         float baseHeight = 0f;
@@ -1325,6 +1433,7 @@ public static class ShadeSettingsMenu
         selectable.leftCursor = leftCursor;
         selectable.rightCursor = rightCursor;
         selectable.selectHighlight = selectHighlight;
+        SetAutomaticNavigation(selectable);
         return selectable;
     }
 
@@ -1412,6 +1521,9 @@ public static class ShadeSettingsMenu
         }
         ms.transform.SetAsLastSibling();
         StripTemplateComponents(ms);
+
+        var focusDriver = ms.gameObject.GetComponent<MenuFocusDriver>() ?? ms.gameObject.AddComponent<MenuFocusDriver>();
+        focusDriver.screen = ms;
     }
 
     private static RectTransform CreateContentRoot(MenuScreen ms)
@@ -1523,6 +1635,16 @@ public static class ShadeSettingsMenu
             arr.SetValue(e, i);
         }
         entryField.SetValue(mbl, arr);
+
+        foreach (var selectable in selectables)
+        {
+            if (selectable is Selectable unitySelectable)
+                SetAutomaticNavigation(unitySelectable);
+        }
+
+        if (ms.backButton != null)
+            SetAutomaticNavigation(ms.backButton);
+
         mbl.SetupActive();
     }
 
@@ -1657,6 +1779,7 @@ public static class ShadeSettingsMenu
         layout.minWidth = 0f;
         layout.preferredWidth = 0f;
         layout.flexibleWidth = 1f;
+        SetAutomaticNavigation(btn);
         return btn;
     }
 
@@ -1699,6 +1822,17 @@ public static class ShadeSettingsMenu
         if (content == null)
             return;
         var selectables = new List<MenuSelectable>();
+        var shadeToggle = CreateMenuButton(content, buttonTemplate, GetShadeToggleLabel(), null, CancelTarget.PauseMenu);
+        if (shadeToggle is MenuButton toggleButton)
+        {
+            var driver = toggleButton.gameObject.AddComponent<ShadeToggleDriver>();
+            driver.Initialize(toggleButton);
+            selectables.Add(toggleButton);
+        }
+        else if (shadeToggle != null)
+        {
+            selectables.Add(shadeToggle);
+        }
         if (difficultyScreen != null)
         {
             var s = CreateMenuButton(content, buttonTemplate, "Difficulty", () => ShowScreen(difficultyScreen), CancelTarget.PauseMenu);
@@ -1790,17 +1924,17 @@ public static class ShadeSettingsMenu
         var presetRect = presetRow.AddComponent<RectTransform>();
         presetRect.SetParent(content, false);
         var presetLayout = presetRow.AddComponent<HorizontalLayoutGroup>();
-        presetLayout.spacing = 48f;
+        presetLayout.spacing = 56f;
         presetLayout.padding = new RectOffset(16, 16, 0, 0);
-        presetLayout.childControlWidth = false;
-        presetLayout.childControlHeight = true;
-        presetLayout.childForceExpandWidth = false;
+        presetLayout.childControlWidth = true;
+        presetLayout.childControlHeight = false;
+        presetLayout.childForceExpandWidth = true;
         presetLayout.childForceExpandHeight = false;
         presetLayout.childAlignment = TextAnchor.UpperCenter;
         var presetLayoutElement = presetRow.AddComponent<LayoutElement>();
         presetLayoutElement.minHeight = ButtonRowHeight * 1.75f;
-        presetLayoutElement.preferredHeight = ButtonRowHeight * 2.4f;
-        presetLayoutElement.flexibleHeight = 0f;
+        presetLayoutElement.preferredHeight = 0f;
+        presetLayoutElement.flexibleHeight = 1f;
 
         void AddPresetOption(string label, string description, System.Action onSubmit)
         {
@@ -1809,18 +1943,19 @@ public static class ShadeSettingsMenu
             optionRect.SetParent(presetRow.transform, false);
 
             var optionLayout = optionRoot.AddComponent<VerticalLayoutGroup>();
-            optionLayout.spacing = 12f;
-            optionLayout.padding = new RectOffset(8, 8, 0, 0);
+            optionLayout.spacing = 18f;
+            optionLayout.padding = new RectOffset(12, 12, 0, 0);
             optionLayout.childControlWidth = true;
-            optionLayout.childControlHeight = true;
+            optionLayout.childControlHeight = false;
             optionLayout.childForceExpandWidth = true;
             optionLayout.childForceExpandHeight = false;
             optionLayout.childAlignment = TextAnchor.UpperCenter;
 
             var optionLayoutElement = optionRoot.AddComponent<LayoutElement>();
-            optionLayoutElement.minWidth = 320f;
-            optionLayoutElement.preferredWidth = 360f;
+            optionLayoutElement.minWidth = 360f;
+            optionLayoutElement.preferredWidth = 420f;
             optionLayoutElement.flexibleWidth = 1f;
+            optionLayoutElement.flexibleHeight = 1f;
 
             var selectable = CreateMenuButton(optionRoot.transform, buttonTemplate, label, onSubmit, CancelTarget.ShadeMain);
             if (selectable is MenuButton button)
@@ -1842,6 +1977,9 @@ public static class ShadeSettingsMenu
             var descriptionObject = new GameObject("Description");
             var descriptionRect = descriptionObject.AddComponent<RectTransform>();
             descriptionRect.SetParent(optionRoot.transform, false);
+            descriptionRect.anchorMin = new Vector2(0f, 1f);
+            descriptionRect.anchorMax = new Vector2(1f, 1f);
+            descriptionRect.pivot = new Vector2(0.5f, 1f);
             var descriptionText = descriptionObject.AddComponent<Text>();
             ApplyTextStyle(descriptionText, sliderLabelStyle, TextAnchor.UpperCenter, Color.white);
             descriptionText.horizontalOverflow = HorizontalWrapMode.Wrap;
@@ -1850,7 +1988,7 @@ public static class ShadeSettingsMenu
             var descriptionLayout = descriptionObject.AddComponent<LayoutElement>();
             descriptionLayout.minHeight = 0f;
             descriptionLayout.preferredHeight = 0f;
-            descriptionLayout.flexibleHeight = 0f;
+            descriptionLayout.flexibleHeight = 1f;
             var fitter = descriptionObject.AddComponent<ContentSizeFitter>();
             fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
             fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -2042,6 +2180,7 @@ public static class ShadeSettingsMenu
         {
             if (previous != null && previous != mainScreen)
                 consumeNextToggle = true;
+            NotifyShadeToggleChanged();
         }
         else if (target != null && target != mainScreen)
         {
@@ -2425,6 +2564,7 @@ public static class ShadeSettingsMenu
         {
             pauseSelectable.targetGraphic = background;
             ApplyButtonColors(pauseSelectable);
+            SetAutomaticNavigation(pauseSelectable);
         }
 
         foreach (var cond in go.GetComponents<MenuButtonListCondition>())
