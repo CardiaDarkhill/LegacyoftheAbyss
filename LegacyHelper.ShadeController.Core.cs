@@ -92,12 +92,6 @@ public partial class LegacyHelper
         private float nailTimer;
         internal static bool suppressActivateOnSlash;
         internal static Transform expectedSlashParent;
-        private const KeyCode FireKey = KeyCode.Space;
-        private const KeyCode NailKey = KeyCode.J;
-        private const KeyCode TeleportKey = KeyCode.K;
-        private const KeyCode SprintKeyPrimary = KeyCode.LeftShift;
-        private const KeyCode SprintKeySecondary = KeyCode.RightShift;
-        private const KeyCode DamageToggleKey = KeyCode.Alpha0;
 
         private struct AxisLeashLimits
         {
@@ -125,7 +119,7 @@ public partial class LegacyHelper
         private Vector2 capturedMoveInput;
         private float capturedHorizontalInput;
         private bool capturedSprintHeld;
-        // Spells use FireKey + W (Shriek) or FireKey + S (Descending Dark)
+        // Spells use Fire + Up (Shriek) or Fire + Down (Descending Dark)
 
         // Teleport channel
         private bool isChannelingTeleport;
@@ -162,7 +156,6 @@ public partial class LegacyHelper
         public float quakeCooldown = 1.1f;
         
         // Focus (heal) ability
-        private const KeyCode FocusKey = KeyCode.H; // hold to focus
         public int focusSoulCost = 33;
         public float focusChannelTime = 1.25f;
         private bool isFocusing;
@@ -572,7 +565,7 @@ public partial class LegacyHelper
 
             if (hazardCooldown > 0f) hazardCooldown = Mathf.Max(0f, hazardCooldown - Time.deltaTime);
             if (hurtCooldown > 0f) hurtCooldown = Mathf.Max(0f, hurtCooldown - Time.deltaTime);
-            if (Input.GetKeyDown(DamageToggleKey))
+            if (ShadeInput.WasActionPressed(ShadeAction.DamageToggle))
             {
                 canTakeDamage = !canTakeDamage;
                 if (ModConfig.Instance.logShade)
@@ -699,17 +692,18 @@ public partial class LegacyHelper
 
         private void CaptureMovementInput()
         {
-            float h = (Input.GetKey(KeyCode.A) ? -1f : 0f) + (Input.GetKey(KeyCode.D) ? 1f : 0f);
-            float v = (Input.GetKey(KeyCode.S) ? -1f : 0f) + (Input.GetKey(KeyCode.W) ? 1f : 0f);
-            Vector2 input = new Vector2(h, v);
-            if (input.sqrMagnitude > 1f) input.Normalize();
+            float left = ShadeInput.GetActionValue(ShadeAction.MoveLeft);
+            float right = ShadeInput.GetActionValue(ShadeAction.MoveRight);
+            float up = ShadeInput.GetActionValue(ShadeAction.MoveUp);
+            float down = ShadeInput.GetActionValue(ShadeAction.MoveDown);
+            Vector2 input = new Vector2(right - left, up - down);
+            if (input.sqrMagnitude > 1f)
+                input.Normalize();
             if (isChannelingTeleport)
                 input = Vector2.zero;
             capturedMoveInput = input;
-            capturedHorizontalInput = h;
-            capturedSprintHeld = sprintUnlocked &&
-                                 (Input.GetKey(SprintKeyPrimary) || Input.GetKey(SprintKeySecondary)) &&
-                                 input.sqrMagnitude > 0f;
+            capturedHorizontalInput = Mathf.Clamp(input.x, -1f, 1f);
+            capturedSprintHeld = sprintUnlocked && ShadeInput.IsActionHeld(ShadeAction.Sprint) && input.sqrMagnitude > 0f;
         }
 
         private static bool GameIsPaused()
@@ -1151,9 +1145,9 @@ public partial class LegacyHelper
         private void HandleFire()
         {
             fireTimer -= Time.deltaTime;
-            if (!Input.GetKey(FireKey) || fireTimer > 0f) return;
+            if (!ShadeInput.IsActionHeld(ShadeAction.Fire) || fireTimer > 0f) return;
             // If aiming a spell with up/down, don't fire projectile
-            if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.S)) return;
+            if (ShadeInput.IsActionHeld(ShadeAction.MoveUp) || ShadeInput.IsActionHeld(ShadeAction.MoveDown)) return;
             if (!IsProjectileUnlocked()) return;
             if (shadeSoul < projectileSoulCost) return;
             fireTimer = fireCooldown;
@@ -1166,8 +1160,8 @@ public partial class LegacyHelper
         private void HandleShriek()
         {
             shriekTimer -= Time.deltaTime;
-            // Trigger on FireKey + Up
-            if (!Input.GetKeyDown(FireKey) || !Input.GetKey(KeyCode.W)) return;
+            // Trigger on Fire + Up
+            if (!ShadeInput.WasActionPressed(ShadeAction.Fire) || !ShadeInput.IsActionHeld(ShadeAction.MoveUp)) return;
             if (!IsShriekUnlocked()) return; // locked until 3rd unlock
             if (shriekTimer > 0f) return;
             if (shadeSoul < shriekSoulCost) return;
@@ -1240,8 +1234,8 @@ public partial class LegacyHelper
         private void HandleDescendingDark()
         {
             quakeTimer -= Time.deltaTime;
-            // Trigger on FireKey + Down
-            if (!Input.GetKeyDown(FireKey) || !Input.GetKey(KeyCode.S)) return;
+            // Trigger on Fire + Down
+            if (!ShadeInput.WasActionPressed(ShadeAction.Fire) || !ShadeInput.IsActionHeld(ShadeAction.MoveDown)) return;
             if (!IsDescendingDarkUnlocked()) return; // locked until 2nd unlock
             if (quakeTimer > 0f) return;
             if (shadeSoul < quakeSoulCost) return;
@@ -2143,7 +2137,7 @@ public partial class LegacyHelper
             if (isFocusing)
             {
                 // Cancel if key released or interrupted by teleport
-                if (!Input.GetKey(FocusKey) || isChannelingTeleport || inHardLeash || isInactive)
+                if (!ShadeInput.IsActionHeld(ShadeAction.Focus) || isChannelingTeleport || inHardLeash || isInactive)
                 {
                     CancelFocus();
                     return;
@@ -2238,7 +2232,7 @@ public partial class LegacyHelper
             }
 
             // Start focus when holding key with enough soul and missing HP
-            if (!Input.GetKey(FocusKey)) return;
+            if (!ShadeInput.IsActionHeld(ShadeAction.Focus)) return;
             if (isCastingSpell || isChannelingTeleport || inHardLeash || isInactive) return;
             if (shadeHP >= shadeMaxHP) return; // already full
             if (shadeSoul < focusSoulCost) return; // not enough soul
@@ -2770,7 +2764,7 @@ public partial class LegacyHelper
             teleportCooldownTimer = Mathf.Max(0f, teleportCooldownTimer - Time.deltaTime);
 
             // Start channel
-            if (!isChannelingTeleport && teleportCooldownTimer <= 0f && Input.GetKeyDown(TeleportKey))
+            if (!isChannelingTeleport && teleportCooldownTimer <= 0f && ShadeInput.WasActionPressed(ShadeAction.Teleport))
             {
                 isChannelingTeleport = true;
                 teleportChannelTimer = teleportChannelTime;
@@ -2799,7 +2793,8 @@ public partial class LegacyHelper
             }
 
             // Cancel on movement or attack input
-            if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(0) || Input.GetKeyDown(NailKey) || Input.GetKeyDown(FireKey))
+            if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(0) ||
+                ShadeInput.WasActionPressed(ShadeAction.Nail) || ShadeInput.WasActionPressed(ShadeAction.Fire))
             {
                 isChannelingTeleport = false;
                 try { if (sr) { var c = sr.color; c.a = 0.9f; sr.color = c; } } catch { }

@@ -1,3 +1,4 @@
+using UnityEngine;
 using Xunit;
 
 public class ModConfigTests
@@ -22,5 +23,19 @@ public class ModConfigTests
         Assert.Equal(2, loaded.focusHornetHeal);
         Assert.Equal(3, loaded.focusShadeHeal);
         Assert.True(loaded.logDamage);
+}
+
+    [Fact]
+    public void ShadeBindingRebindPersists()
+    {
+        var cfg = ModConfig.Instance;
+        cfg.shadeInput.ResetToDefaults();
+        cfg.shadeInput.SetBindingOption(ShadeAction.Nail, false, ShadeBindingOption.FromKey(KeyCode.P));
+        cfg.shadeInput.SetBindingOption(ShadeAction.Nail, true, ShadeBindingOption.None());
+        ModConfig.Save();
+        var loaded = ModConfig.Load();
+        var binding = loaded.shadeInput.GetBinding(ShadeAction.Nail);
+        Assert.Equal(ShadeBindingOptionType.Key, binding.primary.type);
+        Assert.Equal(KeyCode.P, binding.primary.key);
     }
 }

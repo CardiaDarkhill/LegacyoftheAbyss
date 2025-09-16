@@ -22,6 +22,7 @@ public class ModConfig
     public int bindShadeHeal = 2;
     public int focusHornetHeal = 1;
     public int focusShadeHeal = 1;
+    public ShadeInputConfig shadeInput = ShadeInputConfig.CreateDefault();
 
     private static ModConfig instance;
 
@@ -41,6 +42,7 @@ public class ModConfig
                 instance = new ModConfig();
                 Save();
             }
+            instance.shadeInput ??= ShadeInputConfig.CreateDefault();
         }
         catch
         {

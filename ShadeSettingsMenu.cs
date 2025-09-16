@@ -54,6 +54,7 @@ public static class ShadeSettingsMenu
     private static readonly Color ButtonPressedColor = new Color(0.95f, 0.9f, 0.8f, 0.45f);
     private static readonly Color ButtonDisabledColor = new Color(1f, 1f, 1f, 0.15f);
     private static bool consumeNextToggle;
+    private static readonly List<BindingMenuDriver> bindingDrivers = new();
 
     private struct ShadowStyle
     {
@@ -210,6 +211,145 @@ public static class ShadeSettingsMenu
             toggle.isOn = !toggle.isOn;
             eventData?.Use();
         }
+    }
+
+    private sealed class BindingMenuDriver : MonoBehaviour
+    {
+        private MenuButton button;
+        private ShadeAction action;
+        private bool secondary;
+        private string labelPrefix;
+        private Text uiText;
+        private Component tmpTextComponent;
+        private PropertyInfo tmpTextProperty;
+        private bool capturing;
+
+        public void Initialize(MenuButton menuButton, ShadeAction targetAction, bool isSecondary, string label)
+        {
+            button = menuButton;
+            action = targetAction;
+            secondary = isSecondary;
+            labelPrefix = label;
+            uiText = button.GetComponentInChildren<Text>(true);
+            var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
+            if (tmpType != null)
+            {
+                tmpTextComponent = button.GetComponentInChildren(tmpType, true);
+                tmpTextProperty = tmpType.GetProperty("text");
+            }
+
+            button.OnSubmitPressed.RemoveAllListeners();
+            button.OnSubmitPressed.AddListener(BeginCapture);
+            RegisterBindingDriver(this);
+            UpdateLabel();
+        }
+
+        public void UpdateLabel()
+        {
+            string bindingText = ShadeInput.DescribeBindingOption(ShadeInput.GetBindingOption(action, secondary));
+            SetButtonText($"{labelPrefix}: {bindingText}");
+        }
+
+        private void SetButtonText(string value)
+        {
+            if (uiText != null)
+            {
+                uiText.text = value;
+                return;
+            }
+            if (tmpTextComponent != null && tmpTextProperty != null)
+            {
+                tmpTextProperty.SetValue(tmpTextComponent, value);
+            }
+        }
+
+        private void BeginCapture()
+        {
+            if (!capturing)
+                StartCoroutine(CaptureRoutine());
+        }
+
+        private System.Collections.IEnumerator CaptureRoutine()
+        {
+            capturing = true;
+            SetButtonText($"{labelPrefix}: Press a binding... (Esc cancels, Backspace clears)");
+            while (true)
+            {
+                yield return null;
+                if (Input.GetKeyDown(KeyCode.Escape))
+                    break;
+                if (Input.GetKeyDown(KeyCode.Backspace) || Input.GetKeyDown(KeyCode.Delete))
+                {
+                    ShadeInput.SetBindingOption(action, secondary, ShadeBindingOption.None());
+                    ModConfig.Save();
+                    NotifyBindingChanged();
+                    break;
+                }
+                if (ShadeInput.TryCaptureKey(out var key))
+                {
+                    ShadeInput.SetBindingOption(action, secondary, ShadeBindingOption.FromKey(key));
+                    ModConfig.Save();
+                    NotifyBindingChanged();
+                    break;
+                }
+                if (ShadeInput.TryCaptureControl(out var control, out int deviceIndex))
+                {
+                    ShadeInput.SetBindingOption(action, secondary, ShadeBindingOption.FromControl(control, deviceIndex));
+                    ShadeInput.EnsureControllerIndex(deviceIndex);
+                    ModConfig.Save();
+                    NotifyBindingChanged();
+                    break;
+                }
+            }
+            capturing = false;
+            UpdateLabel();
+        }
+
+        private void OnDestroy()
+        {
+            UnregisterBindingDriver(this);
+        }
+    }
+
+    private static void RegisterBindingDriver(BindingMenuDriver driver)
+    {
+        if (driver != null && !bindingDrivers.Contains(driver))
+            bindingDrivers.Add(driver);
+    }
+
+    private static void UnregisterBindingDriver(BindingMenuDriver driver)
+    {
+        if (driver == null)
+            return;
+        bindingDrivers.Remove(driver);
+    }
+
+    internal static void NotifyBindingChanged()
+    {
+        for (int i = bindingDrivers.Count - 1; i >= 0; i--)
+        {
+            var driver = bindingDrivers[i];
+            if (driver == null)
+            {
+                bindingDrivers.RemoveAt(i);
+                continue;
+            }
+            driver.UpdateLabel();
+        }
+    }
+
+    private static void ApplySharedKeyboardPreset()
+    {
+        ShadeInput.Config.ApplySharedKeyboardPreset();
+        ModConfig.Save();
+        NotifyBindingChanged();
+    }
+
+    private static void RestoreDefaultBindings()
+    {
+        ShadeInput.Config.ResetToDefaults();
+        ModConfig.Save();
+        NotifyBindingChanged();
     }
 
     private sealed class RowHighlightDriver : MonoBehaviour, ISelectHandler, IDeselectHandler, IPointerEnterHandler, IPointerExitHandler
@@ -1542,22 +1682,72 @@ public static class ShadeSettingsMenu
         LayoutRebuilder.ForceRebuildLayoutImmediate(content);
     }
 
-    private static void BuildControlsMenu(UIManager ui, MenuScreen ms)
+    private static void BuildControlsMenu(UIManager ui, MenuScreen ms, MenuButton buttonTemplate)
     {
-        if (ms == null)
+        if (ms == null || buttonTemplate == null)
             return;
         var content = CreateContentRoot(ms);
         if (content == null)
             return;
+
+        bindingDrivers.Clear();
+
         var info = new GameObject("ControlsInfo");
         info.transform.SetParent(content, false);
-        var text = info.AddComponent<Text>();
-        ApplyTextStyle(text, sliderLabelStyle, TextAnchor.MiddleCenter, Color.white);
-        text.text = "Controller configuration options will appear here in a future update.";
-        var layout = info.AddComponent<LayoutElement>();
-        layout.preferredHeight = 40f;
-        SetupButtonList(ms, new List<MenuSelectable>());
-        if (ms.backButton != null)
+        var infoText = info.AddComponent<Text>();
+        ApplyTextStyle(infoText, sliderLabelStyle, TextAnchor.MiddleCenter, Color.white);
+        infoText.text = "Select a binding to change it. Press Backspace to clear or press a controller button to bind.";
+        var infoLayout = info.AddComponent<LayoutElement>();
+        infoLayout.preferredHeight = 60f;
+
+        var selectables = new List<MenuSelectable>();
+
+        void AddBindingButton(ShadeAction action, string label, bool secondary)
+        {
+            var selectable = CreateMenuButton(content, buttonTemplate, string.Empty, null, CancelTarget.ShadeMain);
+            if (selectable is MenuButton btn)
+            {
+                var driver = btn.gameObject.AddComponent<BindingMenuDriver>();
+                driver.Initialize(btn, action, secondary, label);
+                selectables.Add(btn);
+            }
+        }
+
+        void AddBindingRow(ShadeAction action, string label)
+        {
+            AddBindingButton(action, label + " (Primary)", false);
+            AddBindingButton(action, label + " (Alt)", true);
+        }
+
+        AddBindingRow(ShadeAction.MoveLeft, "Move Left");
+        AddBindingRow(ShadeAction.MoveRight, "Move Right");
+        AddBindingRow(ShadeAction.MoveUp, "Move Up");
+        AddBindingRow(ShadeAction.MoveDown, "Move Down");
+        AddBindingRow(ShadeAction.Nail, "Nail Attack");
+        AddBindingRow(ShadeAction.Fire, "Spellcast");
+        AddBindingRow(ShadeAction.Teleport, "Teleport");
+        AddBindingRow(ShadeAction.Focus, "Focus");
+        AddBindingRow(ShadeAction.Sprint, "Sprint");
+        AddBindingRow(ShadeAction.DamageToggle, "Toggle Damage");
+
+        void AddSimpleButton(string label, System.Action onSubmit)
+        {
+            var selectable = CreateMenuButton(content, buttonTemplate, label, onSubmit, CancelTarget.ShadeMain);
+            if (selectable != null)
+                selectables.Add(selectable);
+        }
+
+        AddSimpleButton("Preset: Shared Keyboard", ApplySharedKeyboardPreset);
+        AddSimpleButton("Restore Defaults", RestoreDefaultBindings);
+
+        SetupButtonList(ms, selectables);
+        if (selectables.Count > 0)
+        {
+            var first = selectables[0];
+            screenFirstSelectables[ms] = first;
+            ms.defaultHighlight = first;
+        }
+        else if (ms.backButton != null)
         {
             screenFirstSelectables[ms] = ms.backButton;
             ms.defaultHighlight = ms.backButton;
@@ -1835,7 +2025,7 @@ public static class ShadeSettingsMenu
 
         BuildMainMenu(ui, mainScreen, buttonTemplate);
         BuildDifficultyMenu(ui, difficultyScreen, sliderTemplate, buttonTemplate);
-        BuildControlsMenu(ui, controlsScreen);
+        BuildControlsMenu(ui, controlsScreen, buttonTemplate);
         BuildLoggingMenu(ui, loggingScreen, toggleTemplate, buttonTemplate);
 
         if (createdSliderTemplate && sliderTemplate != null)
