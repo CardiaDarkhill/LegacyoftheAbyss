@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
 using InControl;
@@ -358,34 +359,124 @@ public partial class LegacyHelper
 
     private static class InputDeviceBlocker
     {
-        private static void UpdateExcludedDevices(InputHandler handler, InputDevice device, bool exclude)
+        private static readonly HashSet<InputDevice> trackedShadeDevices = new();
+        private static readonly List<InputDevice> cleanupList = new();
+
+        private static void UpdateDeviceState(InputHandler handler, InputDevice device, bool exclude)
         {
-            if (handler == null || device == null || device == InputDevice.Null)
+            if (device == null || device == InputDevice.Null)
                 return;
+
             try
             {
-                var actions = handler.inputActions;
-                if (actions == null)
-                    return;
-                var list = actions.ExcludeDevices;
-                if (list == null)
-                    return;
-                bool contains = list.Contains(device);
-                if (exclude)
+                var actions = handler != null ? handler.inputActions : null;
+                if (actions != null)
                 {
-                    if (!contains)
-                        list.Add(device);
-                    if (actions.Device == device)
-                        actions.Device = null;
-                }
-                else if (contains)
-                {
-                    list.Remove(device);
+                    var list = actions.ExcludeDevices;
+                    if (list != null)
+                    {
+                        bool contains = list.Contains(device);
+                        if (exclude)
+                        {
+                            if (!contains)
+                                list.Add(device);
+                            if (actions.Device == device)
+                                actions.Device = null;
+                        }
+                        else if (contains)
+                        {
+                            list.Remove(device);
+                        }
+                    }
                 }
             }
             catch
             {
             }
+
+            ApplyPassive(device, exclude);
+        }
+
+        private static void ApplyPassive(InputDevice device, bool passive)
+        {
+            if (device == null || device == InputDevice.Null)
+                return;
+
+            try
+            {
+                if (passive)
+                {
+                    bool added = trackedShadeDevices.Add(device);
+                    if (added || !device.Passive)
+                    {
+                        device.Passive = true;
+                    }
+                }
+                else if (trackedShadeDevices.Remove(device))
+                {
+                    if (device.Passive)
+                        device.Passive = false;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private static void ReleaseTrackedDevices(InputHandler handler)
+        {
+            if (trackedShadeDevices.Count == 0)
+                return;
+
+            cleanupList.Clear();
+            cleanupList.AddRange(trackedShadeDevices);
+            foreach (var device in cleanupList)
+            {
+                UpdateDeviceState(handler, device, false);
+            }
+            cleanupList.Clear();
+        }
+
+        private static void CleanupDetachedDevices(InputHandler handler, IList<InputDevice> devices)
+        {
+            if (trackedShadeDevices.Count == 0)
+                return;
+
+            cleanupList.Clear();
+            foreach (var device in trackedShadeDevices)
+            {
+                if (device == null || device == InputDevice.Null)
+                {
+                    cleanupList.Add(device);
+                    continue;
+                }
+
+                if (devices == null || !ContainsDevice(devices, device))
+                {
+                    cleanupList.Add(device);
+                }
+            }
+
+            if (cleanupList.Count > 0)
+            {
+                foreach (var device in cleanupList)
+                {
+                    UpdateDeviceState(handler, device, false);
+                }
+                cleanupList.Clear();
+            }
+        }
+
+        private static bool ContainsDevice(IList<InputDevice> list, InputDevice device)
+        {
+            if (list == null || device == null || device == InputDevice.Null)
+                return false;
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i] == device)
+                    return true;
+            }
+            return false;
         }
 
         private static bool ShadeUsesAllControllers(ShadeInputConfig config, int targetIndex, int deviceCount)
@@ -402,15 +493,62 @@ public partial class LegacyHelper
             return true;
         }
 
-        internal static bool ShouldIgnoreDevice(InputHandler handler, InputDevice device)
+        internal static void RefreshShadeDevices(InputHandler handler)
         {
-            if (device == null || device == InputDevice.Null)
-                return false;
+            if (!InputManager.IsSetup)
+            {
+                ReleaseTrackedDevices(handler);
+                return;
+            }
 
-            bool ignore = false;
             try
             {
-                if (!device.IsUnknown)
+                if (handler == null)
+                {
+                    ReleaseTrackedDevices(null);
+                    return;
+                }
+
+                var cfg = ModConfig.Instance;
+                if (cfg == null || !cfg.hornetControllerEnabled)
+                {
+                    ReleaseTrackedDevices(handler);
+                    return;
+                }
+
+                var shadeConfig = cfg.shadeInput;
+                if (shadeConfig == null || !shadeConfig.UsesControllerBindings())
+                {
+                    ReleaseTrackedDevices(handler);
+                    return;
+                }
+
+                var devices = InputManager.Devices;
+                if (devices == null || devices.Count == 0)
+                {
+                    ReleaseTrackedDevices(handler);
+                    return;
+                }
+
+                for (int i = 0; i < devices.Count; i++)
+                {
+                    ShouldIgnoreDevice(handler, devices[i]);
+                }
+
+                CleanupDetachedDevices(handler, devices);
+            }
+            catch
+            {
+            }
+        }
+
+        internal static bool ShouldIgnoreDevice(InputHandler handler, InputDevice device)
+        {
+            bool ignore = false;
+
+            try
+            {
+                if (device != null && device != InputDevice.Null && !device.IsUnknown)
                 {
                     var cfg = ModConfig.Instance;
                     if (cfg != null && cfg.hornetControllerEnabled)
@@ -436,13 +574,13 @@ public partial class LegacyHelper
                 ignore = false;
             }
 
-            UpdateExcludedDevices(handler, device, ignore);
+            UpdateDeviceState(handler, device, ignore);
             return ignore;
         }
 
         internal static void ReleaseDevice(InputHandler handler, InputDevice device)
         {
-            UpdateExcludedDevices(handler, device, false);
+            UpdateDeviceState(handler, device, false);
         }
 
         internal static void EnsureLastActiveController(InputHandler handler)
@@ -459,6 +597,21 @@ public partial class LegacyHelper
                     handler.lastActiveController = actions.LastInputType;
                     handler.lastInputDeviceStyle = actions.LastDeviceStyle;
                 }
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(InputManager), "UpdateActiveDevice")]
+    private class InputManager_UpdateActiveDevice_BlockShadeDevices
+    {
+        private static void Prefix()
+        {
+            try
+            {
+                InputDeviceBlocker.RefreshShadeDevices(InputHandler.UnsafeInstance);
             }
             catch
             {
