@@ -122,9 +122,14 @@ public static class ShadeSettingsMenu
             {
                 ShowMainMenu();
             }
-            else if (builtFor != null)
+            else
             {
-                HideImmediate(builtFor);
+                var ui = builtFor ?? UIManager.instance;
+                if (ui != null)
+                {
+                    bool consumeToggle = activeScreen != null && activeScreen != mainScreen;
+                    HideImmediate(ui, consumeToggle);
+                }
             }
         }
     }
@@ -1107,6 +1112,30 @@ public static class ShadeSettingsMenu
         selectable.navigation = navigation;
     }
 
+    private static void ConfigureHorizontalNavigation(IList<MenuButton> buttons)
+    {
+        if (buttons == null || buttons.Count == 0)
+            return;
+
+        for (int i = 0; i < buttons.Count; i++)
+        {
+            var button = buttons[i];
+            if (button == null)
+                continue;
+
+            var navigation = button.navigation;
+            var up = navigation.selectOnUp;
+            var down = navigation.selectOnDown;
+            navigation.mode = Navigation.Mode.Explicit;
+            navigation.wrapAround = false;
+            navigation.selectOnLeft = i > 0 ? buttons[i - 1] : navigation.selectOnLeft;
+            navigation.selectOnRight = i < buttons.Count - 1 ? buttons[i + 1] : navigation.selectOnRight;
+            navigation.selectOnUp = up;
+            navigation.selectOnDown = down;
+            button.navigation = navigation;
+        }
+    }
+
     private static Font FindFontInObject(GameObject root)
     {
         if (root == null)
@@ -1932,6 +1961,7 @@ public static class ShadeSettingsMenu
         infoLayout.preferredHeight = 48f;
 
         var selectables = new List<MenuSelectable>();
+        var presetButtons = new List<MenuButton>();
 
         var presetRow = new GameObject("PresetOptions");
         var presetRect = presetRow.AddComponent<RectTransform>();
@@ -1996,6 +2026,7 @@ public static class ShadeSettingsMenu
                     layout.flexibleWidth = 1f;
                 }
                 selectables.Add(button);
+                presetButtons.Add(button);
             }
             else if (selectable != null)
             {
@@ -2130,6 +2161,7 @@ public static class ShadeSettingsMenu
         }
 
         SetupButtonList(ms, selectables);
+        ConfigureHorizontalNavigation(presetButtons);
         if (selectables.Count > 0)
         {
             var first = selectables[0];
@@ -2248,8 +2280,8 @@ public static class ShadeSettingsMenu
             return true;
         }
 
-        HideImmediate(ui);
-        return true;
+        HideImmediate(ui, consumeToggle: false);
+        return false;
     }
 
     private static void Build(UIManager ui)
@@ -2672,12 +2704,12 @@ public static class ShadeSettingsMenu
         yield break;
     }
 
-    internal static void HideImmediate(UIManager ui)
+    internal static void HideImmediate(UIManager ui, bool consumeToggle = true)
     {
+        consumeNextToggle = consumeToggle;
         if (allScreens.Count == 0)
             return;
         LogMenuInfo("Hiding Shade settings page");
-        consumeNextToggle = true;
         foreach (var ms in allScreens)
         {
             if (ms != null)

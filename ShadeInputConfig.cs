@@ -191,6 +191,55 @@ public class ShadeInputConfig
         assistMode = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightStickButton), ShadeBindingOption.None());
     }
 
+    private static bool BindingUsesController(ShadeBinding binding)
+    {
+        if (binding == null)
+            return false;
+        return binding.primary.type == ShadeBindingOptionType.Controller || binding.secondary.type == ShadeBindingOptionType.Controller;
+    }
+
+    private static bool OptionUsesControllerIndex(ShadeBindingOption option, int fallbackIndex, int targetIndex)
+    {
+        if (option.type != ShadeBindingOptionType.Controller)
+            return false;
+        int actualIndex = option.controllerDevice >= 0 ? option.controllerDevice : fallbackIndex;
+        return actualIndex == targetIndex;
+    }
+
+    private static bool BindingUsesControllerIndex(ShadeBinding binding, int fallbackIndex, int targetIndex)
+    {
+        if (binding == null)
+            return false;
+        return OptionUsesControllerIndex(binding.primary, fallbackIndex, targetIndex) || OptionUsesControllerIndex(binding.secondary, fallbackIndex, targetIndex);
+    }
+
+    public bool UsesControllerBindings()
+    {
+        return BindingUsesController(moveLeft) || BindingUsesController(moveRight) || BindingUsesController(moveUp) ||
+               BindingUsesController(moveDown) || BindingUsesController(fire) || BindingUsesController(nail) ||
+               BindingUsesController(nailUp) || BindingUsesController(nailDown) || BindingUsesController(teleport) ||
+               BindingUsesController(focus) || BindingUsesController(sprint) || BindingUsesController(assistMode);
+    }
+
+    public bool IsControllerIndexInUse(int index)
+    {
+        if (index < 0)
+            return false;
+        int fallbackIndex = Mathf.Max(-1, controllerDeviceIndex);
+        return BindingUsesControllerIndex(moveLeft, fallbackIndex, index) ||
+               BindingUsesControllerIndex(moveRight, fallbackIndex, index) ||
+               BindingUsesControllerIndex(moveUp, fallbackIndex, index) ||
+               BindingUsesControllerIndex(moveDown, fallbackIndex, index) ||
+               BindingUsesControllerIndex(fire, fallbackIndex, index) ||
+               BindingUsesControllerIndex(nail, fallbackIndex, index) ||
+               BindingUsesControllerIndex(nailUp, fallbackIndex, index) ||
+               BindingUsesControllerIndex(nailDown, fallbackIndex, index) ||
+               BindingUsesControllerIndex(teleport, fallbackIndex, index) ||
+               BindingUsesControllerIndex(focus, fallbackIndex, index) ||
+               BindingUsesControllerIndex(sprint, fallbackIndex, index) ||
+               BindingUsesControllerIndex(assistMode, fallbackIndex, index);
+    }
+
     public ShadeBinding GetBinding(ShadeAction action) => action switch
     {
         ShadeAction.MoveLeft => moveLeft,

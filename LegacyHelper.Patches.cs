@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Reflection;
 using HarmonyLib;
+using InControl;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -352,6 +353,101 @@ public partial class LegacyHelper
             {
                 return true;
             }
+        }
+    }
+
+    private static class InputDeviceBlocker
+    {
+        internal static bool ShouldIgnoreDevice(InputHandler handler, InputDevice device)
+        {
+            if (device == null || device == InputDevice.Null)
+                return false;
+            try
+            {
+                var cfg = ModConfig.Instance;
+                if (cfg == null || !cfg.hornetControllerEnabled)
+                    return false;
+                if (handler != null && handler.gameController == device)
+                    return false;
+                var shadeConfig = cfg.shadeInput;
+                if (shadeConfig == null || !shadeConfig.UsesControllerBindings())
+                    return false;
+                var devices = InputManager.Devices;
+                if (devices == null || devices.Count <= 1)
+                    return false;
+                int index = -1;
+                for (int i = 0; i < devices.Count; i++)
+                {
+                    if (devices[i] == device)
+                    {
+                        index = i;
+                        break;
+                    }
+                }
+                if (index < 0)
+                    return false;
+                return shadeConfig.IsControllerIndexInUse(index);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        internal static void EnsureLastActiveController(InputHandler handler)
+        {
+            if (handler == null)
+                return;
+            try
+            {
+                var actions = handler.inputActions;
+                if (actions == null)
+                    return;
+                if (handler.lastActiveController == BindingSourceType.None)
+                {
+                    handler.lastActiveController = actions.LastInputType;
+                    handler.lastInputDeviceStyle = actions.LastDeviceStyle;
+                }
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(InputHandler), nameof(InputHandler.UpdateActiveController))]
+    private class InputHandler_UpdateActiveController_BlockShadeDevice
+    {
+        private static bool Prefix(InputHandler __instance)
+        {
+            try
+            {
+                if (!InputDeviceBlocker.ShouldIgnoreDevice(__instance, InputManager.ActiveDevice))
+                    return true;
+                InputDeviceBlocker.EnsureLastActiveController(__instance);
+                return false;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(InputHandler), "ControllerActivated")]
+    private class InputHandler_ControllerActivated_BlockShadeDevice
+    {
+        private static bool Prefix(InputHandler __instance, InputDevice inputDevice)
+        {
+            try
+            {
+                if (InputDeviceBlocker.ShouldIgnoreDevice(__instance, inputDevice))
+                    return false;
+            }
+            catch
+            {
+            }
+            return true;
         }
     }
 
