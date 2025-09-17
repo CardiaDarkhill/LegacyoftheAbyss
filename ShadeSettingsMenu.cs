@@ -1943,7 +1943,7 @@ public static class ShadeSettingsMenu
         presetRect.offsetMax = Vector2.zero;
         var presetLayout = presetRow.AddComponent<HorizontalLayoutGroup>();
         float presetSpacing = Mathf.Clamp(Screen.width * 0.035f, 32f, 90f);
-        int sidePadding = Mathf.RoundToInt(Mathf.Clamp(Screen.width * 0.04f, 36f, 120f));
+        int sidePadding = Mathf.RoundToInt(Mathf.Clamp(Screen.width * 0.04f, 36f, -80f));
         float presetCardPreferredWidth = Mathf.Clamp(Screen.width * 0.22f, 260f, 430f);
         float presetCardMinWidth = Mathf.Clamp(Screen.width * 0.16f, 200f, presetCardPreferredWidth);
         presetLayout.spacing = presetSpacing;
