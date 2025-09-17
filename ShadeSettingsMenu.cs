@@ -1909,10 +1909,16 @@ public static class ShadeSettingsMenu
 
         bindingDrivers.Clear();
 
+        float horizontalMargin = Mathf.Clamp(Screen.width * 0.035f, 48f, 140f);
+        float bottomMargin = Mathf.Clamp(Screen.height * 0.08f, 56f, 132f);
+        float topMargin = Mathf.Clamp(Screen.height * 0.115f, 72f, 168f);
+
         if (content != null)
         {
+            content.offsetMin = new Vector2(horizontalMargin, bottomMargin);
+            content.offsetMax = new Vector2(-horizontalMargin, -topMargin);
             var anchored = content.anchoredPosition;
-            anchored.y += Mathf.Round(Screen.height * 0.15f);
+            anchored.y = Mathf.Clamp(Screen.height * 0.04f, 28f, 64f);
             content.anchoredPosition = anchored;
         }
 
@@ -1930,10 +1936,15 @@ public static class ShadeSettingsMenu
         var presetRow = new GameObject("PresetOptions");
         var presetRect = presetRow.AddComponent<RectTransform>();
         presetRect.SetParent(content, false);
+        presetRect.anchorMin = new Vector2(0f, 1f);
+        presetRect.anchorMax = new Vector2(1f, 1f);
+        presetRect.pivot = new Vector2(0.5f, 1f);
+        presetRect.offsetMin = Vector2.zero;
+        presetRect.offsetMax = Vector2.zero;
         var presetLayout = presetRow.AddComponent<HorizontalLayoutGroup>();
-        float presetSpacing = Mathf.Clamp(Screen.width * 0.045f, 40f, 110f);
-        int sidePadding = Mathf.RoundToInt(Mathf.Clamp(Screen.width * 0.07f, 48f, Screen.width * 0.16f));
-        float presetCardPreferredWidth = Mathf.Clamp(Screen.width * 0.23f, 260f, 430f);
+        float presetSpacing = Mathf.Clamp(Screen.width * 0.035f, 32f, 90f);
+        int sidePadding = Mathf.RoundToInt(Mathf.Clamp(Screen.width * 0.04f, 36f, 120f));
+        float presetCardPreferredWidth = Mathf.Clamp(Screen.width * 0.22f, 260f, 430f);
         float presetCardMinWidth = Mathf.Clamp(Screen.width * 0.16f, 200f, presetCardPreferredWidth);
         presetLayout.spacing = presetSpacing;
         presetLayout.padding = new RectOffset(sidePadding, sidePadding, 0, 0);
@@ -1952,6 +1963,9 @@ public static class ShadeSettingsMenu
             var optionRoot = new GameObject(label.Replace(' ', '_'));
             var optionRect = optionRoot.AddComponent<RectTransform>();
             optionRect.SetParent(presetRow.transform, false);
+            optionRect.anchorMin = new Vector2(0f, 1f);
+            optionRect.anchorMax = new Vector2(1f, 1f);
+            optionRect.pivot = new Vector2(0.5f, 1f);
 
             var optionLayout = optionRoot.AddComponent<VerticalLayoutGroup>();
             optionLayout.spacing = 18f;
@@ -2012,10 +2026,10 @@ public static class ShadeSettingsMenu
             ScaleTextElements(descriptionObject, 0.64f);
         }
 
-        AddPresetOption("Preset 1: Default", "Shade keeps the original keyboard layout. Hornet stays on controller and keyboard hotkeys stay disabled.", ApplyDefaultPreset);
-        AddPresetOption("Preset 2: Two Controllers", "Shade uses the second controller with dedicated buttons while Hornet remains on the first controller.", ApplyDualControllerPresetOption);
-        AddPresetOption("Preset 3: Keyboard Only", "Shade moves to the keypad while Hornet's controls jump to the left side of the keyboard. Controllers are disabled.", ApplyKeyboardOnlyPresetOption);
-        AddPresetOption("Preset 4: Shade Controller", "Shade uses the first controller layout and Hornet swaps to left-side keyboard hotkeys with the controller disabled.", ApplyShadeControllerPresetOption);
+        AddPresetOption("Default", "Shade keeps the original keyboard layout. Hornet stays on controller and keyboard hotkeys stay disabled.", ApplyDefaultPreset);
+        AddPresetOption("Two Controllers", "Shade uses the second controller with dedicated buttons while Hornet remains on the first controller.", ApplyDualControllerPresetOption);
+        AddPresetOption("Keyboard Only", "Shade moves to the keypad while Hornet's controls jump to the left side of the keyboard. Controllers are disabled.", ApplyKeyboardOnlyPresetOption);
+        AddPresetOption("Shade Controller", "Shade uses the first controller layout and Hornet swaps to left-side keyboard hotkeys with the controller disabled.", ApplyShadeControllerPresetOption);
 
         var bindingsContainer = new GameObject("BindingColumns");
         var bindingsRect = bindingsContainer.AddComponent<RectTransform>();
