@@ -358,40 +358,91 @@ public partial class LegacyHelper
 
     private static class InputDeviceBlocker
     {
+        private static void UpdateExcludedDevices(InputHandler handler, InputDevice device, bool exclude)
+        {
+            if (handler == null || device == null || device == InputDevice.Null)
+                return;
+            try
+            {
+                var actions = handler.inputActions;
+                if (actions == null)
+                    return;
+                var list = actions.ExcludeDevices;
+                if (list == null)
+                    return;
+                bool contains = list.Contains(device);
+                if (exclude)
+                {
+                    if (!contains)
+                        list.Add(device);
+                    if (actions.Device == device)
+                        actions.Device = null;
+                }
+                else if (contains)
+                {
+                    list.Remove(device);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private static bool ShadeUsesAllControllers(ShadeInputConfig config, int targetIndex, int deviceCount)
+        {
+            if (config == null)
+                return false;
+            for (int i = 0; i < deviceCount; i++)
+            {
+                if (i == targetIndex)
+                    continue;
+                if (!config.IsControllerIndexInUse(i))
+                    return false;
+            }
+            return true;
+        }
+
         internal static bool ShouldIgnoreDevice(InputHandler handler, InputDevice device)
         {
             if (device == null || device == InputDevice.Null)
                 return false;
+
+            bool ignore = false;
             try
             {
-                var cfg = ModConfig.Instance;
-                if (cfg == null || !cfg.hornetControllerEnabled)
-                    return false;
-                if (handler != null && handler.gameController == device)
-                    return false;
-                var shadeConfig = cfg.shadeInput;
-                if (shadeConfig == null || !shadeConfig.UsesControllerBindings())
-                    return false;
-                var devices = InputManager.Devices;
-                if (devices == null || devices.Count <= 1)
-                    return false;
-                int index = -1;
-                for (int i = 0; i < devices.Count; i++)
+                if (!device.IsUnknown)
                 {
-                    if (devices[i] == device)
+                    var cfg = ModConfig.Instance;
+                    if (cfg != null && cfg.hornetControllerEnabled)
                     {
-                        index = i;
-                        break;
+                        var shadeConfig = cfg.shadeInput;
+                        if (shadeConfig != null && shadeConfig.UsesControllerBindings())
+                        {
+                            var devices = InputManager.Devices;
+                            if (devices != null && devices.Count > 1)
+                            {
+                                int index = devices.IndexOf(device);
+                                if (index >= 0 && shadeConfig.IsControllerIndexInUse(index))
+                                {
+                                    ignore = !ShadeUsesAllControllers(shadeConfig, index, devices.Count);
+                                }
+                            }
+                        }
                     }
                 }
-                if (index < 0)
-                    return false;
-                return shadeConfig.IsControllerIndexInUse(index);
             }
             catch
             {
-                return false;
+                ignore = false;
             }
+
+            UpdateExcludedDevices(handler, device, ignore);
+            return ignore;
+        }
+
+        internal static void ReleaseDevice(InputHandler handler, InputDevice device)
+        {
+            UpdateExcludedDevices(handler, device, false);
         }
 
         internal static void EnsureLastActiveController(InputHandler handler)
@@ -448,6 +499,21 @@ public partial class LegacyHelper
             {
             }
             return true;
+        }
+    }
+
+    [HarmonyPatch(typeof(InputHandler), "ControllerDetached")]
+    private class InputHandler_ControllerDetached_ReleaseShadeDevice
+    {
+        private static void Postfix(InputHandler __instance, InputDevice inputDevice)
+        {
+            try
+            {
+                InputDeviceBlocker.ReleaseDevice(__instance, inputDevice);
+            }
+            catch
+            {
+            }
         }
     }
 
