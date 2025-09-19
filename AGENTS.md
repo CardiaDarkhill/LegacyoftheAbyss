@@ -18,15 +18,10 @@
 ## To Do:
 - At time of writing the following features requests need to be actioned:
 
-- Support for using two controllers instead of forcing mouse and keyboard + controller
 - Charms, notches and other progression items for the shade, independant of just using Hornet's progression
 - Demo video of gameplay for the Nexusmods page
 - Ability unlock pop-ups for when the shade gets new abilities
-- In game configurable controls for the shade
-- A menu option in the silksong pause menu that provides a default hotkey setup that allows both the Shade and Hornet to be controlled using a single keyboard
 - Improved damage logging for the shade, for some reason, certain hits that should be damaging the shade are both not damaging it and not showing up in the logs as a blocked hit
-- The game currently freezes/crashes when dying in Steel Soul mode, this needs to be looked into
-- We're getting some lag/hitching both when the shade spawns in and just in general. I suspect this is due to us loading our sprite sheets from disk during runtime, we should look into better cacheing 
 
 
 ## Testing:
