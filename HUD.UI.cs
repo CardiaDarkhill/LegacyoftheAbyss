@@ -99,6 +99,13 @@ public partial class SimpleHUD
         );
 
         BuildMasks(hRect, uiScale);
+
+        unlockPopup = gameObject.GetComponent<ShadeUnlockPopup>();
+        if (unlockPopup == null)
+        {
+            unlockPopup = gameObject.AddComponent<ShadeUnlockPopup>();
+        }
+        unlockPopup.Initialize(canvas, GetUIScale);
     }
 
     private void RefreshHealth()

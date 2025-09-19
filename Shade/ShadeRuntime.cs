@@ -1,4 +1,7 @@
 #nullable enable
+
+using System;
+using System.Collections.Generic;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
@@ -16,12 +19,27 @@ namespace LegacyoftheAbyss.Shade
         private static readonly ShadePersistentState s_persistentState = new ShadePersistentState();
         private static readonly ShadeSaveSlotRepository s_saveSlots = new ShadeSaveSlotRepository();
         private static readonly ShadeCharmInventory s_charmInventory = new ShadeCharmInventory();
+        private static readonly Queue<ShadeUnlockNotification> s_notificationQueue = new();
+        private static readonly HashSet<string> s_seenNotificationKeys = new(StringComparer.OrdinalIgnoreCase);
+
+        public static event Action? NotificationsChanged;
 
         public static ShadePersistentState PersistentState => s_persistentState;
 
         public static ShadeSaveSlotRepository SaveSlots => s_saveSlots;
 
         public static ShadeCharmInventory Charms => s_charmInventory;
+
+        public static bool HasPendingNotifications
+        {
+            get
+            {
+                lock (s_notificationQueue)
+                {
+                    return s_notificationQueue.Count > 0;
+                }
+            }
+        }
 
         public static bool TryGetPersistentState(out int currentHp, out int maxHp, out int soul, out bool canTakeDamage)
         {
@@ -55,15 +73,81 @@ namespace LegacyoftheAbyss.Shade
         {
             s_persistentState.Reset();
             s_charmInventory.ResetLoadout();
+            ResetNotificationState();
+        }
+
+        public static void ResetNotificationState()
+        {
+            lock (s_notificationQueue)
+            {
+                s_notificationQueue.Clear();
+                s_seenNotificationKeys.Clear();
+            }
+
+            RaiseNotificationsChanged();
+        }
+
+        public static bool TryDequeueNotification(out ShadeUnlockNotification notification)
+        {
+            lock (s_notificationQueue)
+            {
+                if (s_notificationQueue.Count > 0)
+                {
+                    notification = s_notificationQueue.Dequeue();
+                    return true;
+                }
+            }
+
+            notification = null!;
+            return false;
+        }
+
+        public static bool EnqueueNotification(string? key, string message, ShadeUnlockNotificationType type, float duration = ShadeUnlockNotification.DefaultDuration)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                return false;
+            }
+
+            var notification = new ShadeUnlockNotification(key, message, type, duration);
+            return EnqueueNotification(notification);
+        }
+
+        public static bool EnqueueNotification(ShadeUnlockNotification notification)
+        {
+            if (notification == null || string.IsNullOrWhiteSpace(notification.Message))
+            {
+                return false;
+            }
+
+            bool queued = false;
+            lock (s_notificationQueue)
+            {
+                if (s_seenNotificationKeys.Add(notification.Key))
+                {
+                    s_notificationQueue.Enqueue(notification);
+                    queued = true;
+                }
+            }
+
+            if (queued)
+            {
+                RaiseNotificationsChanged();
+            }
+
+            return queued;
         }
 
         public static void NotifyHornetSpellUnlocked()
         {
+            int previous = s_persistentState.SpellProgress;
             s_persistentState.AdvanceSpellProgress();
+            QueueSpellNotificationsBetween(previous, s_persistentState.SpellProgress);
         }
 
         public static void SyncSpellProgress(int progress)
         {
+            int previous = s_persistentState.SpellProgress;
             s_persistentState.SetSpellProgress(progress);
         }
 

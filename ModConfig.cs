@@ -92,6 +92,9 @@ public class ModConfig
     public bool logMenu = true;
     public bool logShade = true;
     public bool logHud = true;
+    public bool shadeUnlockPopupsMuted = false;
+    public float shadeUnlockPopupDelaySeconds = 0.75f;
+    public float shadeUnlockPopupDurationSeconds = 3.5f;
     public bool shadeEnabled = true;
     public bool hornetKeyboardEnabled = false;
     public bool hornetControllerEnabled = true;

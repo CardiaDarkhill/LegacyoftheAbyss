@@ -38,6 +38,7 @@ public partial class SimpleHUD : MonoBehaviour
     private Canvas canvas;
     private CanvasScaler scaler;
     private CanvasGroup canvasGroup;
+    private ShadeUnlockPopup unlockPopup;
 
     private const KeyCode DebugDamageKey = KeyCode.None; // disabled
     private const KeyCode DebugHealKey = KeyCode.None; // disabled
