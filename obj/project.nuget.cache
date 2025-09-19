@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "PlIfBzcgIaMyvV30MnS2Gr2a12cvIPz2Ye1ELDTAiphBpOe5EVP5lE98011m2atmJ7qmB6PE1sYcdjPkaYOeKA==",
+  "dgSpecHash": "5Kyp/zza6uh3Cg/AE016L7Yk2FH7qAnTHCvxMsVLmG9tX1aZSm5bKqh3htK9adTahH83a4Vg1sFAlPkSs2o0Eg==",
   "success": true,
-  "projectFilePath": "E:\\SteamProgram\\steamapps\\common\\Hollow Knight Silksong\\BepInEx\\plugins\\LegacyoftheAbyss\\LegacyoftheAbyss.csproj",
+  "projectFilePath": "E:\\SteamProgram\\steamapps\\common\\Hollow Knight Silksong\\BepInEx\\plugins\\legacyoftheabyss\\LegacyoftheAbyss.csproj",
   "expectedPackageFiles": [],
   "logs": []
 }

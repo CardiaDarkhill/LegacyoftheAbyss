@@ -75,18 +75,11 @@
 
     <!-- BepInEx Core -->
     <Reference Include="BepInEx">
-      <HintPath>DummyDLLs/BepInEx.dll</HintPath>
+      <HintPath>net472/BepInEx.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="HarmonyLib">
-      <HintPath>DummyDLLs/0Harmony.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="netstandard">
-      <HintPath>DummyDLLs/netstandard.dll</HintPath>
+      <HintPath>net472/0Harmony.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>
