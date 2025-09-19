@@ -1,3 +1,4 @@
+#nullable disable
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
@@ -820,3 +821,4 @@ public partial class LegacyHelper
         }
     }
 }
+#nullable restore

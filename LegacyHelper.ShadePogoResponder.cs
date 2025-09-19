@@ -1,3 +1,4 @@
+#nullable disable
 using UnityEngine;
 
 public partial class LegacyHelper
@@ -123,3 +124,4 @@ public partial class LegacyHelper
         }
     }
 }
+#nullable restore

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using Newtonsoft.Json;
 using UnityEngine;
 
 internal static class ModPaths
@@ -102,7 +103,13 @@ public class ModConfig
     public int focusShadeHeal = 1;
     public ShadeInputConfig shadeInput = ShadeInputConfig.CreateDefault();
 
-    private static ModConfig instance;
+    private static ModConfig? instance;
+    private static readonly JsonSerializerSettings FallbackJsonSettings = new JsonSerializerSettings
+    {
+        Formatting = Formatting.Indented,
+        TypeNameHandling = TypeNameHandling.None,
+        NullValueHandling = NullValueHandling.Ignore
+    };
 
     public static ModConfig Instance => instance ??= Load();
 
@@ -113,19 +120,21 @@ public class ModConfig
             if (File.Exists(ModPaths.Config))
             {
                 string json = File.ReadAllText(ModPaths.Config);
-                instance = UnityEngine.JsonUtility.FromJson<ModConfig>(json) ?? new ModConfig();
+                instance = Deserialize(json) ?? new ModConfig();
             }
             else
             {
                 instance = new ModConfig();
                 Save();
             }
+
             instance.shadeInput ??= ShadeInputConfig.CreateDefault();
         }
         catch
         {
             instance = new ModConfig();
         }
+
         return instance;
     }
 
@@ -133,10 +142,85 @@ public class ModConfig
     {
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(ModPaths.Config));
-            string json = UnityEngine.JsonUtility.ToJson(Instance, true);
+            var directory = Path.GetDirectoryName(ModPaths.Config);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            string json = Serialize(Instance);
             File.WriteAllText(ModPaths.Config, json);
         }
-        catch { }
+        catch
+        {
+        }
+    }
+
+    private static string Serialize(ModConfig config)
+    {
+        if (TrySerializeWithUnity(config, out var json))
+        {
+            return json;
+        }
+
+        return JsonConvert.SerializeObject(config, FallbackJsonSettings);
+    }
+
+    private static bool TrySerializeWithUnity(ModConfig config, out string json)
+    {
+        try
+        {
+            json = JsonUtility.ToJson(config, true);
+            if (!string.IsNullOrWhiteSpace(json))
+            {
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        json = string.Empty;
+        return false;
+    }
+
+    private static ModConfig? Deserialize(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        if (TryDeserializeWithUnity(json, out var config))
+        {
+            return config;
+        }
+
+        try
+        {
+            return JsonConvert.DeserializeObject<ModConfig>(json, FallbackJsonSettings);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool TryDeserializeWithUnity(string json, out ModConfig? config)
+    {
+        try
+        {
+            config = JsonUtility.FromJson<ModConfig>(json);
+            if (config != null)
+            {
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        config = null;
+        return false;
     }
 }

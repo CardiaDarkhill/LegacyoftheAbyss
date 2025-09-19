@@ -1,3 +1,4 @@
+#nullable disable
 using System;
 using UnityEngine;
 public partial class SimpleHUD
@@ -38,3 +39,4 @@ public partial class SimpleHUD
 }
 
 
+#nullable restore

@@ -1,3 +1,4 @@
+#nullable disable
 using System;
 using System.Collections;
 using UnityEngine;
@@ -191,3 +192,4 @@ public partial class SimpleHUD
 }
 
 
+#nullable restore

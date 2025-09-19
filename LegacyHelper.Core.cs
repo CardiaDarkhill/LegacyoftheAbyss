@@ -1,3 +1,4 @@
+#nullable disable
 using System;
 using System.Reflection;
 using BepInEx;
@@ -237,3 +238,4 @@ public partial class LegacyHelper : BaseUnityPlugin
         }
     }
 }
+#nullable restore

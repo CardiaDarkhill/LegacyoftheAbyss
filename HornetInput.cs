@@ -3,7 +3,7 @@ using UnityEngine;
 
 public static class HornetInput
 {
-    private static InputHandler FindHandler()
+    private static InputHandler? FindHandler()
     {
         try
         {
