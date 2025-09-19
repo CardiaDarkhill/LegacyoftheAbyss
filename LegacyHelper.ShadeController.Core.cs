@@ -74,6 +74,93 @@ public partial class LegacyHelper
             TryPlaySpawnAnimation();
         }
 
+        public void ApplyCharmLoadout(IEnumerable<ShadeCharmDefinition>? loadout)
+        {
+            var previousSnapshot = charmSnapshot;
+            var removedCharms = equippedCharms.ToArray();
+
+            var sanitized = new List<ShadeCharmDefinition>();
+            if (loadout != null)
+            {
+                foreach (var charm in loadout)
+                {
+                    if (charm == null)
+                    {
+                        continue;
+                    }
+
+                    sanitized.Add(charm);
+                }
+            }
+
+            charmSnapshot = ShadeCharmCalculator.BuildSnapshot(s_defaultCharmStats, sanitized);
+            abilityOverrides = charmSnapshot.AbilityOverrides;
+
+            equippedCharms.Clear();
+            equippedCharms.AddRange(charmSnapshot.Definitions);
+
+            charmUpdateCallbacks.Clear();
+            foreach (var equipped in equippedCharms)
+            {
+                if (equipped.Hooks.OnUpdate != null)
+                {
+                    charmUpdateCallbacks.Add(equipped.Hooks.OnUpdate);
+                }
+            }
+
+            moveSpeed = charmSnapshot.MoveSpeed;
+            sprintMultiplier = charmSnapshot.SprintMultiplier;
+            sprintDashMultiplier = charmSnapshot.SprintDashMultiplier;
+            sprintDashDuration = charmSnapshot.SprintDashDuration;
+            sprintDashCooldown = charmSnapshot.SprintDashCooldown;
+            fireCooldown = charmSnapshot.FireCooldown;
+            nailCooldown = charmSnapshot.NailCooldown;
+            shriekCooldown = charmSnapshot.ShriekCooldown;
+            quakeCooldown = charmSnapshot.QuakeCooldown;
+            teleportCooldown = charmSnapshot.TeleportCooldown;
+            projectileSoulCost = charmSnapshot.ProjectileSoulCost;
+            shriekSoulCost = charmSnapshot.ShriekSoulCost;
+            quakeSoulCost = charmSnapshot.QuakeSoulCost;
+            focusSoulCost = charmSnapshot.FocusSoulCost;
+
+            int previousSoulMax = shadeSoulMax;
+            shadeSoulMax = charmSnapshot.ShadeSoulCapacity;
+            int clampedSoul = Mathf.Clamp(shadeSoul, 0, shadeSoulMax);
+            bool soulAdjusted = clampedSoul != shadeSoul;
+            shadeSoul = clampedSoul;
+            lastSoulForReady = Mathf.Min(lastSoulForReady, shadeSoul);
+
+            if (soulAdjusted || shadeSoulMax != previousSoulMax)
+            {
+                PushSoulToHud();
+            }
+
+            if (removedCharms.Length > 0)
+            {
+                var removedContext = new ShadeCharmContext(this, previousSnapshot);
+                foreach (var removed in removedCharms)
+                {
+                    try { removed.Hooks.OnRemoved?.Invoke(removedContext); }
+                    catch { }
+                }
+            }
+
+            if (equippedCharms.Count > 0)
+            {
+                var appliedContext = new ShadeCharmContext(this, charmSnapshot);
+                foreach (var applied in equippedCharms)
+                {
+                    try { applied.Hooks.OnApplied?.Invoke(appliedContext); }
+                    catch { }
+                }
+            }
+
+            if (soulAdjusted || shadeSoulMax != previousSoulMax)
+            {
+                PersistIfChanged();
+            }
+        }
+
         private void LoadShadeSprites()
         {
             try
@@ -412,6 +499,17 @@ public partial class LegacyHelper
             PersistIfChanged();
             CheckFocusReadySfx();
             HandleAnimation();
+
+            if (charmUpdateCallbacks.Count > 0)
+            {
+                var context = new ShadeCharmContext(this, charmSnapshot);
+                float delta = Time.deltaTime;
+                foreach (var callback in charmUpdateCallbacks)
+                {
+                    try { callback(context, delta); }
+                    catch { }
+                }
+            }
         }
 
         private void FixedUpdate()
@@ -1042,12 +1140,47 @@ public partial class LegacyHelper
                 return ShadeRuntime.PersistentState.SpellProgress;
             }
         }
-        private bool IsProjectileUnlocked() => ShadeSpellProgress >= 1;
-        private bool IsDescendingDarkUnlocked() => ShadeSpellProgress >= 2;
-        private bool IsShriekUnlocked() => ShadeSpellProgress >= 3;
-        private bool IsProjectileUpgraded() => ShadeSpellProgress >= 4;
-        private bool IsDescendingDarkUpgraded() => ShadeSpellProgress >= 5;
-        private bool IsShriekUpgraded() => ShadeSpellProgress >= 6;
+        private bool IsProjectileUnlocked()
+        {
+            if (abilityOverrides.EnableProjectile.HasValue)
+                return abilityOverrides.EnableProjectile.Value;
+            return ShadeSpellProgress >= 1;
+        }
+
+        private bool IsDescendingDarkUnlocked()
+        {
+            if (abilityOverrides.EnableDescendingDark.HasValue)
+                return abilityOverrides.EnableDescendingDark.Value;
+            return ShadeSpellProgress >= 2;
+        }
+
+        private bool IsShriekUnlocked()
+        {
+            if (abilityOverrides.EnableShriek.HasValue)
+                return abilityOverrides.EnableShriek.Value;
+            return ShadeSpellProgress >= 3;
+        }
+
+        private bool IsProjectileUpgraded()
+        {
+            if (abilityOverrides.UpgradeProjectile.HasValue)
+                return abilityOverrides.UpgradeProjectile.Value;
+            return ShadeSpellProgress >= 4;
+        }
+
+        private bool IsDescendingDarkUpgraded()
+        {
+            if (abilityOverrides.UpgradeDescendingDark.HasValue)
+                return abilityOverrides.UpgradeDescendingDark.Value;
+            return ShadeSpellProgress >= 5;
+        }
+
+        private bool IsShriekUpgraded()
+        {
+            if (abilityOverrides.UpgradeShriek.HasValue)
+                return abilityOverrides.UpgradeShriek.Value;
+            return ShadeSpellProgress >= 6;
+        }
         private int ComputeSpellDamageMultiplier(float baseMult, bool upgraded)
         {
             int nail = Mathf.Max(1, GetHornetNailDamage());

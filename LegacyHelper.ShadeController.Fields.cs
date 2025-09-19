@@ -1,8 +1,10 @@
 #nullable disable
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using LegacyoftheAbyss.Shade;
 using UnityEngine;
 using GlobalEnums;
 
@@ -10,9 +12,16 @@ public partial class LegacyHelper
 {
     public partial class ShadeController : MonoBehaviour
     {
+        private static readonly ShadeCharmStatBaseline s_defaultCharmStats = ShadeCharmStatBaseline.CreateDefault();
+
+        private ShadeCharmLoadoutSnapshot charmSnapshot = ShadeCharmLoadoutSnapshot.FromBaseline(s_defaultCharmStats);
+        private readonly List<ShadeCharmDefinition> equippedCharms = new List<ShadeCharmDefinition>();
+        private readonly List<Action<ShadeCharmContext, float>> charmUpdateCallbacks = new List<Action<ShadeCharmContext, float>>();
+        private ShadeCharmAbilityToggles abilityOverrides = ShadeCharmAbilityToggles.None;
+
         // Movement and leash
-        public float moveSpeed = 10f;
-        public float sprintMultiplier = 2.5f;
+        private float moveSpeed = s_defaultCharmStats.MoveSpeed;
+        private float sprintMultiplier = s_defaultCharmStats.SprintMultiplier;
         public float maxDistance = 14f;
         public float softLeashRadius = 12f;
         public float hardLeashRadius = 22f;
@@ -40,8 +49,8 @@ public partial class LegacyHelper
 
         // Ranged attack
         public float projectileSpeed = 22f;
-        public float fireCooldown = 0.25f;
-        public float nailCooldown = 0.3f;
+        private float fireCooldown = s_defaultCharmStats.FireCooldown;
+        private float nailCooldown = s_defaultCharmStats.NailCooldown;
         public Vector2 muzzleOffset = new Vector2(0.9f, 0f);
 
         private Transform hornetTransform;
@@ -127,15 +136,15 @@ public partial class LegacyHelper
         private float teleportChannelTimer;
         public float teleportChannelTime = 0.6f;
         private float teleportCooldownTimer;
-        public float teleportCooldown = 1.5f;
+        private float teleportCooldown = s_defaultCharmStats.TeleportCooldown;
 
         private bool sprintUnlocked;
         private bool isSprinting;
         private float sprintDashTimer;
         private float sprintDashCooldownTimer;
-        public float sprintDashMultiplier = 7.5f;
-        public float sprintDashDuration = 0.075f;
-        public float sprintDashCooldown = 1f;
+        private float sprintDashMultiplier = s_defaultCharmStats.SprintDashMultiplier;
+        private float sprintDashDuration = s_defaultCharmStats.SprintDashDuration;
+        private float sprintDashCooldown = s_defaultCharmStats.SprintDashCooldown;
         private ParticleSystem activeDashPs;
         private Vector2 activeDashDir;
 
@@ -145,19 +154,19 @@ public partial class LegacyHelper
         private Coroutine deathRoutine;
 
         // Shade Soul resource
-        public int shadeSoulMax = 99;
+        public int shadeSoulMax = s_defaultCharmStats.ShadeSoulCapacity;
         public int shadeSoul;
         public int soulGainPerHit = 11;
-        public int projectileSoulCost = 33;
-        public int shriekSoulCost = 33;
-        public int quakeSoulCost = 33;
+        private int projectileSoulCost = s_defaultCharmStats.ProjectileSoulCost;
+        private int shriekSoulCost = s_defaultCharmStats.ShriekSoulCost;
+        private int quakeSoulCost = s_defaultCharmStats.QuakeSoulCost;
         private float shriekTimer;
         private float quakeTimer;
-        public float shriekCooldown = 0.5f;
-        public float quakeCooldown = 1.1f;
+        private float shriekCooldown = s_defaultCharmStats.ShriekCooldown;
+        private float quakeCooldown = s_defaultCharmStats.QuakeCooldown;
 
         // Focus (heal) ability
-        public int focusSoulCost = 33;
+        private int focusSoulCost = s_defaultCharmStats.FocusSoulCost;
         public float focusChannelTime = 1.25f;
         private bool isFocusing;
         private float focusTimer;

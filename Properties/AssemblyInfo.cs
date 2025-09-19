@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
 using LegacyoftheAbyss;
 
@@ -14,3 +15,4 @@ using LegacyoftheAbyss;
 [assembly: AssemblyFileVersion("0.1.0.0")]
 [assembly: AssemblyVersion("0.1.0.0")]
 [assembly: TargetFramework(".NETStandard,Version=v2.1", FrameworkDisplayName = ".NET Standard 2.1")]
+[assembly: InternalsVisibleTo("LegacyoftheAbyss.Tests")]
