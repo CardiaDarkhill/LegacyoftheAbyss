@@ -14,7 +14,7 @@ public partial class LegacyHelper
             if (nailTimer > 0f) return;
 
             float forcedV = 0f;
-            bool pressed = ShadeInput.WasActionPressed(ShadeAction.Nail) || Input.GetMouseButtonDown(0);
+            bool pressed = ShadeInput.WasActionPressed(ShadeAction.Nail);
             if (ShadeInput.WasActionPressed(ShadeAction.NailUp))
             {
                 pressed = true;

@@ -2802,7 +2802,7 @@ public partial class LegacyHelper
             }
 
             // Cancel on movement or attack input
-            if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(0) ||
+            if (Input.GetKeyDown(KeyCode.Escape) ||
                 ShadeInput.WasActionPressed(ShadeAction.Nail) ||
                 ShadeInput.WasActionPressed(ShadeAction.NailUp) ||
                 ShadeInput.WasActionPressed(ShadeAction.NailDown) ||
