@@ -2,21 +2,45 @@
 
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace LegacyoftheAbyss.Shade
 {
+    internal enum ShadeCharmId
+    {
+        AbyssalCore,
+        PhantomStride,
+        EchoOfBlades,
+        DuskShroud,
+        TwinSoulBond,
+        LuminousGuard,
+        UmbralHeart,
+        LuminousVeil,
+        PaleRemnant
+    }
+
     internal sealed class ShadeCharmDefinition
     {
         public ShadeCharmDefinition(
             string id,
             ShadeCharmStatModifiers? statModifiers = null,
             ShadeCharmAbilityToggles? abilityToggles = null,
-            ShadeCharmHooks? hooks = null)
+            ShadeCharmHooks? hooks = null,
+            string? displayName = null,
+            string? description = null,
+            int notchCost = 0,
+            Color? fallbackTint = null,
+            ShadeCharmId? enumId = null)
         {
             Id = id ?? throw new ArgumentNullException(nameof(id));
             StatModifiers = statModifiers ?? ShadeCharmStatModifiers.Identity;
             AbilityToggles = abilityToggles ?? ShadeCharmAbilityToggles.None;
             Hooks = hooks ?? ShadeCharmHooks.Empty;
+            DisplayName = string.IsNullOrWhiteSpace(displayName) ? Id : displayName;
+            Description = description ?? string.Empty;
+            NotchCost = Mathf.Max(0, notchCost);
+            FallbackTint = fallbackTint ?? Color.white;
+            EnumId = enumId;
         }
 
         public string Id { get; }
@@ -27,7 +51,17 @@ namespace LegacyoftheAbyss.Shade
 
         public ShadeCharmHooks Hooks { get; }
 
-        public override string ToString() => Id;
+        public string DisplayName { get; }
+
+        public string Description { get; }
+
+        public int NotchCost { get; }
+
+        public Color FallbackTint { get; }
+
+        public ShadeCharmId? EnumId { get; }
+
+        public override string ToString() => DisplayName;
     }
 
     internal readonly struct ShadeCharmStatModifiers

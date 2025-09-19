@@ -6,43 +6,6 @@ using UnityEngine;
 
 namespace LegacyoftheAbyss.Shade
 {
-    internal enum ShadeCharmId
-    {
-        AbyssalCore,
-        PhantomStride,
-        EchoOfBlades,
-        DuskShroud,
-        TwinSoulBond,
-        LuminousGuard
-    }
-
-    internal sealed class ShadeCharmDefinition
-    {
-        public ShadeCharmDefinition(ShadeCharmId id, string name, string description, int notchCost, Color fallbackTint)
-        {
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                throw new ArgumentException("Charm name must be provided.", nameof(name));
-            }
-
-            Id = id;
-            Name = name;
-            Description = description ?? string.Empty;
-            NotchCost = Mathf.Max(0, notchCost);
-            FallbackTint = fallbackTint;
-        }
-
-        public ShadeCharmId Id { get; }
-
-        public string Name { get; }
-
-        public string Description { get; }
-
-        public int NotchCost { get; }
-
-        public Color FallbackTint { get; }
-    }
-
     internal sealed class ShadeCharmInventory
     {
         private readonly List<ShadeCharmDefinition> _definitions;
@@ -56,45 +19,53 @@ namespace LegacyoftheAbyss.Shade
             _definitions = new List<ShadeCharmDefinition>
             {
                 new ShadeCharmDefinition(
-                    ShadeCharmId.AbyssalCore,
-                    "Abyssal Core",
-                    "Shade focus draws more deeply from the void, reducing the soul required to mend wounds.",
-                    2,
-                    new Color(0.58f, 0.29f, 0.76f)),
+                    nameof(ShadeCharmId.AbyssalCore),
+                    displayName: "Abyssal Core",
+                    description: "Shade focus draws more deeply from the void, reducing the soul required to mend wounds.",
+                    notchCost: 2,
+                    fallbackTint: new Color(0.58f, 0.29f, 0.76f),
+                    enumId: ShadeCharmId.AbyssalCore),
                 new ShadeCharmDefinition(
-                    ShadeCharmId.PhantomStride,
-                    "Phantom Stride",
-                    "Improves the shade's sprinting burst, letting it keep pace when the fight drifts apart.",
-                    1,
-                    new Color(0.29f, 0.58f, 0.76f)),
+                    nameof(ShadeCharmId.PhantomStride),
+                    displayName: "Phantom Stride",
+                    description: "Improves the shade's sprinting burst, letting it keep pace when the fight drifts apart.",
+                    notchCost: 1,
+                    fallbackTint: new Color(0.29f, 0.58f, 0.76f),
+                    enumId: ShadeCharmId.PhantomStride),
                 new ShadeCharmDefinition(
-                    ShadeCharmId.EchoOfBlades,
-                    "Echo of Blades",
-                    "Hones spellcasting instincts so that fireballs and nail flurries can be loosed in quicker succession.",
-                    2,
-                    new Color(0.76f, 0.45f, 0.29f)),
+                    nameof(ShadeCharmId.EchoOfBlades),
+                    displayName: "Echo of Blades",
+                    description: "Hones spellcasting instincts so that fireballs and nail flurries can be loosed in quicker succession.",
+                    notchCost: 2,
+                    fallbackTint: new Color(0.76f, 0.45f, 0.29f),
+                    enumId: ShadeCharmId.EchoOfBlades),
                 new ShadeCharmDefinition(
-                    ShadeCharmId.DuskShroud,
-                    "Dusk Shroud",
-                    "Wraps the shade in a protective veil, easing the soul drain of its more taxing abilities.",
-                    1,
-                    new Color(0.24f, 0.35f, 0.55f)),
+                    nameof(ShadeCharmId.DuskShroud),
+                    displayName: "Dusk Shroud",
+                    description: "Wraps the shade in a protective veil, easing the soul drain of its more taxing abilities.",
+                    notchCost: 1,
+                    fallbackTint: new Color(0.24f, 0.35f, 0.55f),
+                    enumId: ShadeCharmId.DuskShroud),
                 new ShadeCharmDefinition(
-                    ShadeCharmId.TwinSoulBond,
-                    "Twin Soul Bond",
-                    "Strengthens the link between Hornet and shade, extending how far the two can stray before the tether snaps.",
-                    3,
-                    new Color(0.45f, 0.70f, 0.36f)),
+                    nameof(ShadeCharmId.TwinSoulBond),
+                    displayName: "Twin Soul Bond",
+                    description: "Strengthens the link between Hornet and shade, extending how far the two can stray before the tether snaps.",
+                    notchCost: 3,
+                    fallbackTint: new Color(0.45f, 0.70f, 0.36f),
+                    enumId: ShadeCharmId.TwinSoulBond),
                 new ShadeCharmDefinition(
-                    ShadeCharmId.LuminousGuard,
-                    "Luminous Guard",
-                    "Fragments of light orbit the companion, stiffening its guard and making each blast slightly cheaper.",
-                    2,
-                    new Color(0.85f, 0.72f, 0.32f))
+                    nameof(ShadeCharmId.LuminousGuard),
+                    displayName: "Luminous Guard",
+                    description: "Fragments of light orbit the companion, stiffening its guard and making each blast slightly cheaper.",
+                    notchCost: 2,
+                    fallbackTint: new Color(0.85f, 0.72f, 0.32f),
+                    enumId: ShadeCharmId.LuminousGuard)
             };
 
-            _definitionMap = _definitions.ToDictionary(def => def.Id);
-            _owned = new HashSet<ShadeCharmId>(_definitions.Select(d => d.Id));
+            _definitionMap = _definitions
+                .Where(def => def.EnumId.HasValue)
+                .ToDictionary(def => def.EnumId!.Value);
+            _owned = new HashSet<ShadeCharmId>(_definitionMap.Keys);
             _equipped = new HashSet<ShadeCharmId>();
             _notchCapacity = 6;
         }
@@ -157,13 +128,13 @@ namespace LegacyoftheAbyss.Shade
 
             if (!_owned.Contains(id))
             {
-                message = $"{definition.Name} has not been discovered yet.";
+                message = $"{definition.DisplayName} has not been discovered yet.";
                 return false;
             }
 
             if (_equipped.Contains(id))
             {
-                message = $"{definition.Name} is already equipped.";
+                message = $"{definition.DisplayName} is already equipped.";
                 return false;
             }
 
@@ -174,7 +145,7 @@ namespace LegacyoftheAbyss.Shade
             }
 
             _equipped.Add(id);
-            message = $"{definition.Name} equipped.";
+            message = $"{definition.DisplayName} equipped.";
             return true;
         }
 
@@ -189,7 +160,7 @@ namespace LegacyoftheAbyss.Shade
             _equipped.Remove(id);
             if (_definitionMap.TryGetValue(id, out var definition))
             {
-                message = $"{definition.Name} removed.";
+                message = $"{definition.DisplayName} removed.";
             }
             else
             {
@@ -221,9 +192,9 @@ namespace LegacyoftheAbyss.Shade
 
         public void GrantAllCharms()
         {
-            foreach (var definition in _definitions)
+            foreach (var id in _definitionMap.Keys)
             {
-                _owned.Add(definition.Id);
+                _owned.Add(id);
             }
         }
 

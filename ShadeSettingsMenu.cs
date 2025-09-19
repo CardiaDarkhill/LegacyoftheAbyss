@@ -236,7 +236,7 @@ public static class ShadeSettingsMenu
         private Text notchLabel;
         private Text statusLabel;
 
-        public ShadeCharmId CharmId => definition?.Id ?? default;
+        public ShadeCharmId? CharmId => definition?.EnumId;
 
         public void Initialize(CharmMenuController owner, ShadeCharmDefinition def, MenuButton button, Image icon, Text name, Text notch, Text status)
         {
@@ -258,7 +258,7 @@ public static class ShadeSettingsMenu
                 return;
 
             if (nameLabel != null)
-                nameLabel.text = definition.Name;
+                nameLabel.text = definition.DisplayName;
 
             if (notchLabel != null)
             {
@@ -273,8 +273,9 @@ public static class ShadeSettingsMenu
                 return;
 
             var inventory = ShadeRuntime.Charms;
-            bool owned = inventory?.IsOwned(definition.Id) ?? false;
-            bool equipped = inventory?.IsEquipped(definition.Id) ?? false;
+            var enumId = definition.EnumId;
+            bool owned = enumId.HasValue && (inventory?.IsOwned(enumId.Value) ?? false);
+            bool equipped = enumId.HasValue && (inventory?.IsEquipped(enumId.Value) ?? false);
 
             if (menuButton != null)
                 menuButton.interactable = owned;
@@ -306,14 +307,20 @@ public static class ShadeSettingsMenu
         {
             if (definition == null)
                 return;
-            controller?.HandleCharmSelected(definition.Id);
+            if (definition.EnumId.HasValue)
+            {
+                controller?.HandleCharmSelected(definition.EnumId.Value);
+            }
         }
 
         public void OnSubmit(BaseEventData eventData)
         {
             if (definition == null)
                 return;
-            controller?.HandleCharmSubmit(definition.Id);
+            if (definition.EnumId.HasValue)
+            {
+                controller?.HandleCharmSubmit(definition.EnumId.Value);
+            }
             eventData?.Use();
         }
 
@@ -530,7 +537,7 @@ public static class ShadeSettingsMenu
             if (selectedCharm.HasValue)
             {
                 var def = inventory.GetDefinition(selectedCharm.Value);
-                SetDetailTexts(def.Name, def.Description);
+                SetDetailTexts(def.DisplayName, def.Description);
                 if (!inventory.IsOwned(selectedCharm.Value))
                     fallbackStatus = "This charm has not been unlocked yet.";
                 else if (inventory.IsEquipped(selectedCharm.Value))
@@ -2436,7 +2443,7 @@ public static class ShadeSettingsMenu
 
         foreach (var definition in inventory.AllCharms)
         {
-            var selectable = CreateMenuButton(gridRoot.transform, buttonTemplate, definition.Name, null, CancelTarget.ShadeMain);
+            var selectable = CreateMenuButton(gridRoot.transform, buttonTemplate, definition.DisplayName, null, CancelTarget.ShadeMain);
             if (selectable is MenuButton menuButton)
             {
                 selectables.Add(menuButton);

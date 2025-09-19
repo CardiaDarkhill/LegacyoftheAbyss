@@ -164,7 +164,6 @@ public class ShadeSaveSlotRepositoryTests
     }
 
     [Fact]
-<<<<<<< ours
     public void CharmHelpersOperatePerSlot()
     {
         var repository = new ShadeSaveSlotRepository();
@@ -189,7 +188,9 @@ public class ShadeSaveSlotRepositoryTests
         Assert.Empty(repository.GetDiscoveredCharms(1));
         Assert.Equal(0, repository.GetNotchCapacity(1));
         Assert.Empty(repository.GetEquippedCharmLoadouts(1));
-=======
+    }
+
+    [Fact]
     public void CharmCollectionStatePersistsPerSlot()
     {
         var repository = new ShadeSaveSlotRepository();
@@ -225,6 +226,5 @@ public class ShadeSaveSlotRepositoryTests
 
         repository.SetCollectedCharms(0, Array.Empty<ShadeCharmId>());
         Assert.Empty(repository.GetCollectedCharms(0));
->>>>>>> theirs
     }
 }

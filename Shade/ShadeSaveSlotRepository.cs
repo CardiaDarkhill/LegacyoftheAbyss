@@ -12,9 +12,38 @@ namespace LegacyoftheAbyss.Shade
     /// </summary>
     internal sealed class ShadeSaveSlotRepository
     {
-        private readonly Dictionary<int, ShadePersistentState> _slots;
+        private sealed class ShadeSaveSlotRecord
+        {
+            public ShadeSaveSlotRecord()
+                : this(new ShadePersistentState(), new HashSet<ShadeCharmId>())
+            {
+            }
 
+            private ShadeSaveSlotRecord(ShadePersistentState state, HashSet<ShadeCharmId> collected)
+            {
+                State = state;
+                CollectedCharms = collected;
+            }
+
+            public ShadePersistentState State { get; private set; }
+
+            public HashSet<ShadeCharmId> CollectedCharms { get; }
+
+            public ShadeSaveSlotRecord Clone()
+            {
+                return new ShadeSaveSlotRecord(State.Clone(), new HashSet<ShadeCharmId>(CollectedCharms));
+            }
+
+            public void ReplaceState(ShadePersistentState state)
+            {
+                State = state;
+            }
+        }
+
+        private readonly Dictionary<int, ShadeSaveSlotRecord> _slots;
         private static readonly IReadOnlyCollection<int> s_emptyCharmList = Array.Empty<int>();
+        private static readonly IReadOnlyDictionary<int, IReadOnlyCollection<int>> s_emptyLoadoutMap =
+            new Dictionary<int, IReadOnlyCollection<int>>();
 
         public ShadeSaveSlotRepository(int maxSlots = 4)
         {
@@ -24,7 +53,7 @@ namespace LegacyoftheAbyss.Shade
             }
 
             MaxSlots = maxSlots;
-            _slots = new Dictionary<int, ShadePersistentState>(MaxSlots);
+            _slots = new Dictionary<int, ShadeSaveSlotRecord>(MaxSlots);
         }
 
         public int MaxSlots { get; }
@@ -33,20 +62,25 @@ namespace LegacyoftheAbyss.Shade
 
         public ShadePersistentState GetOrCreateSlot(int slot)
         {
-            if (!_slots.TryGetValue(slot, out var existing))
+            if (!IsValidSlot(slot))
             {
-                existing = new ShadePersistentState();
-                _slots[slot] = existing;
+                return new ShadePersistentState();
             }
 
-            return existing;
+            return GetOrCreateRecord(slot).State;
         }
 
         public bool TryGetSlot(int slot, out ShadePersistentState state)
         {
-            if (_slots.TryGetValue(slot, out var existing))
+            if (!IsValidSlot(slot))
             {
-                state = existing.Clone();
+                state = new ShadePersistentState();
+                return false;
+            }
+
+            if (_slots.TryGetValue(slot, out var record))
+            {
+                state = record.State.Clone();
                 return true;
             }
 
@@ -56,16 +90,23 @@ namespace LegacyoftheAbyss.Shade
 
         public void UpdateSlot(int slot, ShadePersistentState data)
         {
-            if (slot < 0 || slot >= MaxSlots)
+            if (!IsValidSlot(slot))
             {
                 return;
             }
 
-            _slots[slot] = (data ?? new ShadePersistentState()).Clone();
+            var record = GetOrCreateRecord(slot);
+            var clone = (data ?? new ShadePersistentState()).Clone();
+            record.ReplaceState(clone);
         }
 
         public void ClearSlot(int slot)
         {
+            if (!IsValidSlot(slot))
+            {
+                return;
+            }
+
             _slots.Remove(slot);
         }
 
@@ -74,12 +115,11 @@ namespace LegacyoftheAbyss.Shade
             _slots.Clear();
         }
 
-<<<<<<< ours
         public IReadOnlyCollection<int> GetDiscoveredCharms(int slot)
         {
-            if (_slots.TryGetValue(slot, out var state))
+            if (_slots.TryGetValue(slot, out var record))
             {
-                return state.GetDiscoveredCharmIdsSnapshot();
+                return record.State.GetDiscoveredCharmIdsSnapshot();
             }
 
             return s_emptyCharmList;
@@ -87,9 +127,9 @@ namespace LegacyoftheAbyss.Shade
 
         public IReadOnlyCollection<int> GetEquippedCharms(int slot, int loadoutId)
         {
-            if (_slots.TryGetValue(slot, out var state))
+            if (_slots.TryGetValue(slot, out var record))
             {
-                return state.GetEquippedCharms(loadoutId);
+                return record.State.GetEquippedCharms(loadoutId);
             }
 
             return s_emptyCharmList;
@@ -97,12 +137,12 @@ namespace LegacyoftheAbyss.Shade
 
         public IReadOnlyDictionary<int, IReadOnlyCollection<int>> GetEquippedCharmLoadouts(int slot)
         {
-            if (_slots.TryGetValue(slot, out var state))
+            if (_slots.TryGetValue(slot, out var record))
             {
-                return state.GetEquippedCharmLoadouts();
+                return record.State.GetEquippedCharmLoadouts();
             }
 
-            return new Dictionary<int, IReadOnlyCollection<int>>();
+            return s_emptyLoadoutMap;
         }
 
         public bool UnlockCharm(int slot, int charmId)
@@ -112,11 +152,54 @@ namespace LegacyoftheAbyss.Shade
                 return false;
             }
 
-            return GetOrCreateSlot(slot).UnlockCharm(charmId);
+            return GetOrCreateRecord(slot).State.UnlockCharm(charmId);
         }
 
         public bool EquipCharm(int slot, int loadoutId, int charmId)
-=======
+        {
+            if (!IsValidSlot(slot))
+            {
+                return false;
+            }
+
+            return GetOrCreateRecord(slot).State.EquipCharm(loadoutId, charmId);
+        }
+
+        public bool UnequipCharm(int slot, int loadoutId, int charmId)
+        {
+            if (!IsValidSlot(slot))
+            {
+                return false;
+            }
+
+            if (_slots.TryGetValue(slot, out var record))
+            {
+                return record.State.UnequipCharm(loadoutId, charmId);
+            }
+
+            return false;
+        }
+
+        public int GetNotchCapacity(int slot)
+        {
+            if (_slots.TryGetValue(slot, out var record))
+            {
+                return record.State.NotchCapacity;
+            }
+
+            return 0;
+        }
+
+        public bool SetNotchCapacity(int slot, int capacity)
+        {
+            if (!IsValidSlot(slot))
+            {
+                return false;
+            }
+
+            return GetOrCreateRecord(slot).State.SetNotchCapacity(capacity);
+        }
+
         public bool MarkCharmCollected(int slot, ShadeCharmId charmId)
         {
             if (!IsValidSlot(slot))
@@ -124,8 +207,7 @@ namespace LegacyoftheAbyss.Shade
                 return false;
             }
 
-            var record = GetOrCreateRecord(slot);
-            return record.CollectedCharms.Add(charmId);
+            return GetOrCreateRecord(slot).CollectedCharms.Add(charmId);
         }
 
         public bool IsCharmCollected(int slot, ShadeCharmId charmId)
@@ -154,52 +236,12 @@ namespace LegacyoftheAbyss.Shade
         }
 
         public bool ClearCharm(int slot, ShadeCharmId charmId)
->>>>>>> theirs
         {
             if (!IsValidSlot(slot))
             {
                 return false;
             }
 
-<<<<<<< ours
-            return GetOrCreateSlot(slot).EquipCharm(loadoutId, charmId);
-        }
-
-        public bool UnequipCharm(int slot, int loadoutId, int charmId)
-        {
-            if (!_slots.TryGetValue(slot, out var state))
-            {
-                return false;
-            }
-
-            return state.UnequipCharm(loadoutId, charmId);
-        }
-
-        public int GetNotchCapacity(int slot)
-        {
-            if (_slots.TryGetValue(slot, out var state))
-            {
-                return state.NotchCapacity;
-            }
-
-            return 0;
-        }
-
-        public bool SetNotchCapacity(int slot, int capacity)
-        {
-            if (!IsValidSlot(slot))
-            {
-                return false;
-            }
-
-            return GetOrCreateSlot(slot).SetNotchCapacity(capacity);
-        }
-
-        private bool IsValidSlot(int slot)
-        {
-            return slot >= 0 && slot < MaxSlots;
-        }
-=======
             if (_slots.TryGetValue(slot, out var record))
             {
                 return record.CollectedCharms.Remove(charmId);
@@ -231,6 +273,11 @@ namespace LegacyoftheAbyss.Shade
 
         private ShadeSaveSlotRecord GetOrCreateRecord(int slot)
         {
+            if (!IsValidSlot(slot))
+            {
+                throw new ArgumentOutOfRangeException(nameof(slot));
+            }
+
             if (!_slots.TryGetValue(slot, out var record))
             {
                 record = new ShadeSaveSlotRecord();
@@ -240,7 +287,9 @@ namespace LegacyoftheAbyss.Shade
             return record;
         }
 
-        private bool IsValidSlot(int slot) => slot >= 0 && slot < MaxSlots;
->>>>>>> theirs
+        private bool IsValidSlot(int slot)
+        {
+            return slot >= 0 && slot < MaxSlots;
+        }
     }
 }

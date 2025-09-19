@@ -2,8 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using System;
-using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 
@@ -21,6 +19,8 @@ namespace LegacyoftheAbyss.Shade
         private static readonly ShadeCharmInventory s_charmInventory = new ShadeCharmInventory();
         private static readonly Queue<ShadeUnlockNotification> s_notificationQueue = new();
         private static readonly HashSet<string> s_seenNotificationKeys = new(StringComparer.OrdinalIgnoreCase);
+        private static int s_activeSlot;
+        private static bool s_hasActiveSlot;
 
         public static event Action? NotificationsChanged;
 
@@ -151,7 +151,6 @@ namespace LegacyoftheAbyss.Shade
             s_persistentState.SetSpellProgress(progress);
         }
 
-<<<<<<< ours
         public static IReadOnlyCollection<int> GetDiscoveredCharms()
         {
             return s_persistentState.GetDiscoveredCharmIdsSnapshot();
@@ -200,7 +199,8 @@ namespace LegacyoftheAbyss.Shade
         public static bool SetNotchCapacity(int capacity)
         {
             return s_persistentState.SetNotchCapacity(capacity);
-=======
+        }
+
         internal static void SyncActiveSlot(GameManager? gameManager)
         {
             if (gameManager == null)
@@ -215,15 +215,9 @@ namespace LegacyoftheAbyss.Shade
 
         internal static void SetActiveSlot(int slot)
         {
-            int clamped;
-            if (s_saveSlots.MaxSlots > 0)
-            {
-                clamped = Mathf.Clamp(slot, 0, s_saveSlots.MaxSlots - 1);
-            }
-            else
-            {
-                clamped = 0;
-            }
+            int clamped = s_saveSlots.MaxSlots > 0
+                ? Mathf.Clamp(slot, 0, s_saveSlots.MaxSlots - 1)
+                : 0;
 
             s_activeSlot = clamped;
             s_hasActiveSlot = true;
@@ -297,7 +291,6 @@ namespace LegacyoftheAbyss.Shade
             }
 
             return 0;
->>>>>>> theirs
         }
     }
 }
