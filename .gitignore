@@ -11,3 +11,8 @@ Assets/logs/*
 *.GlobalUsings.g.cs
 *.CoreCompileInputs.cache
 obj/Release/LegacyoftheAbyss.csproj.CoreCompileInputs.cache
+obj/LegacyoftheAbyss.csproj.nuget.dgspec.json
+obj/project.nuget.cache
+obj/Release/LegacyoftheAbyss.assets.cache
+obj/Release/LegacyoftheAbyss.csproj.AssemblyReference.cache
+obj/Release/LegacyoftheAbyss.GeneratedMSBuildEditorConfig.editorconfig
