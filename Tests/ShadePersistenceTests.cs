@@ -164,6 +164,7 @@ public class ShadeSaveSlotRepositoryTests
     }
 
     [Fact]
+<<<<<<< ours
     public void CharmHelpersOperatePerSlot()
     {
         var repository = new ShadeSaveSlotRepository();
@@ -188,5 +189,42 @@ public class ShadeSaveSlotRepositoryTests
         Assert.Empty(repository.GetDiscoveredCharms(1));
         Assert.Equal(0, repository.GetNotchCapacity(1));
         Assert.Empty(repository.GetEquippedCharmLoadouts(1));
+=======
+    public void CharmCollectionStatePersistsPerSlot()
+    {
+        var repository = new ShadeSaveSlotRepository();
+
+        Assert.False(repository.IsCharmCollected(0, ShadeCharmId.UmbralHeart));
+        Assert.True(repository.MarkCharmCollected(0, ShadeCharmId.UmbralHeart));
+        Assert.True(repository.IsCharmCollected(0, ShadeCharmId.UmbralHeart));
+
+        var snapshot = repository.GetCollectedCharms(0);
+        Assert.Contains(ShadeCharmId.UmbralHeart, snapshot);
+
+        // Duplicated mark should report false and not add again.
+        Assert.False(repository.MarkCharmCollected(0, ShadeCharmId.UmbralHeart));
+
+        var copy = repository.GetCollectedCharms(0);
+        Assert.NotSame(snapshot, copy);
+        Assert.True(snapshot.OrderBy(c => c).SequenceEqual(copy.OrderBy(c => c)));
+
+        Assert.True(repository.ClearCharm(0, ShadeCharmId.UmbralHeart));
+        Assert.False(repository.IsCharmCollected(0, ShadeCharmId.UmbralHeart));
+    }
+
+    [Fact]
+    public void SetCollectedCharmsReplacesState()
+    {
+        var repository = new ShadeSaveSlotRepository();
+        repository.MarkCharmCollected(0, ShadeCharmId.UmbralHeart);
+
+        repository.SetCollectedCharms(0, new[] { ShadeCharmId.LuminousVeil, ShadeCharmId.PaleRemnant });
+
+        var charms = repository.GetCollectedCharms(0).OrderBy(c => c).ToArray();
+        Assert.Equal(new[] { ShadeCharmId.LuminousVeil, ShadeCharmId.PaleRemnant }, charms);
+
+        repository.SetCollectedCharms(0, Array.Empty<ShadeCharmId>());
+        Assert.Empty(repository.GetCollectedCharms(0));
+>>>>>>> theirs
     }
 }

@@ -1,5 +1,8 @@
 #nullable enable
+using System;
 using System.Collections.Generic;
+using System.Reflection;
+using UnityEngine;
 
 namespace LegacyoftheAbyss.Shade
 {
@@ -60,6 +63,7 @@ namespace LegacyoftheAbyss.Shade
             s_persistentState.SetSpellProgress(progress);
         }
 
+<<<<<<< ours
         public static IReadOnlyCollection<int> GetDiscoveredCharms()
         {
             return s_persistentState.GetDiscoveredCharmIdsSnapshot();
@@ -108,6 +112,104 @@ namespace LegacyoftheAbyss.Shade
         public static bool SetNotchCapacity(int capacity)
         {
             return s_persistentState.SetNotchCapacity(capacity);
+=======
+        internal static void SyncActiveSlot(GameManager? gameManager)
+        {
+            if (gameManager == null)
+            {
+                EnsureActiveSlot();
+                return;
+            }
+
+            int desired = TryGetProfileId(gameManager);
+            SetActiveSlot(desired);
+        }
+
+        internal static void SetActiveSlot(int slot)
+        {
+            int clamped;
+            if (s_saveSlots.MaxSlots > 0)
+            {
+                clamped = Mathf.Clamp(slot, 0, s_saveSlots.MaxSlots - 1);
+            }
+            else
+            {
+                clamped = 0;
+            }
+
+            s_activeSlot = clamped;
+            s_hasActiveSlot = true;
+            s_saveSlots.GetOrCreateSlot(s_activeSlot);
+        }
+
+        internal static IReadOnlyCollection<ShadeCharmId> GetCollectedCharms()
+        {
+            EnsureActiveSlot();
+            return s_saveSlots.GetCollectedCharms(s_activeSlot);
+        }
+
+        internal static bool IsCharmCollected(ShadeCharmId charmId)
+        {
+            EnsureActiveSlot();
+            return s_saveSlots.IsCharmCollected(s_activeSlot, charmId);
+        }
+
+        internal static bool TryCollectCharm(ShadeCharmId charmId)
+        {
+            EnsureActiveSlot();
+            return s_saveSlots.MarkCharmCollected(s_activeSlot, charmId);
+        }
+
+        private static void EnsureActiveSlot()
+        {
+            if (!s_hasActiveSlot)
+            {
+                SetActiveSlot(0);
+            }
+        }
+
+        private static int TryGetProfileId(GameManager gameManager)
+        {
+            try
+            {
+                const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                var type = gameManager.GetType();
+
+                var field = type.GetField("profileID", flags)
+                    ?? type.GetField("profileId", flags)
+                    ?? type.GetField("ProfileID", flags)
+                    ?? type.GetField("ProfileId", flags);
+
+                if (field != null && field.FieldType == typeof(int))
+                {
+                    var value = field.GetValue(gameManager);
+                    if (value is int intField)
+                    {
+                        return Math.Max(0, intField);
+                    }
+                }
+
+                var property = type.GetProperty("profileID", flags)
+                    ?? type.GetProperty("profileId", flags)
+                    ?? type.GetProperty("ProfileID", flags)
+                    ?? type.GetProperty("ProfileId", flags);
+
+                if (property != null && property.PropertyType == typeof(int) && property.GetIndexParameters().Length == 0)
+                {
+                    var propertyValue = property.GetValue(gameManager);
+                    if (propertyValue is int intProperty)
+                    {
+                        return Math.Max(0, intProperty);
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore reflection failures and fall back to default slot.
+            }
+
+            return 0;
+>>>>>>> theirs
         }
     }
 }

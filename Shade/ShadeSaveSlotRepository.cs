@@ -74,6 +74,7 @@ namespace LegacyoftheAbyss.Shade
             _slots.Clear();
         }
 
+<<<<<<< ours
         public IReadOnlyCollection<int> GetDiscoveredCharms(int slot)
         {
             if (_slots.TryGetValue(slot, out var state))
@@ -115,12 +116,52 @@ namespace LegacyoftheAbyss.Shade
         }
 
         public bool EquipCharm(int slot, int loadoutId, int charmId)
+=======
+        public bool MarkCharmCollected(int slot, ShadeCharmId charmId)
         {
             if (!IsValidSlot(slot))
             {
                 return false;
             }
 
+            var record = GetOrCreateRecord(slot);
+            return record.CollectedCharms.Add(charmId);
+        }
+
+        public bool IsCharmCollected(int slot, ShadeCharmId charmId)
+        {
+            if (!IsValidSlot(slot))
+            {
+                return false;
+            }
+
+            return _slots.TryGetValue(slot, out var record) && record.CollectedCharms.Contains(charmId);
+        }
+
+        public IReadOnlyCollection<ShadeCharmId> GetCollectedCharms(int slot)
+        {
+            if (!IsValidSlot(slot))
+            {
+                return Array.Empty<ShadeCharmId>();
+            }
+
+            if (_slots.TryGetValue(slot, out var record))
+            {
+                return record.CollectedCharms.ToArray();
+            }
+
+            return Array.Empty<ShadeCharmId>();
+        }
+
+        public bool ClearCharm(int slot, ShadeCharmId charmId)
+>>>>>>> theirs
+        {
+            if (!IsValidSlot(slot))
+            {
+                return false;
+            }
+
+<<<<<<< ours
             return GetOrCreateSlot(slot).EquipCharm(loadoutId, charmId);
         }
 
@@ -158,5 +199,48 @@ namespace LegacyoftheAbyss.Shade
         {
             return slot >= 0 && slot < MaxSlots;
         }
+=======
+            if (_slots.TryGetValue(slot, out var record))
+            {
+                return record.CollectedCharms.Remove(charmId);
+            }
+
+            return false;
+        }
+
+        public void SetCollectedCharms(int slot, IEnumerable<ShadeCharmId> charms)
+        {
+            if (!IsValidSlot(slot))
+            {
+                return;
+            }
+
+            var record = GetOrCreateRecord(slot);
+            record.CollectedCharms.Clear();
+
+            if (charms == null)
+            {
+                return;
+            }
+
+            foreach (var charm in charms)
+            {
+                record.CollectedCharms.Add(charm);
+            }
+        }
+
+        private ShadeSaveSlotRecord GetOrCreateRecord(int slot)
+        {
+            if (!_slots.TryGetValue(slot, out var record))
+            {
+                record = new ShadeSaveSlotRecord();
+                _slots[slot] = record;
+            }
+
+            return record;
+        }
+
+        private bool IsValidSlot(int slot) => slot >= 0 && slot < MaxSlots;
+>>>>>>> theirs
     }
 }
