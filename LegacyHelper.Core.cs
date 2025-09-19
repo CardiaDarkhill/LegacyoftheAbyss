@@ -3,6 +3,7 @@ using System;
 using System.Reflection;
 using BepInEx;
 using HarmonyLib;
+using LegacyoftheAbyss.Shade;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -17,25 +18,17 @@ public partial class LegacyHelper : BaseUnityPlugin
     private bool loggedMissingPauseMenu;
 
     // Persist shade state across scene transitions
-    internal static int savedShadeHP = -1;
-    internal static int savedShadeMax = -1;
-    internal static int savedShadeSoul = -1;
-    internal static int savedShadeSpellProgress = 0; // 0..6 progression
-    internal static bool savedShadeCanTakeDamage = true;
-    internal static bool HasSavedShadeState => savedShadeMax > 0;
+    internal static bool HasSavedShadeState => ShadeRuntime.PersistentState.HasData;
 
     internal static void SaveShadeState(int curHp, int maxHp, int soul, bool? canTakeDamage = null)
     {
-        savedShadeMax = Mathf.Max(1, maxHp);
-        savedShadeHP = Mathf.Clamp(curHp, 0, savedShadeMax);
-        savedShadeSoul = Mathf.Max(0, soul);
-        if (canTakeDamage.HasValue) savedShadeCanTakeDamage = canTakeDamage.Value;
+        ShadeRuntime.CaptureState(curHp, maxHp, soul, canTakeDamage);
     }
 
     // Called when Hornet gains a new spell. Advances Shade's unlock/upgrade track.
     internal static void NotifyHornetSpellUnlocked()
     {
-        savedShadeSpellProgress = Mathf.Clamp(savedShadeSpellProgress + 1, 0, 6);
+        ShadeRuntime.NotifyHornetSpellUnlocked();
     }
 
     private void Awake()
@@ -161,9 +154,9 @@ public partial class LegacyHelper : BaseUnityPlugin
 
         var scNew = helper.AddComponent<ShadeController>();
         scNew.Init(gm.hero_ctrl.transform);
-        if (HasSavedShadeState)
+        if (ShadeRuntime.TryGetPersistentState(out var savedHp, out var savedMax, out var savedSoul, out var savedCanTakeDamage))
         {
-            scNew.RestorePersistentState(savedShadeHP, savedShadeMax, savedShadeSoul, savedShadeCanTakeDamage);
+            scNew.RestorePersistentState(savedHp, savedMax, savedSoul, savedCanTakeDamage);
         }
 
         var sr = helper.AddComponent<SpriteRenderer>();

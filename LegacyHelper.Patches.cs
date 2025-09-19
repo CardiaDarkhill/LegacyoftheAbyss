@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
 using InControl;
+using LegacyoftheAbyss.Shade;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -79,9 +80,9 @@ public partial class LegacyHelper
                     }
                 }
                 // Fallback: ensure saved state revives next spawn
-                if (savedShadeMax > 0)
+                if (ShadeRuntime.PersistentState.HasData)
                 {
-                    savedShadeHP = Mathf.Max(savedShadeHP, 1);
+                    ShadeRuntime.EnsureMinimumHealth(1);
                 }
             }
             catch { }
