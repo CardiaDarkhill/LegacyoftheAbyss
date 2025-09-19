@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -291,23 +291,23 @@ public partial class LegacyHelper
         {
             try
             {
-                var dir = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Assets", "Knight_Shade_Sprites");
-                idleAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Idle_Sheet.png"), 9);
-                floatAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Float_Sheet.png"), 6);
-                vengefulAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Vengeful_Spirit_Sheet.png"), 2);
-                shadeSoulAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Soul_Sheet.png"), 4);
-                fireballCastAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Fireball_Cast_Sheet.png"), 4);
-                quakeCastAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Quake_Cast_Sheet.png"), 2);
-                shriekCastAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Shriek_Cast_Sheet.png"), 2);
-                abyssShriekAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Abyss_Shriek_sheet.png"), 8);
-                howlingWraithsAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Howling_Wraiths_Sheet.png"), 7);
-                deathAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Death_Sheet.png"), 6);
-                descendAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Shade_Descend_Sheet.png"), 3);
-                descendAuraAnimFrames = LoadSpriteStrip(Path.Combine(dir, "Quake_Descend_Aura_Sheet.png"), 3);
-                dDiveSlamAnimFrames = LoadSpriteStrip(Path.Combine(dir, "DDive_Slam_Sheet.png"), 2);
-                dDarkSlamAnimFrames = LoadSpriteStrip(Path.Combine(dir, "DDark_Slam_Sheet.png"), 6);
-                dDarkBurstAnimFrames = LoadSpriteStrip(Path.Combine(dir, "DDark_Burst_sheet.png"), 7);
-                var inactive = LoadSpriteStrip(Path.Combine(dir, "ShadeInactive.png"));
+                string SpritePath(string fileName) => ModPaths.GetAssetPath("Knight_Shade_Sprites", fileName);
+                idleAnimFrames = LoadSpriteStrip(SpritePath("Shade_Idle_Sheet.png"), 9);
+                floatAnimFrames = LoadSpriteStrip(SpritePath("Shade_Float_Sheet.png"), 6);
+                vengefulAnimFrames = LoadSpriteStrip(SpritePath("Vengeful_Spirit_Sheet.png"), 2);
+                shadeSoulAnimFrames = LoadSpriteStrip(SpritePath("Shade_Soul_Sheet.png"), 4);
+                fireballCastAnimFrames = LoadSpriteStrip(SpritePath("Shade_Fireball_Cast_Sheet.png"), 4);
+                quakeCastAnimFrames = LoadSpriteStrip(SpritePath("Shade_Quake_Cast_Sheet.png"), 2);
+                shriekCastAnimFrames = LoadSpriteStrip(SpritePath("Shade_Shriek_Cast_Sheet.png"), 2);
+                abyssShriekAnimFrames = LoadSpriteStrip(SpritePath("Abyss_Shriek_sheet.png"), 8);
+                howlingWraithsAnimFrames = LoadSpriteStrip(SpritePath("Howling_Wraiths_Sheet.png"), 7);
+                deathAnimFrames = LoadSpriteStrip(SpritePath("Shade_Death_Sheet.png"), 6);
+                descendAnimFrames = LoadSpriteStrip(SpritePath("Shade_Descend_Sheet.png"), 3);
+                descendAuraAnimFrames = LoadSpriteStrip(SpritePath("Quake_Descend_Aura_Sheet.png"), 3);
+                dDiveSlamAnimFrames = LoadSpriteStrip(SpritePath("DDive_Slam_Sheet.png"), 2);
+                dDarkSlamAnimFrames = LoadSpriteStrip(SpritePath("DDark_Slam_Sheet.png"), 6);
+                dDarkBurstAnimFrames = LoadSpriteStrip(SpritePath("DDark_Burst_sheet.png"), 7);
+                var inactive = LoadSpriteStrip(SpritePath("ShadeInactive.png"));
                 inactiveSprite = inactive.Length > 0 ? inactive[0] : null;
             }
             catch
@@ -2358,15 +2358,17 @@ public partial class LegacyHelper
         {
             try
             {
-                string dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-                string assets = Path.Combine(dir, "Assets");
-                string path = Path.Combine(assets, fileName);
-                if (!File.Exists(path)) return null;
-                // WAV only for now (16-bit PCM). Keep simple and dependency-free.
-                if (path.EndsWith(".wav", System.StringComparison.OrdinalIgnoreCase))
+                if (!ModPaths.TryGetAssetPath(out var path, fileName))
                 {
-                    return LoadPcmWav(path);
+                    return null;
                 }
+
+                if (!path.EndsWith(".wav", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    return null;
+                }
+
+                return LoadPcmWav(path);
             }
             catch { }
             return null;

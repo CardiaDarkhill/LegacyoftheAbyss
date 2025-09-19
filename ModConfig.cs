@@ -1,12 +1,87 @@
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
 internal static class ModPaths
 {
-    internal static readonly string Root = Path.GetDirectoryName(typeof(ModPaths).Assembly.Location);
+    internal static readonly string Root = Path.GetDirectoryName(typeof(ModPaths).Assembly.Location) ?? Directory.GetCurrentDirectory();
     internal static readonly string Assets = Path.Combine(Root, "Assets");
     internal static readonly string Logs = Path.Combine(Assets, "logs");
     internal static readonly string Config = Path.Combine(Assets, "config.json");
+    private static readonly string CleanupRoot = Path.GetFullPath(Path.Combine(Root, "..", "LegacyCleanup"));
+
+    private static IEnumerable<string> GetAssetSearchRoots()
+    {
+        var order = new[]
+        {
+            Assets,
+            Path.Combine(CleanupRoot, "LegacyoftheAbyss", "Assets"),
+            Path.Combine(CleanupRoot, "Assets"),
+            Path.Combine(CleanupRoot, "LegacyoftheAbyss"),
+            CleanupRoot
+        };
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var candidate in order)
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                continue;
+            }
+
+            string full = Path.GetFullPath(candidate);
+            if (seen.Add(full))
+            {
+                yield return full;
+            }
+        }
+    }
+
+    internal static bool TryGetAssetPath(out string fullPath, params string[] parts)
+    {
+        fullPath = string.Empty;
+        if (parts == null || parts.Length == 0)
+        {
+            return false;
+        }
+
+        string relative = Path.Combine(parts);
+        foreach (var root in GetAssetSearchRoots())
+        {
+            string candidate = Path.Combine(root, relative);
+            if (File.Exists(candidate))
+            {
+                fullPath = candidate;
+                return true;
+            }
+        }
+
+        fullPath = Path.Combine(Assets, relative);
+        return File.Exists(fullPath);
+    }
+
+    internal static string GetAssetPath(params string[] parts)
+    {
+        return TryGetAssetPath(out var resolved, parts)
+            ? resolved
+            : Path.Combine(Assets, Path.Combine(parts));
+    }
+
+    internal static string GetAssetDirectory(params string[] parts)
+    {
+        string relative = Path.Combine(parts);
+        foreach (var root in GetAssetSearchRoots())
+        {
+            string candidate = Path.Combine(root, relative);
+            if (Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return Path.Combine(Assets, relative);
+    }
 }
 
 public class ModConfig

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -22,11 +22,10 @@ public partial class SimpleHUD
     {
         try
         {
-            var dir = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Assets");
-            var maskPath = Path.Combine(dir, "select_game_HUD_0001_health.png");
-            var framePath = Path.Combine(dir, "select_game_HUD_0002_health_frame.png");
-            var slashPath = Path.Combine(dir, "The Knight spells and items - atlas0 #00000309.png");
-            var soulOrbPath = Path.Combine(dir, "soul_orb_glow0000.png");
+            var maskPath = ModPaths.GetAssetPath("select_game_HUD_0001_health.png");
+            var framePath = ModPaths.GetAssetPath("select_game_HUD_0002_health_frame.png");
+            var slashPath = ModPaths.GetAssetPath("The Knight spells and items - atlas0 #00000309.png");
+            var soulOrbPath = ModPaths.GetAssetPath("soul_orb_glow0000.png");
             maskSprite = LoadSprite(maskPath);
             if (maskSprite == null) maskSprite = FindSpriteInGame("select_game_HUD_0001_health");
             frameSprite = LoadSprite(framePath);
