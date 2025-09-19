@@ -14,6 +14,8 @@ namespace LegacyoftheAbyss.Shade
     {
         private readonly Dictionary<int, ShadePersistentState> _slots;
 
+        private static readonly IReadOnlyCollection<int> s_emptyCharmList = Array.Empty<int>();
+
         public ShadeSaveSlotRepository(int maxSlots = 4)
         {
             if (maxSlots <= 0)
@@ -70,6 +72,91 @@ namespace LegacyoftheAbyss.Shade
         public void ResetAll()
         {
             _slots.Clear();
+        }
+
+        public IReadOnlyCollection<int> GetDiscoveredCharms(int slot)
+        {
+            if (_slots.TryGetValue(slot, out var state))
+            {
+                return state.GetDiscoveredCharmIdsSnapshot();
+            }
+
+            return s_emptyCharmList;
+        }
+
+        public IReadOnlyCollection<int> GetEquippedCharms(int slot, int loadoutId)
+        {
+            if (_slots.TryGetValue(slot, out var state))
+            {
+                return state.GetEquippedCharms(loadoutId);
+            }
+
+            return s_emptyCharmList;
+        }
+
+        public IReadOnlyDictionary<int, IReadOnlyCollection<int>> GetEquippedCharmLoadouts(int slot)
+        {
+            if (_slots.TryGetValue(slot, out var state))
+            {
+                return state.GetEquippedCharmLoadouts();
+            }
+
+            return new Dictionary<int, IReadOnlyCollection<int>>();
+        }
+
+        public bool UnlockCharm(int slot, int charmId)
+        {
+            if (!IsValidSlot(slot))
+            {
+                return false;
+            }
+
+            return GetOrCreateSlot(slot).UnlockCharm(charmId);
+        }
+
+        public bool EquipCharm(int slot, int loadoutId, int charmId)
+        {
+            if (!IsValidSlot(slot))
+            {
+                return false;
+            }
+
+            return GetOrCreateSlot(slot).EquipCharm(loadoutId, charmId);
+        }
+
+        public bool UnequipCharm(int slot, int loadoutId, int charmId)
+        {
+            if (!_slots.TryGetValue(slot, out var state))
+            {
+                return false;
+            }
+
+            return state.UnequipCharm(loadoutId, charmId);
+        }
+
+        public int GetNotchCapacity(int slot)
+        {
+            if (_slots.TryGetValue(slot, out var state))
+            {
+                return state.NotchCapacity;
+            }
+
+            return 0;
+        }
+
+        public bool SetNotchCapacity(int slot, int capacity)
+        {
+            if (!IsValidSlot(slot))
+            {
+                return false;
+            }
+
+            return GetOrCreateSlot(slot).SetNotchCapacity(capacity);
+        }
+
+        private bool IsValidSlot(int slot)
+        {
+            return slot >= 0 && slot < MaxSlots;
         }
     }
 }

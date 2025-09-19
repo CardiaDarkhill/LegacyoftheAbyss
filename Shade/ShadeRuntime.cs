@@ -1,4 +1,5 @@
 #nullable enable
+using System.Collections.Generic;
 
 namespace LegacyoftheAbyss.Shade
 {
@@ -57,6 +58,56 @@ namespace LegacyoftheAbyss.Shade
         public static void SyncSpellProgress(int progress)
         {
             s_persistentState.SetSpellProgress(progress);
+        }
+
+        public static IReadOnlyCollection<int> GetDiscoveredCharms()
+        {
+            return s_persistentState.GetDiscoveredCharmIdsSnapshot();
+        }
+
+        public static bool IsCharmDiscovered(int charmId)
+        {
+            return s_persistentState.HasDiscoveredCharm(charmId);
+        }
+
+        public static bool UnlockCharm(int charmId)
+        {
+            return s_persistentState.UnlockCharm(charmId);
+        }
+
+        public static IReadOnlyCollection<int> GetEquippedCharms(int loadoutId)
+        {
+            return s_persistentState.GetEquippedCharms(loadoutId);
+        }
+
+        public static IReadOnlyDictionary<int, IReadOnlyCollection<int>> GetEquippedCharmLoadouts()
+        {
+            return s_persistentState.GetEquippedCharmLoadouts();
+        }
+
+        public static bool EquipCharm(int loadoutId, int charmId)
+        {
+            return s_persistentState.EquipCharm(loadoutId, charmId);
+        }
+
+        public static bool UnequipCharm(int loadoutId, int charmId)
+        {
+            return s_persistentState.UnequipCharm(loadoutId, charmId);
+        }
+
+        public static void ClearLoadout(int loadoutId)
+        {
+            s_persistentState.ClearLoadout(loadoutId);
+        }
+
+        public static int GetNotchCapacity()
+        {
+            return s_persistentState.NotchCapacity;
+        }
+
+        public static bool SetNotchCapacity(int capacity)
+        {
+            return s_persistentState.SetNotchCapacity(capacity);
         }
     }
 }

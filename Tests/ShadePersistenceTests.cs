@@ -44,6 +44,58 @@ public class ShadePersistentStateTests
         state.SetSpellProgress(-5);
         Assert.Equal(0, state.SpellProgress);
     }
+
+    [Fact]
+    public void CharmStateDiscoveryEquippingCloneAndReset()
+    {
+        var state = new ShadePersistentState();
+
+        Assert.False(state.HasDiscoveredCharm(7));
+        Assert.True(state.UnlockCharm(7));
+        Assert.True(state.HasDiscoveredCharm(7));
+        Assert.False(state.UnlockCharm(7));
+
+        Assert.False(state.EquipCharm(0, 5));
+        Assert.True(state.EquipCharm(0, 7));
+        Assert.Contains(7, state.GetEquippedCharms(0));
+        Assert.Empty(state.GetEquippedCharms(1));
+
+        var equippedSnapshot = state.GetEquippedCharms(0);
+        if (equippedSnapshot is int[] equippedArray)
+        {
+            equippedArray[0] = 123;
+        }
+
+        Assert.Contains(7, state.GetEquippedCharms(0));
+
+        Assert.True(state.SetNotchCapacity(5));
+        Assert.Equal(5, state.NotchCapacity);
+        Assert.True(state.SetNotchCapacity(-2));
+        Assert.Equal(0, state.NotchCapacity);
+        Assert.False(state.SetNotchCapacity(0));
+        Assert.True(state.SetNotchCapacity(3));
+
+        var clone = state.Clone();
+        Assert.True(clone.HasDiscoveredCharm(7));
+        Assert.Contains(7, clone.GetEquippedCharms(0));
+        Assert.Equal(3, clone.NotchCapacity);
+
+        clone.UnlockCharm(8);
+        clone.EquipCharm(1, 8);
+        clone.ClearLoadout(0);
+        clone.SetNotchCapacity(6);
+
+        Assert.True(state.HasDiscoveredCharm(7));
+        Assert.False(state.HasDiscoveredCharm(8));
+        Assert.Contains(7, state.GetEquippedCharms(0));
+        Assert.Empty(state.GetEquippedCharms(1));
+        Assert.Equal(3, state.NotchCapacity);
+
+        state.Reset();
+        Assert.Empty(state.DiscoveredCharmIds);
+        Assert.Empty(state.GetEquippedCharms(0));
+        Assert.Equal(0, state.NotchCapacity);
+    }
 }
 
 public class ShadeSaveSlotRepositoryTests
@@ -64,6 +116,23 @@ public class ShadeSaveSlotRepositoryTests
         Assert.Equal(5, stored.MaxHP);
         Assert.Equal(10, stored.Soul);
         Assert.False(stored.CanTakeDamage);
+        Assert.Equal(0, stored.NotchCapacity);
+
+        original.UnlockCharm(7);
+        original.EquipCharm(0, 7);
+        original.SetNotchCapacity(4);
+
+        repository.UpdateSlot(2, original);
+
+        original.UnlockCharm(9);
+        original.EquipCharm(1, 9);
+        original.SetNotchCapacity(2);
+
+        Assert.True(repository.TryGetSlot(2, out var storedWithCharms));
+        Assert.NotSame(original, storedWithCharms);
+        Assert.True(storedWithCharms.HasDiscoveredCharm(7));
+        Assert.Contains(7, storedWithCharms.GetEquippedCharms(0));
+        Assert.Equal(4, storedWithCharms.NotchCapacity);
     }
 
     [Fact]
@@ -92,5 +161,32 @@ public class ShadeSaveSlotRepositoryTests
 
         repository.ResetAll();
         Assert.Empty(repository.KnownSlots);
+    }
+
+    [Fact]
+    public void CharmHelpersOperatePerSlot()
+    {
+        var repository = new ShadeSaveSlotRepository();
+
+        Assert.True(repository.UnlockCharm(1, 12));
+        Assert.Contains(12, repository.GetDiscoveredCharms(1));
+        Assert.True(repository.SetNotchCapacity(1, 6));
+        Assert.Equal(6, repository.GetNotchCapacity(1));
+
+        Assert.True(repository.EquipCharm(1, 0, 12));
+        Assert.Contains(12, repository.GetEquippedCharms(1, 0));
+        Assert.Empty(repository.GetEquippedCharms(0, 0));
+
+        Assert.False(repository.EquipCharm(1, 0, 99));
+        Assert.False(repository.UnequipCharm(0, 0, 12));
+
+        var loadouts = repository.GetEquippedCharmLoadouts(1);
+        Assert.Single(loadouts);
+        Assert.Equal(12, loadouts[0].Single());
+
+        repository.ClearSlot(1);
+        Assert.Empty(repository.GetDiscoveredCharms(1));
+        Assert.Equal(0, repository.GetNotchCapacity(1));
+        Assert.Empty(repository.GetEquippedCharmLoadouts(1));
     }
 }

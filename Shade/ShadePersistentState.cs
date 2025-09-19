@@ -1,4 +1,7 @@
 #nullable enable
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace LegacyoftheAbyss.Shade
@@ -18,18 +21,35 @@ namespace LegacyoftheAbyss.Shade
         public int SpellProgress { get; private set; }
             = 0;
 
+        private readonly HashSet<int> _discoveredCharmIds = new();
+        private readonly Dictionary<int, HashSet<int>> _equippedCharmLoadouts = new();
+
+        public IReadOnlyCollection<int> DiscoveredCharmIds => _discoveredCharmIds;
+
+        public int NotchCapacity { get; private set; }
+            = 0;
+
         public bool HasData => MaxHP > 0;
 
         public ShadePersistentState Clone()
         {
-            return new ShadePersistentState
+            var clone = new ShadePersistentState
             {
                 CurrentHP = CurrentHP,
                 MaxHP = MaxHP,
                 Soul = Soul,
                 CanTakeDamage = CanTakeDamage,
-                SpellProgress = SpellProgress
+                SpellProgress = SpellProgress,
+                NotchCapacity = NotchCapacity
             };
+
+            clone._discoveredCharmIds.UnionWith(_discoveredCharmIds);
+            foreach (var (loadoutId, charms) in _equippedCharmLoadouts)
+            {
+                clone._equippedCharmLoadouts[loadoutId] = new HashSet<int>(charms);
+            }
+
+            return clone;
         }
 
         public void Capture(int currentHp, int maxHp, int soul, bool? canTakeDamage = null)
@@ -50,6 +70,9 @@ namespace LegacyoftheAbyss.Shade
             Soul = -1;
             CanTakeDamage = true;
             SpellProgress = 0;
+            NotchCapacity = 0;
+            _discoveredCharmIds.Clear();
+            _equippedCharmLoadouts.Clear();
         }
 
         public void ForceMinimumHealth(int minimum)
@@ -71,6 +94,97 @@ namespace LegacyoftheAbyss.Shade
         public void SetSpellProgress(int progress)
         {
             SpellProgress = Mathf.Clamp(progress, 0, MaxSpellProgress);
+        }
+
+        public bool HasDiscoveredCharm(int charmId)
+        {
+            return _discoveredCharmIds.Contains(charmId);
+        }
+
+        public bool UnlockCharm(int charmId)
+        {
+            if (charmId < 0)
+            {
+                return false;
+            }
+
+            return _discoveredCharmIds.Add(charmId);
+        }
+
+        public bool EquipCharm(int loadoutId, int charmId)
+        {
+            if (!_discoveredCharmIds.Contains(charmId))
+            {
+                return false;
+            }
+
+            if (!_equippedCharmLoadouts.TryGetValue(loadoutId, out var loadout))
+            {
+                loadout = new HashSet<int>();
+                _equippedCharmLoadouts[loadoutId] = loadout;
+            }
+
+            return loadout.Add(charmId);
+        }
+
+        public bool UnequipCharm(int loadoutId, int charmId)
+        {
+            if (!_equippedCharmLoadouts.TryGetValue(loadoutId, out var loadout))
+            {
+                return false;
+            }
+
+            bool removed = loadout.Remove(charmId);
+            if (removed && loadout.Count == 0)
+            {
+                _equippedCharmLoadouts.Remove(loadoutId);
+            }
+
+            return removed;
+        }
+
+        public IReadOnlyCollection<int> GetDiscoveredCharmIdsSnapshot()
+        {
+            if (_discoveredCharmIds.Count == 0)
+            {
+                return Array.Empty<int>();
+            }
+
+            return _discoveredCharmIds.ToArray();
+        }
+
+        public IReadOnlyCollection<int> GetEquippedCharms(int loadoutId)
+        {
+            if (_equippedCharmLoadouts.TryGetValue(loadoutId, out var loadout))
+            {
+                return loadout.ToArray();
+            }
+
+            return Array.Empty<int>();
+        }
+
+        public IReadOnlyDictionary<int, IReadOnlyCollection<int>> GetEquippedCharmLoadouts()
+        {
+            return _equippedCharmLoadouts.ToDictionary(
+                kvp => kvp.Key,
+                kvp => (IReadOnlyCollection<int>)kvp.Value.ToArray());
+        }
+
+        public void ClearLoadout(int loadoutId)
+        {
+            _equippedCharmLoadouts.Remove(loadoutId);
+        }
+
+        public bool SetNotchCapacity(int capacity)
+        {
+            int sanitized = Mathf.Max(0, capacity);
+            if (sanitized == NotchCapacity)
+            {
+                return false;
+            }
+
+            NotchCapacity = sanitized;
+            return true;
         }
     }
 }
