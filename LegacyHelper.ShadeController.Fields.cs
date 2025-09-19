@@ -37,6 +37,13 @@ public partial class LegacyHelper
         private int shadeHP;
         private float hazardCooldown;
         private float baseMaxDistance, baseSoftLeashRadius, baseHardLeashRadius, baseSnapLeashRadius;
+        private float baseSprintMultiplier;
+        private float baseFireCooldown;
+        private float baseNailCooldown;
+        private int baseFocusSoulCost;
+        private int baseProjectileSoulCost;
+        private int baseShriekSoulCost;
+        private int baseQuakeSoulCost;
         private bool wasInactive;
         public float hitKnockbackForce = 6f;
         private Vector2 knockbackVelocity;

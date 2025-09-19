@@ -15,10 +15,13 @@ namespace LegacyoftheAbyss.Shade
     {
         private static readonly ShadePersistentState s_persistentState = new ShadePersistentState();
         private static readonly ShadeSaveSlotRepository s_saveSlots = new ShadeSaveSlotRepository();
+        private static readonly ShadeCharmInventory s_charmInventory = new ShadeCharmInventory();
 
         public static ShadePersistentState PersistentState => s_persistentState;
 
         public static ShadeSaveSlotRepository SaveSlots => s_saveSlots;
+
+        public static ShadeCharmInventory Charms => s_charmInventory;
 
         public static bool TryGetPersistentState(out int currentHp, out int maxHp, out int soul, out bool canTakeDamage)
         {
@@ -51,6 +54,7 @@ namespace LegacyoftheAbyss.Shade
         public static void Clear()
         {
             s_persistentState.Reset();
+            s_charmInventory.ResetLoadout();
         }
 
         public static void NotifyHornetSpellUnlocked()

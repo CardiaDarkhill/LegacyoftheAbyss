@@ -10,6 +10,7 @@ using UnityEngine.EventSystems;
 using Object = UnityEngine.Object;
 using BepInEx.Logging;
 using GlobalEnums;
+using LegacyoftheAbyss.Shade;
 
 public static class ShadeSettingsMenu
 {
@@ -20,6 +21,7 @@ public static class ShadeSettingsMenu
     private static MenuScreen difficultyScreen;
     private static MenuScreen controlsScreen;
     private static MenuScreen loggingScreen;
+    private static MenuScreen charmsScreen;
     private static MenuScreen activeScreen;
     private static readonly List<MenuScreen> allScreens = new();
     private static readonly Dictionary<MenuScreen, MenuSelectable> screenFirstSelectables = new();
@@ -93,6 +95,8 @@ public static class ShadeSettingsMenu
     private static Sprite fallbackSlicedSprite;
     private static Sprite fallbackKnobSprite;
     private static Sprite fallbackCheckSprite;
+    private static Sprite fallbackCharmSprite;
+    private static CharmMenuController charmsController;
 
     private static void LogMenu(LogLevel level, string message)
     {
@@ -219,6 +223,372 @@ public static class ShadeSettingsMenu
                 return;
             toggle.isOn = !toggle.isOn;
             eventData?.Use();
+        }
+    }
+
+    private sealed class CharmButtonDriver : MonoBehaviour, ISelectHandler, ISubmitHandler
+    {
+        private CharmMenuController controller;
+        private ShadeCharmDefinition definition;
+        private MenuButton menuButton;
+        private Image iconImage;
+        private Text nameLabel;
+        private Text notchLabel;
+        private Text statusLabel;
+
+        public ShadeCharmId CharmId => definition?.Id ?? default;
+
+        public void Initialize(CharmMenuController owner, ShadeCharmDefinition def, MenuButton button, Image icon, Text name, Text notch, Text status)
+        {
+            controller = owner;
+            definition = def;
+            menuButton = button;
+            iconImage = icon;
+            nameLabel = name;
+            notchLabel = notch;
+            statusLabel = status;
+            controller?.RegisterCharmButton(this);
+            UpdateStaticContent();
+            Refresh();
+        }
+
+        private void UpdateStaticContent()
+        {
+            if (definition == null)
+                return;
+
+            if (nameLabel != null)
+                nameLabel.text = definition.Name;
+
+            if (notchLabel != null)
+            {
+                int cost = Mathf.Max(0, definition.NotchCost);
+                notchLabel.text = cost == 1 ? "1 Notch" : $"{cost} Notches";
+            }
+        }
+
+        public void Refresh()
+        {
+            if (definition == null)
+                return;
+
+            var inventory = ShadeRuntime.Charms;
+            bool owned = inventory?.IsOwned(definition.Id) ?? false;
+            bool equipped = inventory?.IsEquipped(definition.Id) ?? false;
+
+            if (menuButton != null)
+                menuButton.interactable = owned;
+
+            if (iconImage != null)
+                iconImage.color = owned ? definition.FallbackTint : new Color(0.3f, 0.3f, 0.3f, 1f);
+
+            if (statusLabel != null)
+            {
+                if (equipped)
+                {
+                    statusLabel.text = "Equipped";
+                    statusLabel.color = new Color(0.92f, 0.86f, 0.55f, 1f);
+                }
+                else if (!owned)
+                {
+                    statusLabel.text = "Locked";
+                    statusLabel.color = new Color(0.7f, 0.32f, 0.32f, 1f);
+                }
+                else
+                {
+                    statusLabel.text = string.Empty;
+                    statusLabel.color = Color.white;
+                }
+            }
+        }
+
+        public void OnSelect(BaseEventData eventData)
+        {
+            if (definition == null)
+                return;
+            controller?.HandleCharmSelected(definition.Id);
+        }
+
+        public void OnSubmit(BaseEventData eventData)
+        {
+            if (definition == null)
+                return;
+            controller?.HandleCharmSubmit(definition.Id);
+            eventData?.Use();
+        }
+
+        private void OnDestroy()
+        {
+            controller?.UnregisterCharmButton(this);
+        }
+    }
+
+    private sealed class CharmMenuController : MonoBehaviour
+    {
+        private readonly List<CharmButtonDriver> charmButtons = new();
+        private Text notchMeter;
+        private Text statusText;
+        private Text detailTitleText;
+        private Text detailDescriptionText;
+        private Text navigationHintText;
+        private MenuButton equipButton;
+        private MenuButton unequipButton;
+        private ShadeCharmId? selectedCharm;
+        private string pendingStatusMessage = string.Empty;
+
+        public void Initialize(Text notch, Text status, Text title, Text description, Text navigation, MenuButton equip, MenuButton unequip)
+        {
+            notchMeter = notch;
+            statusText = status;
+            detailTitleText = title;
+            detailDescriptionText = description;
+            navigationHintText = navigation;
+            equipButton = equip;
+            unequipButton = unequip;
+
+            if (navigationHintText != null)
+            {
+                navigationHintText.text = "Use arrow keys or the left stick to move between charms. Press Enter/A to equip, Backspace/X to unequip, and Esc/B to return to the pause menu. QA: Equip a charm, confirm the notch meter updates, then back out cleanly.";
+            }
+
+            if (equipButton != null)
+            {
+                equipButton.OnSubmitPressed.RemoveAllListeners();
+                equipButton.OnSubmitPressed.AddListener(HandleEquipPressed);
+            }
+
+            if (unequipButton != null)
+            {
+                unequipButton.OnSubmitPressed.RemoveAllListeners();
+                unequipButton.OnSubmitPressed.AddListener(HandleUnequipPressed);
+            }
+
+            RefreshAll();
+        }
+
+        public void RegisterCharmButton(CharmButtonDriver driver)
+        {
+            if (driver != null && !charmButtons.Contains(driver))
+                charmButtons.Add(driver);
+        }
+
+        public void UnregisterCharmButton(CharmButtonDriver driver)
+        {
+            if (driver == null)
+                return;
+            charmButtons.Remove(driver);
+        }
+
+        public void HandleScreenShown()
+        {
+            RefreshAll();
+        }
+
+        public void RefreshAll()
+        {
+            for (int i = charmButtons.Count - 1; i >= 0; i--)
+            {
+                if (charmButtons[i] == null)
+                {
+                    charmButtons.RemoveAt(i);
+                    continue;
+                }
+                charmButtons[i].Refresh();
+            }
+
+            UpdateNotchMeter();
+            UpdateActionState();
+            UpdateDetailPanel();
+        }
+
+        public void HandleCharmSelected(ShadeCharmId id)
+        {
+            selectedCharm = id;
+            UpdateActionState();
+            UpdateDetailPanel();
+        }
+
+        public void HandleCharmSubmit(ShadeCharmId id)
+        {
+            var inventory = ShadeRuntime.Charms;
+            if (inventory == null)
+            {
+                pendingStatusMessage = "Charm inventory not ready.";
+                UpdateStatusText(pendingStatusMessage);
+                return;
+            }
+
+            if (inventory.TryToggle(id, out var message))
+            {
+                pendingStatusMessage = message;
+                selectedCharm = id;
+                LegacyHelper.RequestShadeLoadoutRecompute();
+            }
+            else
+            {
+                pendingStatusMessage = string.IsNullOrEmpty(message) ? "Unable to change charm." : message;
+                RefreshAll();
+            }
+        }
+
+        public void HandleEquipPressed()
+        {
+            var inventory = ShadeRuntime.Charms;
+            if (inventory == null)
+            {
+                pendingStatusMessage = "Charm inventory not ready.";
+                RefreshAll();
+                return;
+            }
+
+            if (!selectedCharm.HasValue)
+            {
+                pendingStatusMessage = "Select a charm to equip.";
+                RefreshAll();
+                return;
+            }
+
+            if (inventory.TryEquip(selectedCharm.Value, out var message))
+            {
+                pendingStatusMessage = message;
+                LegacyHelper.RequestShadeLoadoutRecompute();
+            }
+            else
+            {
+                pendingStatusMessage = string.IsNullOrEmpty(message) ? "Unable to equip charm." : message;
+                RefreshAll();
+            }
+        }
+
+        public void HandleUnequipPressed()
+        {
+            var inventory = ShadeRuntime.Charms;
+            if (inventory == null)
+            {
+                pendingStatusMessage = "Charm inventory not ready.";
+                RefreshAll();
+                return;
+            }
+
+            if (!selectedCharm.HasValue)
+            {
+                pendingStatusMessage = "Select a charm to unequip.";
+                RefreshAll();
+                return;
+            }
+
+            if (inventory.TryUnequip(selectedCharm.Value, out var message))
+            {
+                pendingStatusMessage = message;
+                LegacyHelper.RequestShadeLoadoutRecompute();
+            }
+            else
+            {
+                pendingStatusMessage = string.IsNullOrEmpty(message) ? "Unable to unequip charm." : message;
+                RefreshAll();
+            }
+        }
+
+        private void UpdateNotchMeter()
+        {
+            if (notchMeter == null)
+                return;
+            var inventory = ShadeRuntime.Charms;
+            if (inventory == null)
+            {
+                notchMeter.text = "Charm inventory unavailable.";
+                return;
+            }
+
+            notchMeter.text = $"Notches Used: {inventory.UsedNotches}/{inventory.NotchCapacity}";
+        }
+
+        private void UpdateDetailPanel()
+        {
+            var inventory = ShadeRuntime.Charms;
+            if (inventory == null)
+            {
+                SetDetailTexts("Charms", "Charm inventory data not yet ready.");
+                UpdateStatusText("Charm data unavailable.");
+                return;
+            }
+
+            if (!selectedCharm.HasValue)
+            {
+                foreach (var driver in charmButtons)
+                {
+                    if (driver != null)
+                    {
+                        selectedCharm = driver.CharmId;
+                        break;
+                    }
+                }
+            }
+
+            string fallbackStatus = "Select a charm to view details.";
+
+            if (selectedCharm.HasValue)
+            {
+                var def = inventory.GetDefinition(selectedCharm.Value);
+                SetDetailTexts(def.Name, def.Description);
+                if (!inventory.IsOwned(selectedCharm.Value))
+                    fallbackStatus = "This charm has not been unlocked yet.";
+                else if (inventory.IsEquipped(selectedCharm.Value))
+                    fallbackStatus = "Charm equipped. Unequip to free notches for other charms.";
+                else
+                    fallbackStatus = "Equip to add this charm to your shade's loadout.";
+            }
+            else
+            {
+                SetDetailTexts("Charms", "Select a charm to view its description and equip requirements.");
+            }
+
+            UpdateStatusText(fallbackStatus);
+        }
+
+        private void SetDetailTexts(string title, string description)
+        {
+            if (detailTitleText != null)
+                detailTitleText.text = title;
+            if (detailDescriptionText != null)
+                detailDescriptionText.text = description;
+        }
+
+        private void UpdateActionState()
+        {
+            var inventory = ShadeRuntime.Charms;
+            bool canEquip = false;
+            bool canUnequip = false;
+
+            if (inventory != null && selectedCharm.HasValue)
+            {
+                var def = inventory.GetDefinition(selectedCharm.Value);
+                bool owned = inventory.IsOwned(selectedCharm.Value);
+                bool equipped = inventory.IsEquipped(selectedCharm.Value);
+                canUnequip = equipped;
+                canEquip = owned && !equipped && inventory.UsedNotches + def.NotchCost <= inventory.NotchCapacity;
+            }
+
+            if (equipButton != null)
+                equipButton.interactable = canEquip;
+            if (unequipButton != null)
+                unequipButton.interactable = canUnequip;
+        }
+
+        private void UpdateStatusText(string fallback)
+        {
+            if (statusText == null)
+                return;
+
+            if (!string.IsNullOrEmpty(pendingStatusMessage))
+            {
+                statusText.text = pendingStatusMessage;
+                pendingStatusMessage = string.Empty;
+            }
+            else
+            {
+                statusText.text = fallback;
+            }
         }
     }
 
@@ -412,6 +782,11 @@ public static class ShadeSettingsMenu
     internal static void NotifyShadeToggleChanged()
     {
         shadeToggleDriver?.UpdateLabel();
+    }
+
+    internal static void NotifyCharmLoadoutChanged()
+    {
+        charmsController?.RefreshAll();
     }
 
     private static void ApplyDefaultPreset()
@@ -1480,6 +1855,8 @@ public static class ShadeSettingsMenu
         difficultyScreen = null;
         controlsScreen = null;
         loggingScreen = null;
+        charmsScreen = null;
+        charmsController = null;
         activeScreen = null;
         screen = null;
         templateSource = null;
@@ -1868,6 +2245,11 @@ public static class ShadeSettingsMenu
             var s = CreateMenuButton(content, buttonTemplate, "Difficulty", () => ShowScreen(difficultyScreen), CancelTarget.PauseMenu);
             if (s != null) selectables.Add(s);
         }
+        if (charmsScreen != null)
+        {
+            var s = CreateMenuButton(content, buttonTemplate, "Charms", () => ShowScreen(charmsScreen), CancelTarget.PauseMenu);
+            if (s != null) selectables.Add(s);
+        }
         if (controlsScreen != null)
         {
             var s = CreateMenuButton(content, buttonTemplate, "Controls", () => ShowScreen(controlsScreen), CancelTarget.PauseMenu);
@@ -1891,6 +2273,273 @@ public static class ShadeSettingsMenu
             ms.defaultHighlight = ms.backButton;
         }
         ConfigureBackButton(ms, CancelTarget.PauseMenu, ui);
+        LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+    }
+
+    private static void BuildCharmsMenu(UIManager ui, MenuScreen ms, MenuButton buttonTemplate)
+    {
+        if (ms == null || buttonTemplate == null)
+            return;
+
+        var content = CreateContentRoot(ms);
+        if (content == null)
+            return;
+
+        charmsController = ms.gameObject.GetComponent<CharmMenuController>() ?? ms.gameObject.AddComponent<CharmMenuController>();
+
+        var inventory = ShadeRuntime.Charms;
+        if (inventory == null)
+        {
+            var fallbackMessage = new GameObject("CharmUnavailable");
+            fallbackMessage.transform.SetParent(content, false);
+            var messageText = fallbackMessage.AddComponent<Text>();
+            ApplyTextStyle(messageText, sliderLabelStyle, TextAnchor.MiddleCenter, Color.white);
+            messageText.text = "Charm inventory unavailable.";
+            var msgLayout = fallbackMessage.AddComponent<LayoutElement>();
+            msgLayout.minHeight = 120f;
+            msgLayout.preferredHeight = 120f;
+            return;
+        }
+
+        float horizontalMargin = Mathf.Clamp(Screen.width * 0.04f, 48f, 140f);
+        float bottomMargin = Mathf.Clamp(Screen.height * 0.08f, 56f, 132f);
+        float topMargin = Mathf.Clamp(Screen.height * 0.11f, 72f, 164f);
+        content.offsetMin = new Vector2(horizontalMargin, bottomMargin);
+        content.offsetMax = new Vector2(-horizontalMargin, -topMargin);
+
+        var selectables = new List<MenuSelectable>();
+        var actionButtons = new List<MenuButton>();
+
+        var notchObj = new GameObject("NotchMeter");
+        var notchRect = notchObj.AddComponent<RectTransform>();
+        notchRect.SetParent(content, false);
+        var notchText = notchObj.AddComponent<Text>();
+        ApplyTextStyle(notchText, sliderLabelStyle, TextAnchor.MiddleCenter, Color.white);
+        notchText.text = $"Notches Used: {inventory.UsedNotches}/{inventory.NotchCapacity}";
+        var notchLayout = notchObj.AddComponent<LayoutElement>();
+        notchLayout.minHeight = 52f;
+        notchLayout.preferredHeight = 52f;
+
+        var navObj = new GameObject("NavigationHint");
+        var navRect = navObj.AddComponent<RectTransform>();
+        navRect.SetParent(content, false);
+        var navigationText = navObj.AddComponent<Text>();
+        ApplyTextStyle(navigationText, sliderLabelStyle, TextAnchor.MiddleCenter, Color.white);
+        ScaleTextElements(navObj, 0.85f);
+        var navLayout = navObj.AddComponent<LayoutElement>();
+        navLayout.minHeight = 44f;
+        navLayout.preferredHeight = 44f;
+
+        var gridRoot = new GameObject("CharmGrid");
+        var gridRect = gridRoot.AddComponent<RectTransform>();
+        gridRect.SetParent(content, false);
+        gridRect.anchorMin = new Vector2(0f, 1f);
+        gridRect.anchorMax = new Vector2(1f, 1f);
+        gridRect.pivot = new Vector2(0.5f, 1f);
+        gridRect.offsetMin = Vector2.zero;
+        gridRect.offsetMax = Vector2.zero;
+        var gridLayout = gridRoot.AddComponent<GridLayoutGroup>();
+        gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        int columnCount = Screen.width >= 1800 ? 3 : 2;
+        gridLayout.constraintCount = Mathf.Max(2, columnCount);
+        float cellWidth = Mathf.Clamp(Screen.width * 0.22f, 260f, 360f);
+        float cellHeight = Mathf.Clamp(Screen.height * 0.24f, 220f, 320f);
+        gridLayout.cellSize = new Vector2(cellWidth, cellHeight);
+        float horizontalSpacing = Mathf.Clamp(cellWidth * 0.08f, 18f, 42f);
+        float verticalSpacing = Mathf.Clamp(cellHeight * 0.12f, 18f, 46f);
+        gridLayout.spacing = new Vector2(horizontalSpacing, verticalSpacing);
+        gridLayout.childAlignment = TextAnchor.UpperCenter;
+        gridLayout.startAxis = GridLayoutGroup.Axis.Horizontal;
+        gridLayout.startCorner = GridLayoutGroup.Corner.UpperLeft;
+        var gridLayoutElement = gridRoot.AddComponent<LayoutElement>();
+        gridLayoutElement.minHeight = cellHeight * 2.4f;
+        gridLayoutElement.flexibleHeight = 1f;
+
+        var detailRoot = new GameObject("CharmDetails");
+        var detailRect = detailRoot.AddComponent<RectTransform>();
+        detailRect.SetParent(content, false);
+        var detailLayout = detailRoot.AddComponent<VerticalLayoutGroup>();
+        detailLayout.spacing = 12f;
+        detailLayout.padding = new RectOffset(36, 36, 0, 0);
+        detailLayout.childControlHeight = false;
+        detailLayout.childForceExpandHeight = false;
+        detailLayout.childControlWidth = true;
+        detailLayout.childForceExpandWidth = true;
+        detailLayout.childAlignment = TextAnchor.UpperLeft;
+        var detailLayoutElement = detailRoot.AddComponent<LayoutElement>();
+        detailLayoutElement.minHeight = 180f;
+        detailLayoutElement.preferredHeight = 0f;
+
+        var detailTitleObj = new GameObject("DetailTitle");
+        detailTitleObj.transform.SetParent(detailRoot.transform, false);
+        var detailTitleText = detailTitleObj.AddComponent<Text>();
+        ApplyTextStyle(detailTitleText, sliderLabelStyle, TextAnchor.MiddleLeft, Color.white);
+        ScaleTextElements(detailTitleObj, 1.05f);
+        var detailTitleLayout = detailTitleObj.AddComponent<LayoutElement>();
+        detailTitleLayout.minHeight = 42f;
+        detailTitleLayout.preferredHeight = 42f;
+
+        var detailDescriptionObj = new GameObject("DetailDescription");
+        detailDescriptionObj.transform.SetParent(detailRoot.transform, false);
+        var detailDescriptionText = detailDescriptionObj.AddComponent<Text>();
+        ApplyTextStyle(detailDescriptionText, sliderValueStyle ?? sliderLabelStyle, TextAnchor.UpperLeft, Color.white);
+        detailDescriptionText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        detailDescriptionText.verticalOverflow = VerticalWrapMode.Overflow;
+        var detailDescLayout = detailDescriptionObj.AddComponent<LayoutElement>();
+        detailDescLayout.minHeight = 72f;
+        detailDescLayout.preferredHeight = 0f;
+
+        var statusObj = new GameObject("StatusMessage");
+        statusObj.transform.SetParent(detailRoot.transform, false);
+        var statusText = statusObj.AddComponent<Text>();
+        ApplyTextStyle(statusText, sliderLabelStyle, TextAnchor.MiddleLeft, Color.white);
+        ScaleTextElements(statusObj, 0.9f);
+        var statusLayout = statusObj.AddComponent<LayoutElement>();
+        statusLayout.minHeight = 40f;
+        statusLayout.preferredHeight = 40f;
+        statusText.text = "Select a charm to view details.";
+
+        var actionRow = new GameObject("CharmActions");
+        var actionRect = actionRow.AddComponent<RectTransform>();
+        actionRect.SetParent(content, false);
+        var actionLayout = actionRow.AddComponent<HorizontalLayoutGroup>();
+        actionLayout.spacing = Mathf.Clamp(Screen.width * 0.035f, 32f, 84f);
+        actionLayout.childAlignment = TextAnchor.MiddleCenter;
+        actionLayout.childControlWidth = true;
+        actionLayout.childForceExpandWidth = false;
+        actionLayout.childControlHeight = false;
+        actionLayout.childForceExpandHeight = false;
+        var actionLayoutElement = actionRow.AddComponent<LayoutElement>();
+        actionLayoutElement.minHeight = ButtonRowHeight * 1.2f;
+        actionLayoutElement.preferredHeight = ButtonRowHeight * 1.2f;
+
+        MenuButton equipButton = null;
+        MenuButton unequipButton = null;
+
+        var equipSelectable = CreateMenuButton(actionRow.transform, buttonTemplate, "Equip", null, CancelTarget.ShadeMain);
+        if (equipSelectable is MenuButton equipMenuButton)
+        {
+            equipButton = equipMenuButton;
+            actionButtons.Add(equipMenuButton);
+        }
+
+        var unequipSelectable = CreateMenuButton(actionRow.transform, buttonTemplate, "Unequip", null, CancelTarget.ShadeMain);
+        if (unequipSelectable is MenuButton unequipMenuButton)
+        {
+            unequipButton = unequipMenuButton;
+            actionButtons.Add(unequipMenuButton);
+        }
+
+        ConfigureHorizontalNavigation(actionButtons);
+
+        var iconSprite = GetFallbackSprite(ref fallbackCharmSprite, "ShadeSettingsCharmIcon", false);
+
+        foreach (var definition in inventory.AllCharms)
+        {
+            var selectable = CreateMenuButton(gridRoot.transform, buttonTemplate, definition.Name, null, CancelTarget.ShadeMain);
+            if (selectable is MenuButton menuButton)
+            {
+                selectables.Add(menuButton);
+
+                var layout = menuButton.GetComponent<LayoutElement>();
+                if (layout != null)
+                {
+                    layout.minHeight = 0f;
+                    layout.preferredHeight = 0f;
+                    layout.flexibleHeight = 1f;
+                    layout.minWidth = 0f;
+                    layout.preferredWidth = 0f;
+                    layout.flexibleWidth = 1f;
+                }
+
+                var buttonRect = menuButton.GetComponent<RectTransform>();
+                if (buttonRect != null)
+                {
+                    buttonRect.anchorMin = new Vector2(0.5f, 0.5f);
+                    buttonRect.anchorMax = new Vector2(0.5f, 0.5f);
+                    buttonRect.pivot = new Vector2(0.5f, 0.5f);
+                    buttonRect.sizeDelta = gridLayout.cellSize;
+                }
+
+                var contentRoot = new GameObject("CharmContent");
+                var contentRect = contentRoot.AddComponent<RectTransform>();
+                contentRect.SetParent(menuButton.transform, false);
+                contentRect.anchorMin = Vector2.zero;
+                contentRect.anchorMax = Vector2.one;
+                contentRect.offsetMin = new Vector2(16f, 18f);
+                contentRect.offsetMax = new Vector2(-16f, -18f);
+                var contentLayout = contentRoot.AddComponent<VerticalLayoutGroup>();
+                contentLayout.spacing = 8f;
+                contentLayout.childAlignment = TextAnchor.UpperCenter;
+                contentLayout.childControlHeight = false;
+                contentLayout.childForceExpandHeight = false;
+                contentLayout.childControlWidth = true;
+                contentLayout.childForceExpandWidth = true;
+
+                var iconObj = new GameObject("Icon");
+                var iconRect = iconObj.AddComponent<RectTransform>();
+                iconRect.SetParent(contentRoot.transform, false);
+                var iconImage = iconObj.AddComponent<Image>();
+                iconImage.sprite = iconSprite;
+                iconImage.type = Image.Type.Simple;
+                iconImage.preserveAspect = true;
+                var iconLayout = iconObj.AddComponent<LayoutElement>();
+                iconLayout.minHeight = cellHeight * 0.55f;
+                iconLayout.preferredHeight = cellHeight * 0.55f;
+
+                var existingLabel = menuButton.GetComponentInChildren<Text>(true);
+                if (existingLabel != null)
+                {
+                    existingLabel.transform.SetParent(contentRoot.transform, false);
+                    ApplyTextStyle(existingLabel, sliderLabelStyle, TextAnchor.MiddleCenter, Color.white);
+                    var nameLayout = existingLabel.gameObject.GetComponent<LayoutElement>() ?? existingLabel.gameObject.AddComponent<LayoutElement>();
+                    nameLayout.minHeight = 36f;
+                    nameLayout.preferredHeight = 36f;
+                }
+
+                var notchObjLocal = new GameObject("NotchCost");
+                notchObjLocal.transform.SetParent(contentRoot.transform, false);
+                var notchCostText = notchObjLocal.AddComponent<Text>();
+                ApplyTextStyle(notchCostText, sliderValueStyle ?? sliderLabelStyle, TextAnchor.MiddleCenter, Color.white);
+                ScaleTextElements(notchObjLocal, 0.9f);
+                var notchCostLayout = notchObjLocal.AddComponent<LayoutElement>();
+                notchCostLayout.minHeight = 30f;
+                notchCostLayout.preferredHeight = 30f;
+
+                var statusObjLocal = new GameObject("StatusLabel");
+                statusObjLocal.transform.SetParent(contentRoot.transform, false);
+                var statusLabel = statusObjLocal.AddComponent<Text>();
+                ApplyTextStyle(statusLabel, sliderLabelStyle, TextAnchor.MiddleCenter, Color.white);
+                ScaleTextElements(statusObjLocal, 0.85f);
+                var statusLocalLayout = statusObjLocal.AddComponent<LayoutElement>();
+                statusLocalLayout.minHeight = 26f;
+                statusLocalLayout.preferredHeight = 26f;
+
+                var driver = menuButton.gameObject.AddComponent<CharmButtonDriver>();
+                driver.Initialize(charmsController, definition, menuButton, iconImage, existingLabel, notchCostText, statusLabel);
+            }
+        }
+
+        if (equipButton != null)
+            selectables.Add(equipButton);
+        if (unequipButton != null)
+            selectables.Add(unequipButton);
+
+        SetupButtonList(ms, selectables);
+        if (selectables.Count > 0)
+        {
+            var first = selectables[0];
+            screenFirstSelectables[ms] = first;
+            ms.defaultHighlight = first;
+        }
+        else if (ms.backButton != null)
+        {
+            screenFirstSelectables[ms] = ms.backButton;
+            ms.defaultHighlight = ms.backButton;
+        }
+
+        ConfigureBackButton(ms, CancelTarget.ShadeMain, ui);
+        charmsController?.Initialize(notchText, statusText, detailTitleText, detailDescriptionText, navigationText, equipButton, unequipButton);
         LayoutRebuilder.ForceRebuildLayoutImmediate(content);
     }
 
@@ -2246,6 +2895,10 @@ public static class ShadeSettingsMenu
                 consumeNextToggle = true;
             NotifyShadeToggleChanged();
         }
+        else if (target == charmsScreen)
+        {
+            charmsController?.HandleScreenShown();
+        }
         else if (target != null && target != mainScreen)
         {
             consumeNextToggle = false;
@@ -2412,6 +3065,7 @@ public static class ShadeSettingsMenu
 
         mainScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
         difficultyScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
+        charmsScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
         controlsScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
         loggingScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
 
@@ -2428,6 +3082,13 @@ public static class ShadeSettingsMenu
             difficultyScreen.gameObject.SetActive(false);
             InitializeScreen(difficultyScreen);
             allScreens.Add(difficultyScreen);
+        }
+        if (charmsScreen != null)
+        {
+            charmsScreen.gameObject.name = "ShadeSettingsCharms";
+            charmsScreen.gameObject.SetActive(false);
+            InitializeScreen(charmsScreen);
+            allScreens.Add(charmsScreen);
         }
         if (controlsScreen != null)
         {
@@ -2448,6 +3109,7 @@ public static class ShadeSettingsMenu
 
         BuildMainMenu(ui, mainScreen, buttonTemplate);
         BuildDifficultyMenu(ui, difficultyScreen, sliderTemplate, buttonTemplate);
+        BuildCharmsMenu(ui, charmsScreen, buttonTemplate);
         BuildControlsMenu(ui, controlsScreen, buttonTemplate);
         BuildLoggingMenu(ui, loggingScreen, toggleTemplate, buttonTemplate);
 
@@ -2771,6 +3433,8 @@ public static class ShadeSettingsMenu
         sliderValueStyle = null;
         toggleLabelStyle = null;
         fallbackFont = null;
+        fallbackCharmSprite = null;
+        charmsController = null;
         storedGameOptionsCanvasState = false;
     }
 }

@@ -41,6 +41,13 @@ public partial class LegacyHelper
             baseSoftLeashRadius = softLeashRadius;
             baseHardLeashRadius = hardLeashRadius;
             baseSnapLeashRadius = snapLeashRadius;
+            baseSprintMultiplier = sprintMultiplier;
+            baseFireCooldown = fireCooldown;
+            baseNailCooldown = nailCooldown;
+            baseFocusSoulCost = focusSoulCost;
+            baseProjectileSoulCost = projectileSoulCost;
+            baseShriekSoulCost = shriekSoulCost;
+            baseQuakeSoulCost = quakeSoulCost;
             wasInactive = (!isDying && shadeHP <= 0);
 
             // Ensure the shade can act as a pogo surface for Hornet
@@ -72,6 +79,7 @@ public partial class LegacyHelper
             PersistIfChanged();
             lastSoulForReady = shadeSoul;
             TryPlaySpawnAnimation();
+            RecomputeCharmLoadout();
         }
 
         public void ApplyCharmLoadout(IEnumerable<ShadeCharmDefinition>? loadout)

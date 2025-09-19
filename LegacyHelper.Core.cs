@@ -137,6 +137,7 @@ public partial class LegacyHelper : BaseUnityPlugin
                     sc.TeleportToPosition(pos);
                     sc.TriggerSpawnEntrance();
                     SaveShadeState(sc.GetCurrentHP(), sc.GetMaxHP(), sc.GetShadeSoul(), sc.GetCanTakeDamage());
+                    RequestShadeLoadoutRecompute();
                 }
                 else
                 {
@@ -169,6 +170,7 @@ public partial class LegacyHelper : BaseUnityPlugin
         }
 
         scNew.TriggerSpawnEntrance();
+        RequestShadeLoadoutRecompute();
     }
 
     internal static void SetShadeEnabled(bool enabled)
@@ -212,6 +214,30 @@ public partial class LegacyHelper : BaseUnityPlugin
 
         ShadeSettingsMenu.NotifyShadeToggleChanged();
         ModConfig.Save();
+    }
+
+    internal static void RequestShadeLoadoutRecompute()
+    {
+        try
+        {
+            if (helper != null)
+            {
+                var controller = helper.GetComponent<ShadeController>();
+                if (controller != null)
+                {
+                    controller.RecomputeCharmLoadout();
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            if (ModConfig.Instance.logGeneral)
+            {
+                Logger.LogWarning($"Failed to recompute shade charm loadout: {e}");
+            }
+        }
+
+        ShadeSettingsMenu.NotifyCharmLoadoutChanged();
     }
 
     internal static void DisableStartup(GameManager gm)
