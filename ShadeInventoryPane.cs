@@ -170,7 +170,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
         OnInputRight += () => MoveSelectionHorizontal(1);
         OnInputUp += () => MoveSelectionVertical(-1);
         OnInputDown += () => MoveSelectionVertical(1);
-        OnSubmit += HandleSubmit;
     }
 
     private void BuildUI()
@@ -867,6 +866,23 @@ internal static class ShadeInventoryPaneIntegration
                 PaneListField.SetValue(input, paneList);
             }
             catch { }
+        }
+    }
+
+    internal static ShadeInventoryPane? TryGetShadePane(InventoryPaneInput input)
+    {
+        if (input == null || PaneField == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return PaneField.GetValue(input) as ShadeInventoryPane;
+        }
+        catch
+        {
+            return null;
         }
     }
 }

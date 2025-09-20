@@ -244,6 +244,26 @@ public partial class LegacyHelper
         }
     }
 
+    [HarmonyPatch(typeof(InventoryPaneInput), "PressSubmit")]
+    private class InventoryPaneInput_PressSubmit_Shade
+    {
+        private static bool Prefix(InventoryPaneInput __instance)
+        {
+            try
+            {
+                var shadePane = ShadeInventoryPaneIntegration.TryGetShadePane(__instance);
+                if (shadePane != null)
+                {
+                    shadePane.HandleSubmit();
+                    return false;
+                }
+            }
+            catch { }
+
+            return true;
+        }
+    }
+
     [HarmonyPatch(typeof(StartManager), "Start")]
     private class StartManager_Start_Enumerator_Patch
     {
