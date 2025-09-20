@@ -17,6 +17,7 @@ internal static class ModPaths
         var order = new[]
         {
             Assets,
+            Path.Combine(Root, "..", "Assets"),
             Path.Combine(CleanupRoot, "LegacyoftheAbyss", "Assets"),
             Path.Combine(CleanupRoot, "Assets"),
             Path.Combine(CleanupRoot, "LegacyoftheAbyss"),

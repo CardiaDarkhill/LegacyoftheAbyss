@@ -38,7 +38,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "The shade feels Hornet's call more keenly, extending their leash so the companion is easier to find in the fray.",
                 notchCost: 1,
                 fallbackTint: new Color(0.74f, 0.77f, 0.83f),
-                enumId: ShadeCharmId.WaywardCompass));
+                enumId: ShadeCharmId.WaywardCompass,
+                iconName: "shade_charm_wayward_compass"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.Sprintmaster),
@@ -52,7 +53,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "Fleet voidstuff guides the companion's steps, boosting both its pace and the responsiveness of its sprint.",
                 notchCost: 1,
                 fallbackTint: new Color(0.92f, 0.58f, 0.36f),
-                enumId: ShadeCharmId.Sprintmaster));
+                enumId: ShadeCharmId.Sprintmaster,
+                iconName: "shade_charm_sprintmaster"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.Dashmaster),
@@ -66,7 +68,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "Teaches the shade relentless motion, shortening the recovery after quick bursts and carrying momentum further.",
                 notchCost: 2,
                 fallbackTint: new Color(0.35f, 0.70f, 0.78f),
-                enumId: ShadeCharmId.Dashmaster));
+                enumId: ShadeCharmId.Dashmaster,
+                iconName: "shade_charm_dashmaster"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.ShamanStone),
@@ -84,7 +87,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "Empowers the shade's spells, letting screams and quakes strike harder while returning to readiness more quickly.",
                 notchCost: 3,
                 fallbackTint: new Color(0.56f, 0.32f, 0.66f),
-                enumId: ShadeCharmId.ShamanStone));
+                enumId: ShadeCharmId.ShamanStone,
+                iconName: "shade_charm_shaman_stone"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.SpellTwister),
@@ -99,7 +103,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "Refines void channeling so spells and focus alike draw less soul from the shared reserve.",
                 notchCost: 2,
                 fallbackTint: new Color(0.40f, 0.48f, 0.86f),
-                enumId: ShadeCharmId.SpellTwister));
+                enumId: ShadeCharmId.SpellTwister,
+                iconName: "shade_charm_spell_twister"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.QuickSlash),
@@ -111,7 +116,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "The companion's blade darts with relentless rhythm, dramatically reducing the pause between nail strikes.",
                 notchCost: 3,
                 fallbackTint: new Color(0.86f, 0.32f, 0.32f),
-                enumId: ShadeCharmId.QuickSlash));
+                enumId: ShadeCharmId.QuickSlash,
+                iconName: "shade_charm_quick_slash"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.MarkOfPride),
@@ -124,7 +130,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "Ancient sigils elongate the shade's nail, allowing its swings to cover a far wider span around Hornet.",
                 notchCost: 3,
                 fallbackTint: new Color(0.74f, 0.43f, 0.24f),
-                enumId: ShadeCharmId.MarkOfPride));
+                enumId: ShadeCharmId.MarkOfPride,
+                iconName: "shade_charm_mark_of_pride"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.Longnail),
@@ -137,7 +144,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "Woven strands stretch the companion's reach, slightly increasing the length of its nail arcs.",
                 notchCost: 2,
                 fallbackTint: new Color(0.58f, 0.66f, 0.44f),
-                enumId: ShadeCharmId.Longnail));
+                enumId: ShadeCharmId.Longnail,
+                iconName: "shade_charm_longnail"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.SoulCatcher),
@@ -150,7 +158,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "The shade draws more soul from each successful strike, helping Hornet recover resources mid-fight.",
                 notchCost: 2,
                 fallbackTint: new Color(0.30f, 0.62f, 0.68f),
-                enumId: ShadeCharmId.SoulCatcher));
+                enumId: ShadeCharmId.SoulCatcher,
+                iconName: "shade_charm_soul_catcher"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.FragileStrength),
@@ -163,7 +172,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "Greatly boosts the companion's nail damage, but the charm will shatter if the shade is destroyed.",
                 notchCost: 3,
                 fallbackTint: new Color(0.82f, 0.52f, 0.18f),
-                enumId: ShadeCharmId.FragileStrength));
+                enumId: ShadeCharmId.FragileStrength,
+                iconName: "shade_charm_fragile_strength"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.SoulEater),
@@ -176,7 +186,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "Hunger for essence swells within the shade, drawing far more soul from each strike to fuel spells and focus.",
                 notchCost: 4,
                 fallbackTint: new Color(0.39f, 0.24f, 0.52f),
-                enumId: ShadeCharmId.SoulEater));
+                enumId: ShadeCharmId.SoulEater,
+                iconName: "shade_charm_soul_eater"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.Grubsong),
@@ -197,7 +208,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "When the shade is struck it sings with collected kin, restoring a measure of soul to keep the fight alive.",
                 notchCost: 1,
                 fallbackTint: new Color(0.47f, 0.73f, 0.54f),
-                enumId: ShadeCharmId.Grubsong));
+                enumId: ShadeCharmId.Grubsong,
+                iconName: "shade_charm_grubsong"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.QuickFocus),
@@ -210,7 +222,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "Channeling void becomes second nature, greatly reducing the time required for the shade to mend wounds.",
                 notchCost: 3,
                 fallbackTint: new Color(0.52f, 0.77f, 0.93f),
-                enumId: ShadeCharmId.QuickFocus));
+                enumId: ShadeCharmId.QuickFocus,
+                iconName: "shade_charm_quick_focus"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.DeepFocus),
@@ -233,7 +246,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "The shade's meditations flow slowly but mend extra wounds and share greater restorative energy with Hornet.",
                 notchCost: 4,
                 fallbackTint: new Color(0.28f, 0.52f, 0.76f),
-                enumId: ShadeCharmId.DeepFocus));
+                enumId: ShadeCharmId.DeepFocus,
+                iconName: "shade_charm_deep_focus"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.ShapeOfUnn),
@@ -246,7 +260,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "Blessing of Unn lets the shade glide while focusing, keeping pace with Hornet without breaking concentration.",
                 notchCost: 2,
                 fallbackTint: new Color(0.32f, 0.68f, 0.40f),
-                enumId: ShadeCharmId.ShapeOfUnn));
+                enumId: ShadeCharmId.ShapeOfUnn,
+                iconName: "shade_charm_shape_of_unn"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.SteadyBody),
@@ -259,7 +274,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "The shade plants itself firmly, resisting enemy blows so its position beside Hornet barely shifts.",
                 notchCost: 1,
                 fallbackTint: new Color(0.78f, 0.74f, 0.48f),
-                enumId: ShadeCharmId.SteadyBody));
+                enumId: ShadeCharmId.SteadyBody,
+                iconName: "shade_charm_steady_body"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.StalwartShell),
@@ -272,7 +288,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "Layers of hardened void linger after each hit, extending the shade's invulnerability to survive brutal fights.",
                 notchCost: 2,
                 fallbackTint: new Color(0.64f, 0.58f, 0.44f),
-                enumId: ShadeCharmId.StalwartShell));
+                enumId: ShadeCharmId.StalwartShell,
+                iconName: "shade_charm_stalwart_shell"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.FuryOfTheFallen),
@@ -308,7 +325,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "When only a sliver of vitality remains the shade fights with reckless ferocity, greatly amplifying nail damage.",
                 notchCost: 2,
                 fallbackTint: new Color(0.82f, 0.29f, 0.35f),
-                enumId: ShadeCharmId.FuryOfTheFallen));
+                enumId: ShadeCharmId.FuryOfTheFallen,
+                iconName: "shade_charm_fury_of_the_fallen"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.NailmastersGlory),
@@ -320,7 +338,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "Lessons from the Nailmasters echo through the shade, letting their blade recover swiftly between strikes.",
                 notchCost: 3,
                 fallbackTint: new Color(0.83f, 0.68f, 0.41f),
-                enumId: ShadeCharmId.NailmastersGlory));
+                enumId: ShadeCharmId.NailmastersGlory,
+                iconName: "shade_charm_nailmasters_glory"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.FragileHeart),
@@ -333,7 +352,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "Bolsters the shade with additional vitality, but the charm will shatter if the companion falls in battle.",
                 notchCost: 2,
                 fallbackTint: new Color(0.94f, 0.56f, 0.60f),
-                enumId: ShadeCharmId.FragileHeart));
+                enumId: ShadeCharmId.FragileHeart,
+                iconName: "shade_charm_fragile_heart"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.SharpShadow),
@@ -350,7 +370,8 @@ namespace LegacyoftheAbyss.Shade
                 description: "Streamlined void lets the companion blink more readily, shortening both the charge-up and recovery of teleports.",
                 notchCost: 2,
                 fallbackTint: new Color(0.28f, 0.24f, 0.42f),
-                enumId: ShadeCharmId.SharpShadow));
+                enumId: ShadeCharmId.SharpShadow,
+                iconName: "shade_charm_sharp_shadow"));
 
             _definitionMap = _definitions
                 .Where(def => def.EnumId.HasValue)
@@ -536,6 +557,46 @@ namespace LegacyoftheAbyss.Shade
                     _newlyDiscovered.Add(id);
                     changed = true;
                 }
+            }
+
+            if (changed)
+            {
+                RaiseStateChanged();
+            }
+        }
+
+        public void RevokeAllCharms(bool resetNotchCapacity = true)
+        {
+            bool changed = false;
+
+            if (_owned.Count > 0)
+            {
+                _owned.Clear();
+                changed = true;
+            }
+
+            if (_equipped.Count > 0)
+            {
+                _equipped.Clear();
+                changed = true;
+            }
+
+            if (_broken.Count > 0)
+            {
+                _broken.Clear();
+                changed = true;
+            }
+
+            if (_newlyDiscovered.Count > 0)
+            {
+                _newlyDiscovered.Clear();
+                changed = true;
+            }
+
+            if (resetNotchCapacity && _notchCapacity != DefaultNotchCapacity)
+            {
+                _notchCapacity = DefaultNotchCapacity;
+                changed = true;
             }
 
             if (changed)

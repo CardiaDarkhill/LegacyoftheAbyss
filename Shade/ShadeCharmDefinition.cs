@@ -569,6 +569,7 @@ namespace LegacyoftheAbyss.Shade
             foreach (var candidate in candidates)
             {
                 if (ModPaths.TryGetAssetPath(out var path, candidate)
+                    || ModPaths.TryGetAssetPath(out path, "CharmIcons", candidate)
                     || ModPaths.TryGetAssetPath(out path, "Charms", candidate))
                 {
                     var sprite = LoadSprite(path);

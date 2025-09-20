@@ -56,6 +56,7 @@ public partial class LegacyHelper : BaseUnityPlugin
     private void Update()
     {
         LoggingManager.Update();
+        HandleDebugInput();
         var ui = UnityEngine.Object.FindFirstObjectByType<UIManager>();
         if (ui == null)
         {
@@ -80,6 +81,48 @@ public partial class LegacyHelper : BaseUnityPlugin
         loggedMissingUI = false;
         loggedMissingPauseMenu = false;
         ShadeSettingsMenu.Inject(ui);
+    }
+
+    private void HandleDebugInput()
+    {
+        try
+        {
+            if (!Input.GetKeyDown(KeyCode.BackQuote))
+            {
+                return;
+            }
+
+            if (!Input.GetKey(KeyCode.LeftControl) && !Input.GetKey(KeyCode.RightControl))
+            {
+                return;
+            }
+
+            var inventory = ShadeRuntime.Charms;
+            if (inventory == null)
+            {
+                return;
+            }
+
+            var owned = inventory.GetOwnedCharms();
+            bool allOwned = owned.Count >= inventory.AllCharms.Count;
+            if (allOwned)
+            {
+                inventory.RevokeAllCharms();
+                Logger?.LogInfo("Shade debug: revoked all shade charms.");
+            }
+            else
+            {
+                inventory.GrantAllCharms();
+                ShadeRuntime.SetNotchCapacity(20);
+                Logger?.LogInfo("Shade debug: unlocked all shade charms.");
+            }
+
+            RequestShadeLoadoutRecompute();
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogWarning($"Shade debug toggle failed: {ex}");
+        }
     }
 
     private void OnDestroy()
@@ -267,3 +310,4 @@ public partial class LegacyHelper : BaseUnityPlugin
     }
 }
 #nullable restore
+

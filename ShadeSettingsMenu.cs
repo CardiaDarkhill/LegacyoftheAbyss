@@ -56,6 +56,7 @@ public static class ShadeSettingsMenu
     private static readonly Color ButtonHighlightColor = new Color(1f, 0.95f, 0.78f, 0.35f);
     private static readonly Color ButtonPressedColor = new Color(0.95f, 0.9f, 0.8f, 0.45f);
     private static readonly Color ButtonDisabledColor = new Color(1f, 1f, 1f, 0.15f);
+    private const bool IncludeLegacyCharmMenu = false;
     private static bool consumeNextToggle;
     private static readonly List<BindingMenuDriver> bindingDrivers = new();
     private static ShadeToggleDriver shadeToggleDriver;
@@ -3120,7 +3121,14 @@ public static class ShadeSettingsMenu
 
         mainScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
         difficultyScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
-        charmsScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
+        if (IncludeLegacyCharmMenu)
+        {
+            charmsScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
+        }
+        else
+        {
+            charmsScreen = null;
+        }
         controlsScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
         loggingScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
 
@@ -3164,7 +3172,8 @@ public static class ShadeSettingsMenu
 
         BuildMainMenu(ui, mainScreen, buttonTemplate);
         BuildDifficultyMenu(ui, difficultyScreen, sliderTemplate, buttonTemplate);
-        BuildCharmsMenu(ui, charmsScreen, buttonTemplate);
+        if (IncludeLegacyCharmMenu && charmsScreen != null)
+            BuildCharmsMenu(ui, charmsScreen, buttonTemplate);
         BuildControlsMenu(ui, controlsScreen, buttonTemplate);
         BuildLoggingMenu(ui, loggingScreen, toggleTemplate, buttonTemplate);
 
