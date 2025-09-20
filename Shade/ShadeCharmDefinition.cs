@@ -2,21 +2,35 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using UnityEngine;
 
 namespace LegacyoftheAbyss.Shade
 {
-    internal enum ShadeCharmId
+    public enum ShadeCharmId
     {
-        AbyssalCore,
-        PhantomStride,
-        EchoOfBlades,
-        DuskShroud,
-        TwinSoulBond,
-        LuminousGuard,
-        UmbralHeart,
-        LuminousVeil,
-        PaleRemnant
+        WaywardCompass,
+        Sprintmaster,
+        Dashmaster,
+        ShamanStone,
+        SpellTwister,
+        QuickSlash,
+        MarkOfPride,
+        Longnail,
+        SoulCatcher,
+        FragileStrength,
+        SoulEater,
+        Grubsong,
+        QuickFocus,
+        DeepFocus,
+        ShapeOfUnn,
+        SteadyBody,
+        StalwartShell,
+        FuryOfTheFallen,
+        NailmastersGlory,
+        FragileHeart,
+        SharpShadow
     }
 
     internal sealed class ShadeCharmDefinition
@@ -30,7 +44,8 @@ namespace LegacyoftheAbyss.Shade
             string? description = null,
             int notchCost = 0,
             Color? fallbackTint = null,
-            ShadeCharmId? enumId = null)
+            ShadeCharmId? enumId = null,
+            string? iconName = null)
         {
             Id = id ?? throw new ArgumentNullException(nameof(id));
             StatModifiers = statModifiers ?? ShadeCharmStatModifiers.Identity;
@@ -41,6 +56,7 @@ namespace LegacyoftheAbyss.Shade
             NotchCost = Mathf.Max(0, notchCost);
             FallbackTint = fallbackTint ?? Color.white;
             EnumId = enumId;
+            Icon = ShadeCharmIconLoader.TryLoadIcon(iconName, Id, DisplayName, EnumId?.ToString());
         }
 
         public string Id { get; }
@@ -61,6 +77,8 @@ namespace LegacyoftheAbyss.Shade
 
         public ShadeCharmId? EnumId { get; }
 
+        public Sprite? Icon { get; }
+
         public override string ToString() => DisplayName;
     }
 
@@ -68,65 +86,99 @@ namespace LegacyoftheAbyss.Shade
     {
         public static ShadeCharmStatModifiers Identity => new ShadeCharmStatModifiers();
 
-        public float MoveSpeedMultiplier { get; init; } = 1f;
+        public ShadeCharmStatModifiers()
+        {
+            MoveSpeedMultiplier = 1f;
+            MoveSpeedFlatBonus = 0f;
+            SprintSpeedMultiplier = 1f;
+            SprintSpeedFlatBonus = 0f;
+            SprintDashSpeedMultiplier = 1f;
+            SprintDashSpeedFlatBonus = 0f;
+            SprintDashDurationMultiplier = 1f;
+            SprintDashDurationFlatDelta = 0f;
+            SprintDashCooldownMultiplier = 1f;
+            SprintDashCooldownFlatDelta = 0f;
+            FireCooldownMultiplier = 1f;
+            FireCooldownFlatDelta = 0f;
+            NailCooldownMultiplier = 1f;
+            NailCooldownFlatDelta = 0f;
+            ShriekCooldownMultiplier = 1f;
+            ShriekCooldownFlatDelta = 0f;
+            QuakeCooldownMultiplier = 1f;
+            QuakeCooldownFlatDelta = 0f;
+            TeleportCooldownMultiplier = 1f;
+            TeleportCooldownFlatDelta = 0f;
+            ProjectileSoulCostMultiplier = 1f;
+            ProjectileSoulCostFlatDelta = 0;
+            ShriekSoulCostMultiplier = 1f;
+            ShriekSoulCostFlatDelta = 0;
+            QuakeSoulCostMultiplier = 1f;
+            QuakeSoulCostFlatDelta = 0;
+            FocusSoulCostMultiplier = 1f;
+            FocusSoulCostFlatDelta = 0;
+            ShadeSoulCapacityMultiplier = 1f;
+            ShadeSoulCapacityFlatBonus = 0;
+        }
 
-        public float MoveSpeedFlatBonus { get; init; } = 0f;
+        public float MoveSpeedMultiplier { get; init; }
 
-        public float SprintSpeedMultiplier { get; init; } = 1f;
+        public float MoveSpeedFlatBonus { get; init; }
 
-        public float SprintSpeedFlatBonus { get; init; } = 0f;
+        public float SprintSpeedMultiplier { get; init; }
 
-        public float SprintDashSpeedMultiplier { get; init; } = 1f;
+        public float SprintSpeedFlatBonus { get; init; }
 
-        public float SprintDashSpeedFlatBonus { get; init; } = 0f;
+        public float SprintDashSpeedMultiplier { get; init; }
 
-        public float SprintDashDurationMultiplier { get; init; } = 1f;
+        public float SprintDashSpeedFlatBonus { get; init; }
 
-        public float SprintDashDurationFlatDelta { get; init; } = 0f;
+        public float SprintDashDurationMultiplier { get; init; }
 
-        public float SprintDashCooldownMultiplier { get; init; } = 1f;
+        public float SprintDashDurationFlatDelta { get; init; }
 
-        public float SprintDashCooldownFlatDelta { get; init; } = 0f;
+        public float SprintDashCooldownMultiplier { get; init; }
 
-        public float FireCooldownMultiplier { get; init; } = 1f;
+        public float SprintDashCooldownFlatDelta { get; init; }
 
-        public float FireCooldownFlatDelta { get; init; } = 0f;
+        public float FireCooldownMultiplier { get; init; }
 
-        public float NailCooldownMultiplier { get; init; } = 1f;
+        public float FireCooldownFlatDelta { get; init; }
 
-        public float NailCooldownFlatDelta { get; init; } = 0f;
+        public float NailCooldownMultiplier { get; init; }
 
-        public float ShriekCooldownMultiplier { get; init; } = 1f;
+        public float NailCooldownFlatDelta { get; init; }
 
-        public float ShriekCooldownFlatDelta { get; init; } = 0f;
+        public float ShriekCooldownMultiplier { get; init; }
 
-        public float QuakeCooldownMultiplier { get; init; } = 1f;
+        public float ShriekCooldownFlatDelta { get; init; }
 
-        public float QuakeCooldownFlatDelta { get; init; } = 0f;
+        public float QuakeCooldownMultiplier { get; init; }
 
-        public float TeleportCooldownMultiplier { get; init; } = 1f;
+        public float QuakeCooldownFlatDelta { get; init; }
 
-        public float TeleportCooldownFlatDelta { get; init; } = 0f;
+        public float TeleportCooldownMultiplier { get; init; }
 
-        public float ProjectileSoulCostMultiplier { get; init; } = 1f;
+        public float TeleportCooldownFlatDelta { get; init; }
 
-        public int ProjectileSoulCostFlatDelta { get; init; } = 0;
+        public float ProjectileSoulCostMultiplier { get; init; }
 
-        public float ShriekSoulCostMultiplier { get; init; } = 1f;
+        public int ProjectileSoulCostFlatDelta { get; init; }
 
-        public int ShriekSoulCostFlatDelta { get; init; } = 0;
+        public float ShriekSoulCostMultiplier { get; init; }
 
-        public float QuakeSoulCostMultiplier { get; init; } = 1f;
+        public int ShriekSoulCostFlatDelta { get; init; }
 
-        public int QuakeSoulCostFlatDelta { get; init; } = 0;
+        public float QuakeSoulCostMultiplier { get; init; }
 
-        public float FocusSoulCostMultiplier { get; init; } = 1f;
+        public int QuakeSoulCostFlatDelta { get; init; }
 
-        public int FocusSoulCostFlatDelta { get; init; } = 0;
+        public float FocusSoulCostMultiplier { get; init; }
 
-        public float ShadeSoulCapacityMultiplier { get; init; } = 1f;
+        public int FocusSoulCostFlatDelta { get; init; }
 
-        public int ShadeSoulCapacityFlatBonus { get; init; } = 0;
+        public float ShadeSoulCapacityMultiplier { get; init; }
+
+        public int ShadeSoulCapacityFlatBonus { get; init; }
 
         public ShadeCharmStatModifiers Combine(in ShadeCharmStatModifiers other)
         {
@@ -205,6 +257,8 @@ namespace LegacyoftheAbyss.Shade
         public Action<ShadeCharmContext>? OnRemoved { get; init; }
 
         public Action<ShadeCharmContext, float>? OnUpdate { get; init; }
+
+        public Action<ShadeCharmContext, ShadeCharmDamageEvent>? OnShadeDamaged { get; init; }
     }
 
     internal readonly struct ShadeCharmContext
@@ -218,6 +272,28 @@ namespace LegacyoftheAbyss.Shade
         public LegacyHelper.ShadeController Controller { get; }
 
         public ShadeCharmLoadoutSnapshot Snapshot { get; }
+    }
+
+    internal readonly struct ShadeCharmDamageEvent
+    {
+        public ShadeCharmDamageEvent(int attemptedDamage, int actualDamage, bool wasHazard, bool wasPrevented, bool wasLethal)
+        {
+            AttemptedDamage = Mathf.Max(0, attemptedDamage);
+            ActualDamage = Mathf.Max(0, actualDamage);
+            WasHazard = wasHazard;
+            WasPrevented = wasPrevented;
+            WasLethal = wasLethal;
+        }
+
+        public int AttemptedDamage { get; }
+
+        public int ActualDamage { get; }
+
+        public bool WasHazard { get; }
+
+        public bool WasPrevented { get; }
+
+        public bool WasLethal { get; }
     }
 
     internal readonly struct ShadeCharmStatBaseline
@@ -440,6 +516,151 @@ namespace LegacyoftheAbyss.Shade
         private static int RoundToInt(float value)
         {
             return (int)MathF.Round(value, MidpointRounding.AwayFromZero);
+        }
+    }
+
+    internal static class ShadeCharmIconLoader
+    {
+        private static readonly Dictionary<string, Sprite?> Cache = new(StringComparer.OrdinalIgnoreCase);
+
+        public static Sprite? TryLoadIcon(params string?[]? names)
+        {
+            if (names == null || names.Length == 0)
+            {
+                return null;
+            }
+
+            foreach (var name in names)
+            {
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    continue;
+                }
+
+                lock (Cache)
+                {
+                    if (Cache.TryGetValue(name, out var cached))
+                    {
+                        if (cached != null)
+                        {
+                            return cached;
+                        }
+                    }
+                }
+
+                var sprite = LoadIconInternal(name!);
+                lock (Cache)
+                {
+                    Cache[name!] = sprite;
+                }
+
+                if (sprite != null)
+                {
+                    return sprite;
+                }
+            }
+
+            return null;
+        }
+
+        private static Sprite? LoadIconInternal(string rawName)
+        {
+            var candidates = BuildCandidates(rawName).ToArray();
+            foreach (var candidate in candidates)
+            {
+                if (ModPaths.TryGetAssetPath(out var path, candidate)
+                    || ModPaths.TryGetAssetPath(out path, "Charms", candidate))
+                {
+                    var sprite = LoadSprite(path);
+                    if (sprite != null)
+                    {
+                        return sprite;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static IEnumerable<string> BuildCandidates(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                yield break;
+            }
+
+            string trimmed = input.Trim();
+            string withoutExt = Path.GetFileNameWithoutExtension(trimmed);
+            if (string.IsNullOrWhiteSpace(withoutExt))
+            {
+                yield break;
+            }
+
+            var bases = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                withoutExt,
+                withoutExt.Replace(' ', '_'),
+                withoutExt.Replace(' ', '-'),
+                RemoveNonAlphanumeric(withoutExt)
+            };
+
+            string snake = string.Concat(withoutExt.Select((ch, idx) =>
+                idx > 0 && char.IsUpper(ch) && char.IsLower(withoutExt[idx - 1]) ? "_" + char.ToLowerInvariant(ch) : char.ToString(char.ToLowerInvariant(ch))));
+            bases.Add(snake);
+
+            foreach (var basis in bases.Where(b => !string.IsNullOrWhiteSpace(b)))
+            {
+                string normalized = basis.Trim();
+                if (!normalized.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+                {
+                    yield return normalized + ".png";
+                }
+                yield return normalized;
+            }
+        }
+
+        private static string RemoveNonAlphanumeric(string value)
+        {
+            var chars = value.Where(char.IsLetterOrDigit).ToArray();
+            return new string(chars);
+        }
+
+        private static Sprite? LoadSprite(string path)
+        {
+            try
+            {
+                if (!File.Exists(path))
+                {
+                    return null;
+                }
+
+                var bytes = File.ReadAllBytes(path);
+                if (bytes == null || bytes.Length == 0)
+                {
+                    return null;
+                }
+
+                var tex = new Texture2D(2, 2, TextureFormat.ARGB32, false);
+                if (!ImageConversion.LoadImage(tex, bytes, false))
+                {
+                    UnityEngine.Object.Destroy(tex);
+                    return null;
+                }
+
+                tex.filterMode = FilterMode.Point;
+                tex.wrapMode = TextureWrapMode.Clamp;
+                tex.name = Path.GetFileName(path);
+                tex.hideFlags = HideFlags.HideAndDontSave;
+
+                var sprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f), 64f);
+                sprite.name = Path.GetFileNameWithoutExtension(path);
+                sprite.hideFlags = HideFlags.HideAndDontSave;
+                return sprite;
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 }

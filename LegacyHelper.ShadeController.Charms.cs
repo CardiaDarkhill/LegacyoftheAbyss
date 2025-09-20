@@ -19,50 +19,229 @@ public partial class LegacyHelper
             projectileSoulCost = baseProjectileSoulCost;
             shriekSoulCost = baseShriekSoulCost;
             quakeSoulCost = baseQuakeSoulCost;
+            soulGainPerHit = baseSoulGainPerHit;
+            focusChannelTime = baseFocusChannelTime;
+            focusHealRange = baseFocusHealRange;
+            teleportChannelTime = baseTeleportChannelTime;
+            hitKnockbackForce = baseHitKnockbackForce;
+            shadeMaxHP = baseShadeMaxHP;
+            ResetCharmDerivedStats();
 
             var inventory = ShadeRuntime.Charms;
-            if (inventory == null)
-            {
-                return;
-            }
-
-            foreach (var charmId in inventory.GetEquipped())
-            {
-                switch (charmId)
-                {
-                    case ShadeCharmId.AbyssalCore:
-                        focusSoulCost = Mathf.Max(10, Mathf.RoundToInt(baseFocusSoulCost * 0.8f));
-                        break;
-                    case ShadeCharmId.PhantomStride:
-                        sprintMultiplier = baseSprintMultiplier + 0.75f;
-                        break;
-                    case ShadeCharmId.EchoOfBlades:
-                        fireCooldown = Mathf.Max(0.1f, baseFireCooldown * 0.85f);
-                        nailCooldown = Mathf.Max(0.12f, baseNailCooldown * 0.85f);
-                        break;
-                    case ShadeCharmId.DuskShroud:
-                        projectileSoulCost = Mathf.Max(10, Mathf.RoundToInt(baseProjectileSoulCost * 0.85f));
-                        shriekSoulCost = Mathf.Max(10, Mathf.RoundToInt(baseShriekSoulCost * 0.9f));
-                        quakeSoulCost = Mathf.Max(10, Mathf.RoundToInt(baseQuakeSoulCost * 0.9f));
-                        break;
-                    case ShadeCharmId.TwinSoulBond:
-                        maxDistance = baseMaxDistance + 6f;
-                        softLeashRadius = baseSoftLeashRadius + 4f;
-                        hardLeashRadius = baseHardLeashRadius + 6f;
-                        snapLeashRadius = baseSnapLeashRadius + 6f;
-                        break;
-                    case ShadeCharmId.LuminousGuard:
-                        projectileSoulCost = Mathf.Max(10, Mathf.RoundToInt(projectileSoulCost * 0.9f));
-                        break;
-                }
-            }
+            var loadout = inventory?.GetEquippedDefinitions();
+            ApplyCharmLoadout(loadout);
 
             maxDistance = Mathf.Max(6f, maxDistance);
             softLeashRadius = Mathf.Max(4f, softLeashRadius);
-            hardLeashRadius = Mathf.Max(6f, hardLeashRadius);
-            snapLeashRadius = Mathf.Max(softLeashRadius, snapLeashRadius);
+            hardLeashRadius = Mathf.Max(softLeashRadius, hardLeashRadius);
+            snapLeashRadius = Mathf.Max(hardLeashRadius, snapLeashRadius);
 
             PushSoulToHud();
+        }
+
+        internal void MultiplyNailDamage(float factor)
+        {
+            if (factor <= 0f)
+                return;
+
+            charmNailDamageMultiplier = Mathf.Clamp(charmNailDamageMultiplier * factor, 0.1f, 10f);
+        }
+
+        internal void MultiplySpellDamage(float factor)
+        {
+            if (factor <= 0f)
+                return;
+
+            charmSpellDamageMultiplier = Mathf.Clamp(charmSpellDamageMultiplier * factor, 0.1f, 10f);
+        }
+
+        internal void MultiplyNailScale(float factor)
+        {
+            if (factor <= 0f)
+                return;
+
+            charmNailScaleMultiplier = Mathf.Clamp(charmNailScaleMultiplier * factor, 0.5f, 3f);
+        }
+
+        internal void AddSoulGainBonus(int amount)
+        {
+            charmSoulGainBonus = Mathf.Clamp(charmSoulGainBonus + amount, -99, 99);
+        }
+
+        internal void AdjustLeash(float maxDelta, float softDelta, float hardDelta, float snapDelta)
+        {
+            maxDistance += maxDelta;
+            softLeashRadius += softDelta;
+            hardLeashRadius += hardDelta;
+            snapLeashRadius += snapDelta;
+        }
+
+        internal void ResetCharmDerivedStats()
+        {
+            charmNailDamageMultiplier = 1f;
+            charmSpellDamageMultiplier = 1f;
+            charmNailScaleMultiplier = 1f;
+            charmSoulGainBonus = 0;
+            charmFocusHealBonus = 0;
+            charmHornetFocusHealBonus = 0;
+            charmFocusTimeMultiplier = 1f;
+            charmTeleportChannelMultiplier = 1f;
+            charmHurtIFrameMultiplier = 1f;
+            charmMaxHpBonus = 0;
+            allowFocusMovement = false;
+            knockbackSuppressionCount = 0;
+            conditionalNailDamageMultipliers.Clear();
+            conditionalNailDamageProduct = 1f;
+            UpdateFocusDerivedValues();
+            UpdateTeleportChannelTime();
+            UpdateHurtIFrameDuration();
+            ApplyCharmHealthModifiers();
+        }
+
+        internal void GainShadeSoul(int amount)
+        {
+            if (amount <= 0)
+                return;
+
+            int before = shadeSoul;
+            shadeSoul = Mathf.Clamp(shadeSoul + amount, 0, shadeSoulMax);
+            if (shadeSoul != before)
+            {
+                PushSoulToHud();
+                PersistIfChanged();
+            }
+        }
+
+        internal void AddFocusHealBonus(int amount)
+        {
+            charmFocusHealBonus = Mathf.Clamp(charmFocusHealBonus + amount, -12, 12);
+        }
+
+        internal void AddHornetFocusHealBonus(int amount)
+        {
+            charmHornetFocusHealBonus = Mathf.Clamp(charmHornetFocusHealBonus + amount, -12, 12);
+        }
+
+        internal void MultiplyFocusTime(float factor)
+        {
+            if (factor <= 0f)
+                return;
+
+            charmFocusTimeMultiplier = Mathf.Clamp(charmFocusTimeMultiplier * factor, 0.2f, 5f);
+            UpdateFocusDerivedValues();
+        }
+
+        internal void MultiplyTeleportChannelTime(float factor)
+        {
+            if (factor <= 0f)
+                return;
+
+            charmTeleportChannelMultiplier = Mathf.Clamp(charmTeleportChannelMultiplier * factor, 0.25f, 4f);
+            UpdateTeleportChannelTime();
+        }
+
+        internal void MultiplyHurtInvulnerability(float factor)
+        {
+            if (factor <= 0f)
+                return;
+
+            charmHurtIFrameMultiplier = Mathf.Clamp(charmHurtIFrameMultiplier * factor, 0.5f, 5f);
+            UpdateHurtIFrameDuration();
+        }
+
+        internal void ModifyKnockbackSuppression(int delta)
+        {
+            knockbackSuppressionCount = Mathf.Clamp(knockbackSuppressionCount + delta, 0, 10);
+        }
+
+        internal void SetFocusMovementAllowed(bool allowed)
+        {
+            allowFocusMovement = allowed;
+        }
+
+        internal void AddMaxHpBonus(int amount, bool fillNew)
+        {
+            int previousMax = Mathf.Max(1, baseShadeMaxHP + charmMaxHpBonus);
+            charmMaxHpBonus = Mathf.Clamp(charmMaxHpBonus + amount, -20, 40);
+            int fill = fillNew ? Mathf.Max(0, Mathf.Max(1, baseShadeMaxHP + charmMaxHpBonus) - previousMax) : 0;
+            ApplyCharmHealthModifiers(fill);
+        }
+
+        internal void SetConditionalNailDamageMultiplier(string key, float multiplier)
+        {
+            if (string.IsNullOrEmpty(key))
+                return;
+
+            conditionalNailDamageMultipliers[key] = Mathf.Max(0.01f, multiplier);
+            UpdateConditionalNailDamageProduct();
+        }
+
+        internal void ClearConditionalNailDamageMultiplier(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+                return;
+
+            if (conditionalNailDamageMultipliers.Remove(key))
+            {
+                UpdateConditionalNailDamageProduct();
+            }
+        }
+
+        private void UpdateConditionalNailDamageProduct()
+        {
+            float product = 1f;
+            foreach (var value in conditionalNailDamageMultipliers.Values)
+            {
+                product *= Mathf.Clamp(value, 0.01f, 10f);
+            }
+
+            conditionalNailDamageProduct = Mathf.Clamp(product, 0.1f, 10f);
+        }
+
+        private float GetConditionalNailDamageMultiplier()
+        {
+            return conditionalNailDamageProduct;
+        }
+
+        private void UpdateFocusDerivedValues()
+        {
+            focusChannelTime = Mathf.Max(0.05f, baseFocusChannelTime * charmFocusTimeMultiplier);
+        }
+
+        private void UpdateTeleportChannelTime()
+        {
+            teleportChannelTime = Mathf.Max(0.05f, baseTeleportChannelTime * charmTeleportChannelMultiplier);
+        }
+
+        private void UpdateHurtIFrameDuration()
+        {
+            currentHurtIFrameDuration = Mathf.Max(0.05f, HurtIFrameSeconds * charmHurtIFrameMultiplier);
+        }
+
+        private int GetFocusHealAmount()
+        {
+            int baseAmount = ModConfig.Instance.focusShadeHeal + charmFocusHealBonus;
+            return Mathf.Clamp(baseAmount, 0, 12);
+        }
+
+        private int GetHornetFocusHealAmount()
+        {
+            int baseAmount = ModConfig.Instance.focusHornetHeal + charmHornetFocusHealBonus;
+            return Mathf.Clamp(baseAmount, 0, 12);
+        }
+
+        private void ApplyCharmHealthModifiers(int fillAmount = 0)
+        {
+            int targetMax = Mathf.Max(1, baseShadeMaxHP + charmMaxHpBonus);
+            if (fillAmount > 0)
+            {
+                shadeHP = Mathf.Clamp(shadeHP + fillAmount, 0, targetMax);
+            }
+
+            shadeMaxHP = targetMax;
+            shadeHP = Mathf.Clamp(shadeHP, 0, shadeMaxHP);
+            PushShadeStatsToHud();
+            PersistIfChanged();
         }
     }
 }

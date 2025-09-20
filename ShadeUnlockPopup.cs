@@ -419,12 +419,12 @@ public sealed class ShadeUnlockPopup : MonoBehaviour
         }
     }
 
-    private static Color GetColorFor(ShadeRuntime.ShadeUnlockNotificationType type)
+    private static Color GetColorFor(ShadeUnlockNotificationType type)
     {
         return type switch
         {
-            ShadeRuntime.ShadeUnlockNotificationType.Charm => CharmColor,
-            ShadeRuntime.ShadeUnlockNotificationType.Spell => SpellColor,
+            ShadeUnlockNotificationType.Charm => CharmColor,
+            ShadeUnlockNotificationType.Spell => SpellColor,
             _ => AbilityColor
         };
     }

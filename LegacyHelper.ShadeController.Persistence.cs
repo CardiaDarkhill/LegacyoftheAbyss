@@ -1,5 +1,6 @@
 #nullable disable
 using UnityEngine;
+using LegacyoftheAbyss.Shade;
 
 public partial class LegacyHelper
 {
@@ -22,6 +23,7 @@ public partial class LegacyHelper
                 isInactive = false;
                 CancelDeathAnimation();
             }
+            ShadeRuntime.HandleBenchRest();
             PushShadeStatsToHud();
         }
 

@@ -119,6 +119,7 @@ public partial class LegacyHelper
                 ls.x = Mathf.Abs(ls.x) * scaleSign;
                 //ls.y = Mathf.Abs(ls.y);
                 ls *= 1f / SpriteScale;
+                ls *= charmNailScaleMultiplier;
                 tr.localScale = ls;
                 if (nailSlash != null)
                 {
@@ -264,6 +265,8 @@ public partial class LegacyHelper
 
                     int nailDmg = Mathf.Max(1, GetHornetNailDamage());
                     nailDmg = Mathf.Max(1, Mathf.RoundToInt(nailDmg * ModConfig.Instance.shadeDamageMultiplier));
+                    nailDmg = Mathf.Max(1, Mathf.RoundToInt(nailDmg * charmNailDamageMultiplier));
+                    nailDmg = Mathf.Max(1, Mathf.RoundToInt(nailDmg * GetConditionalNailDamageMultiplier()));
                     foreach (var d in damagers)
                     {
                         if (!d) continue;
@@ -327,7 +330,8 @@ public partial class LegacyHelper
                             onDamaged = () =>
                             {
                                 int prevSoul = shadeSoul;
-                                shadeSoul = Mathf.Min(shadeSoulMax, shadeSoul + soulGainPerHit);
+                                int soulGain = Mathf.Max(0, soulGainPerHit + charmSoulGainBonus);
+                                shadeSoul = Mathf.Min(shadeSoulMax, shadeSoul + soulGain);
                                 PushSoulToHud();
                                 CheckHazardOverlap();
                                 if (prevSoul < focusSoulCost && shadeSoul >= focusSoulCost)

@@ -17,6 +17,8 @@ public partial class LegacyHelper : BaseUnityPlugin
     private bool loggedMissingUI;
     private bool loggedMissingPauseMenu;
 
+    internal static LegacyHelper Instance { get; private set; }
+
     // Persist shade state across scene transitions
     internal static bool HasSavedShadeState => ShadeRuntime.PersistentState.HasData;
 
@@ -33,6 +35,7 @@ public partial class LegacyHelper : BaseUnityPlugin
 
     private void Awake()
     {
+        Instance = this;
         ModConfig.Load();
         LoggingManager.Initialize();
         var harmony = new Harmony("com.legacyoftheabyss.helper");
@@ -81,6 +84,11 @@ public partial class LegacyHelper : BaseUnityPlugin
 
     private void OnDestroy()
     {
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+
         LoggingManager.Flush();
         ModConfig.Save();
     }
@@ -96,6 +104,7 @@ public partial class LegacyHelper : BaseUnityPlugin
             if (gm == null || gm.hero_ctrl == null) return;
             Vector3 spawnPosAtControl = gm.hero_ctrl.transform.position;
             SpawnShadeAtPosition(spawnPosAtControl);
+            ShadeCharmPlacer.PopulateScene(SceneManager.GetActiveScene().name, gm.hero_ctrl.transform);
         }
         catch { }
     }
@@ -233,7 +242,7 @@ public partial class LegacyHelper : BaseUnityPlugin
         {
             if (ModConfig.Instance.logGeneral)
             {
-                Logger.LogWarning($"Failed to recompute shade charm loadout: {e}");
+                Instance?.Logger?.LogWarning($"Failed to recompute shade charm loadout: {e}");
             }
         }
 

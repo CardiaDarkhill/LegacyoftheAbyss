@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "JujUd5yol4lT0Ctpf4nPFvIqqWCvV8GiPSnwJw5f66KQmNSyEm1L+LNTQRIuaDDXCN+wh8vLoCP00pwKZHtvjA==",
+  "dgSpecHash": "45WFTQ7tnGX1ZV25U7CoFy/nJZ+tUclRpTf7cHprrOruuYEcHwamrsSLi84H4jVLuZu14UrbNw3ugDWjflY3Tg==",
   "success": true,
-  "projectFilePath": "E:\\SteamProgram\\steamapps\\common\\Hollow Knight Silksong\\BepInEx\\plugins\\legacyoftheabyss\\LegacyoftheAbyss.csproj",
+  "projectFilePath": "E:\\SteamProgram\\steamapps\\common\\Hollow Knight Silksong\\BepInEx\\plugins\\LegacyoftheAbyss\\LegacyoftheAbyss.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\Liam\\.nuget\\packages\\bepinex.analyzers\\1.0.8\\bepinex.analyzers.1.0.8.nupkg.sha512",
     "C:\\Users\\Liam\\.nuget\\packages\\bepinex.baselib\\5.4.20\\bepinex.baselib.5.4.20.nupkg.sha512",

@@ -235,10 +235,11 @@ public static class ShadeSettingsMenu
         private Text nameLabel;
         private Text notchLabel;
         private Text statusLabel;
+        private Sprite fallbackIcon;
 
         public ShadeCharmId? CharmId => definition?.EnumId;
 
-        public void Initialize(CharmMenuController owner, ShadeCharmDefinition def, MenuButton button, Image icon, Text name, Text notch, Text status)
+        public void Initialize(CharmMenuController owner, ShadeCharmDefinition def, MenuButton button, Image icon, Text name, Text notch, Text status, Sprite fallback)
         {
             controller = owner;
             definition = def;
@@ -247,6 +248,7 @@ public static class ShadeSettingsMenu
             nameLabel = name;
             notchLabel = notch;
             statusLabel = status;
+            fallbackIcon = fallback;
             controller?.RegisterCharmButton(this);
             UpdateStaticContent();
             Refresh();
@@ -265,6 +267,11 @@ public static class ShadeSettingsMenu
                 int cost = Mathf.Max(0, definition.NotchCost);
                 notchLabel.text = cost == 1 ? "1 Notch" : $"{cost} Notches";
             }
+
+            if (iconImage != null)
+            {
+                iconImage.sprite = definition.Icon ?? fallbackIcon;
+            }
         }
 
         public void Refresh()
@@ -276,16 +283,41 @@ public static class ShadeSettingsMenu
             var enumId = definition.EnumId;
             bool owned = enumId.HasValue && (inventory?.IsOwned(enumId.Value) ?? false);
             bool equipped = enumId.HasValue && (inventory?.IsEquipped(enumId.Value) ?? false);
+            bool broken = enumId.HasValue && (inventory?.IsBroken(enumId.Value) ?? false);
+            bool isNew = enumId.HasValue && (inventory?.IsNewlyDiscovered(enumId.Value) ?? false);
 
             if (menuButton != null)
-                menuButton.interactable = owned;
+                menuButton.interactable = owned && !broken;
 
             if (iconImage != null)
-                iconImage.color = owned ? definition.FallbackTint : new Color(0.3f, 0.3f, 0.3f, 1f);
+            {
+                iconImage.sprite = definition.Icon ?? fallbackIcon;
+            }
+
+            if (iconImage != null)
+            {
+                if (!owned)
+                {
+                    iconImage.color = new Color(0.3f, 0.3f, 0.3f, 1f);
+                }
+                else if (broken)
+                {
+                    iconImage.color = new Color(0.55f, 0.25f, 0.25f, 1f);
+                }
+                else
+                {
+                    iconImage.color = definition.Icon != null ? Color.white : definition.FallbackTint;
+                }
+            }
 
             if (statusLabel != null)
             {
-                if (equipped)
+                if (broken)
+                {
+                    statusLabel.text = "Broken";
+                    statusLabel.color = new Color(0.83f, 0.35f, 0.35f, 1f);
+                }
+                else if (equipped)
                 {
                     statusLabel.text = "Equipped";
                     statusLabel.color = new Color(0.92f, 0.86f, 0.55f, 1f);
@@ -294,6 +326,11 @@ public static class ShadeSettingsMenu
                 {
                     statusLabel.text = "Locked";
                     statusLabel.color = new Color(0.7f, 0.32f, 0.32f, 1f);
+                }
+                else if (isNew)
+                {
+                    statusLabel.text = "New";
+                    statusLabel.color = new Color(0.55f, 0.78f, 0.92f, 1f);
                 }
                 else
                 {
@@ -411,6 +448,14 @@ public static class ShadeSettingsMenu
         public void HandleCharmSelected(ShadeCharmId id)
         {
             selectedCharm = id;
+            var inventory = ShadeRuntime.Charms;
+            if (inventory != null && inventory.MarkCharmSeen(id))
+            {
+                foreach (var driver in charmButtons)
+                {
+                    driver?.Refresh();
+                }
+            }
             UpdateActionState();
             UpdateDetailPanel();
         }
@@ -540,6 +585,8 @@ public static class ShadeSettingsMenu
                 SetDetailTexts(def.DisplayName, def.Description);
                 if (!inventory.IsOwned(selectedCharm.Value))
                     fallbackStatus = "This charm has not been unlocked yet.";
+                else if (inventory.IsBroken(selectedCharm.Value))
+                    fallbackStatus = "This charm is broken. Rest at a bench to repair it before equipping.";
                 else if (inventory.IsEquipped(selectedCharm.Value))
                     fallbackStatus = "Charm equipped. Unequip to free notches for other charms.";
                 else
@@ -572,8 +619,9 @@ public static class ShadeSettingsMenu
                 var def = inventory.GetDefinition(selectedCharm.Value);
                 bool owned = inventory.IsOwned(selectedCharm.Value);
                 bool equipped = inventory.IsEquipped(selectedCharm.Value);
+                bool broken = inventory.IsBroken(selectedCharm.Value);
                 canUnequip = equipped;
-                canEquip = owned && !equipped && inventory.UsedNotches + def.NotchCost <= inventory.NotchCapacity;
+                canEquip = owned && !equipped && !broken && inventory.UsedNotches + def.NotchCost <= inventory.NotchCapacity;
             }
 
             if (equipButton != null)
@@ -2523,7 +2571,7 @@ public static class ShadeSettingsMenu
                 statusLocalLayout.preferredHeight = 26f;
 
                 var driver = menuButton.gameObject.AddComponent<CharmButtonDriver>();
-                driver.Initialize(charmsController, definition, menuButton, iconImage, existingLabel, notchCostText, statusLabel);
+                driver.Initialize(charmsController, definition, menuButton, iconImage, existingLabel, notchCostText, statusLabel, iconSprite);
             }
         }
 

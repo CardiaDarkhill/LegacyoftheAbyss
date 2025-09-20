@@ -17,6 +17,7 @@ public partial class LegacyHelper
         private ShadeCharmLoadoutSnapshot charmSnapshot = ShadeCharmLoadoutSnapshot.FromBaseline(s_defaultCharmStats);
         private readonly List<ShadeCharmDefinition> equippedCharms = new List<ShadeCharmDefinition>();
         private readonly List<Action<ShadeCharmContext, float>> charmUpdateCallbacks = new List<Action<ShadeCharmContext, float>>();
+        private readonly List<Action<ShadeCharmContext, ShadeCharmDamageEvent>> charmDamageCallbacks = new List<Action<ShadeCharmContext, ShadeCharmDamageEvent>>();
         private ShadeCharmAbilityToggles abilityOverrides = ShadeCharmAbilityToggles.None;
 
         // Movement and leash
@@ -164,6 +165,11 @@ public partial class LegacyHelper
         public int shadeSoulMax = s_defaultCharmStats.ShadeSoulCapacity;
         public int shadeSoul;
         public int soulGainPerHit = 11;
+        private int baseSoulGainPerHit = 11;
+        private int charmSoulGainBonus;
+        private float charmNailDamageMultiplier = 1f;
+        private float charmSpellDamageMultiplier = 1f;
+        private float charmNailScaleMultiplier = 1f;
         private int projectileSoulCost = s_defaultCharmStats.ProjectileSoulCost;
         private int shriekSoulCost = s_defaultCharmStats.ShriekSoulCost;
         private int quakeSoulCost = s_defaultCharmStats.QuakeSoulCost;
@@ -187,6 +193,24 @@ public partial class LegacyHelper
         private AudioClip sfxFocusComplete;
         private AudioClip sfxFocusReady;
         private int lastSoulForReady = -1;
+
+        private float baseFocusChannelTime;
+        private float baseFocusHealRange;
+        private float baseTeleportChannelTime;
+        private float baseHitKnockbackForce;
+        private int baseShadeMaxHP;
+
+        private int charmFocusHealBonus;
+        private int charmHornetFocusHealBonus;
+        private float charmFocusTimeMultiplier = 1f;
+        private float charmTeleportChannelMultiplier = 1f;
+        private float charmHurtIFrameMultiplier = 1f;
+        private float currentHurtIFrameDuration = HurtIFrameSeconds;
+        private int charmMaxHpBonus;
+        private bool allowFocusMovement;
+        private int knockbackSuppressionCount;
+        private readonly Dictionary<string, float> conditionalNailDamageMultipliers = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
+        private float conditionalNailDamageProduct = 1f;
 
         private SimpleHUD cachedHud;
         private float hurtCooldown;

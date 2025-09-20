@@ -13,8 +13,8 @@ public class ShadeNotificationTests
     {
         ShadeRuntime.Clear();
 
-        bool first = ShadeRuntime.EnqueueNotification("test-key", "Test message", ShadeRuntime.ShadeUnlockNotificationType.Ability);
-        bool second = ShadeRuntime.EnqueueNotification("test-key", "Test message", ShadeRuntime.ShadeUnlockNotificationType.Ability);
+        bool first = ShadeRuntime.EnqueueNotification("test-key", "Test message", ShadeUnlockNotificationType.Ability);
+        bool second = ShadeRuntime.EnqueueNotification("test-key", "Test message", ShadeUnlockNotificationType.Ability);
 
         Assert.True(first);
         Assert.False(second);

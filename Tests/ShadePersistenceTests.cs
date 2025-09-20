@@ -1,3 +1,5 @@
+using System;
+
 using System.Linq;
 using LegacyoftheAbyss.Shade;
 using Xunit;
@@ -195,34 +197,34 @@ public class ShadeSaveSlotRepositoryTests
     {
         var repository = new ShadeSaveSlotRepository();
 
-        Assert.False(repository.IsCharmCollected(0, ShadeCharmId.UmbralHeart));
-        Assert.True(repository.MarkCharmCollected(0, ShadeCharmId.UmbralHeart));
-        Assert.True(repository.IsCharmCollected(0, ShadeCharmId.UmbralHeart));
+        Assert.False(repository.IsCharmCollected(0, ShadeCharmId.FragileStrength));
+        Assert.True(repository.MarkCharmCollected(0, ShadeCharmId.FragileStrength));
+        Assert.True(repository.IsCharmCollected(0, ShadeCharmId.FragileStrength));
 
         var snapshot = repository.GetCollectedCharms(0);
-        Assert.Contains(ShadeCharmId.UmbralHeart, snapshot);
+        Assert.Contains(ShadeCharmId.FragileStrength, snapshot);
 
         // Duplicated mark should report false and not add again.
-        Assert.False(repository.MarkCharmCollected(0, ShadeCharmId.UmbralHeart));
+        Assert.False(repository.MarkCharmCollected(0, ShadeCharmId.FragileStrength));
 
         var copy = repository.GetCollectedCharms(0);
         Assert.NotSame(snapshot, copy);
         Assert.True(snapshot.OrderBy(c => c).SequenceEqual(copy.OrderBy(c => c)));
 
-        Assert.True(repository.ClearCharm(0, ShadeCharmId.UmbralHeart));
-        Assert.False(repository.IsCharmCollected(0, ShadeCharmId.UmbralHeart));
+        Assert.True(repository.ClearCharm(0, ShadeCharmId.FragileStrength));
+        Assert.False(repository.IsCharmCollected(0, ShadeCharmId.FragileStrength));
     }
 
     [Fact]
     public void SetCollectedCharmsReplacesState()
     {
         var repository = new ShadeSaveSlotRepository();
-        repository.MarkCharmCollected(0, ShadeCharmId.UmbralHeart);
+        repository.MarkCharmCollected(0, ShadeCharmId.FragileStrength);
 
-        repository.SetCollectedCharms(0, new[] { ShadeCharmId.LuminousVeil, ShadeCharmId.PaleRemnant });
+        repository.SetCollectedCharms(0, new[] { ShadeCharmId.MarkOfPride, ShadeCharmId.SoulCatcher });
 
         var charms = repository.GetCollectedCharms(0).OrderBy(c => c).ToArray();
-        Assert.Equal(new[] { ShadeCharmId.LuminousVeil, ShadeCharmId.PaleRemnant }, charms);
+        Assert.Equal(new[] { ShadeCharmId.MarkOfPride, ShadeCharmId.SoulCatcher }, charms);
 
         repository.SetCollectedCharms(0, Array.Empty<ShadeCharmId>());
         Assert.Empty(repository.GetCollectedCharms(0));

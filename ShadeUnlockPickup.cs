@@ -18,10 +18,19 @@ public sealed class ShadeUnlockPickup : MonoBehaviour
     public string message = "Shade unlocked a new ability!";
 
     [Tooltip("Notification category used for popup styling.")]
-    public ShadeRuntime.ShadeUnlockNotificationType notificationType = ShadeRuntime.ShadeUnlockNotificationType.Ability;
+    public ShadeUnlockNotificationType notificationType = ShadeUnlockNotificationType.Ability;
 
     [Tooltip("Optional popup duration override. Zero falls back to the configured default.")]
     public float durationSeconds = 0f;
+
+    [Tooltip("If true, the pickup will grant the configured charm when collected.")]
+    public bool grantCharm;
+
+    [Tooltip("Charm granted when this pickup is consumed (if Grant Charm is enabled).")]
+    public ShadeCharmId charmId = ShadeCharmId.WaywardCompass;
+
+    [Tooltip("When granting a charm without a custom message, automatically use the charm name for the popup text.")]
+    public bool useCharmNameForMessage = true;
 
     [Tooltip("Destroy this pickup object once the notification has been dispatched.")]
     public bool destroyOnPickup = true;
@@ -104,7 +113,29 @@ public sealed class ShadeUnlockPickup : MonoBehaviour
 
         consumed = true;
 
+        bool grantedCharm = false;
+        if (grantCharm)
+        {
+            grantedCharm = ShadeRuntime.TryCollectCharm(charmId);
+        }
+
         string resolvedMessage = !string.IsNullOrWhiteSpace(overrideMessage) ? overrideMessage : message;
+        if (grantCharm && grantedCharm && string.IsNullOrWhiteSpace(resolvedMessage) && useCharmNameForMessage)
+        {
+            try
+            {
+                var inventory = ShadeRuntime.Charms;
+                if (inventory != null)
+                {
+                    var definition = inventory.GetDefinition(charmId);
+                    resolvedMessage = $"{definition.DisplayName} acquired.";
+                }
+            }
+            catch
+            {
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(resolvedMessage))
         {
             string key = !string.IsNullOrWhiteSpace(notificationKey) ? notificationKey : resolvedMessage;

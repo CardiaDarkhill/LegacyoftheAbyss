@@ -15,23 +15,26 @@ namespace LegacyoftheAbyss.Shade
         private sealed class ShadeSaveSlotRecord
         {
             public ShadeSaveSlotRecord()
-                : this(new ShadePersistentState(), new HashSet<ShadeCharmId>())
+                : this(new ShadePersistentState(), new HashSet<ShadeCharmId>(), new HashSet<ShadeCharmId>())
             {
             }
 
-            private ShadeSaveSlotRecord(ShadePersistentState state, HashSet<ShadeCharmId> collected)
+            private ShadeSaveSlotRecord(ShadePersistentState state, HashSet<ShadeCharmId> collected, HashSet<ShadeCharmId> broken)
             {
                 State = state;
                 CollectedCharms = collected;
+                BrokenCharms = broken;
             }
 
             public ShadePersistentState State { get; private set; }
 
             public HashSet<ShadeCharmId> CollectedCharms { get; }
 
+            public HashSet<ShadeCharmId> BrokenCharms { get; }
+
             public ShadeSaveSlotRecord Clone()
             {
-                return new ShadeSaveSlotRecord(State.Clone(), new HashSet<ShadeCharmId>(CollectedCharms));
+                return new ShadeSaveSlotRecord(State.Clone(), new HashSet<ShadeCharmId>(CollectedCharms), new HashSet<ShadeCharmId>(BrokenCharms));
             }
 
             public void ReplaceState(ShadePersistentState state)
@@ -119,7 +122,19 @@ namespace LegacyoftheAbyss.Shade
         {
             if (_slots.TryGetValue(slot, out var record))
             {
-                return record.State.GetDiscoveredCharmIdsSnapshot();
+                var discovered = record.State.GetDiscoveredCharmIdsSnapshot();
+                if (record.CollectedCharms.Count == 0)
+                {
+                    return discovered;
+                }
+
+                var buffer = new HashSet<int>(discovered ?? Array.Empty<int>());
+                foreach (var charm in record.CollectedCharms)
+                {
+                    buffer.Add((int)charm);
+                }
+
+                return buffer.ToArray();
             }
 
             return s_emptyCharmList;
@@ -235,6 +250,21 @@ namespace LegacyoftheAbyss.Shade
             return Array.Empty<ShadeCharmId>();
         }
 
+        public IReadOnlyCollection<ShadeCharmId> GetBrokenCharms(int slot)
+        {
+            if (!IsValidSlot(slot))
+            {
+                return Array.Empty<ShadeCharmId>();
+            }
+
+            if (_slots.TryGetValue(slot, out var record))
+            {
+                return record.BrokenCharms.ToArray();
+            }
+
+            return Array.Empty<ShadeCharmId>();
+        }
+
         public bool ClearCharm(int slot, ShadeCharmId charmId)
         {
             if (!IsValidSlot(slot))
@@ -268,6 +298,48 @@ namespace LegacyoftheAbyss.Shade
             foreach (var charm in charms)
             {
                 record.CollectedCharms.Add(charm);
+            }
+        }
+
+        public void SetBrokenCharms(int slot, IEnumerable<ShadeCharmId> charms)
+        {
+            if (!IsValidSlot(slot))
+            {
+                return;
+            }
+
+            var record = GetOrCreateRecord(slot);
+            record.BrokenCharms.Clear();
+
+            if (charms == null)
+            {
+                return;
+            }
+
+            foreach (var charm in charms)
+            {
+                record.BrokenCharms.Add(charm);
+            }
+        }
+
+        public void SetEquippedCharms(int slot, int loadoutId, IEnumerable<int> charmIds)
+        {
+            if (!IsValidSlot(slot))
+            {
+                return;
+            }
+
+            var record = GetOrCreateRecord(slot);
+            record.State.ClearLoadout(loadoutId);
+
+            if (charmIds == null)
+            {
+                return;
+            }
+
+            foreach (var charmId in charmIds)
+            {
+                record.State.EquipCharm(loadoutId, charmId);
             }
         }
 

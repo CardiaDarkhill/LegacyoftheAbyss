@@ -48,6 +48,13 @@ public partial class LegacyHelper
             baseProjectileSoulCost = projectileSoulCost;
             baseShriekSoulCost = shriekSoulCost;
             baseQuakeSoulCost = quakeSoulCost;
+            baseSoulGainPerHit = soulGainPerHit;
+            baseFocusChannelTime = focusChannelTime;
+            baseFocusHealRange = focusHealRange;
+            baseTeleportChannelTime = teleportChannelTime;
+            baseHitKnockbackForce = hitKnockbackForce;
+            baseShadeMaxHP = shadeMaxHP;
+            ResetCharmDerivedStats();
             wasInactive = (!isDying && shadeHP <= 0);
 
             // Ensure the shade can act as a pogo surface for Hornet
@@ -68,12 +75,14 @@ public partial class LegacyHelper
                     int computedMax = Mathf.Max(1, (pd.maxHealth + 1) / 2);
                     shadeMaxHP = computedMax;
                     if (!LegacyHelper.HasSavedShadeState && shadeHP <= 0)
-                        shadeHP = Mathf.Clamp((pd.health + 1) / 2, 0, shadeMaxHP);
+                    shadeHP = Mathf.Clamp((pd.health + 1) / 2, 0, shadeMaxHP);
                     shadeHP = Mathf.Clamp(shadeHP, 0, shadeMaxHP);
                     PushShadeStatsToHud();
                 }
             }
             catch { }
+
+            baseShadeMaxHP = shadeMaxHP;
 
             lastSavedHP = lastSavedMax = lastSavedSoul = -999;
             PersistIfChanged();
@@ -82,7 +91,7 @@ public partial class LegacyHelper
             RecomputeCharmLoadout();
         }
 
-        public void ApplyCharmLoadout(IEnumerable<ShadeCharmDefinition>? loadout)
+        internal void ApplyCharmLoadout(IEnumerable<ShadeCharmDefinition> loadout)
         {
             var previousSnapshot = charmSnapshot;
             var removedCharms = equippedCharms.ToArray();
@@ -108,11 +117,16 @@ public partial class LegacyHelper
             equippedCharms.AddRange(charmSnapshot.Definitions);
 
             charmUpdateCallbacks.Clear();
+            charmDamageCallbacks.Clear();
             foreach (var equipped in equippedCharms)
             {
                 if (equipped.Hooks.OnUpdate != null)
                 {
                     charmUpdateCallbacks.Add(equipped.Hooks.OnUpdate);
+                }
+                if (equipped.Hooks.OnShadeDamaged != null)
+                {
+                    charmDamageCallbacks.Add(equipped.Hooks.OnShadeDamaged);
                 }
             }
 
@@ -740,7 +754,9 @@ public partial class LegacyHelper
 
         private void HandleMovementAndFacing(float deltaTime)
         {
-            if (isCastingSpell || isFocusing)
+            bool blockForFocus = isFocusing && !allowFocusMovement;
+            bool blockForOtherSpells = isCastingSpell && !isFocusing;
+            if (blockForFocus || blockForOtherSpells)
             {
                 if (rb) rb.linearVelocity = Vector2.zero;
                 lastMoveDelta = Vector2.zero;
@@ -1193,6 +1209,7 @@ public partial class LegacyHelper
         {
             int nail = Mathf.Max(1, GetHornetNailDamage());
             float mult = upgraded ? baseMult : baseMult * 0.7f; // Soul variant = 30% less
+            mult *= charmSpellDamageMultiplier;
             int dmg = Mathf.RoundToInt(nail * mult * ModConfig.Instance.shadeDamageMultiplier);
             return Mathf.Max(1, dmg);
         }
@@ -1932,6 +1949,13 @@ public partial class LegacyHelper
 
         private void ApplyKnockback(Vector2 sourcePos)
         {
+            if (knockbackSuppressionCount > 0)
+            {
+                knockbackVelocity = Vector2.zero;
+                knockbackTimer = 0f;
+                return;
+            }
+
             try
             {
                 Vector2 dir = ((Vector2)transform.position - sourcePos).normalized;
@@ -1945,15 +1969,21 @@ public partial class LegacyHelper
         {
             if (hazardCooldown > 0f) return;
             TeleportToHornet();
+            int attempted = 1;
+            int actual = 0;
+            bool prevented = !canTakeDamage;
             if (canTakeDamage)
             {
-                shadeHP = Mathf.Max(0, shadeHP - 1);
+                int before = shadeHP;
+                shadeHP = Mathf.Max(0, shadeHP - attempted);
+                actual = Mathf.Max(0, before - shadeHP);
                 if (shadeHP <= 0) StartDeathAnimation();
             }
             PushShadeStatsToHud();
             hazardCooldown = 0.25f;
             CancelFocus();
             PersistIfChanged();
+            DispatchCharmDamageEvent(attempted, actual, true, prevented || actual <= 0, shadeHP <= 0);
         }
 
         private void OnShadeHitEnemy(DamageHero dh)
@@ -1961,14 +1991,21 @@ public partial class LegacyHelper
             if (hurtCooldown > 0f) return;
             int dmg = 0;
             try { if (dh != null) dmg = dh.damageDealt; } catch { }
-            if (dmg <= 0) return; // ignore non-damaging triggers
+            if (dmg <= 0)
+            {
+                DispatchCharmDamageEvent(0, 0, false, true, false);
+                return; // ignore non-damaging triggers
+            }
             Vector2 srcPos = dh ? (Vector2)dh.transform.position : (Vector2)transform.position;
             if (!canTakeDamage)
             {
-                hurtCooldown = HurtIFrameSeconds;
+                hurtCooldown = currentHurtIFrameDuration;
+                DispatchCharmDamageEvent(dmg, 0, false, true, false);
                 return;
             }
+            int beforeHp = shadeHP;
             shadeHP = Mathf.Max(0, shadeHP - dmg);
+            int actual = Mathf.Max(0, beforeHp - shadeHP);
             if (shadeHP > 0)
             {
                 ApplyKnockback(srcPos);
@@ -1978,14 +2015,36 @@ public partial class LegacyHelper
                 StartDeathAnimation();
             }
             PushShadeStatsToHud();
-            hurtCooldown = HurtIFrameSeconds;
+            hurtCooldown = currentHurtIFrameDuration;
             CancelFocus();
             PersistIfChanged();
+            DispatchCharmDamageEvent(dmg, actual, false, actual <= 0, shadeHP <= 0);
+        }
+
+        private void DispatchCharmDamageEvent(int attemptedDamage, int actualDamage, bool wasHazard, bool prevented, bool lethal)
+        {
+            if (charmDamageCallbacks.Count == 0)
+            {
+                return;
+            }
+
+            var context = new ShadeCharmContext(this, charmSnapshot);
+            var evt = new ShadeCharmDamageEvent(attemptedDamage, actualDamage, wasHazard, prevented, lethal);
+            foreach (var callback in charmDamageCallbacks)
+            {
+                try { callback(context, evt); }
+                catch { }
+            }
         }
 
         private void StartDeathAnimation()
         {
             if (isDying) return;
+            bool brokeCharm = ShadeRuntime.HandleShadeDeath();
+            if (brokeCharm)
+            {
+                LegacyHelper.RequestShadeLoadoutRecompute();
+            }
             StopSpawnAnimation();
             if (deathRoutine != null) StopCoroutine(deathRoutine);
             isDying = true;
@@ -2100,7 +2159,7 @@ public partial class LegacyHelper
                 if (focusTimer > 0f) return;
 
                 // Complete focus
-                int healAmt = ModConfig.Instance.focusShadeHeal;
+                int healAmt = GetFocusHealAmount();
                 int canHeal = (shadeHP < shadeMaxHP && healAmt > 0) ? Mathf.Min(healAmt, shadeMaxHP - shadeHP) : 0;
                 if (canHeal > 0)
                 {
@@ -2126,8 +2185,9 @@ public partial class LegacyHelper
                             if (dist <= focusHealRange)
                             {
                                 // Avoid exceeding max via AddHealth handling
-                                if (ModConfig.Instance.focusHornetHeal > 0)
-                                    hc.AddHealth(ModConfig.Instance.focusHornetHeal);
+                                int hornetHeal = GetHornetFocusHealAmount();
+                                if (hornetHeal > 0)
+                                    hc.AddHealth(hornetHeal);
                             }
                         }
                     }
