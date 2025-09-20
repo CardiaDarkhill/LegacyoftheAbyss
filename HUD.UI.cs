@@ -11,6 +11,8 @@ public partial class SimpleHUD
         // Canvas
         canvas = gameObject.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.overrideSorting = true;
+        canvas.sortingOrder = -100;
         scaler = gameObject.AddComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
@@ -36,6 +38,8 @@ public partial class SimpleHUD
         soulOrbRoot.sizeDelta = orbPixels * uiScale * 0.85f;
         soulOrbRoot.anchoredPosition = new Vector2(-200f * uiScale, -20f * uiScale);
         soulOrbRoot.localScale = new Vector3(-1f, 1f, 1f); // mirror like previous frame
+        orbGameplayScale = soulOrbRoot.localScale;
+        orbMenuScale = new Vector3(-orbGameplayScale.x, orbGameplayScale.y, orbGameplayScale.z);
 
         // Background
         var soulBgGO = new GameObject("SoulBackground");
@@ -97,6 +101,8 @@ public partial class SimpleHUD
             soulOrbRoot.anchoredPosition.x,
             orbCenterY + (maskHeight * 0.5f)
         );
+        healthGameplayScale = hRect.localScale;
+        healthMenuScale = new Vector3(-healthGameplayScale.x, healthGameplayScale.y, healthGameplayScale.z);
 
         BuildMasks(hRect, uiScale);
 
@@ -106,6 +112,7 @@ public partial class SimpleHUD
             unlockPopup = gameObject.AddComponent<ShadeUnlockPopup>();
         }
         unlockPopup.Initialize(canvas, GetUIScale);
+        UpdateMenuOrientation(ShouldTreatAsMenu());
     }
 
     private void RefreshHealth()

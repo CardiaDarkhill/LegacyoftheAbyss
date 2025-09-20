@@ -1,6 +1,8 @@
 #nullable disable
 using System;
 using System.Collections;
+using System.Reflection;
+using GlobalEnums;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -39,6 +41,11 @@ public partial class SimpleHUD : MonoBehaviour
     private CanvasScaler scaler;
     private CanvasGroup canvasGroup;
     private ShadeUnlockPopup unlockPopup;
+
+    private Vector3 orbGameplayScale = Vector3.one;
+    private Vector3 orbMenuScale = Vector3.one;
+    private Vector3 healthGameplayScale = Vector3.one;
+    private Vector3 healthMenuScale = Vector3.one;
 
     private const KeyCode DebugDamageKey = KeyCode.None; // disabled
     private const KeyCode DebugHealKey = KeyCode.None; // disabled
@@ -190,23 +197,128 @@ public partial class SimpleHUD : MonoBehaviour
         if (canvasGroup == null)
             return;
 
-        bool paused = false;
-        try
-        {
-            var gm = GameManager.instance;
-            paused = gm != null && gm.IsGamePaused();
-        }
-        catch
-        {
-            paused = false;
-        }
-
-        float target = paused ? 0.35f : 1f;
+        bool menuActive = ShouldTreatAsMenu();
+        float target = menuActive ? 0.35f : 1f;
         float current = canvasGroup.alpha;
         if (!Mathf.Approximately(current, target))
         {
             float step = Mathf.Max(0.01f, Time.unscaledDeltaTime * 5f);
             canvasGroup.alpha = Mathf.MoveTowards(current, target, step);
+        }
+
+        UpdateMenuOrientation(menuActive);
+    }
+
+    private bool ShouldTreatAsMenu()
+    {
+        try
+        {
+            var gm = GameManager.instance;
+            if (gm != null && gm.IsGamePaused())
+            {
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            var ui = UIManager.instance;
+            var state = TryGetUiState(ui);
+            if (state.HasValue && IsMenuState(state.Value))
+            {
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        return false;
+    }
+
+    private static UIState? TryGetUiState(UIManager ui)
+    {
+        if (ui == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return ui.uiState;
+        }
+        catch
+        {
+            try
+            {
+                var field = typeof(UIManager).GetField("uiState", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (field != null)
+                {
+                    object value = field.GetValue(ui);
+                    if (value is UIState state)
+                    {
+                        return state;
+                    }
+
+                    if (value is int raw)
+                    {
+                        return (UIState)raw;
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsMenuState(UIState state)
+    {
+        string name = state.ToString();
+        if (string.IsNullOrEmpty(name))
+        {
+            return false;
+        }
+
+        if (string.Equals(name, "PLAYING", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(name, "GAMEPLAY", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return name.IndexOf("PAUSE", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               name.IndexOf("MENU", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               name.IndexOf("INVENTORY", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               name.IndexOf("MAP", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               name.IndexOf("JOURNAL", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               name.IndexOf("SHOP", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               name.IndexOf("OPTION", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private void UpdateMenuOrientation(bool menuActive)
+    {
+        var targetOrbScale = menuActive ? orbMenuScale : orbGameplayScale;
+        if (soulOrbRoot != null && soulOrbRoot.localScale != targetOrbScale)
+        {
+            soulOrbRoot.localScale = targetOrbScale;
+        }
+
+        if (healthContainer != null)
+        {
+            var rect = healthContainer.GetComponent<RectTransform>();
+            if (rect != null)
+            {
+                var targetScale = menuActive ? healthMenuScale : healthGameplayScale;
+                if (rect.localScale != targetScale)
+                {
+                    rect.localScale = targetScale;
+                }
+            }
         }
     }
 

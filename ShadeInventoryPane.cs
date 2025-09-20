@@ -701,6 +701,7 @@ internal static class ShadeInventoryPaneIntegration
         var newList = panes.ToList();
 
         int insertIndex = -1;
+
         for (int i = 0; i < panes.Length; i++)
         {
             var existing = panes[i];
@@ -709,11 +710,35 @@ internal static class ShadeInventoryPaneIntegration
                 continue;
             }
 
-            string name = existing.gameObject != null ? existing.gameObject.name : existing.name;
-            if (!string.IsNullOrEmpty(name))
+            string typeName = existing.GetType().Name;
+            if (!string.IsNullOrEmpty(typeName) &&
+                typeName.IndexOf("Crest", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                if (name.IndexOf("Charm", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    name.IndexOf("Tool", StringComparison.OrdinalIgnoreCase) >= 0)
+                insertIndex = i + 1;
+                break;
+            }
+        }
+
+        if (insertIndex < 0)
+        {
+            for (int i = 0; i < panes.Length; i++)
+            {
+                var existing = panes[i];
+                if (!existing)
+                {
+                    continue;
+                }
+
+                string name = existing.gameObject != null ? existing.gameObject.name : existing.name;
+                string typeName = existing.GetType().Name;
+                bool matchesName = !string.IsNullOrEmpty(name) &&
+                    (name.IndexOf("Charm", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     name.IndexOf("Tool", StringComparison.OrdinalIgnoreCase) >= 0);
+                bool matchesType = !string.IsNullOrEmpty(typeName) &&
+                    (typeName.IndexOf("Charm", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     typeName.IndexOf("Tool", StringComparison.OrdinalIgnoreCase) >= 0);
+
+                if (matchesName || matchesType)
                 {
                     insertIndex = i + 1;
                     break;

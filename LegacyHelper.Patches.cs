@@ -1,4 +1,5 @@
 #nullable disable
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
@@ -197,6 +198,50 @@ public partial class LegacyHelper
     private class GameManager_Start_Patch
     {
         private static void Postfix(GameManager __instance) => DisableStartup(__instance);
+    }
+
+    [HarmonyPatch]
+    private class InventoryPaneList_EnsureShadePane_Patch
+    {
+        private static IEnumerable<MethodBase> TargetMethods()
+        {
+            var type = typeof(InventoryPaneList);
+            if (type == null)
+            {
+                yield break;
+            }
+
+            string[] candidates = { "Awake", "Start", "OnEnable" };
+            foreach (string name in candidates)
+            {
+                var method = AccessTools.Method(type, name);
+                if (method != null)
+                {
+                    yield return method;
+                }
+            }
+        }
+
+        private static void Postfix(InventoryPaneList __instance)
+        {
+            if (__instance == null)
+            {
+                return;
+            }
+
+            try
+            {
+                ShadeInventoryPaneIntegration.EnsurePane(__instance);
+            }
+            catch (Exception ex)
+            {
+                if (ModConfig.Instance.logMenu)
+                {
+                    try { Debug.LogWarning($"[ShadeInventory] Failed to ensure shade pane: {ex}"); }
+                    catch { }
+                }
+            }
+        }
     }
 
     [HarmonyPatch(typeof(StartManager), "Start")]

@@ -1855,6 +1855,17 @@ public partial class LegacyHelper
             }
         }
 
+        public void SuppressHazardDamage(float duration)
+        {
+            if (duration <= 0f)
+            {
+                return;
+            }
+
+            hazardCooldown = Mathf.Max(hazardCooldown, duration);
+            hurtCooldown = Mathf.Max(hurtCooldown, duration);
+        }
+
         private Vector2 ClampAgainstTransitionGates(Vector2 proposed)
         {
             try

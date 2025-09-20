@@ -187,6 +187,7 @@ public partial class LegacyHelper : BaseUnityPlugin
                 if (sc != null)
                 {
                     sc.TeleportToPosition(pos);
+                    sc.SuppressHazardDamage(1.5f);
                     sc.TriggerSpawnEntrance();
                     SaveShadeState(sc.GetCurrentHP(), sc.GetMaxHP(), sc.GetShadeSoul(), sc.GetCanTakeDamage());
                     RequestShadeLoadoutRecompute();
@@ -211,6 +212,8 @@ public partial class LegacyHelper : BaseUnityPlugin
         {
             scNew.RestorePersistentState(savedHp, savedMax, savedSoul, savedCanTakeDamage);
         }
+
+        scNew.SuppressHazardDamage(1.5f);
 
         var sr = helper.AddComponent<SpriteRenderer>();
 
