@@ -45,6 +45,8 @@ public partial class LegacyHelper
         private int baseProjectileSoulCost;
         private int baseShriekSoulCost;
         private int baseQuakeSoulCost;
+        private bool baselineStatsInitialized;
+        private bool pendingCharmLoadoutRecompute;
         private bool wasInactive;
         public float hitKnockbackForce = 6f;
         private Vector2 knockbackVelocity;

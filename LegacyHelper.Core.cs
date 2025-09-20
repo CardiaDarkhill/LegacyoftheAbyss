@@ -284,7 +284,7 @@ public partial class LegacyHelper : BaseUnityPlugin
                 var controller = helper.GetComponent<ShadeController>();
                 if (controller != null)
                 {
-                    controller.RecomputeCharmLoadout();
+                    controller.QueueCharmLoadoutRecompute();
                 }
             }
         }

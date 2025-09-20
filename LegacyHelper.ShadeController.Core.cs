@@ -84,11 +84,13 @@ public partial class LegacyHelper
 
             baseShadeMaxHP = shadeMaxHP;
 
+            baselineStatsInitialized = true;
+
             lastSavedHP = lastSavedMax = lastSavedSoul = -999;
             PersistIfChanged();
             lastSoulForReady = shadeSoul;
             TryPlaySpawnAnimation();
-            RecomputeCharmLoadout();
+            QueueCharmLoadoutRecompute();
             PersistIfChanged();
         }
 
@@ -192,6 +194,18 @@ public partial class LegacyHelper
             if (soulAdjusted || shadeSoulMax != previousSoulMax)
             {
                 PersistIfChanged();
+            }
+        }
+
+        internal void QueueCharmLoadoutRecompute()
+        {
+            if (baselineStatsInitialized)
+            {
+                RecomputeCharmLoadout();
+            }
+            else
+            {
+                pendingCharmLoadoutRecompute = true;
             }
         }
 

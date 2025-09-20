@@ -8,6 +8,14 @@ public partial class LegacyHelper
     {
         public void RecomputeCharmLoadout()
         {
+            if (!baselineStatsInitialized)
+            {
+                pendingCharmLoadoutRecompute = true;
+                return;
+            }
+
+            pendingCharmLoadoutRecompute = false;
+
             maxDistance = baseMaxDistance;
             softLeashRadius = baseSoftLeashRadius;
             hardLeashRadius = baseHardLeashRadius;

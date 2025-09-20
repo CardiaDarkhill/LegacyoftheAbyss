@@ -6,6 +6,7 @@ using TeamCherry.NestedFadeGroup;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 using LegacyoftheAbyss.Shade;
 
 internal sealed class ShadeInventoryPane : InventoryPane
@@ -24,12 +25,18 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private RectTransform contentRoot = null!;
     private RectTransform gridRoot = null!;
     private RectTransform highlight = null!;
-    private Text titleText = null!;
-    private Text notchText = null!;
-    private Text detailTitleText = null!;
-    private Text descriptionText = null!;
-    private Text statusText = null!;
-    private Text hintText = null!;
+    private Text? titleText;
+    private Text? notchText;
+    private Text? detailTitleText;
+    private Text? descriptionText;
+    private Text? statusText;
+    private Text? hintText;
+    private TMP_Text? titleTextTMP;
+    private TMP_Text? notchTextTMP;
+    private TMP_Text? detailTitleTextTMP;
+    private TMP_Text? descriptionTextTMP;
+    private TMP_Text? statusTextTMP;
+    private TMP_Text? hintTextTMP;
     private CanvasGroup canvasGroup = null!;
 
     private Font? bodyFont;
@@ -38,6 +45,12 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private Material? headerFontMaterial;
     private Color bodyFontColor = Color.white;
     private Color headerFontColor = Color.white;
+    private TMP_FontAsset? bodyTmpFont;
+    private TMP_FontAsset? headerTmpFont;
+    private Material? bodyTmpFontMaterial;
+    private Material? headerTmpFontMaterial;
+    private Color bodyTmpFontColor = Color.white;
+    private Color headerTmpFontColor = Color.white;
     private Sprite? panelBackgroundSprite;
     private Color panelBackgroundColor = DefaultPanelColor;
     private Sprite? highlightSpriteTemplate;
@@ -63,6 +76,81 @@ internal sealed class ShadeInventoryPane : InventoryPane
         public Image Icon;
         public Image Background;
         public GameObject NewMarker;
+    }
+
+    private static void SetTextValue(Text? text, TMP_Text? tmp, string value)
+    {
+        if (text != null)
+        {
+            text.text = value;
+        }
+
+        if (tmp != null)
+        {
+            tmp.text = value;
+        }
+    }
+
+    private static string GetTextValue(Text? text, TMP_Text? tmp)
+    {
+        if (tmp != null)
+        {
+            return tmp.text ?? string.Empty;
+        }
+
+        if (text != null)
+        {
+            return text.text ?? string.Empty;
+        }
+
+        return string.Empty;
+    }
+
+    private static FontStyles ConvertFontStyle(FontStyle style) => style switch
+    {
+        FontStyle.Bold => FontStyles.Bold,
+        FontStyle.Italic => FontStyles.Italic,
+        FontStyle.BoldAndItalic => FontStyles.Bold | FontStyles.Italic,
+        _ => FontStyles.Normal
+    };
+
+    private static TextAlignmentOptions ConvertAlignment(TextAnchor anchor) => anchor switch
+    {
+        TextAnchor.UpperLeft => TextAlignmentOptions.TopLeft,
+        TextAnchor.UpperCenter => TextAlignmentOptions.Top,
+        TextAnchor.UpperRight => TextAlignmentOptions.TopRight,
+        TextAnchor.MiddleLeft => TextAlignmentOptions.Left,
+        TextAnchor.MiddleCenter => TextAlignmentOptions.Center,
+        TextAnchor.MiddleRight => TextAlignmentOptions.Right,
+        TextAnchor.LowerLeft => TextAlignmentOptions.BottomLeft,
+        TextAnchor.LowerCenter => TextAlignmentOptions.Bottom,
+        TextAnchor.LowerRight => TextAlignmentOptions.BottomRight,
+        _ => TextAlignmentOptions.Center
+    };
+
+    private TMP_FontAsset? GetPreferredTmpFont(bool useHeaderFont)
+    {
+        return useHeaderFont ? (headerTmpFont ?? bodyTmpFont) : (bodyTmpFont ?? headerTmpFont);
+    }
+
+    private Material? GetPreferredTmpMaterial(bool useHeaderFont)
+    {
+        return useHeaderFont ? (headerTmpFontMaterial ?? bodyTmpFontMaterial) : (bodyTmpFontMaterial ?? headerTmpFontMaterial);
+    }
+
+    private Color GetPreferredTmpColor(bool useHeaderFont)
+    {
+        return useHeaderFont ? headerTmpFontColor : bodyTmpFontColor;
+    }
+
+    private static RectTransform? ResolveRectTransform(Text? text, TMP_Text? tmp)
+    {
+        if (text != null)
+        {
+            return text.rectTransform;
+        }
+
+        return tmp != null ? tmp.rectTransform : null;
     }
 
     internal static void LogMenuEvent(string message)
@@ -181,10 +269,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         displayLabel = label;
-        if (titleText != null)
-        {
-            titleText.text = label;
-        }
+        SetTextValue(titleText, titleTextTMP, label);
         UpdateParentListLabel();
     }
 
@@ -202,7 +287,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         var id = entry.Id;
         if (!inventory.IsOwned(id))
         {
-            statusText.text = "This charm has not been unlocked yet.";
+            SetTextValue(statusText, statusTextTMP, "This charm has not been unlocked yet.");
             return;
         }
 
@@ -211,7 +296,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
             ? inventory.TryUnequip(id, out message)
             : inventory.TryEquip(id, out message);
 
-        statusText.text = message;
+        SetTextValue(statusText, statusTextTMP, message);
         if (success)
         {
             LegacyHelper.RequestShadeLoadoutRecompute();
@@ -239,11 +324,14 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 return;
             }
 
-            if (titleText != null && !string.Equals(titleText.text, displayLabel, StringComparison.Ordinal))
+            string currentTitle = GetTextValue(titleText, titleTextTMP);
+            if (!string.Equals(currentTitle, displayLabel, StringComparison.Ordinal))
             {
-                titleText.text = displayLabel;
+                SetTextValue(titleText, titleTextTMP, displayLabel);
                 changed = true;
             }
+
+            bool foundDisplayLabel = false;
 
             var texts = parentList.GetComponentsInChildren<Text>(true);
             foreach (var text in texts)
@@ -256,7 +344,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 string current = text.text ?? string.Empty;
                 if (string.Equals(current, displayLabel, StringComparison.OrdinalIgnoreCase))
                 {
-                    return;
+                    foundDisplayLabel = true;
+                    break;
                 }
 
                 if (string.Equals(current, "??/??", StringComparison.OrdinalIgnoreCase) ||
@@ -264,7 +353,36 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 {
                     text.text = displayLabel;
                     changed = true;
+                    foundDisplayLabel = true;
                     break;
+                }
+            }
+
+            if (!foundDisplayLabel)
+            {
+                var tmpTexts = parentList.GetComponentsInChildren<TMP_Text>(true);
+                foreach (var tmp in tmpTexts)
+                {
+                    if (tmp == null)
+                    {
+                        continue;
+                    }
+
+                    string current = tmp.text ?? string.Empty;
+                    if (string.Equals(current, displayLabel, StringComparison.OrdinalIgnoreCase))
+                    {
+                        foundDisplayLabel = true;
+                        break;
+                    }
+
+                    if (string.Equals(current, "??/??", StringComparison.OrdinalIgnoreCase) ||
+                        string.IsNullOrWhiteSpace(current))
+                    {
+                        tmp.text = displayLabel;
+                        changed = true;
+                        foundDisplayLabel = true;
+                        break;
+                    }
                 }
             }
         }
@@ -323,6 +441,38 @@ internal sealed class ShadeInventoryPane : InventoryPane
                     if (headerSample.color.a > 0f)
                     {
                         headerFontColor = headerSample.color;
+                    }
+                }
+            }
+
+            var tmpTexts = template.GetComponentsInChildren<TMP_Text>(true);
+            if (tmpTexts != null && tmpTexts.Length > 0)
+            {
+                var orderedTmp = tmpTexts
+                    .Where(t => t != null && t.font != null)
+                    .OrderBy(t => t.fontSize)
+                    .ToArray();
+
+                if (orderedTmp.Length > 0)
+                {
+                    int bodyIndex = Mathf.Clamp(orderedTmp.Length > 1 ? orderedTmp.Length / 2 : 0, 0, orderedTmp.Length - 1);
+                    var bodySample = orderedTmp[bodyIndex];
+                    bodyTmpFont = bodySample.font;
+                    bodyTmpFontMaterial = bodySample.fontMaterial;
+                    if (bodySample.color.a > 0f)
+                    {
+                        bodyTmpFontColor = bodySample.color;
+                    }
+                }
+
+                var headerSampleTmp = orderedTmp.LastOrDefault();
+                if (headerSampleTmp != null)
+                {
+                    headerTmpFont = headerSampleTmp.font;
+                    headerTmpFontMaterial = headerSampleTmp.fontMaterial;
+                    if (headerSampleTmp.color.a > 0f)
+                    {
+                        headerTmpFontColor = headerSampleTmp.color;
                     }
                 }
             }
@@ -513,22 +663,28 @@ internal sealed class ShadeInventoryPane : InventoryPane
         contentRoot.offsetMin = new Vector2(32f, 36f);
         contentRoot.offsetMax = new Vector2(-32f, -36f);
 
-        titleText = CreateText("Title", contentRoot, FontStyle.Normal, 46, TextAnchor.UpperLeft, useHeaderFont: true);
-        var titleRect = titleText.rectTransform;
-        titleRect.anchorMin = new Vector2(0f, 1f);
-        titleRect.anchorMax = new Vector2(1f, 1f);
-        titleRect.pivot = new Vector2(0f, 1f);
-        titleRect.offsetMin = new Vector2(0f, -60f);
-        titleRect.offsetMax = new Vector2(0f, -8f);
-        titleText.text = displayLabel;
+        titleText = CreateText("Title", contentRoot, FontStyle.Normal, 46, TextAnchor.UpperLeft, out titleTextTMP, useHeaderFont: true);
+        var titleRect = ResolveRectTransform(titleText, titleTextTMP);
+        if (titleRect != null)
+        {
+            titleRect.anchorMin = new Vector2(0f, 1f);
+            titleRect.anchorMax = new Vector2(1f, 1f);
+            titleRect.pivot = new Vector2(0f, 1f);
+            titleRect.offsetMin = new Vector2(0f, -60f);
+            titleRect.offsetMax = new Vector2(0f, -8f);
+        }
+        SetTextValue(titleText, titleTextTMP, displayLabel);
 
-        notchText = CreateText("Notches", contentRoot, FontStyle.Normal, 32, TextAnchor.UpperRight);
-        var notchRect = notchText.rectTransform;
-        notchRect.anchorMin = new Vector2(0.45f, 1f);
-        notchRect.anchorMax = new Vector2(1f, 1f);
-        notchRect.pivot = new Vector2(1f, 1f);
-        notchRect.offsetMin = new Vector2(-12f, -60f);
-        notchRect.offsetMax = new Vector2(0f, -10f);
+        notchText = CreateText("Notches", contentRoot, FontStyle.Normal, 32, TextAnchor.UpperRight, out notchTextTMP);
+        var notchRect = ResolveRectTransform(notchText, notchTextTMP);
+        if (notchRect != null)
+        {
+            notchRect.anchorMin = new Vector2(0.45f, 1f);
+            notchRect.anchorMax = new Vector2(1f, 1f);
+            notchRect.pivot = new Vector2(1f, 1f);
+            notchRect.offsetMin = new Vector2(-12f, -60f);
+            notchRect.offsetMax = new Vector2(0f, -10f);
+        }
 
         gridRoot = new GameObject("CharmGrid", typeof(RectTransform)).GetComponent<RectTransform>();
         gridRoot.SetParent(contentRoot, false);
@@ -573,40 +729,67 @@ internal sealed class ShadeInventoryPane : InventoryPane
         detailRoot.offsetMin = new Vector2(24f, 16f);
         detailRoot.offsetMax = new Vector2(-8f, -104f);
 
-        detailTitleText = CreateText("CharmName", detailRoot, FontStyle.Normal, 38, TextAnchor.UpperLeft, useHeaderFont: true);
-        var detailTitleRect = detailTitleText.rectTransform;
-        detailTitleRect.anchorMin = new Vector2(0f, 0.74f);
-        detailTitleRect.anchorMax = new Vector2(1f, 1f);
-        detailTitleRect.pivot = new Vector2(0f, 1f);
-        detailTitleRect.offsetMin = Vector2.zero;
-        detailTitleRect.offsetMax = new Vector2(0f, -6f);
-        detailTitleText.text = displayLabel;
+        detailTitleText = CreateText("CharmName", detailRoot, FontStyle.Normal, 38, TextAnchor.UpperLeft, out detailTitleTextTMP, useHeaderFont: true);
+        var detailTitleRect = ResolveRectTransform(detailTitleText, detailTitleTextTMP);
+        if (detailTitleRect != null)
+        {
+            detailTitleRect.anchorMin = new Vector2(0f, 0.74f);
+            detailTitleRect.anchorMax = new Vector2(1f, 1f);
+            detailTitleRect.pivot = new Vector2(0f, 1f);
+            detailTitleRect.offsetMin = Vector2.zero;
+            detailTitleRect.offsetMax = new Vector2(0f, -6f);
+        }
+        SetTextValue(detailTitleText, detailTitleTextTMP, displayLabel);
 
-        descriptionText = CreateText("Description", detailRoot, FontStyle.Normal, 30, TextAnchor.UpperLeft);
-        var descRect = descriptionText.rectTransform;
-        descRect.anchorMin = new Vector2(0f, 0.32f);
-        descRect.anchorMax = new Vector2(1f, 0.74f);
-        descRect.offsetMin = Vector2.zero;
-        descRect.offsetMax = new Vector2(-6f, -4f);
-        descriptionText.horizontalOverflow = HorizontalWrapMode.Wrap;
-        descriptionText.verticalOverflow = VerticalWrapMode.Overflow;
-        descriptionText.lineSpacing = 1.1f;
+        descriptionText = CreateText("Description", detailRoot, FontStyle.Normal, 30, TextAnchor.UpperLeft, out descriptionTextTMP);
+        var descRect = ResolveRectTransform(descriptionText, descriptionTextTMP);
+        if (descRect != null)
+        {
+            descRect.anchorMin = new Vector2(0f, 0.32f);
+            descRect.anchorMax = new Vector2(1f, 0.74f);
+            descRect.offsetMin = Vector2.zero;
+            descRect.offsetMax = new Vector2(-6f, -4f);
+        }
+        if (descriptionText != null)
+        {
+            descriptionText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            descriptionText.verticalOverflow = VerticalWrapMode.Overflow;
+            descriptionText.lineSpacing = 1.1f;
+        }
+        else if (descriptionTextTMP != null)
+        {
+            descriptionTextTMP.lineSpacing = 1.1f;
+        }
 
-        statusText = CreateText("Status", detailRoot, FontStyle.Italic, 28, TextAnchor.UpperLeft);
-        var statusRect = statusText.rectTransform;
-        statusRect.anchorMin = new Vector2(0f, 0.18f);
-        statusRect.anchorMax = new Vector2(1f, 0.34f);
-        statusRect.offsetMin = new Vector2(0f, 4f);
-        statusRect.offsetMax = new Vector2(-6f, 0f);
+        statusText = CreateText("Status", detailRoot, FontStyle.Italic, 28, TextAnchor.UpperLeft, out statusTextTMP);
+        var statusRect = ResolveRectTransform(statusText, statusTextTMP);
+        if (statusRect != null)
+        {
+            statusRect.anchorMin = new Vector2(0f, 0.18f);
+            statusRect.anchorMax = new Vector2(1f, 0.34f);
+            statusRect.offsetMin = new Vector2(0f, 4f);
+            statusRect.offsetMax = new Vector2(-6f, 0f);
+        }
 
-        hintText = CreateText("Hint", detailRoot, FontStyle.Normal, 24, TextAnchor.UpperLeft);
-        var hintRect = hintText.rectTransform;
-        hintRect.anchorMin = new Vector2(0f, 0f);
-        hintRect.anchorMax = new Vector2(1f, 0.18f);
-        hintRect.offsetMin = new Vector2(0f, 4f);
-        hintRect.offsetMax = new Vector2(-6f, 0f);
-        hintText.text = "Submit to equip or unequip. Ctrl + ` unlocks all charms (debug).";
-        hintText.color = new Color(0.78f, 0.82f, 0.92f, 0.8f);
+        hintText = CreateText("Hint", detailRoot, FontStyle.Normal, 24, TextAnchor.UpperLeft, out hintTextTMP);
+        var hintRect = ResolveRectTransform(hintText, hintTextTMP);
+        if (hintRect != null)
+        {
+            hintRect.anchorMin = new Vector2(0f, 0f);
+            hintRect.anchorMax = new Vector2(1f, 0.18f);
+            hintRect.offsetMin = new Vector2(0f, 4f);
+            hintRect.offsetMax = new Vector2(-6f, 0f);
+        }
+        SetTextValue(hintText, hintTextTMP, "Submit to equip or unequip. Ctrl + ` unlocks all charms (debug).");
+        var hintColor = new Color(0.78f, 0.82f, 0.92f, 0.8f);
+        if (hintText != null)
+        {
+            hintText.color = hintColor;
+        }
+        else if (hintTextTMP != null)
+        {
+            hintTextTMP.color = hintColor;
+        }
 
         isBuilt = true;
         if (contentRoot != null)
@@ -616,11 +799,37 @@ internal sealed class ShadeInventoryPane : InventoryPane
         LogMenuEvent("BuildUI complete");
     }
 
-    private Text CreateText(string name, RectTransform parent, FontStyle style, int size, TextAnchor anchor, bool useHeaderFont = false)
+    private Text? CreateText(string name, RectTransform parent, FontStyle style, int size, TextAnchor anchor, out TMP_Text? tmpText, bool useHeaderFont = false)
     {
+        tmpText = null;
+
         var go = new GameObject(name, typeof(RectTransform));
         var rect = go.GetComponent<RectTransform>();
         rect.SetParent(parent, false);
+
+        var preferredTmpFont = GetPreferredTmpFont(useHeaderFont);
+        if (preferredTmpFont != null)
+        {
+            var tmp = go.AddComponent<TextMeshProUGUI>();
+            tmp.font = preferredTmpFont;
+            tmp.fontSize = size;
+            tmp.fontStyle = ConvertFontStyle(style);
+            tmp.alignment = ConvertAlignment(anchor);
+            tmp.color = GetPreferredTmpColor(useHeaderFont);
+            var tmpMaterial = GetPreferredTmpMaterial(useHeaderFont);
+            if (tmpMaterial != null)
+            {
+                tmp.fontMaterial = tmpMaterial;
+            }
+
+            tmp.enableWordWrapping = true;
+            tmp.overflowMode = TextOverflowModes.Overflow;
+            tmp.raycastTarget = false;
+            tmp.text = string.Empty;
+            tmpText = tmp;
+            return null;
+        }
+
         var text = go.AddComponent<Text>();
 
         Font? resolvedFont = useHeaderFont ? (headerFont ?? bodyFont) : (bodyFont ?? headerFont);
@@ -647,6 +856,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         text.horizontalOverflow = HorizontalWrapMode.Wrap;
         text.verticalOverflow = VerticalWrapMode.Overflow;
         text.raycastTarget = false;
+        text.text = string.Empty;
         return text;
     }
 
@@ -900,18 +1110,18 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private void UpdateNotchMeter()
     {
         EnsureBuilt();
-        if (notchText == null)
+        if (notchText == null && notchTextTMP == null)
         {
             return;
         }
 
         if (inventory == null)
         {
-            notchText.text = "Shade charm inventory unavailable.";
+            SetTextValue(notchText, notchTextTMP, "Shade charm inventory unavailable.");
         }
         else
         {
-            notchText.text = $"Notches Used: {inventory.UsedNotches}/{inventory.NotchCapacity}";
+            SetTextValue(notchText, notchTextTMP, $"Notches Used: {inventory.UsedNotches}/{inventory.NotchCapacity}");
         }
     }
 
@@ -922,9 +1132,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return;
         }
 
-        if (titleText != null && !string.Equals(titleText.text, displayLabel, StringComparison.Ordinal))
+        string currentTitle = GetTextValue(titleText, titleTextTMP);
+        if (!string.Equals(currentTitle, displayLabel, StringComparison.Ordinal))
         {
-            titleText.text = displayLabel;
+            SetTextValue(titleText, titleTextTMP, displayLabel);
         }
 
         labelPulseTimer -= Time.unscaledDeltaTime;
@@ -940,16 +1151,16 @@ internal sealed class ShadeInventoryPane : InventoryPane
         EnsureBuilt();
         if (entries.Count == 0 || inventory == null)
         {
-            detailTitleText.text = displayLabel;
-            descriptionText.text = "Collect shade charms to unlock new abilities for your companion.";
-            statusText.text = string.Empty;
+            SetTextValue(detailTitleText, detailTitleTextTMP, displayLabel);
+            SetTextValue(descriptionText, descriptionTextTMP, "Collect shade charms to unlock new abilities for your companion.");
+            SetTextValue(statusText, statusTextTMP, string.Empty);
             return;
         }
 
         var entry = entries[Mathf.Clamp(selectedIndex, 0, entries.Count - 1)];
         var definition = entry.Definition;
-        detailTitleText.text = definition?.DisplayName ?? displayLabel;
-        descriptionText.text = definition?.Description ?? string.Empty;
+        SetTextValue(detailTitleText, detailTitleTextTMP, definition?.DisplayName ?? displayLabel);
+        SetTextValue(descriptionText, descriptionTextTMP, definition?.Description ?? string.Empty);
 
         bool owned = inventory.IsOwned(entry.Id);
         bool equipped = inventory.IsEquipped(entry.Id);
@@ -989,7 +1200,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 : $"Notch Cost: {notchIcons} ({notchCost})";
         }
 
-        statusText.text = string.IsNullOrEmpty(notchInfo) ? status : $"{notchInfo}\\n{status}";
+        SetTextValue(statusText, statusTextTMP, string.IsNullOrEmpty(notchInfo) ? status : $"{notchInfo}\\n{status}");
     }
 
     private Sprite GetFallbackSprite()
