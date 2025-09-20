@@ -283,6 +283,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         try
         {
+            var rootRect = transform as RectTransform;
+            string rootSize = rootRect != null
+                ? $"{rootRect.rect.width:F0}x{rootRect.rect.height:F0}"
+                : "<null>";
             int gridChildren = gridRoot != null ? gridRoot.childCount : -1;
             int contentChildren = contentRoot != null ? contentRoot.childCount : -1;
             int activeEntries = 0;
@@ -313,7 +317,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 : "<null>";
 
             LogMenuEvent(
-                $"{context} state -> built={isBuilt}, paneActive={isActive}, goActive={paneActive}, canvasAlpha={alpha:F2}, entries={entries.Count}, activeEntries={activeEntries}, icons={iconCount}, gridChildren={gridChildren}, contentChildren={contentChildren}, panelActive={panelActive}, gridActive={gridActive}, panelSize={panelSize}, highlightActive={highlightActive}, highlightParent={highlightParent}, selectedIndex={selectedIndex}");
+                $"{context} state -> built={isBuilt}, paneActive={isActive}, goActive={paneActive}, canvasAlpha={alpha:F2}, entries={entries.Count}, activeEntries={activeEntries}, icons={iconCount}, gridChildren={gridChildren}, contentChildren={contentChildren}, panelActive={panelActive}, gridActive={gridActive}, panelSize={panelSize}, rootSize={rootSize}, highlightActive={highlightActive}, highlightParent={highlightParent}, selectedIndex={selectedIndex}");
         }
         catch (Exception ex)
         {
@@ -1601,6 +1605,24 @@ internal sealed class SimpleCanvasNestedFadeGroup : NestedFadeGroupBase
 
 internal static class ShadeInventoryPaneIntegration
 {
+    private static void CopyRectTransform(RectTransform source, RectTransform target)
+    {
+        if (source == null || target == null)
+        {
+            return;
+        }
+
+        target.anchorMin = source.anchorMin;
+        target.anchorMax = source.anchorMax;
+        target.pivot = source.pivot;
+        target.offsetMin = source.offsetMin;
+        target.offsetMax = source.offsetMax;
+        target.anchoredPosition3D = source.anchoredPosition3D;
+        target.sizeDelta = source.sizeDelta;
+        target.localRotation = source.localRotation;
+        target.localScale = source.localScale;
+    }
+
     private static readonly AccessTools.FieldRef<InventoryPaneList, InventoryPane[]> PanesField =
         AccessTools.FieldRefAccess<InventoryPaneList, InventoryPane[]>("panes");
 
@@ -1914,23 +1936,34 @@ internal static class ShadeInventoryPaneIntegration
         }
 
         var go = new GameObject("ShadeInventoryPane", typeof(RectTransform));
+        if (template != null)
+        {
+            go.layer = template.gameObject.layer;
+        }
+
         var rect = go.GetComponent<RectTransform>();
         rect.SetParent(parent, false);
         if (templateRect != null)
         {
-            rect.anchorMin = templateRect.anchorMin;
-            rect.anchorMax = templateRect.anchorMax;
-            rect.pivot = templateRect.pivot;
-            rect.sizeDelta = templateRect.sizeDelta;
-            rect.localScale = templateRect.localScale;
-            rect.localPosition = templateRect.localPosition;
+            CopyRectTransform(templateRect, rect);
+            rect.SetSiblingIndex(templateRect.GetSiblingIndex());
         }
         else
         {
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
             rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition3D = Vector3.zero;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+            rect.sizeDelta = Vector2.zero;
         }
+
+        var rootSize = rect.rect.size;
+        string anchorInfo = $"({rect.anchorMin.x:F2},{rect.anchorMin.y:F2})->({rect.anchorMax.x:F2},{rect.anchorMax.y:F2})";
+        string offsetInfo = $"({rect.offsetMin.x:F0},{rect.offsetMin.y:F0})/({rect.offsetMax.x:F0},{rect.offsetMax.y:F0})";
+        ShadeInventoryPane.LogMenuEvent(
+            $"Shade pane root rect -> parent={(parent != null ? parent.name : "<null>")}, anchors={anchorInfo}, offsets={offsetInfo}, size={rootSize.x:F0}x{rootSize.y:F0}");
 
         var canvasGroup = go.AddComponent<CanvasGroup>();
         canvasGroup.alpha = 0f;
