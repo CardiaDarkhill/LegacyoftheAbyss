@@ -89,6 +89,18 @@ public partial class LegacyHelper
             lastSoulForReady = shadeSoul;
             TryPlaySpawnAnimation();
             RecomputeCharmLoadout();
+            PersistIfChanged();
+        }
+
+        private void OnDestroy()
+        {
+            try
+            {
+                LegacyHelper.SaveShadeState(shadeHP, shadeMaxHP, shadeSoul, canTakeDamage);
+            }
+            catch
+            {
+            }
         }
 
         internal void ApplyCharmLoadout(IEnumerable<ShadeCharmDefinition> loadout)

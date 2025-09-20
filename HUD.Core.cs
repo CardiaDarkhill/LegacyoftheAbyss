@@ -213,6 +213,17 @@ public partial class SimpleHUD : MonoBehaviour
     {
         try
         {
+            if (ShadeSettingsMenu.IsShowing)
+            {
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
             var gm = GameManager.instance;
             if (gm != null && gm.IsGamePaused())
             {
@@ -221,6 +232,11 @@ public partial class SimpleHUD : MonoBehaviour
         }
         catch
         {
+        }
+
+        if (Time.timeScale <= 0.0001f)
+        {
+            return true;
         }
 
         try

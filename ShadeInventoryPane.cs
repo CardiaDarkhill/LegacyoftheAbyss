@@ -52,7 +52,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private bool isBuilt;
     private bool isActive;
     private Sprite? fallbackSprite;
-    private string displayLabel = "Shade";
+    private string displayLabel = "Charms";
 
     private struct CharmEntry
     {
@@ -89,6 +89,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         inventory = inv;
         isActive = true;
         RefreshAll();
+        UpdateParentListLabel();
     }
 
     private void OnDisable()
@@ -135,6 +136,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         inventory ??= ShadeRuntime.Charms;
         isActive = true;
         RefreshAll();
+        UpdateParentListLabel();
     }
 
     public override void PaneEnd()
@@ -160,6 +162,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             titleText.text = label;
         }
+        UpdateParentListLabel();
     }
 
     internal string DisplayLabel => displayLabel;
@@ -200,6 +203,38 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private void HandleInventoryChanged()
     {
         RefreshAll();
+    }
+
+    private void UpdateParentListLabel()
+    {
+        try
+        {
+            var parentList = GetComponentInParent<InventoryPaneList>();
+            if (parentList == null)
+            {
+                return;
+            }
+
+            var texts = parentList.GetComponentsInChildren<Text>(true);
+            foreach (var text in texts)
+            {
+                if (text == null)
+                {
+                    continue;
+                }
+
+                string current = text.text ?? string.Empty;
+                if (string.Equals(current, "??/??", StringComparison.OrdinalIgnoreCase) ||
+                    string.IsNullOrWhiteSpace(current))
+                {
+                    text.text = displayLabel;
+                    break;
+                }
+            }
+        }
+        catch
+        {
+        }
     }
 
     private void SubscribeInput()
@@ -317,7 +352,25 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         if (isBuilt)
         {
+            bool wasActive = isActive;
             RebuildUI();
+            if (wasActive)
+            {
+                RefreshAll();
+            }
+            else
+            {
+                inventory ??= ShadeRuntime.Charms;
+                int count = inventory != null ? inventory.AllCharms.Count : 0;
+                EnsureEntryCount(count);
+                RefreshEntryStates();
+                UpdateNotchMeter();
+                UpdateDetailPanel();
+            }
+        }
+        else if (isActive)
+        {
+            RefreshAll();
         }
     }
 
@@ -1058,7 +1111,7 @@ internal static class ShadeInventoryPaneIntegration
         var shadePane = go.AddComponent<ShadeInventoryPane>();
         shadePane.RootPane = shadePane;
         shadePane.ConfigureFromTemplate(template);
-        shadePane.SetDisplayLabel("Shade Charms");
+        shadePane.SetDisplayLabel("Charms");
 
         var input = go.AddComponent<InventoryPaneInput>();
         ConfigureInput(input, paneList, shadePane);
