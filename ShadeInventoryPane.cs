@@ -51,6 +51,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private int selectedIndex;
     private bool isBuilt;
     private bool isActive;
+    private float labelPulseTimer;
     private Sprite? fallbackSprite;
     private string displayLabel = "Charms";
 
@@ -64,6 +65,22 @@ internal sealed class ShadeInventoryPane : InventoryPane
         public GameObject NewMarker;
     }
 
+    internal static void LogMenuEvent(string message)
+    {
+        if (!ModConfig.Instance.logMenu)
+        {
+            return;
+        }
+
+        try
+        {
+            Debug.Log("[ShadeInventory] " + message);
+        }
+        catch
+        {
+        }
+    }
+
     public override void Awake()
     {
         base.Awake();
@@ -73,6 +90,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private void OnEnable()
     {
         EnsureBuilt();
+        labelPulseTimer = 0f;
         canvasGroup ??= GetComponent<CanvasGroup>();
         if (canvasGroup != null)
         {
@@ -90,6 +108,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         isActive = true;
         RefreshAll();
         UpdateParentListLabel();
+        LogMenuEvent($"OnEnable: entries={entries.Count}, inventoryNull={inventory == null}");
     }
 
     private void OnDisable()
@@ -100,6 +119,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
         inventory = null;
         isActive = false;
+        LogMenuEvent("OnDisable");
         if (canvasGroup != null)
         {
             canvasGroup.alpha = 0f;
@@ -125,6 +145,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     {
         base.PaneStart();
         EnsureBuilt();
+        labelPulseTimer = 0f;
         canvasGroup ??= GetComponent<CanvasGroup>();
         if (canvasGroup != null)
         {
@@ -137,6 +158,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         isActive = true;
         RefreshAll();
         UpdateParentListLabel();
+        LogMenuEvent($"PaneStart: entries={entries.Count}, inventoryNull={inventory == null}");
     }
 
     public override void PaneEnd()
@@ -147,6 +169,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
             canvasGroup.interactable = false;
             canvasGroup.blocksRaycasts = false;
         }
+        LogMenuEvent("PaneEnd");
         base.PaneEnd();
     }
 
@@ -207,12 +230,19 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void UpdateParentListLabel()
     {
+        bool changed = false;
         try
         {
             var parentList = GetComponentInParent<InventoryPaneList>();
             if (parentList == null)
             {
                 return;
+            }
+
+            if (titleText != null && !string.Equals(titleText.text, displayLabel, StringComparison.Ordinal))
+            {
+                titleText.text = displayLabel;
+                changed = true;
             }
 
             var texts = parentList.GetComponentsInChildren<Text>(true);
@@ -224,16 +254,27 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 }
 
                 string current = text.text ?? string.Empty;
+                if (string.Equals(current, displayLabel, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
                 if (string.Equals(current, "??/??", StringComparison.OrdinalIgnoreCase) ||
                     string.IsNullOrWhiteSpace(current))
                 {
                     text.text = displayLabel;
+                    changed = true;
                     break;
                 }
             }
         }
         catch
         {
+        }
+
+        if (changed)
+        {
+            LogMenuEvent($"Label updated to '{displayLabel}'");
         }
     }
 
@@ -380,6 +421,15 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             BuildUI();
         }
+    }
+
+    internal void ForceImmediateRefresh()
+    {
+        EnsureBuilt();
+        RefreshAll();
+        UpdateParentListLabel();
+        labelPulseTimer = 0f;
+        LogMenuEvent($"ForceImmediateRefresh: entries={entries.Count}, inventoryNull={inventory == null}");
     }
 
     private void RebuildUI()
@@ -557,6 +607,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         hintText.color = new Color(0.78f, 0.82f, 0.92f, 0.8f);
 
         isBuilt = true;
+        LogMenuEvent("BuildUI complete");
     }
 
     private Text CreateText(string name, RectTransform parent, FontStyle style, int size, TextAnchor anchor, bool useHeaderFont = false)
@@ -663,6 +714,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         ShadeCharmInventory? inv = ShadeRuntime.Charms;
         inventory = inv;
         var definitions = inv != null ? inv.AllCharms : Array.Empty<ShadeCharmDefinition>();
+        LogMenuEvent($"RefreshAll: definitions={definitions.Count}, inventoryNull={inv == null}");
         EnsureEntryCount(definitions.Count);
         for (int i = 0; i < definitions.Count; i++)
         {
@@ -709,6 +761,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private void EnsureEntryCount(int count)
     {
         EnsureBuilt();
+        int previous = entries.Count;
         while (entries.Count < count)
         {
             entries.Add(CreateEntry(entries.Count));
@@ -721,6 +774,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 Destroy(entries[i].Root.gameObject);
             }
             entries.RemoveAt(i);
+        }
+        if (entries.Count != previous)
+        {
+            LogMenuEvent($"EnsureEntryCount -> entries={entries.Count}");
         }
     }
 
@@ -849,6 +906,26 @@ internal sealed class ShadeInventoryPane : InventoryPane
         else
         {
             notchText.text = $"Notches Used: {inventory.UsedNotches}/{inventory.NotchCapacity}";
+        }
+    }
+
+    private void LateUpdate()
+    {
+        if (!isActive)
+        {
+            return;
+        }
+
+        if (titleText != null && !string.Equals(titleText.text, displayLabel, StringComparison.Ordinal))
+        {
+            titleText.text = displayLabel;
+        }
+
+        labelPulseTimer -= Time.unscaledDeltaTime;
+        if (labelPulseTimer <= 0f)
+        {
+            labelPulseTimer = 0.5f;
+            UpdateParentListLabel();
         }
     }
 
@@ -1064,23 +1141,27 @@ internal static class ShadeInventoryPaneIntegration
     {
         if (paneList == null)
         {
+            ShadeInventoryPane.LogMenuEvent("EnsurePane skipped: paneList null");
             return;
         }
 
         var panes = PanesField(paneList);
         if (panes != null && panes.Any(p => p && p.TryGetComponent<ShadeInventoryPane>(out _)))
         {
+            ShadeInventoryPane.LogMenuEvent("EnsurePane skipped: shade pane already present");
             return;
         }
 
         if (panes == null || panes.Length == 0)
         {
+            ShadeInventoryPane.LogMenuEvent("EnsurePane skipped: no template panes available");
             return;
         }
 
         var template = panes[0];
         var templateRect = template.GetComponent<RectTransform>();
         var parent = templateRect != null ? templateRect.parent : template.transform.parent;
+        ShadeInventoryPane.LogMenuEvent($"Injecting shade pane using template '{template?.GetType().Name ?? "<null>"}'");
 
         var go = new GameObject("ShadeInventoryPane", typeof(RectTransform));
         var rect = go.GetComponent<RectTransform>();
@@ -1112,6 +1193,7 @@ internal static class ShadeInventoryPaneIntegration
         shadePane.RootPane = shadePane;
         shadePane.ConfigureFromTemplate(template);
         shadePane.SetDisplayLabel("Charms");
+        shadePane.ForceImmediateRefresh();
 
         var input = go.AddComponent<InventoryPaneInput>();
         ConfigureInput(input, paneList, shadePane);
@@ -1183,12 +1265,14 @@ internal static class ShadeInventoryPaneIntegration
         insertIndex = Mathf.Clamp(insertIndex, 0, newList.Count);
         newList.Insert(insertIndex, shadePane);
         PanesField(paneList) = newList.ToArray();
+        ShadeInventoryPane.LogMenuEvent($"Shade pane inserted at index {insertIndex}; total panes={newList.Count}");
     }
 
     private static void ConfigureInput(InventoryPaneInput input, InventoryPaneList paneList, ShadeInventoryPane shadePane)
     {
         if (input == null)
         {
+            ShadeInventoryPane.LogMenuEvent("ConfigureInput skipped: input null");
             return;
         }
 
@@ -1206,6 +1290,7 @@ internal static class ShadeInventoryPaneIntegration
                 if (PaneField.GetValue(input) == null)
                 {
                     PaneField.SetValue(input, shadePane);
+                    ShadeInventoryPane.LogMenuEvent("Bound InventoryPaneInput to shade pane");
                 }
             }
             catch { }

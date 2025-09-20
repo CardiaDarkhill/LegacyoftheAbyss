@@ -39,7 +39,7 @@ public partial class SimpleHUD
         soulOrbRoot.anchoredPosition = new Vector2(-200f * uiScale, -20f * uiScale);
         soulOrbRoot.localScale = new Vector3(-1f, 1f, 1f); // mirror like previous frame
         orbGameplayScale = soulOrbRoot.localScale;
-        orbMenuScale = new Vector3(-orbGameplayScale.x, orbGameplayScale.y, orbGameplayScale.z);
+        orbMenuScale = orbGameplayScale;
 
         // Background
         var soulBgGO = new GameObject("SoulBackground");
@@ -102,7 +102,7 @@ public partial class SimpleHUD
             orbCenterY + (maskHeight * 0.5f)
         );
         healthGameplayScale = hRect.localScale;
-        healthMenuScale = new Vector3(-healthGameplayScale.x, healthGameplayScale.y, healthGameplayScale.z);
+        healthMenuScale = healthGameplayScale;
 
         BuildMasks(hRect, uiScale);
 
