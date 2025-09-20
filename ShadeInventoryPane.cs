@@ -490,8 +490,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         panelRoot.SetParent(transform, false);
         panelRoot.anchorMin = Vector2.zero;
         panelRoot.anchorMax = Vector2.one;
-        panelRoot.offsetMin = new Vector2(36f, 24f);
-        panelRoot.offsetMax = new Vector2(-36f, -36f);
+        panelRoot.offsetMin = new Vector2(28f, 28f);
+        panelRoot.offsetMax = new Vector2(-28f, -32f);
 
         var panelImage = panelRoot.gameObject.AddComponent<Image>();
         if (panelBackgroundSprite != null)
@@ -510,16 +510,16 @@ internal sealed class ShadeInventoryPane : InventoryPane
         contentRoot.SetParent(panelRoot, false);
         contentRoot.anchorMin = Vector2.zero;
         contentRoot.anchorMax = Vector2.one;
-        contentRoot.offsetMin = new Vector2(30f, 30f);
-        contentRoot.offsetMax = new Vector2(-30f, -30f);
+        contentRoot.offsetMin = new Vector2(32f, 36f);
+        contentRoot.offsetMax = new Vector2(-32f, -36f);
 
         titleText = CreateText("Title", contentRoot, FontStyle.Normal, 46, TextAnchor.UpperLeft, useHeaderFont: true);
         var titleRect = titleText.rectTransform;
         titleRect.anchorMin = new Vector2(0f, 1f);
         titleRect.anchorMax = new Vector2(1f, 1f);
         titleRect.pivot = new Vector2(0f, 1f);
-        titleRect.offsetMin = new Vector2(0f, -52f);
-        titleRect.offsetMax = new Vector2(0f, -4f);
+        titleRect.offsetMin = new Vector2(0f, -60f);
+        titleRect.offsetMax = new Vector2(0f, -8f);
         titleText.text = displayLabel;
 
         notchText = CreateText("Notches", contentRoot, FontStyle.Normal, 32, TextAnchor.UpperRight);
@@ -527,17 +527,17 @@ internal sealed class ShadeInventoryPane : InventoryPane
         notchRect.anchorMin = new Vector2(0.45f, 1f);
         notchRect.anchorMax = new Vector2(1f, 1f);
         notchRect.pivot = new Vector2(1f, 1f);
-        notchRect.offsetMin = new Vector2(-12f, -52f);
-        notchRect.offsetMax = new Vector2(0f, -6f);
+        notchRect.offsetMin = new Vector2(-12f, -60f);
+        notchRect.offsetMax = new Vector2(0f, -10f);
 
         gridRoot = new GameObject("CharmGrid", typeof(RectTransform)).GetComponent<RectTransform>();
         gridRoot.SetParent(contentRoot, false);
         gridRoot.anchorMin = new Vector2(0f, 0f);
-        gridRoot.anchorMax = new Vector2(0.58f, 0.9f);
+        gridRoot.anchorMax = new Vector2(0.58f, 1f);
         gridRoot.pivot = new Vector2(0f, 1f);
-        gridRoot.offsetMin = new Vector2(0f, 0f);
-        gridRoot.offsetMax = new Vector2(-24f, -96f);
-        gridRoot.anchoredPosition = new Vector2(0f, -72f);
+        gridRoot.offsetMin = new Vector2(0f, 16f);
+        gridRoot.offsetMax = new Vector2(-32f, -104f);
+        gridRoot.anchoredPosition = Vector2.zero;
 
         var gridLayout = gridRoot.gameObject.AddComponent<GridLayoutGroup>();
         gridLayout.cellSize = new Vector2(104f, 112f);
@@ -546,6 +546,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         gridLayout.constraintCount = Columns;
         gridLayout.startAxis = GridLayoutGroup.Axis.Horizontal;
         gridLayout.startCorner = GridLayoutGroup.Corner.UpperLeft;
+        gridLayout.childAlignment = TextAnchor.UpperLeft;
+        gridLayout.padding = new RectOffset(4, 4, 4, 4);
 
         highlight = new GameObject("Highlight", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
         highlight.SetParent(gridRoot, false);
@@ -566,18 +568,18 @@ internal sealed class ShadeInventoryPane : InventoryPane
         var detailRoot = new GameObject("Details", typeof(RectTransform)).GetComponent<RectTransform>();
         detailRoot.SetParent(contentRoot, false);
         detailRoot.anchorMin = new Vector2(0.6f, 0f);
-        detailRoot.anchorMax = new Vector2(1f, 0.9f);
+        detailRoot.anchorMax = new Vector2(1f, 1f);
         detailRoot.pivot = new Vector2(0f, 1f);
-        detailRoot.offsetMin = new Vector2(20f, 0f);
-        detailRoot.offsetMax = new Vector2(0f, -64f);
+        detailRoot.offsetMin = new Vector2(24f, 16f);
+        detailRoot.offsetMax = new Vector2(-8f, -104f);
 
         detailTitleText = CreateText("CharmName", detailRoot, FontStyle.Normal, 38, TextAnchor.UpperLeft, useHeaderFont: true);
         var detailTitleRect = detailTitleText.rectTransform;
-        detailTitleRect.anchorMin = new Vector2(0f, 0.72f);
-        detailTitleRect.anchorMax = new Vector2(1f, 0.98f);
+        detailTitleRect.anchorMin = new Vector2(0f, 0.74f);
+        detailTitleRect.anchorMax = new Vector2(1f, 1f);
         detailTitleRect.pivot = new Vector2(0f, 1f);
         detailTitleRect.offsetMin = Vector2.zero;
-        detailTitleRect.offsetMax = new Vector2(0f, -2f);
+        detailTitleRect.offsetMax = new Vector2(0f, -6f);
         detailTitleText.text = displayLabel;
 
         descriptionText = CreateText("Description", detailRoot, FontStyle.Normal, 30, TextAnchor.UpperLeft);
@@ -585,28 +587,32 @@ internal sealed class ShadeInventoryPane : InventoryPane
         descRect.anchorMin = new Vector2(0f, 0.32f);
         descRect.anchorMax = new Vector2(1f, 0.74f);
         descRect.offsetMin = Vector2.zero;
-        descRect.offsetMax = Vector2.zero;
+        descRect.offsetMax = new Vector2(-6f, -4f);
         descriptionText.horizontalOverflow = HorizontalWrapMode.Wrap;
         descriptionText.verticalOverflow = VerticalWrapMode.Overflow;
         descriptionText.lineSpacing = 1.1f;
 
         statusText = CreateText("Status", detailRoot, FontStyle.Italic, 28, TextAnchor.UpperLeft);
         var statusRect = statusText.rectTransform;
-        statusRect.anchorMin = new Vector2(0f, 0.16f);
-        statusRect.anchorMax = new Vector2(1f, 0.32f);
-        statusRect.offsetMin = new Vector2(0f, 6f);
-        statusRect.offsetMax = Vector2.zero;
+        statusRect.anchorMin = new Vector2(0f, 0.18f);
+        statusRect.anchorMax = new Vector2(1f, 0.34f);
+        statusRect.offsetMin = new Vector2(0f, 4f);
+        statusRect.offsetMax = new Vector2(-6f, 0f);
 
         hintText = CreateText("Hint", detailRoot, FontStyle.Normal, 24, TextAnchor.UpperLeft);
         var hintRect = hintText.rectTransform;
         hintRect.anchorMin = new Vector2(0f, 0f);
-        hintRect.anchorMax = new Vector2(1f, 0.16f);
-        hintRect.offsetMin = new Vector2(0f, 6f);
-        hintRect.offsetMax = Vector2.zero;
+        hintRect.anchorMax = new Vector2(1f, 0.18f);
+        hintRect.offsetMin = new Vector2(0f, 4f);
+        hintRect.offsetMax = new Vector2(-6f, 0f);
         hintText.text = "Submit to equip or unequip. Ctrl + ` unlocks all charms (debug).";
         hintText.color = new Color(0.78f, 0.82f, 0.92f, 0.8f);
 
         isBuilt = true;
+        if (contentRoot != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(contentRoot);
+        }
         LogMenuEvent("BuildUI complete");
     }
 
@@ -1158,7 +1164,23 @@ internal static class ShadeInventoryPaneIntegration
             return;
         }
 
-        var template = panes[0];
+        InventoryPane template = panes.FirstOrDefault(p =>
+        {
+            if (!p)
+            {
+                return false;
+            }
+
+            string goName = p.gameObject != null ? p.gameObject.name : p.name;
+            string typeName = p.GetType().Name;
+            bool matchesName = !string.IsNullOrEmpty(goName) &&
+                (goName.IndexOf("Charm", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 goName.IndexOf("Crest", StringComparison.OrdinalIgnoreCase) >= 0);
+            bool matchesType = !string.IsNullOrEmpty(typeName) &&
+                (typeName.IndexOf("Charm", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 typeName.IndexOf("Crest", StringComparison.OrdinalIgnoreCase) >= 0);
+            return matchesName || matchesType;
+        }) ?? panes.FirstOrDefault(p => p != null) ?? panes[0];
         var templateRect = template.GetComponent<RectTransform>();
         var parent = templateRect != null ? templateRect.parent : template.transform.parent;
         ShadeInventoryPane.LogMenuEvent($"Injecting shade pane using template '{template?.GetType().Name ?? "<null>"}'");

@@ -61,7 +61,13 @@ namespace LegacyoftheAbyss.Shade
             int sanitizedHp = Mathf.Clamp(currentHp, 0, sanitizedMax);
 
             bool suspiciousDrop = previousMax > 1 && sanitizedMax <= 1 && sanitizedHp <= 1;
-            if (suspiciousDrop)
+            bool invulnerableDrop = false;
+            if (!CanTakeDamage || (canTakeDamage.HasValue && !canTakeDamage.Value))
+            {
+                invulnerableDrop = previousHp >= 0 && sanitizedHp < previousHp;
+            }
+
+            if (suspiciousDrop || invulnerableDrop)
             {
                 sanitizedMax = previousMax;
                 sanitizedHp = Mathf.Clamp(Mathf.Max(previousHp, currentHp), 0, sanitizedMax);
@@ -69,7 +75,10 @@ namespace LegacyoftheAbyss.Shade
                 {
                     try
                     {
-                        Debug.LogWarning($"[ShadePersistence] Ignored suspicious state capture (hp={currentHp}, max={maxHp}, prevMax={previousMax}).");
+                        string reason = suspiciousDrop
+                            ? "suspicious"
+                            : "invulnerable";
+                        Debug.LogWarning($"[ShadePersistence] Ignored {reason} state capture (hp={currentHp}, max={maxHp}, prevHp={previousHp}, prevMax={previousMax}, invulnerable={!CanTakeDamage}).");
                     }
                     catch
                     {
