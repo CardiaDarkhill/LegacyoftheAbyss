@@ -24,6 +24,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private const float MinContentTemplateArea = 4000f;
     private const float MinGridTemplateArea = 4000f;
     private const float MinDetailTemplateArea = 3000f;
+    private const float MinRootSizeThreshold = 10f;
+    private static readonly Vector2 DefaultRootSize = new Vector2(1280f, 720f);
 
     private struct RectSnapshot
     {
@@ -154,6 +156,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private RectSnapshot? gridRectTemplate;
     private RectSnapshot? detailRectTemplate;
     private GridLayoutSnapshot? gridLayoutTemplate;
+    private Vector2? rootRectTemplateSize;
+    private LayoutElement? rootLayoutElement;
 
     private struct CharmEntry
     {
@@ -258,6 +262,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
     }
 
+    private static string FormatSize(Vector2 size) => $"{Mathf.Abs(size.x):F0}x{Mathf.Abs(size.y):F0}";
+
     internal static void LogMenuEvent(string message)
     {
         if (!ModConfig.Instance.logMenu)
@@ -271,6 +277,119 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
         catch
         {
+        }
+    }
+
+    private void ForceLayoutRebuild(string reason)
+    {
+        bool loggingEnabled = ModConfig.Instance.logMenu;
+        var rootRect = transform as RectTransform;
+
+        try
+        {
+            Canvas.ForceUpdateCanvases();
+
+            if (gridRoot != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(gridRoot);
+            }
+
+            if (contentRoot != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(contentRoot);
+            }
+
+            if (panelRoot != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(panelRoot);
+            }
+
+            if (rootRect != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(rootRect);
+                if (rootRect.parent is RectTransform parentRect)
+                {
+                    LayoutRebuilder.ForceRebuildLayoutImmediate(parentRect);
+                }
+
+                Vector2 rootSize = rootRect.rect.size;
+                if (rootSize.x < MinRootSizeThreshold || rootSize.y < MinRootSizeThreshold)
+                {
+                    Vector2 fallbackSize = rootRectTemplateSize ?? DefaultRootSize;
+                    bool updatedLayout = false;
+
+                    rootLayoutElement ??= GetComponent<LayoutElement>();
+                    var layoutElement = rootLayoutElement;
+                    if (layoutElement == null)
+                    {
+                        layoutElement = gameObject.AddComponent<LayoutElement>();
+                        layoutElement.flexibleWidth = 0f;
+                        layoutElement.flexibleHeight = 0f;
+                        layoutElement.ignoreLayout = false;
+                        rootLayoutElement = layoutElement;
+                        updatedLayout = true;
+                    }
+
+                    if (layoutElement.minWidth < fallbackSize.x)
+                    {
+                        layoutElement.minWidth = fallbackSize.x;
+                        updatedLayout = true;
+                    }
+
+                    if (layoutElement.preferredWidth < fallbackSize.x)
+                    {
+                        layoutElement.preferredWidth = fallbackSize.x;
+                        updatedLayout = true;
+                    }
+
+                    if (layoutElement.minHeight < fallbackSize.y)
+                    {
+                        layoutElement.minHeight = fallbackSize.y;
+                        updatedLayout = true;
+                    }
+
+                    if (layoutElement.preferredHeight < fallbackSize.y)
+                    {
+                        layoutElement.preferredHeight = fallbackSize.y;
+                        updatedLayout = true;
+                    }
+
+                    if (updatedLayout)
+                    {
+                        LayoutRebuilder.ForceRebuildLayoutImmediate(rootRect);
+                        if (rootRect.parent is RectTransform parentRect2)
+                        {
+                            LayoutRebuilder.ForceRebuildLayoutImmediate(parentRect2);
+                        }
+                        rootSize = rootRect.rect.size;
+                    }
+
+                    if (loggingEnabled && (rootSize.x < MinRootSizeThreshold || rootSize.y < MinRootSizeThreshold))
+                    {
+                        LogMenuEvent($"ForceLayoutRebuild({reason}) warning: root remained collapsed at {FormatSize(rootSize)} (fallback target {FormatSize(fallbackSize)})");
+                    }
+                }
+
+                if (loggingEnabled)
+                {
+                    Vector2 panelSize = panelRoot != null ? panelRoot.rect.size : Vector2.zero;
+                    Vector2 contentSize = contentRoot != null ? contentRoot.rect.size : Vector2.zero;
+                    Vector2 gridSize = gridRoot != null ? gridRoot.rect.size : Vector2.zero;
+                    LogMenuEvent($"ForceLayoutRebuild({reason}): root={FormatSize(rootRect.rect.size)}, panel={FormatSize(panelSize)}, content={FormatSize(contentSize)}, grid={FormatSize(gridSize)}");
+                }
+            }
+            else if (loggingEnabled)
+            {
+                LogMenuEvent($"ForceLayoutRebuild({reason}): root rect missing");
+            }
+        }
+        catch (Exception ex)
+        {
+            if (loggingEnabled)
+            {
+                try { Debug.LogWarning($"[ShadeInventory] ForceLayoutRebuild({reason}) failed: {ex}"); }
+                catch { }
+            }
         }
     }
 
@@ -358,6 +477,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         isActive = true;
         RefreshAll();
         UpdateParentListLabel();
+        ForceLayoutRebuild("OnEnable");
         float alpha = canvasGroup != null ? canvasGroup.alpha : -1f;
         LogMenuEvent($"OnEnable: entries={entries.Count}, inventoryNull={inventory == null}, canvasAlpha={alpha:F2}");
         LogStateSnapshot("OnEnable");
@@ -412,6 +532,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         isActive = true;
         RefreshAll();
         UpdateParentListLabel();
+        ForceLayoutRebuild("PaneStart");
         LogMenuEvent($"PaneStart: entries={entries.Count}, inventoryNull={inventory == null}");
     }
 
@@ -579,6 +700,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return;
         }
 
+        rootRectTemplateSize = null;
         panelRectTemplate = null;
         contentRectTemplate = null;
         gridRectTemplate = null;
@@ -587,6 +709,16 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         try
         {
+            var templateRect = template.GetComponent<RectTransform>();
+            if (templateRect != null)
+            {
+                Vector2 templateSize = templateRect.rect.size;
+                if (templateSize.x > 0f && templateSize.y > 0f)
+                {
+                    rootRectTemplateSize = templateSize;
+                }
+            }
+
             var texts = template.GetComponentsInChildren<Text>(true);
             if (texts != null && texts.Length > 0)
             {
@@ -869,6 +1001,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         labelPulseTimer = 0f;
         float alpha = canvasGroup != null ? canvasGroup.alpha : -1f;
         LogMenuEvent($"ForceImmediateRefresh: entries={entries.Count}, inventoryNull={inventory == null}, canvasAlpha={alpha:F2}");
+        ForceLayoutRebuild("ForceImmediateRefresh");
         LogStateSnapshot("ForceImmediateRefresh");
     }
 
@@ -1121,6 +1254,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             LayoutRebuilder.ForceRebuildLayoutImmediate(contentRoot);
         }
+        ForceLayoutRebuild("BuildUI");
         LogStateSnapshot("BuildUI");
         LogMenuEvent("BuildUI complete");
     }
@@ -1303,6 +1437,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
             RefreshEntryStates();
             UpdateDetailPanel();
         }
+        ForceLayoutRebuild("RefreshAll");
         LogStateSnapshot("RefreshAll");
     }
 
@@ -1338,6 +1473,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             int gridChildren = gridRoot != null ? gridRoot.childCount : -1;
             LogMenuEvent($"EnsureEntryCount -> requested={count}, entries={entries.Count}, gridChildren={gridChildren}");
+            ForceLayoutRebuild("EnsureEntryCount");
         }
         else if (gridRoot != null && gridRoot.childCount != entries.Count)
         {
