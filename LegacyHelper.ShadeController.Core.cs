@@ -463,13 +463,60 @@ public partial class LegacyHelper
             if (hurtCooldown > 0f) hurtCooldown = Mathf.Max(0f, hurtCooldown - Time.deltaTime);
             if (ShadeInput.WasActionPressed(ShadeAction.AssistMode))
             {
-                canTakeDamage = !canTakeDamage;
-                if (ModConfig.Instance.logShade)
+                if (sceneProtectionActive)
                 {
-                    string assistState = canTakeDamage ? "disabled" : "enabled";
-                    try { UnityEngine.Debug.Log($"[ShadeDebug] Assist Mode {assistState}"); } catch { }
+                    sceneProtectionDesiredDamageState = !sceneProtectionDesiredDamageState;
+                    if (ModConfig.Instance.logShade)
+                    {
+                        string assistState = sceneProtectionDesiredDamageState ? "disabled" : "enabled";
+                        string suffix = sceneProtectionTimer > 0f ? " (will apply after spawn protection)" : string.Empty;
+                        try { UnityEngine.Debug.Log($"[ShadeDebug] Assist Mode {assistState}{suffix}"); } catch { }
+                    }
                 }
-                PersistIfChanged();
+                else
+                {
+                    canTakeDamage = !canTakeDamage;
+                    if (ModConfig.Instance.logShade)
+                    {
+                        string assistState = canTakeDamage ? "disabled" : "enabled";
+                        try { UnityEngine.Debug.Log($"[ShadeDebug] Assist Mode {assistState}"); } catch { }
+                    }
+                    PersistIfChanged();
+                }
+            }
+
+            if (sceneProtectionActive)
+            {
+                if (sceneProtectionTimer > 0f)
+                {
+                    sceneProtectionTimer = Mathf.Max(0f, sceneProtectionTimer - Time.deltaTime);
+                }
+
+                if (canTakeDamage)
+                {
+                    canTakeDamage = false;
+                    PersistIfChanged();
+                }
+
+                if (sceneProtectionTimer <= 0f)
+                {
+                    if (SceneProtectionBlockedByOverlap())
+                    {
+                        sceneProtectionTimer = 0.1f;
+                        hazardCooldown = Mathf.Max(hazardCooldown, 0.1f);
+                        hurtCooldown = Mathf.Max(hurtCooldown, 0.1f);
+                        TeleportToHornet();
+                    }
+                    else
+                    {
+                        sceneProtectionActive = false;
+                        if (canTakeDamage != sceneProtectionDesiredDamageState)
+                        {
+                            canTakeDamage = sceneProtectionDesiredDamageState;
+                            PersistIfChanged();
+                        }
+                    }
+                }
             }
             ignoreRefreshTimer -= Time.deltaTime;
             if (ignoreRefreshTimer <= 0f)
@@ -1864,6 +1911,99 @@ public partial class LegacyHelper
 
             hazardCooldown = Mathf.Max(hazardCooldown, duration);
             hurtCooldown = Mathf.Max(hurtCooldown, duration);
+        }
+
+        public void ApplySceneTransitionProtection(float duration)
+        {
+            if (duration <= 0f)
+            {
+                return;
+            }
+
+            sceneProtectionTimer = Mathf.Max(sceneProtectionTimer, duration);
+            if (!sceneProtectionActive)
+            {
+                sceneProtectionActive = true;
+                sceneProtectionDesiredDamageState = canTakeDamage;
+            }
+
+            hazardCooldown = Mathf.Max(hazardCooldown, duration);
+            hurtCooldown = Mathf.Max(hurtCooldown, duration);
+
+            if (canTakeDamage)
+            {
+                canTakeDamage = false;
+                PersistIfChanged();
+            }
+        }
+
+        private bool SceneProtectionBlockedByOverlap()
+        {
+            if (!bodyCol)
+            {
+                return false;
+            }
+
+            try
+            {
+                var filter = new ContactFilter2D();
+                filter.useTriggers = true;
+                int count = bodyCol.Overlap(filter, sceneProtectionOverlapBuffer);
+                for (int i = 0; i < count; i++)
+                {
+                    var c = sceneProtectionOverlapBuffer[i];
+                    if (!c)
+                    {
+                        continue;
+                    }
+
+                    if (c.transform == transform || c.transform.IsChildOf(transform))
+                    {
+                        continue;
+                    }
+
+                    if (hornetTransform && c.transform.root == hornetTransform.root)
+                    {
+                        continue;
+                    }
+
+                    var dh = c.GetComponentInParent<DamageHero>();
+                    if (dh == null)
+                    {
+                        continue;
+                    }
+
+                    if (ShouldIgnoreDamageSource(c) || ShouldIgnoreDamageSource(dh))
+                    {
+                        continue;
+                    }
+
+                    bool canDamage = false;
+                    try { canDamage = dh.enabled && dh.CanCauseDamage; }
+                    catch { }
+                    if (!canDamage)
+                    {
+                        continue;
+                    }
+
+                    var hz = GetHazardType(dh);
+                    if (IsTerrainHazard(hz))
+                    {
+                        return true;
+                    }
+
+                    int dmg = 0;
+                    try { dmg = dh.damageDealt; }
+                    catch { }
+                    if (dmg > 0)
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch { }
+
+            return false;
         }
 
         private Vector2 ClampAgainstTransitionGates(Vector2 proposed)

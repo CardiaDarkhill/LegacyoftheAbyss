@@ -10,20 +10,42 @@ using LegacyoftheAbyss.Shade;
 
 internal sealed class ShadeInventoryPane : InventoryPane
 {
-    private const int Columns = 3;
+    private const int Columns = 7;
     private const float BackgroundAlpha = 0.82f;
+
+    private static readonly Color DefaultPanelColor = new Color(0.05f, 0.05f, 0.08f, 0.92f);
+    private static readonly Color DefaultHighlightColor = new Color(0.78f, 0.86f, 1f, 0.35f);
+    private static readonly Color DefaultCellColor = new Color(0.18f, 0.2f, 0.26f, BackgroundAlpha);
+    private static readonly Color DefaultNewMarkerColor = new Color(1f, 0.85f, 0.25f, 0.95f);
 
     private readonly List<CharmEntry> entries = new List<CharmEntry>();
 
+    private RectTransform panelRoot = null!;
     private RectTransform contentRoot = null!;
     private RectTransform gridRoot = null!;
     private RectTransform highlight = null!;
+    private Text titleText = null!;
     private Text notchText = null!;
-    private Text nameText = null!;
+    private Text detailTitleText = null!;
     private Text descriptionText = null!;
     private Text statusText = null!;
     private Text hintText = null!;
     private CanvasGroup canvasGroup = null!;
+
+    private Font? bodyFont;
+    private Font? headerFont;
+    private Material? bodyFontMaterial;
+    private Material? headerFontMaterial;
+    private Color bodyFontColor = Color.white;
+    private Color headerFontColor = Color.white;
+    private Sprite? panelBackgroundSprite;
+    private Color panelBackgroundColor = DefaultPanelColor;
+    private Sprite? highlightSpriteTemplate;
+    private Color highlightColor = DefaultHighlightColor;
+    private Sprite? cellFrameSprite;
+    private Color cellFrameColor = DefaultCellColor;
+    private Sprite? newMarkerSpriteTemplate;
+    private Color newMarkerColor = DefaultNewMarkerColor;
 
     private ShadeCharmInventory? inventory;
     private int selectedIndex;
@@ -45,29 +67,44 @@ internal sealed class ShadeInventoryPane : InventoryPane
     public override void Awake()
     {
         base.Awake();
-        BuildUI();
         SubscribeInput();
     }
 
     private void OnEnable()
     {
+        EnsureBuilt();
+        canvasGroup ??= GetComponent<CanvasGroup>();
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = 1f;
+            canvasGroup.interactable = true;
+            canvasGroup.blocksRaycasts = true;
+        }
+
         ShadeCharmInventory? inv = ShadeRuntime.Charms;
         if (inv != null)
         {
             inv.StateChanged += HandleInventoryChanged;
         }
         inventory = inv;
+        isActive = true;
         RefreshAll();
     }
 
     private void OnDisable()
     {
-        ShadeCharmInventory? inv = ShadeRuntime.Charms;
-        if (inv != null)
+        if (inventory != null)
         {
-            inv.StateChanged -= HandleInventoryChanged;
+            inventory.StateChanged -= HandleInventoryChanged;
         }
+        inventory = null;
         isActive = false;
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = 0f;
+            canvasGroup.interactable = false;
+            canvasGroup.blocksRaycasts = false;
+        }
     }
 
     private void OnDestroy()
@@ -86,6 +123,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     public override void PaneStart()
     {
         base.PaneStart();
+        EnsureBuilt();
         canvasGroup ??= GetComponent<CanvasGroup>();
         if (canvasGroup != null)
         {
@@ -94,10 +132,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
             canvasGroup.blocksRaycasts = true;
         }
 
-        inventory = ShadeRuntime.Charms;
+        inventory ??= ShadeRuntime.Charms;
         isActive = true;
         RefreshAll();
-        SelectIndex(selectedIndex < entries.Count ? selectedIndex : 0);
     }
 
     public override void PaneEnd()
@@ -119,9 +156,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         displayLabel = label;
-        if (nameText != null)
+        if (titleText != null)
         {
-            nameText.text = label;
+            titleText.text = label;
         }
     }
 
@@ -129,6 +166,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     internal void HandleSubmit()
     {
+        EnsureBuilt();
         if (!isActive || inventory == null || entries.Count == 0)
         {
             return;
@@ -172,6 +210,163 @@ internal sealed class ShadeInventoryPane : InventoryPane
         OnInputDown += () => MoveSelectionVertical(1);
     }
 
+    internal void ConfigureFromTemplate(InventoryPane template)
+    {
+        if (template == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var texts = template.GetComponentsInChildren<Text>(true);
+            if (texts != null && texts.Length > 0)
+            {
+                var ordered = texts
+                    .Where(t => t != null && t.font != null)
+                    .OrderBy(t => t.fontSize)
+                    .ToArray();
+
+                if (ordered.Length > 0)
+                {
+                    int bodyIndex = Mathf.Clamp(ordered.Length > 1 ? ordered.Length / 2 : 0, 0, ordered.Length - 1);
+                    var bodySample = ordered[bodyIndex];
+                    bodyFont = bodySample.font;
+                    bodyFontMaterial = bodySample.material;
+                    if (bodySample.color.a > 0f)
+                    {
+                        bodyFontColor = bodySample.color;
+                    }
+                }
+
+                var headerSample = ordered.LastOrDefault();
+                if (headerSample != null)
+                {
+                    headerFont = headerSample.font;
+                    headerFontMaterial = headerSample.material;
+                    if (headerSample.color.a > 0f)
+                    {
+                        headerFontColor = headerSample.color;
+                    }
+                }
+            }
+
+            var images = template.GetComponentsInChildren<Image>(true);
+            if (images != null && images.Length > 0)
+            {
+                foreach (var img in images)
+                {
+                    if (img == null)
+                    {
+                        continue;
+                    }
+
+                    var sprite = img.sprite;
+                    if (sprite == null)
+                    {
+                        continue;
+                    }
+
+                    string name = img.gameObject != null ? img.gameObject.name : string.Empty;
+                    string lower = string.IsNullOrEmpty(name) ? string.Empty : name.ToLowerInvariant();
+
+                    if (highlightSpriteTemplate == null && (lower.Contains("highlight") || lower.Contains("select")))
+                    {
+                        highlightSpriteTemplate = sprite;
+                        if (img.color.a > 0f)
+                        {
+                            highlightColor = img.color;
+                        }
+                        continue;
+                    }
+
+                    if (newMarkerSpriteTemplate == null && lower.Contains("new"))
+                    {
+                        newMarkerSpriteTemplate = sprite;
+                        if (img.color.a > 0f)
+                        {
+                            newMarkerColor = img.color;
+                        }
+                        continue;
+                    }
+
+                    if (cellFrameSprite == null && (lower.Contains("frame") || lower.Contains("slot") || lower.Contains("charm")))
+                    {
+                        cellFrameSprite = sprite;
+                        if (img.color.a > 0f)
+                        {
+                            cellFrameColor = img.color;
+                        }
+                        continue;
+                    }
+
+                    if (panelBackgroundSprite == null && (lower.Contains("panel") || lower.Contains("background") || lower.Contains("back")))
+                    {
+                        panelBackgroundSprite = sprite;
+                        if (img.color.a > 0f)
+                        {
+                            panelBackgroundColor = img.color;
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        if (isBuilt)
+        {
+            RebuildUI();
+        }
+    }
+
+    private void EnsureBuilt()
+    {
+        if (!isBuilt)
+        {
+            BuildUI();
+        }
+    }
+
+    private void RebuildUI()
+    {
+        bool wasActive = isActive;
+
+        if (panelRoot != null)
+        {
+            Destroy(panelRoot.gameObject);
+        }
+
+        panelRoot = null!;
+        contentRoot = null!;
+        gridRoot = null!;
+        highlight = null!;
+        titleText = null!;
+        notchText = null!;
+        detailTitleText = null!;
+        descriptionText = null!;
+        statusText = null!;
+        hintText = null!;
+        entries.Clear();
+        isBuilt = false;
+
+        BuildUI();
+        if (wasActive && canvasGroup != null)
+        {
+            canvasGroup.alpha = 1f;
+            canvasGroup.interactable = true;
+            canvasGroup.blocksRaycasts = true;
+        }
+        RefreshAll();
+        if (entries.Count > 0)
+        {
+            SelectIndex(Mathf.Clamp(selectedIndex, 0, entries.Count - 1));
+        }
+        UpdateNotchMeter();
+        UpdateDetailPanel();
+    }
+
     private void BuildUI()
     {
         if (isBuilt)
@@ -188,42 +383,62 @@ internal sealed class ShadeInventoryPane : InventoryPane
         canvasGroup.interactable = false;
         canvasGroup.blocksRaycasts = false;
 
+        panelRoot = new GameObject("ShadePanel", typeof(RectTransform)).GetComponent<RectTransform>();
+        panelRoot.SetParent(transform, false);
+        panelRoot.anchorMin = Vector2.zero;
+        panelRoot.anchorMax = Vector2.one;
+        panelRoot.offsetMin = new Vector2(36f, 24f);
+        panelRoot.offsetMax = new Vector2(-36f, -36f);
+
+        var panelImage = panelRoot.gameObject.AddComponent<Image>();
+        if (panelBackgroundSprite != null)
+        {
+            panelImage.sprite = panelBackgroundSprite;
+            panelImage.type = Image.Type.Sliced;
+            panelImage.color = panelBackgroundColor;
+        }
+        else
+        {
+            panelImage.color = panelBackgroundColor;
+        }
+        panelImage.raycastTarget = false;
+
         contentRoot = new GameObject("Content", typeof(RectTransform)).GetComponent<RectTransform>();
-        contentRoot.SetParent(transform, false);
+        contentRoot.SetParent(panelRoot, false);
         contentRoot.anchorMin = Vector2.zero;
         contentRoot.anchorMax = Vector2.one;
-        contentRoot.offsetMin = new Vector2(80f, 60f);
-        contentRoot.offsetMax = new Vector2(-80f, -80f);
+        contentRoot.offsetMin = new Vector2(30f, 30f);
+        contentRoot.offsetMax = new Vector2(-30f, -30f);
 
-        nameText = CreateText("Title", contentRoot, FontStyle.Bold, 40, TextAnchor.UpperLeft);
-        var titleRect = nameText.rectTransform;
+        titleText = CreateText("Title", contentRoot, FontStyle.Normal, 46, TextAnchor.UpperLeft, useHeaderFont: true);
+        var titleRect = titleText.rectTransform;
         titleRect.anchorMin = new Vector2(0f, 1f);
         titleRect.anchorMax = new Vector2(1f, 1f);
         titleRect.pivot = new Vector2(0f, 1f);
-        titleRect.offsetMin = new Vector2(0f, -44f);
-        titleRect.offsetMax = Vector2.zero;
-        nameText.text = displayLabel;
+        titleRect.offsetMin = new Vector2(0f, -52f);
+        titleRect.offsetMax = new Vector2(0f, -4f);
+        titleText.text = displayLabel;
 
-        notchText = CreateText("Notch", contentRoot, FontStyle.Normal, 30, TextAnchor.UpperLeft);
+        notchText = CreateText("Notches", contentRoot, FontStyle.Normal, 32, TextAnchor.UpperRight);
         var notchRect = notchText.rectTransform;
-        notchRect.anchorMin = new Vector2(0f, 1f);
+        notchRect.anchorMin = new Vector2(0.45f, 1f);
         notchRect.anchorMax = new Vector2(1f, 1f);
-        notchRect.pivot = new Vector2(0f, 1f);
-        notchRect.offsetMin = new Vector2(0f, -92f);
-        notchRect.offsetMax = new Vector2(0f, -44f);
+        notchRect.pivot = new Vector2(1f, 1f);
+        notchRect.offsetMin = new Vector2(-12f, -52f);
+        notchRect.offsetMax = new Vector2(0f, -6f);
 
         gridRoot = new GameObject("CharmGrid", typeof(RectTransform)).GetComponent<RectTransform>();
         gridRoot.SetParent(contentRoot, false);
         gridRoot.anchorMin = new Vector2(0f, 0f);
-        gridRoot.anchorMax = new Vector2(0.6f, 0.88f);
+        gridRoot.anchorMax = new Vector2(0.58f, 0.9f);
         gridRoot.pivot = new Vector2(0f, 1f);
         gridRoot.offsetMin = new Vector2(0f, 0f);
-        gridRoot.offsetMax = new Vector2(-24f, -140f);
-        gridRoot.anchoredPosition = new Vector2(0f, -120f);
+        gridRoot.offsetMax = new Vector2(-24f, -96f);
+        gridRoot.anchoredPosition = new Vector2(0f, -72f);
 
         var gridLayout = gridRoot.gameObject.AddComponent<GridLayoutGroup>();
-        gridLayout.cellSize = new Vector2(150f, 160f);
-        gridLayout.spacing = new Vector2(32f, 28f);
+        gridLayout.cellSize = new Vector2(104f, 112f);
+        gridLayout.spacing = new Vector2(16f, 16f);
         gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
         gridLayout.constraintCount = Columns;
         gridLayout.startAxis = GridLayoutGroup.Axis.Horizontal;
@@ -232,58 +447,93 @@ internal sealed class ShadeInventoryPane : InventoryPane
         highlight = new GameObject("Highlight", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
         highlight.SetParent(gridRoot, false);
         var highlightImage = highlight.GetComponent<Image>();
-        highlightImage.color = new Color(0.8f, 0.9f, 1f, 0.28f);
+        if (highlightSpriteTemplate != null)
+        {
+            highlightImage.sprite = highlightSpriteTemplate;
+            highlightImage.type = Image.Type.Sliced;
+            highlightImage.color = highlightColor;
+        }
+        else
+        {
+            highlightImage.color = highlightColor;
+        }
         highlightImage.raycastTarget = false;
         highlight.gameObject.SetActive(false);
 
         var detailRoot = new GameObject("Details", typeof(RectTransform)).GetComponent<RectTransform>();
         detailRoot.SetParent(contentRoot, false);
-        detailRoot.anchorMin = new Vector2(0.62f, 0f);
-        detailRoot.anchorMax = new Vector2(1f, 0.88f);
+        detailRoot.anchorMin = new Vector2(0.6f, 0f);
+        detailRoot.anchorMax = new Vector2(1f, 0.9f);
         detailRoot.pivot = new Vector2(0f, 1f);
-        detailRoot.offsetMin = new Vector2(24f, 0f);
-        detailRoot.offsetMax = Vector2.zero;
+        detailRoot.offsetMin = new Vector2(20f, 0f);
+        detailRoot.offsetMax = new Vector2(0f, -64f);
 
-        descriptionText = CreateText("Description", detailRoot, FontStyle.Normal, 28, TextAnchor.UpperLeft);
+        detailTitleText = CreateText("CharmName", detailRoot, FontStyle.Normal, 38, TextAnchor.UpperLeft, useHeaderFont: true);
+        var detailTitleRect = detailTitleText.rectTransform;
+        detailTitleRect.anchorMin = new Vector2(0f, 0.72f);
+        detailTitleRect.anchorMax = new Vector2(1f, 0.98f);
+        detailTitleRect.pivot = new Vector2(0f, 1f);
+        detailTitleRect.offsetMin = Vector2.zero;
+        detailTitleRect.offsetMax = new Vector2(0f, -2f);
+        detailTitleText.text = displayLabel;
+
+        descriptionText = CreateText("Description", detailRoot, FontStyle.Normal, 30, TextAnchor.UpperLeft);
         var descRect = descriptionText.rectTransform;
-        descRect.anchorMin = new Vector2(0f, 0.45f);
-        descRect.anchorMax = new Vector2(1f, 1f);
+        descRect.anchorMin = new Vector2(0f, 0.32f);
+        descRect.anchorMax = new Vector2(1f, 0.74f);
         descRect.offsetMin = Vector2.zero;
         descRect.offsetMax = Vector2.zero;
         descriptionText.horizontalOverflow = HorizontalWrapMode.Wrap;
         descriptionText.verticalOverflow = VerticalWrapMode.Overflow;
-        descriptionText.lineSpacing = 1.15f;
+        descriptionText.lineSpacing = 1.1f;
 
-        statusText = CreateText("Status", detailRoot, FontStyle.Italic, 26, TextAnchor.UpperLeft);
+        statusText = CreateText("Status", detailRoot, FontStyle.Italic, 28, TextAnchor.UpperLeft);
         var statusRect = statusText.rectTransform;
-        statusRect.anchorMin = new Vector2(0f, 0.25f);
-        statusRect.anchorMax = new Vector2(1f, 0.45f);
-        statusRect.offsetMin = new Vector2(0f, 10f);
+        statusRect.anchorMin = new Vector2(0f, 0.16f);
+        statusRect.anchorMax = new Vector2(1f, 0.32f);
+        statusRect.offsetMin = new Vector2(0f, 6f);
         statusRect.offsetMax = Vector2.zero;
 
         hintText = CreateText("Hint", detailRoot, FontStyle.Normal, 24, TextAnchor.UpperLeft);
         var hintRect = hintText.rectTransform;
         hintRect.anchorMin = new Vector2(0f, 0f);
-        hintRect.anchorMax = new Vector2(1f, 0.25f);
-        hintRect.offsetMin = new Vector2(0f, 10f);
+        hintRect.anchorMax = new Vector2(1f, 0.16f);
+        hintRect.offsetMin = new Vector2(0f, 6f);
         hintRect.offsetMax = Vector2.zero;
-        hintText.text = "Ctrl + ` to unlock all charms (debug). Use submit to equip or unequip.";
+        hintText.text = "Submit to equip or unequip. Ctrl + ` unlocks all charms (debug).";
         hintText.color = new Color(0.78f, 0.82f, 0.92f, 0.8f);
 
         isBuilt = true;
     }
 
-    private Text CreateText(string name, RectTransform parent, FontStyle style, int size, TextAnchor anchor)
+    private Text CreateText(string name, RectTransform parent, FontStyle style, int size, TextAnchor anchor, bool useHeaderFont = false)
     {
         var go = new GameObject(name, typeof(RectTransform));
         var rect = go.GetComponent<RectTransform>();
         rect.SetParent(parent, false);
         var text = go.AddComponent<Text>();
-        text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+
+        Font? resolvedFont = useHeaderFont ? (headerFont ?? bodyFont) : (bodyFont ?? headerFont);
+        if (resolvedFont != null)
+        {
+            text.font = resolvedFont;
+        }
+        else
+        {
+            text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        }
+
         text.fontStyle = style;
         text.fontSize = size;
         text.alignment = anchor;
-        text.color = Color.white;
+
+        var resolvedMaterial = useHeaderFont ? headerFontMaterial : bodyFontMaterial;
+        if (resolvedMaterial != null)
+        {
+            text.material = resolvedMaterial;
+        }
+
+        text.color = useHeaderFont ? headerFontColor : bodyFontColor;
         text.horizontalOverflow = HorizontalWrapMode.Wrap;
         text.verticalOverflow = VerticalWrapMode.Overflow;
         text.raycastTarget = false;
@@ -292,6 +542,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void MoveSelectionHorizontal(int direction)
     {
+        EnsureBuilt();
         if (entries.Count == 0)
         {
             return;
@@ -310,6 +561,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void MoveSelectionVertical(int direction)
     {
+        EnsureBuilt();
         if (entries.Count == 0)
         {
             return;
@@ -326,6 +578,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void SelectIndex(int index)
     {
+        EnsureBuilt();
         if (entries.Count == 0)
         {
             return;
@@ -353,6 +606,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void RefreshAll()
     {
+        EnsureBuilt();
         ShadeCharmInventory? inv = ShadeRuntime.Charms;
         inventory = inv;
         var definitions = inv != null ? inv.AllCharms : Array.Empty<ShadeCharmDefinition>();
@@ -370,14 +624,26 @@ internal sealed class ShadeInventoryPane : InventoryPane
             entries[i] = entry;
         }
 
+        if (gridRoot != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(gridRoot);
+        }
+
         if (selectedIndex >= entries.Count)
         {
             selectedIndex = entries.Count > 0 ? entries.Count - 1 : 0;
         }
 
         UpdateNotchMeter();
-        RefreshEntryStates();
-        UpdateDetailPanel();
+        if (isActive && entries.Count > 0)
+        {
+            SelectIndex(Mathf.Clamp(selectedIndex, 0, entries.Count - 1));
+        }
+        else
+        {
+            RefreshEntryStates();
+            UpdateDetailPanel();
+        }
     }
 
     private void HandleStateChanged()
@@ -389,6 +655,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void EnsureEntryCount(int count)
     {
+        EnsureBuilt();
         while (entries.Count < count)
         {
             entries.Add(CreateEntry(entries.Count));
@@ -412,7 +679,16 @@ internal sealed class ShadeInventoryPane : InventoryPane
         cellRect.localScale = Vector3.one;
 
         var background = cell.AddComponent<Image>();
-        background.color = new Color(0.18f, 0.2f, 0.26f, BackgroundAlpha);
+        if (cellFrameSprite != null)
+        {
+            background.sprite = cellFrameSprite;
+            background.type = Image.Type.Sliced;
+            background.color = cellFrameColor;
+        }
+        else
+        {
+            background.color = cellFrameColor;
+        }
         background.raycastTarget = false;
 
         var iconGo = new GameObject("Icon", typeof(RectTransform));
@@ -421,7 +697,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         iconRect.anchorMin = new Vector2(0.5f, 0.5f);
         iconRect.anchorMax = new Vector2(0.5f, 0.5f);
         iconRect.pivot = new Vector2(0.5f, 0.5f);
-        iconRect.sizeDelta = new Vector2(120f, 120f);
+        iconRect.sizeDelta = new Vector2(96f, 96f);
         var icon = iconGo.AddComponent<Image>();
         icon.preserveAspect = true;
         icon.raycastTarget = false;
@@ -435,7 +711,12 @@ internal sealed class ShadeInventoryPane : InventoryPane
         markerRect.anchoredPosition = new Vector2(-12f, -12f);
         markerRect.sizeDelta = new Vector2(18f, 18f);
         var markerImage = newMarker.GetComponent<Image>();
-        markerImage.color = new Color(1f, 0.85f, 0.25f, 0.95f);
+        if (newMarkerSpriteTemplate != null)
+        {
+            markerImage.sprite = newMarkerSpriteTemplate;
+            markerImage.type = Image.Type.Sliced;
+        }
+        markerImage.color = newMarkerColor;
         markerImage.raycastTarget = false;
         newMarker.SetActive(false);
 
@@ -450,6 +731,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void RefreshEntryStates()
     {
+        EnsureBuilt();
         if (inventory == null)
         {
             foreach (var entry in entries)
@@ -501,6 +783,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void UpdateNotchMeter()
     {
+        EnsureBuilt();
         if (notchText == null)
         {
             return;
@@ -518,16 +801,18 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void UpdateDetailPanel()
     {
+        EnsureBuilt();
         if (entries.Count == 0 || inventory == null)
         {
+            detailTitleText.text = displayLabel;
             descriptionText.text = "Collect shade charms to unlock new abilities for your companion.";
-            statusText.text = "";
+            statusText.text = string.Empty;
             return;
         }
 
         var entry = entries[Mathf.Clamp(selectedIndex, 0, entries.Count - 1)];
         var definition = entry.Definition;
-        nameText.text = definition?.DisplayName ?? displayLabel;
+        detailTitleText.text = definition?.DisplayName ?? displayLabel;
         descriptionText.text = definition?.Description ?? string.Empty;
 
         bool owned = inventory.IsOwned(entry.Id);
@@ -555,7 +840,20 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             status = "Submit to equip this charm.";
         }
-        statusText.text = status;
+        string notchInfo;
+        if (notchCost <= 0)
+        {
+            notchInfo = "No notch cost.";
+        }
+        else
+        {
+            var notchIcons = new string('●', Mathf.Clamp(notchCost, 1, 12));
+            notchInfo = notchCost == 1
+                ? $"Notch Cost: {notchIcons}"
+                : $"Notch Cost: {notchIcons} ({notchCost})";
+        }
+
+        statusText.text = string.IsNullOrEmpty(notchInfo) ? status : $"{notchInfo}\\n{status}";
     }
 
     private Sprite GetFallbackSprite()
@@ -632,7 +930,7 @@ internal static class ShadeInventoryPaneIntegration
     private static readonly FieldInfo PaneField = AccessTools.Field(typeof(InventoryPaneInput), "pane");
     private static readonly FieldInfo PaneListField = AccessTools.Field(typeof(InventoryPaneInput), "paneList");
 
-    private const float ListIconScaleFactor = 0.25f;
+    private const float ListIconScaleFactor = 0.5625f;
 
     private static Sprite? cachedListIcon;
     private static Sprite? cachedListIconSource;
@@ -759,6 +1057,7 @@ internal static class ShadeInventoryPaneIntegration
 
         var shadePane = go.AddComponent<ShadeInventoryPane>();
         shadePane.RootPane = shadePane;
+        shadePane.ConfigureFromTemplate(template);
         shadePane.SetDisplayLabel("Shade Charms");
 
         var input = go.AddComponent<InventoryPaneInput>();

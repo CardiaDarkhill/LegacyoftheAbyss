@@ -134,6 +134,10 @@ public partial class LegacyHelper
         private const float SnapMinWhenNoRoom = 0.25f;
 
         private bool canTakeDamage = true;
+        private float sceneProtectionTimer;
+        private bool sceneProtectionActive;
+        private bool sceneProtectionDesiredDamageState = true;
+        private readonly Collider2D[] sceneProtectionOverlapBuffer = new Collider2D[16];
         private Vector2 capturedMoveInput;
         private float capturedHorizontalInput;
         private bool capturedSprintHeld;

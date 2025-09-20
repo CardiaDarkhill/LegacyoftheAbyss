@@ -17,6 +17,8 @@ public partial class LegacyHelper : BaseUnityPlugin
     private bool loggedMissingUI;
     private bool loggedMissingPauseMenu;
 
+    private const float SceneSpawnProtectionSeconds = 1.5f;
+
     internal static LegacyHelper Instance { get; private set; }
 
     // Persist shade state across scene transitions
@@ -187,7 +189,8 @@ public partial class LegacyHelper : BaseUnityPlugin
                 if (sc != null)
                 {
                     sc.TeleportToPosition(pos);
-                    sc.SuppressHazardDamage(1.5f);
+                    sc.SuppressHazardDamage(SceneSpawnProtectionSeconds);
+                    sc.ApplySceneTransitionProtection(SceneSpawnProtectionSeconds);
                     sc.TriggerSpawnEntrance();
                     SaveShadeState(sc.GetCurrentHP(), sc.GetMaxHP(), sc.GetShadeSoul(), sc.GetCanTakeDamage());
                     RequestShadeLoadoutRecompute();
@@ -213,7 +216,8 @@ public partial class LegacyHelper : BaseUnityPlugin
             scNew.RestorePersistentState(savedHp, savedMax, savedSoul, savedCanTakeDamage);
         }
 
-        scNew.SuppressHazardDamage(1.5f);
+        scNew.SuppressHazardDamage(SceneSpawnProtectionSeconds);
+        scNew.ApplySceneTransitionProtection(SceneSpawnProtectionSeconds);
 
         var sr = helper.AddComponent<SpriteRenderer>();
 
