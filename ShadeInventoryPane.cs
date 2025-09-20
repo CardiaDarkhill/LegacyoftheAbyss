@@ -1623,6 +1623,80 @@ internal static class ShadeInventoryPaneIntegration
         target.localScale = source.localScale;
     }
 
+    private static string CopyLayoutComponents(GameObject? template, GameObject target)
+    {
+        if (template == null || target == null)
+        {
+            return string.Empty;
+        }
+
+        var copied = new List<string>();
+
+        try
+        {
+            var templateLayout = template.GetComponent<LayoutElement>();
+            if (templateLayout != null)
+            {
+                var targetLayout = target.GetComponent<LayoutElement>();
+                if (targetLayout == null)
+                {
+                    targetLayout = target.AddComponent<LayoutElement>();
+                }
+
+                targetLayout.ignoreLayout = templateLayout.ignoreLayout;
+                targetLayout.minWidth = templateLayout.minWidth;
+                targetLayout.minHeight = templateLayout.minHeight;
+                targetLayout.preferredWidth = templateLayout.preferredWidth;
+                targetLayout.preferredHeight = templateLayout.preferredHeight;
+                targetLayout.flexibleWidth = templateLayout.flexibleWidth;
+                targetLayout.flexibleHeight = templateLayout.flexibleHeight;
+                targetLayout.layoutPriority = templateLayout.layoutPriority;
+                targetLayout.enabled = templateLayout.enabled;
+
+                copied.Add($"LayoutElement(min={templateLayout.minWidth:F0}x{templateLayout.minHeight:F0}, " +
+                    $"preferred={templateLayout.preferredWidth:F0}x{templateLayout.preferredHeight:F0}, " +
+                    $"flex={templateLayout.flexibleWidth:F2}x{templateLayout.flexibleHeight:F2})");
+            }
+
+            var templateFitter = template.GetComponent<ContentSizeFitter>();
+            if (templateFitter != null)
+            {
+                var targetFitter = target.GetComponent<ContentSizeFitter>();
+                if (targetFitter == null)
+                {
+                    targetFitter = target.AddComponent<ContentSizeFitter>();
+                }
+
+                targetFitter.horizontalFit = templateFitter.horizontalFit;
+                targetFitter.verticalFit = templateFitter.verticalFit;
+                targetFitter.enabled = templateFitter.enabled;
+
+                copied.Add($"ContentSizeFitter(h={templateFitter.horizontalFit}, v={templateFitter.verticalFit})");
+            }
+
+            var templateAspect = template.GetComponent<AspectRatioFitter>();
+            if (templateAspect != null)
+            {
+                var targetAspect = target.GetComponent<AspectRatioFitter>();
+                if (targetAspect == null)
+                {
+                    targetAspect = target.AddComponent<AspectRatioFitter>();
+                }
+
+                targetAspect.aspectMode = templateAspect.aspectMode;
+                targetAspect.aspectRatio = templateAspect.aspectRatio;
+                targetAspect.enabled = templateAspect.enabled;
+
+                copied.Add($"AspectRatioFitter(mode={templateAspect.aspectMode}, ratio={templateAspect.aspectRatio:F2})");
+            }
+        }
+        catch
+        {
+        }
+
+        return string.Join(", ", copied.Where(s => !string.IsNullOrEmpty(s)));
+    }
+
     private static readonly AccessTools.FieldRef<InventoryPaneList, InventoryPane[]> PanesField =
         AccessTools.FieldRefAccess<InventoryPaneList, InventoryPane[]>("panes");
 
@@ -1958,6 +2032,24 @@ internal static class ShadeInventoryPaneIntegration
             rect.offsetMax = Vector2.zero;
             rect.sizeDelta = Vector2.zero;
         }
+
+        var templateRoot = templateRect != null
+            ? templateRect.gameObject
+            : template != null
+                ? template.gameObject
+                : null;
+        string layoutSummary = CopyLayoutComponents(templateRoot, go);
+        if (!string.IsNullOrEmpty(layoutSummary))
+        {
+            ShadeInventoryPane.LogMenuEvent($"Copied layout components from template: {layoutSummary}");
+        }
+
+        var parentRect = parent as RectTransform;
+        if (parentRect != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(parentRect);
+        }
+        LayoutRebuilder.ForceRebuildLayoutImmediate(rect);
 
         var rootSize = rect.rect.size;
         string anchorInfo = $"({rect.anchorMin.x:F2},{rect.anchorMin.y:F2})->({rect.anchorMax.x:F2},{rect.anchorMax.y:F2})";
