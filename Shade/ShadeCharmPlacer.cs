@@ -71,7 +71,9 @@ namespace LegacyoftheAbyss.Shade
         {
             try
             {
-                var existing = UnityEngine.Object.FindObjectsOfType<ShadeUnlockPickup>(true);
+                var existing = UnityEngine.Object.FindObjectsByType<ShadeUnlockPickup>(
+                    FindObjectsInactive.Include,
+                    FindObjectsSortMode.None);
                 return existing.Any(p => p != null && p.charmId == charmId);
             }
             catch

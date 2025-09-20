@@ -56,7 +56,7 @@ public static class ShadeSettingsMenu
     private static readonly Color ButtonHighlightColor = new Color(1f, 0.95f, 0.78f, 0.35f);
     private static readonly Color ButtonPressedColor = new Color(0.95f, 0.9f, 0.8f, 0.45f);
     private static readonly Color ButtonDisabledColor = new Color(1f, 1f, 1f, 0.15f);
-    private const bool IncludeLegacyCharmMenu = false;
+    private static readonly bool IncludeLegacyCharmMenu = false;
     private static bool consumeNextToggle;
     private static readonly List<BindingMenuDriver> bindingDrivers = new();
     private static ShadeToggleDriver shadeToggleDriver;

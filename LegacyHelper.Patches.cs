@@ -738,7 +738,7 @@ public partial class LegacyHelper
                 Transform parent = __instance.transform.parent;
                 if (parent != ShadeController.expectedSlashParent)
                 {
-                    Object.Destroy(__instance.gameObject);
+                    UnityEngine.Object.Destroy(__instance.gameObject);
                     return false;
                 }
             }

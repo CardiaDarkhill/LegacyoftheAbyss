@@ -15,21 +15,21 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private readonly List<CharmEntry> entries = new List<CharmEntry>();
 
-    private RectTransform contentRoot;
-    private RectTransform gridRoot;
-    private RectTransform highlight;
-    private Text notchText;
-    private Text nameText;
-    private Text descriptionText;
-    private Text statusText;
-    private Text hintText;
-    private CanvasGroup canvasGroup;
+    private RectTransform contentRoot = null!;
+    private RectTransform gridRoot = null!;
+    private RectTransform highlight = null!;
+    private Text notchText = null!;
+    private Text nameText = null!;
+    private Text descriptionText = null!;
+    private Text statusText = null!;
+    private Text hintText = null!;
+    private CanvasGroup canvasGroup = null!;
 
-    private ShadeCharmInventory inventory;
+    private ShadeCharmInventory? inventory;
     private int selectedIndex;
     private bool isBuilt;
     private bool isActive;
-    private Sprite fallbackSprite;
+    private Sprite? fallbackSprite;
     private string displayLabel = "Shade";
 
     private struct CharmEntry
@@ -51,7 +51,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void OnEnable()
     {
-        ShadeCharmInventory inv = ShadeRuntime.Charms;
+        ShadeCharmInventory? inv = ShadeRuntime.Charms;
         if (inv != null)
         {
             inv.StateChanged += HandleInventoryChanged;
@@ -62,7 +62,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void OnDisable()
     {
-        ShadeCharmInventory inv = ShadeRuntime.Charms;
+        ShadeCharmInventory? inv = ShadeRuntime.Charms;
         if (inv != null)
         {
             inv.StateChanged -= HandleInventoryChanged;
@@ -353,7 +353,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void RefreshAll()
     {
-        ShadeCharmInventory inv = ShadeRuntime.Charms;
+        ShadeCharmInventory? inv = ShadeRuntime.Charms;
         inventory = inv;
         var definitions = inv != null ? inv.AllCharms : Array.Empty<ShadeCharmDefinition>();
         EnsureEntryCount(definitions.Count);
@@ -576,14 +576,14 @@ internal sealed class ShadeInventoryPane : InventoryPane
         fallbackSprite = Sprite.Create(tex, new Rect(0f, 0f, 1f, 1f), new Vector2(0.5f, 0.5f), 1f);
         fallbackSprite.name = "ShadeCharmFallbackSprite";
         fallbackSprite.hideFlags = HideFlags.HideAndDontSave;
-        return fallbackSprite;
+        return fallbackSprite!;
     }
 }
 
 internal sealed class SimpleCanvasNestedFadeGroup : NestedFadeGroupBase
 {
     [SerializeField]
-    private CanvasGroup canvasGroup;
+    private CanvasGroup canvasGroup = null!;
 
     protected override void GetMissingReferences()
     {
@@ -689,9 +689,10 @@ internal static class ShadeInventoryPaneIntegration
         HasNewPdField(shadePane) = string.Empty;
 
         var icon = ShadeCharmIconLoader.TryLoadIcon("shade_tab", "shade_charm_void_heart", "void_heart", "shade");
-        if (icon == null && ShadeRuntime.Charms != null)
+        var charms = ShadeRuntime.Charms;
+        if (icon == null && charms != null)
         {
-            icon = ShadeRuntime.Charms.AllCharms.FirstOrDefault()?.Icon;
+            icon = charms.AllCharms.FirstOrDefault()?.Icon;
         }
         if (icon != null)
         {
