@@ -170,6 +170,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         OnInputRight += () => MoveSelectionHorizontal(1);
         OnInputUp += () => MoveSelectionVertical(-1);
         OnInputDown += () => MoveSelectionVertical(1);
+        OnSubmit += HandleSubmit;
     }
 
     private void BuildUI()
@@ -629,6 +630,85 @@ internal static class ShadeInventoryPaneIntegration
     private static readonly FieldInfo AllowRepeatField = AccessTools.Field(typeof(InventoryPaneInput), "allowRepeat");
     private static readonly FieldInfo AllowRepeatSubmitField = AccessTools.Field(typeof(InventoryPaneInput), "allowRepeatSubmit");
     private static readonly FieldInfo AllowRightStickField = AccessTools.Field(typeof(InventoryPaneInput), "allowRightStickSpeed");
+    private static readonly FieldInfo PaneField = AccessTools.Field(typeof(InventoryPaneInput), "pane");
+    private static readonly FieldInfo PaneListField = AccessTools.Field(typeof(InventoryPaneInput), "paneList");
+
+    private const float ListIconScaleFactor = 0.25f;
+
+    private static Sprite? cachedListIcon;
+    private static Sprite? cachedListIconSource;
+
+    private static void AssignListIcon(ShadeInventoryPane shadePane, Sprite? icon)
+    {
+        if (shadePane == null || icon == null)
+        {
+            return;
+        }
+
+        Sprite? scaled = CreateScaledListIcon(icon);
+        if (scaled != null)
+        {
+            ListIconField(shadePane) = scaled;
+        }
+        else
+        {
+            ListIconField(shadePane) = icon;
+        }
+    }
+
+    private static Sprite? CreateScaledListIcon(Sprite icon)
+    {
+        if (icon == null)
+        {
+            return null;
+        }
+
+        if (Mathf.Approximately(ListIconScaleFactor, 1f))
+        {
+            return icon;
+        }
+
+        if (cachedListIconSource == icon && cachedListIcon != null)
+        {
+            return cachedListIcon;
+        }
+
+        if (cachedListIconSource != icon && cachedListIcon != null)
+        {
+            try { UnityEngine.Object.Destroy(cachedListIcon); } catch { }
+            cachedListIcon = null;
+            cachedListIconSource = null;
+        }
+
+        Texture2D texture = icon.texture;
+        if (texture == null)
+        {
+            return icon;
+        }
+
+        Rect rect = icon.rect;
+        if (rect.width <= 0f || rect.height <= 0f)
+        {
+            return icon;
+        }
+
+        float scale = Mathf.Clamp(ListIconScaleFactor, 0.01f, 10f);
+        float pixelsPerUnit = icon.pixelsPerUnit;
+        if (pixelsPerUnit <= 0f)
+        {
+            pixelsPerUnit = 100f;
+        }
+        float scaledPixelsPerUnit = pixelsPerUnit / scale;
+
+        Vector2 pivot = new Vector2(icon.pivot.x / rect.width, icon.pivot.y / rect.height);
+        Sprite scaledSprite = Sprite.Create(texture, rect, pivot, scaledPixelsPerUnit, 0, SpriteMeshType.FullRect, icon.border);
+        scaledSprite.name = icon.name + "_ShadeScaled";
+        scaledSprite.hideFlags = HideFlags.HideAndDontSave;
+
+        cachedListIcon = scaledSprite;
+        cachedListIconSource = icon;
+        return scaledSprite;
+    }
 
     internal static void EnsurePane(InventoryPaneList paneList)
     {
@@ -678,12 +758,12 @@ internal static class ShadeInventoryPaneIntegration
 
         go.AddComponent<SimpleCanvasNestedFadeGroup>();
 
-        var input = go.AddComponent<InventoryPaneInput>();
-        ConfigureInput(input);
-
         var shadePane = go.AddComponent<ShadeInventoryPane>();
         shadePane.RootPane = shadePane;
         shadePane.SetDisplayLabel("Shade Charms");
+
+        var input = go.AddComponent<InventoryPaneInput>();
+        ConfigureInput(input, paneList, shadePane);
 
         PlayerDataTestField(shadePane) = new PlayerDataTest();
         HasNewPdField(shadePane) = string.Empty;
@@ -694,10 +774,7 @@ internal static class ShadeInventoryPaneIntegration
         {
             icon = charms.AllCharms.FirstOrDefault()?.Icon;
         }
-        if (icon != null)
-        {
-            ListIconField(shadePane) = icon;
-        }
+        AssignListIcon(shadePane, icon);
 
         var newList = panes.ToList();
 
@@ -757,7 +834,7 @@ internal static class ShadeInventoryPaneIntegration
         PanesField(paneList) = newList.ToArray();
     }
 
-    private static void ConfigureInput(InventoryPaneInput input)
+    private static void ConfigureInput(InventoryPaneInput input, InventoryPaneList paneList, ShadeInventoryPane shadePane)
     {
         if (input == null)
         {
@@ -770,6 +847,27 @@ internal static class ShadeInventoryPaneIntegration
         AllowRepeatField?.SetValue(input, true);
         AllowRepeatSubmitField?.SetValue(input, false);
         AllowRightStickField?.SetValue(input, false);
+
+        if (shadePane != null && PaneField != null)
+        {
+            try
+            {
+                if (PaneField.GetValue(input) == null)
+                {
+                    PaneField.SetValue(input, shadePane);
+                }
+            }
+            catch { }
+        }
+
+        if (paneList != null && PaneListField != null)
+        {
+            try
+            {
+                PaneListField.SetValue(input, paneList);
+            }
+            catch { }
+        }
     }
 }
 
