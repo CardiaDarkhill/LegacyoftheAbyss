@@ -251,6 +251,59 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
     }
 
+    private void LogStateSnapshot(string context)
+    {
+        if (!ModConfig.Instance.logMenu)
+        {
+            return;
+        }
+
+        try
+        {
+            int gridChildren = gridRoot != null ? gridRoot.childCount : -1;
+            int contentChildren = contentRoot != null ? contentRoot.childCount : -1;
+            int activeEntries = 0;
+            int iconCount = 0;
+            foreach (var entry in entries)
+            {
+                if (entry.Root != null && entry.Root.gameObject.activeSelf)
+                {
+                    activeEntries++;
+                }
+
+                if (entry.Icon != null && entry.Icon.sprite != null)
+                {
+                    iconCount++;
+                }
+            }
+
+            float alpha = canvasGroup != null ? canvasGroup.alpha : -1f;
+            bool paneActive = gameObject != null && gameObject.activeInHierarchy;
+            bool panelActive = panelRoot != null && panelRoot.gameObject.activeInHierarchy;
+            bool gridActive = gridRoot != null && gridRoot.gameObject.activeInHierarchy;
+            bool highlightActive = highlight != null && highlight.gameObject.activeSelf;
+            string highlightParent = highlight != null && highlight.parent != null
+                ? highlight.parent.name
+                : "<none>";
+            string panelSize = panelRoot != null
+                ? $"{panelRoot.rect.width:F0}x{panelRoot.rect.height:F0}"
+                : "<null>";
+
+            LogMenuEvent(
+                $"{context} state -> built={isBuilt}, paneActive={isActive}, goActive={paneActive}, canvasAlpha={alpha:F2}, entries={entries.Count}, activeEntries={activeEntries}, icons={iconCount}, gridChildren={gridChildren}, contentChildren={contentChildren}, panelActive={panelActive}, gridActive={gridActive}, panelSize={panelSize}, highlightActive={highlightActive}, highlightParent={highlightParent}, selectedIndex={selectedIndex}");
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                Debug.LogWarning($"[ShadeInventory] Failed to log state for {context}: {ex}");
+            }
+            catch
+            {
+            }
+        }
+    }
+
     public override void Awake()
     {
         base.Awake();
@@ -278,7 +331,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
         isActive = true;
         RefreshAll();
         UpdateParentListLabel();
-        LogMenuEvent($"OnEnable: entries={entries.Count}, inventoryNull={inventory == null}");
+        float alpha = canvasGroup != null ? canvasGroup.alpha : -1f;
+        LogMenuEvent($"OnEnable: entries={entries.Count}, inventoryNull={inventory == null}, canvasAlpha={alpha:F2}");
+        LogStateSnapshot("OnEnable");
     }
 
     private void OnDisable()
@@ -289,13 +344,15 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
         inventory = null;
         isActive = false;
-        LogMenuEvent("OnDisable");
         if (canvasGroup != null)
         {
             canvasGroup.alpha = 0f;
             canvasGroup.interactable = false;
             canvasGroup.blocksRaycasts = false;
         }
+        float alpha = canvasGroup != null ? canvasGroup.alpha : -1f;
+        LogMenuEvent($"OnDisable: entries={entries.Count}, canvasAlpha={alpha:F2}");
+        LogStateSnapshot("OnDisable");
     }
 
     private void OnDestroy()
@@ -708,7 +765,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
         RefreshAll();
         UpdateParentListLabel();
         labelPulseTimer = 0f;
-        LogMenuEvent($"ForceImmediateRefresh: entries={entries.Count}, inventoryNull={inventory == null}");
+        float alpha = canvasGroup != null ? canvasGroup.alpha : -1f;
+        LogMenuEvent($"ForceImmediateRefresh: entries={entries.Count}, inventoryNull={inventory == null}, canvasAlpha={alpha:F2}");
+        LogStateSnapshot("ForceImmediateRefresh");
     }
 
     private void RebuildUI()
@@ -960,6 +1019,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             LayoutRebuilder.ForceRebuildLayoutImmediate(contentRoot);
         }
+        LogStateSnapshot("BuildUI");
         LogMenuEvent("BuildUI complete");
     }
 
@@ -1078,6 +1138,13 @@ internal sealed class ShadeInventoryPane : InventoryPane
         highlight.offsetMin = Vector2.zero;
         highlight.offsetMax = Vector2.zero;
 
+        string iconName = entry.Icon != null && entry.Icon.sprite != null ? entry.Icon.sprite.name : "<null>";
+        bool entryActive = entry.Root != null && entry.Root.gameObject.activeInHierarchy;
+        int entryChildren = entry.Root != null ? entry.Root.childCount : -1;
+        LogMenuEvent(
+            $"SelectIndex -> index={selectedIndex}, entryActive={entryActive}, entryChildren={entryChildren}, icon={iconName}, highlightParent={(highlight != null && highlight.parent != null ? highlight.parent.name : "<none>")}");
+        LogStateSnapshot("SelectIndex");
+
         var inv = inventory;
         if (inv != null)
         {
@@ -1094,7 +1161,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         ShadeCharmInventory? inv = ShadeRuntime.Charms;
         inventory = inv;
         var definitions = inv != null ? inv.AllCharms : Array.Empty<ShadeCharmDefinition>();
-        LogMenuEvent($"RefreshAll: definitions={definitions.Count}, inventoryNull={inv == null}");
+        int previousEntries = entries.Count;
+        LogMenuEvent($"RefreshAll start: definitions={definitions.Count}, previousEntries={previousEntries}, inventoryNull={inv == null}");
         EnsureEntryCount(definitions.Count);
         for (int i = 0; i < definitions.Count; i++)
         {
@@ -1114,6 +1182,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
             LayoutRebuilder.ForceRebuildLayoutImmediate(gridRoot);
         }
 
+        int gridChildren = gridRoot != null ? gridRoot.childCount : -1;
+        float alpha = canvasGroup != null ? canvasGroup.alpha : -1f;
+        LogMenuEvent($"RefreshAll complete: definitions={definitions.Count}, entries={entries.Count}, gridChildren={gridChildren}, canvasAlpha={alpha:F2}, isActive={isActive}");
+
         if (selectedIndex >= entries.Count)
         {
             selectedIndex = entries.Count > 0 ? entries.Count - 1 : 0;
@@ -1129,6 +1201,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
             RefreshEntryStates();
             UpdateDetailPanel();
         }
+        LogStateSnapshot("RefreshAll");
     }
 
     private void HandleStateChanged()
@@ -1141,6 +1214,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private void EnsureEntryCount(int count)
     {
         EnsureBuilt();
+        if (gridRoot == null)
+        {
+            LogMenuEvent("EnsureEntryCount: gridRoot null before adjustment");
+        }
         int previous = entries.Count;
         while (entries.Count < count)
         {
@@ -1157,7 +1234,12 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
         if (entries.Count != previous)
         {
-            LogMenuEvent($"EnsureEntryCount -> entries={entries.Count}");
+            int gridChildren = gridRoot != null ? gridRoot.childCount : -1;
+            LogMenuEvent($"EnsureEntryCount -> requested={count}, entries={entries.Count}, gridChildren={gridChildren}");
+        }
+        else if (gridRoot != null && gridRoot.childCount != entries.Count)
+        {
+            LogMenuEvent($"EnsureEntryCount -> entries={entries.Count}, gridChildren={gridRoot.childCount} (mismatch)");
         }
     }
 
@@ -1209,6 +1291,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
         markerImage.color = newMarkerColor;
         markerImage.raycastTarget = false;
         newMarker.SetActive(false);
+
+        LogMenuEvent(
+            $"CreateEntry -> index={index}, gridChildCount={(gridRoot != null ? gridRoot.childCount : -1)}, iconActive={(icon != null && icon.gameObject.activeSelf)}");
 
         return new CharmEntry
         {
@@ -1659,6 +1744,7 @@ internal static class ShadeInventoryPaneIntegration
         }
         if (display == null)
         {
+            ShadeInventoryPane.LogMenuEvent("RefreshPaneListDisplay skipped: display null");
             return;
         }
 
@@ -1666,8 +1752,9 @@ internal static class ShadeInventoryPaneIntegration
         {
             display.PreInstantiate(panes.Count);
         }
-        catch
+        catch (Exception ex)
         {
+            ShadeInventoryPane.LogMenuEvent($"RefreshPaneListDisplay.PreInstantiate failed: {ex}");
         }
 
         try
@@ -1676,8 +1763,9 @@ internal static class ShadeInventoryPaneIntegration
             int unlocked = GetUnlockedPaneCount(paneList, panes.Count);
             display.UpdateDisplay(selectedIndex, panes, unlocked);
         }
-        catch
+        catch (Exception ex)
         {
+            ShadeInventoryPane.LogMenuEvent($"RefreshPaneListDisplay.UpdateDisplay failed: {ex}");
         }
     }
 
@@ -1722,6 +1810,10 @@ internal static class ShadeInventoryPaneIntegration
         var templateRect = template.GetComponent<RectTransform>();
         var parent = templateRect != null ? templateRect.parent : template.transform.parent;
         ShadeInventoryPane.LogMenuEvent($"Injecting shade pane using template '{template?.GetType().Name ?? "<null>"}'");
+        if (parent == null)
+        {
+            ShadeInventoryPane.LogMenuEvent("EnsurePane warning: template parent was null");
+        }
 
         var go = new GameObject("ShadeInventoryPane", typeof(RectTransform));
         var rect = go.GetComponent<RectTransform>();
