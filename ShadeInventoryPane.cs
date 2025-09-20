@@ -7,6 +7,7 @@ using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using TeamCherry.Localization;
 using LegacyoftheAbyss.Shade;
 
 internal sealed class ShadeInventoryPane : InventoryPane
@@ -269,6 +270,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         displayLabel = label;
+        ShadeInventoryPaneIntegration.SyncDisplayName(this, displayLabel);
         SetTextValue(titleText, titleTextTMP, label);
         UpdateParentListLabel();
     }
@@ -328,6 +330,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
             if (!string.Equals(currentTitle, displayLabel, StringComparison.Ordinal))
             {
                 SetTextValue(titleText, titleTextTMP, displayLabel);
+                changed = true;
+            }
+
+            if (ShadeInventoryPaneIntegration.TrySetCurrentPaneLabel(parentList, displayLabel))
+            {
                 changed = true;
             }
 
@@ -1266,6 +1273,23 @@ internal static class ShadeInventoryPaneIntegration
     private static readonly AccessTools.FieldRef<InventoryPane, string> HasNewPdField =
         AccessTools.FieldRefAccess<InventoryPane, string>("hasNewPDBool");
 
+    private static readonly AccessTools.FieldRef<InventoryPane, LocalisedString> DisplayNameField =
+        AccessTools.FieldRefAccess<InventoryPane, LocalisedString>("displayName");
+
+    private static readonly AccessTools.FieldRef<InventoryPaneList, InventoryPaneListDisplay> PaneListDisplayField =
+        AccessTools.FieldRefAccess<InventoryPaneList, InventoryPaneListDisplay>("paneListDisplay");
+
+    private static readonly AccessTools.FieldRef<InventoryPaneList, string> NextPaneOpenField =
+        AccessTools.FieldRefAccess<InventoryPaneList, string>("nextPaneOpen");
+
+    private static readonly FieldInfo CurrentPaneTextFieldInfo = AccessTools.Field(typeof(InventoryPaneList), "currentPaneText");
+
+    private static readonly PropertyInfo UnlockedPaneCountProperty =
+        AccessTools.Property(typeof(InventoryPaneList), "UnlockedPaneCount");
+
+    private static readonly MethodInfo GetPaneIndexMethod =
+        AccessTools.Method(typeof(InventoryPaneList), "GetPaneIndex", new[] { typeof(string) });
+
     private static readonly AccessTools.FieldRef<InventoryPaneInput, InventoryPaneList.PaneTypes> PaneControlField =
         AccessTools.FieldRefAccess<InventoryPaneInput, InventoryPaneList.PaneTypes>("paneControl");
 
@@ -1352,6 +1376,152 @@ internal static class ShadeInventoryPaneIntegration
         cachedListIcon = scaledSprite;
         cachedListIconSource = icon;
         return scaledSprite;
+    }
+
+    internal static void SyncDisplayName(ShadeInventoryPane pane, string label)
+    {
+        if (pane == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var value = new LocalisedString(string.Empty, string.IsNullOrEmpty(label) ? string.Empty : label);
+            DisplayNameField(pane) = value;
+        }
+        catch
+        {
+        }
+    }
+
+    internal static bool TrySetCurrentPaneLabel(InventoryPaneList paneList, string label)
+    {
+        if (paneList == null || string.IsNullOrEmpty(label))
+        {
+            return false;
+        }
+
+        if (CurrentPaneTextFieldInfo == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var textObj = CurrentPaneTextFieldInfo.GetValue(paneList);
+            if (textObj == null)
+            {
+                return false;
+            }
+
+            var textProp = textObj.GetType().GetProperty("text");
+            if (textProp != null && textProp.CanWrite)
+            {
+                textProp.SetValue(textObj, label);
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        return false;
+    }
+
+    private static int GetUnlockedPaneCount(InventoryPaneList paneList, int fallback)
+    {
+        if (paneList == null)
+        {
+            return fallback;
+        }
+
+        if (UnlockedPaneCountProperty != null)
+        {
+            try
+            {
+                var value = UnlockedPaneCountProperty.GetValue(paneList, null);
+                if (value is int unlocked)
+                {
+                    return unlocked;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        return fallback;
+    }
+
+    private static int DetermineSelectedIndex(InventoryPaneList paneList, List<InventoryPane> panes)
+    {
+        if (paneList == null || panes == null || panes.Count == 0)
+        {
+            return 0;
+        }
+
+        int index = 0;
+        try
+        {
+            string next = NextPaneOpenField != null ? NextPaneOpenField(paneList) : string.Empty;
+            if (!string.IsNullOrEmpty(next) && GetPaneIndexMethod != null)
+            {
+                var result = GetPaneIndexMethod.Invoke(paneList, new object[] { next });
+                if (result is int resolved && resolved >= 0)
+                {
+                    index = resolved;
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return Mathf.Clamp(index, 0, panes.Count - 1);
+    }
+
+    private static void RefreshPaneListDisplay(InventoryPaneList paneList, List<InventoryPane> panes)
+    {
+        if (paneList == null || panes == null)
+        {
+            return;
+        }
+
+        InventoryPaneListDisplay display = null;
+        if (PaneListDisplayField != null)
+        {
+            try
+            {
+                display = PaneListDisplayField(paneList);
+            }
+            catch
+            {
+                display = null;
+            }
+        }
+        if (display == null)
+        {
+            return;
+        }
+
+        try
+        {
+            display.PreInstantiate(panes.Count);
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            int selectedIndex = DetermineSelectedIndex(paneList, panes);
+            int unlocked = GetUnlockedPaneCount(paneList, panes.Count);
+            display.UpdateDisplay(selectedIndex, panes, unlocked);
+        }
+        catch
+        {
+        }
     }
 
     internal static void EnsurePane(InventoryPaneList paneList)
@@ -1498,6 +1668,7 @@ internal static class ShadeInventoryPaneIntegration
         insertIndex = Mathf.Clamp(insertIndex, 0, newList.Count);
         newList.Insert(insertIndex, shadePane);
         PanesField(paneList) = newList.ToArray();
+        RefreshPaneListDisplay(paneList, newList);
         ShadeInventoryPane.LogMenuEvent($"Shade pane inserted at index {insertIndex}; total panes={newList.Count}");
     }
 

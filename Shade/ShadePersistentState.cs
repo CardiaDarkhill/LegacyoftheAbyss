@@ -94,16 +94,6 @@ namespace LegacyoftheAbyss.Shade
                 CanTakeDamage = canTakeDamage.Value;
             }
 
-            if (ModConfig.Instance.logShade)
-            {
-                try
-                {
-                    Debug.Log($"[ShadePersistence] Capture -> hp={CurrentHP}, max={MaxHP}, soul={Soul}, canTakeDamage={CanTakeDamage}");
-                }
-                catch
-                {
-                }
-            }
         }
 
         public void Reset()

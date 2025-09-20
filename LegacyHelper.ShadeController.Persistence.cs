@@ -13,16 +13,6 @@ public partial class LegacyHelper
             shadeSoul = Mathf.Clamp(soul, 0, shadeSoulMax);
             canTakeDamage = canDamage;
             lastSavedCanTakeDamage = canTakeDamage;
-            if (ModConfig.Instance.logShade)
-            {
-                try
-                {
-                    UnityEngine.Debug.Log($"[ShadePersistence] Restore -> hp={shadeHP}, max={shadeMaxHP}, soul={shadeSoul}, canTakeDamage={canTakeDamage}");
-                }
-                catch
-                {
-                }
-            }
         }
 
         public void FullHealFromBench()
