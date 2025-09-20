@@ -14,6 +14,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 {
     private const int Columns = 7;
     private const float BackgroundAlpha = 0.82f;
+    private const float MinRootSizeThreshold = 1f;
 
     private static readonly Color DefaultPanelColor = new Color(0.05f, 0.05f, 0.08f, 0.92f);
     private static readonly Color DefaultHighlightColor = new Color(0.78f, 0.86f, 1f, 0.35f);
@@ -233,6 +234,98 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         return tmp != null ? tmp.rectTransform : null;
+    }
+
+    private static string FormatVector2(Vector2 value)
+    {
+        return FormattableString.Invariant($"({value.x:0.##}, {value.y:0.##})");
+    }
+
+    private static string FormatRectOffset(RectOffset offset)
+    {
+        if (offset == null)
+        {
+            return "<null>";
+        }
+
+        return FormattableString.Invariant($"(l:{offset.left}, r:{offset.right}, t:{offset.top}, b:{offset.bottom})");
+    }
+
+    private static string DescribeLayoutComponents(RectTransform rect)
+    {
+        var details = new List<string>();
+
+        var layoutElement = rect.GetComponent<LayoutElement>();
+        if (layoutElement != null)
+        {
+            var min = new Vector2(layoutElement.minWidth, layoutElement.minHeight);
+            var preferred = new Vector2(layoutElement.preferredWidth, layoutElement.preferredHeight);
+            var flexible = new Vector2(layoutElement.flexibleWidth, layoutElement.flexibleHeight);
+            details.Add(FormattableString.Invariant(
+                $"LayoutElement(min={FormatVector2(min)}, preferred={FormatVector2(preferred)}, flexible={FormatVector2(flexible)}, ignore={layoutElement.ignoreLayout}, priority={layoutElement.layoutPriority})"));
+        }
+
+        var grid = rect.GetComponent<GridLayoutGroup>();
+        if (grid != null)
+        {
+            details.Add(FormattableString.Invariant(
+                $"GridLayoutGroup(cellSize={FormatVector2(grid.cellSize)}, spacing={FormatVector2(grid.spacing)}, startCorner={grid.startCorner}, startAxis={grid.startAxis}, constraint={grid.constraint}, count={grid.constraintCount}, alignment={grid.childAlignment}, padding={FormatRectOffset(grid.padding)})"));
+        }
+        else
+        {
+            var layoutGroup = rect.GetComponent<LayoutGroup>();
+            if (layoutGroup != null)
+            {
+                string summary = FormattableString.Invariant(
+                    $"LayoutGroup<{layoutGroup.GetType().Name}>(alignment={layoutGroup.childAlignment}, padding={FormatRectOffset(layoutGroup.padding)})");
+                if (layoutGroup is HorizontalOrVerticalLayoutGroup hv)
+                {
+                    summary += FormattableString.Invariant(
+                        $", spacing={hv.spacing}, childCtrl=({hv.childControlWidth},{hv.childControlHeight}), childForce=({hv.childForceExpandWidth},{hv.childForceExpandHeight})");
+                }
+
+                details.Add(summary);
+            }
+        }
+
+        var fitter = rect.GetComponent<ContentSizeFitter>();
+        if (fitter != null)
+        {
+            details.Add($"ContentSizeFitter(h={fitter.horizontalFit}, v={fitter.verticalFit})");
+        }
+
+        return details.Count > 0 ? string.Join("; ", details) : "<none>";
+    }
+
+    internal static void LogRectTransformHierarchy(RectTransform? start, string context)
+    {
+        if (start == null)
+        {
+            LogMenuEvent($"Layout diagnostics skipped for {context}: rect null");
+            return;
+        }
+
+        Transform? current = start;
+        int depth = 0;
+        while (current != null)
+        {
+            if (current is RectTransform rect)
+            {
+                string details = DescribeLayoutComponents(rect);
+                string name = rect.gameObject != null ? rect.gameObject.name : "<null>";
+                bool active = rect.gameObject != null && rect.gameObject.activeInHierarchy;
+                LogMenuEvent(FormattableString.Invariant(
+                    $"LayoutDiag[{context}][{depth}] name='{name}' active={active} anchorMin={FormatVector2(rect.anchorMin)} anchorMax={FormatVector2(rect.anchorMax)} pivot={FormatVector2(rect.pivot)} offsetMin={FormatVector2(rect.offsetMin)} offsetMax={FormatVector2(rect.offsetMax)} anchoredPos={FormatVector2(rect.anchoredPosition)} size={FormatVector2(rect.rect.size)} layout={details}"));
+            }
+            else
+            {
+                string name = current.gameObject != null ? current.gameObject.name : "<null>";
+                LogMenuEvent(FormattableString.Invariant($"LayoutDiag[{context}][{depth}] name='{name}' (no RectTransform)"));
+            }
+
+            current = current.parent;
+            depth++;
+        }
     }
 
     internal static void LogMenuEvent(string message)
@@ -709,6 +802,60 @@ internal sealed class ShadeInventoryPane : InventoryPane
         UpdateParentListLabel();
         labelPulseTimer = 0f;
         LogMenuEvent($"ForceImmediateRefresh: entries={entries.Count}, inventoryNull={inventory == null}");
+    }
+
+    protected override void ForceLayoutRebuild()
+    {
+        try
+        {
+            base.ForceLayoutRebuild();
+        }
+        catch
+        {
+        }
+
+        EnsureBuilt();
+
+        var selfRect = transform as RectTransform;
+        if (selfRect == null)
+        {
+            LogMenuEvent("ForceLayoutRebuild skipped: transform lacks RectTransform");
+            return;
+        }
+
+        if (panelRoot != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(panelRoot);
+        }
+
+        if (contentRoot != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(contentRoot);
+        }
+
+        if (gridRoot != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(gridRoot);
+        }
+
+        LayoutRebuilder.ForceRebuildLayoutImmediate(selfRect);
+
+        Vector2 selfSize = selfRect.rect.size;
+        string panelSizeText = panelRoot != null ? FormatVector2(panelRoot.rect.size) : "<null>";
+        string contentSizeText = contentRoot != null ? FormatVector2(contentRoot.rect.size) : "<null>";
+        string gridSizeText = gridRoot != null ? FormatVector2(gridRoot.rect.size) : "<null>";
+
+        if (selfSize.x < MinRootSizeThreshold || selfSize.y < MinRootSizeThreshold)
+        {
+            LogMenuEvent(FormattableString.Invariant(
+                $"ForceLayoutRebuild -> self={FormatVector2(selfSize)}, panel={panelSizeText}, content={contentSizeText}, grid={gridSizeText} (threshold={MinRootSizeThreshold})"));
+            LogRectTransformHierarchy(selfRect, $"ShadePaneRoot[{gameObject.name}]");
+        }
+        else
+        {
+            LogMenuEvent(FormattableString.Invariant(
+                $"ForceLayoutRebuild -> self={FormatVector2(selfSize)}, panel={panelSizeText}, content={contentSizeText}, grid={gridSizeText}"));
+        }
     }
 
     private void RebuildUI()
@@ -1535,6 +1682,97 @@ internal static class ShadeInventoryPaneIntegration
         return scaledSprite;
     }
 
+    private static void CopyRectTransform(RectTransform? source, RectTransform destination)
+    {
+        if (source == null || destination == null)
+        {
+            return;
+        }
+
+        destination.anchorMin = source.anchorMin;
+        destination.anchorMax = source.anchorMax;
+        destination.pivot = source.pivot;
+        destination.offsetMin = source.offsetMin;
+        destination.offsetMax = source.offsetMax;
+        destination.anchoredPosition = source.anchoredPosition;
+        destination.anchoredPosition3D = source.anchoredPosition3D;
+        destination.sizeDelta = source.sizeDelta;
+        destination.localScale = source.localScale;
+        destination.localRotation = source.localRotation;
+        destination.localPosition = source.localPosition;
+        destination.SetSiblingIndex(source.GetSiblingIndex());
+    }
+
+    private static void CopyLayoutComponents(RectTransform? source, RectTransform destination)
+    {
+        if (source == null || destination == null)
+        {
+            return;
+        }
+
+        var layoutElement = source.GetComponent<LayoutElement>();
+        if (layoutElement != null)
+        {
+            var targetElement = destination.GetComponent<LayoutElement>() ?? destination.gameObject.AddComponent<LayoutElement>();
+            targetElement.ignoreLayout = layoutElement.ignoreLayout;
+            targetElement.minWidth = layoutElement.minWidth;
+            targetElement.preferredWidth = layoutElement.preferredWidth;
+            targetElement.flexibleWidth = layoutElement.flexibleWidth;
+            targetElement.minHeight = layoutElement.minHeight;
+            targetElement.preferredHeight = layoutElement.preferredHeight;
+            targetElement.flexibleHeight = layoutElement.flexibleHeight;
+            targetElement.layoutPriority = layoutElement.layoutPriority;
+        }
+
+        var fitter = source.GetComponent<ContentSizeFitter>();
+        if (fitter != null)
+        {
+            var targetFitter = destination.GetComponent<ContentSizeFitter>() ?? destination.gameObject.AddComponent<ContentSizeFitter>();
+            targetFitter.horizontalFit = fitter.horizontalFit;
+            targetFitter.verticalFit = fitter.verticalFit;
+        }
+
+        var grid = source.GetComponent<GridLayoutGroup>();
+        if (grid != null)
+        {
+            var targetGrid = destination.GetComponent<GridLayoutGroup>() ?? destination.gameObject.AddComponent<GridLayoutGroup>();
+            targetGrid.cellSize = grid.cellSize;
+            targetGrid.spacing = grid.spacing;
+            targetGrid.startAxis = grid.startAxis;
+            targetGrid.startCorner = grid.startCorner;
+            targetGrid.constraint = grid.constraint;
+            targetGrid.constraintCount = grid.constraintCount;
+            targetGrid.childAlignment = grid.childAlignment;
+            targetGrid.padding = new RectOffset(grid.padding.left, grid.padding.right, grid.padding.top, grid.padding.bottom);
+            return;
+        }
+
+        var layoutGroup = source.GetComponent<LayoutGroup>();
+        if (layoutGroup != null)
+        {
+            var targetGroupComponent = destination.GetComponent(layoutGroup.GetType()) as LayoutGroup;
+            if (targetGroupComponent == null)
+            {
+                targetGroupComponent = destination.gameObject.AddComponent(layoutGroup.GetType()) as LayoutGroup;
+            }
+
+            if (targetGroupComponent != null)
+            {
+                targetGroupComponent.padding = new RectOffset(layoutGroup.padding.left, layoutGroup.padding.right, layoutGroup.padding.top, layoutGroup.padding.bottom);
+                targetGroupComponent.childAlignment = layoutGroup.childAlignment;
+
+                if (layoutGroup is HorizontalOrVerticalLayoutGroup hv && targetGroupComponent is HorizontalOrVerticalLayoutGroup targetHv)
+                {
+                    targetHv.spacing = hv.spacing;
+                    targetHv.childControlWidth = hv.childControlWidth;
+                    targetHv.childControlHeight = hv.childControlHeight;
+                    targetHv.childForceExpandWidth = hv.childForceExpandWidth;
+                    targetHv.childForceExpandHeight = hv.childForceExpandHeight;
+                }
+            }
+        }
+    }
+
     internal static void SyncDisplayName(ShadeInventoryPane pane, string label)
     {
         if (pane == null)
@@ -1728,18 +1966,19 @@ internal static class ShadeInventoryPaneIntegration
         rect.SetParent(parent, false);
         if (templateRect != null)
         {
-            rect.anchorMin = templateRect.anchorMin;
-            rect.anchorMax = templateRect.anchorMax;
-            rect.pivot = templateRect.pivot;
-            rect.sizeDelta = templateRect.sizeDelta;
-            rect.localScale = templateRect.localScale;
-            rect.localPosition = templateRect.localPosition;
+            CopyRectTransform(templateRect, rect);
+            CopyLayoutComponents(templateRect, rect);
+            ShadeInventoryPane.LogRectTransformHierarchy(templateRect, "TemplatePaneLive");
         }
         else
         {
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
             rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+            rect.anchoredPosition = Vector2.zero;
+            rect.localScale = Vector3.one;
         }
 
         var canvasGroup = go.AddComponent<CanvasGroup>();
