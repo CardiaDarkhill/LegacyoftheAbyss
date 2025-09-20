@@ -20,6 +20,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private static readonly Color DefaultCellColor = new Color(0.18f, 0.2f, 0.26f, BackgroundAlpha);
     private static readonly Color DefaultNewMarkerColor = new Color(1f, 0.85f, 0.25f, 0.95f);
 
+    private const float MinPanelTemplateArea = 5000f;
+    private const float MinContentTemplateArea = 4000f;
+    private const float MinGridTemplateArea = 4000f;
+    private const float MinDetailTemplateArea = 3000f;
+
     private struct RectSnapshot
     {
         public Vector2 AnchorMin;
@@ -233,6 +238,24 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         return tmp != null ? tmp.rectTransform : null;
+    }
+
+    private static float CalculateRectArea(RectTransform rect)
+    {
+        if (rect == null)
+        {
+            return 0f;
+        }
+
+        try
+        {
+            Vector2 size = rect.rect.size;
+            return Mathf.Abs(size.x * size.y);
+        }
+        catch
+        {
+            return 0f;
+        }
     }
 
     internal static void LogMenuEvent(string message)
@@ -687,6 +710,15 @@ internal sealed class ShadeInventoryPane : InventoryPane
             var rects = template.GetComponentsInChildren<RectTransform>(true);
             if (rects != null && rects.Length > 0)
             {
+                float bestPanelArea = 0f;
+                float bestContentArea = 0f;
+                float bestDetailArea = 0f;
+                float bestGridArea = 0f;
+                string? panelRectName = null;
+                string? contentRectName = null;
+                string? detailRectName = null;
+                string? gridRectName = null;
+
                 foreach (var rect in rects)
                 {
                     if (rect == null)
@@ -694,33 +726,99 @@ internal sealed class ShadeInventoryPane : InventoryPane
                         continue;
                     }
 
-                    var grid = rect.GetComponent<GridLayoutGroup>();
-                    if (grid != null && gridRectTemplate == null)
+                    string name = rect.gameObject != null ? rect.gameObject.name : rect.name;
+                    float area = CalculateRectArea(rect);
+                    if (area <= 0f)
                     {
-                        gridRectTemplate = RectSnapshot.From(rect);
-                        gridLayoutTemplate = GridLayoutSnapshot.From(grid);
                         continue;
                     }
 
-                    string lowerName = rect.gameObject != null ? rect.gameObject.name?.ToLowerInvariant() ?? string.Empty : string.Empty;
-                    if (panelRectTemplate == null && !string.IsNullOrEmpty(lowerName) &&
+                    var grid = rect.GetComponent<GridLayoutGroup>();
+                    if (grid != null)
+                    {
+                        if (area > bestGridArea)
+                        {
+                            gridRectTemplate = RectSnapshot.From(rect);
+                            gridLayoutTemplate = GridLayoutSnapshot.From(grid);
+                            bestGridArea = area;
+                            gridRectName = name;
+                        }
+                        continue;
+                    }
+
+                    string lowerName = string.IsNullOrEmpty(name) ? string.Empty : name.ToLowerInvariant();
+                    if (!string.IsNullOrEmpty(lowerName) &&
                         (lowerName.Contains("panel") || lowerName.Contains("background")))
                     {
-                        panelRectTemplate = RectSnapshot.From(rect);
+                        if (area > bestPanelArea)
+                        {
+                            panelRectTemplate = RectSnapshot.From(rect);
+                            bestPanelArea = area;
+                            panelRectName = name;
+                        }
                         continue;
                     }
 
-                    if (contentRectTemplate == null && !string.IsNullOrEmpty(lowerName) && lowerName.Contains("content"))
+                    if (!string.IsNullOrEmpty(lowerName) && lowerName.Contains("content"))
                     {
-                        contentRectTemplate = RectSnapshot.From(rect);
+                        if (area > bestContentArea)
+                        {
+                            contentRectTemplate = RectSnapshot.From(rect);
+                            bestContentArea = area;
+                            contentRectName = name;
+                        }
                         continue;
                     }
 
-                    if (detailRectTemplate == null && !string.IsNullOrEmpty(lowerName) && lowerName.Contains("detail"))
+                    if (!string.IsNullOrEmpty(lowerName) && lowerName.Contains("detail"))
                     {
-                        detailRectTemplate = RectSnapshot.From(rect);
+                        if (area > bestDetailArea)
+                        {
+                            detailRectTemplate = RectSnapshot.From(rect);
+                            bestDetailArea = area;
+                            detailRectName = name;
+                        }
                     }
                 }
+
+                if (bestPanelArea > 0f && bestPanelArea < MinPanelTemplateArea)
+                {
+                    LogMenuEvent($"ConfigureFromTemplate: panel rect '{panelRectName ?? "<unknown>"}' area={bestPanelArea:F0} below minimum ({MinPanelTemplateArea:F0}); using defaults.");
+                    panelRectTemplate = null;
+                    panelRectName = null;
+                    bestPanelArea = 0f;
+                }
+
+                if (bestContentArea > 0f && bestContentArea < MinContentTemplateArea)
+                {
+                    LogMenuEvent($"ConfigureFromTemplate: content rect '{contentRectName ?? "<unknown>"}' area={bestContentArea:F0} below minimum ({MinContentTemplateArea:F0}); using defaults.");
+                    contentRectTemplate = null;
+                    contentRectName = null;
+                    bestContentArea = 0f;
+                }
+
+                if (bestDetailArea > 0f && bestDetailArea < MinDetailTemplateArea)
+                {
+                    LogMenuEvent($"ConfigureFromTemplate: detail rect '{detailRectName ?? "<unknown>"}' area={bestDetailArea:F0} below minimum ({MinDetailTemplateArea:F0}); using defaults.");
+                    detailRectTemplate = null;
+                    detailRectName = null;
+                    bestDetailArea = 0f;
+                }
+
+                if (bestGridArea > 0f && bestGridArea < MinGridTemplateArea)
+                {
+                    LogMenuEvent($"ConfigureFromTemplate: grid rect '{gridRectName ?? "<unknown>"}' area={bestGridArea:F0} below minimum ({MinGridTemplateArea:F0}); using defaults.");
+                    gridRectTemplate = null;
+                    gridLayoutTemplate = null;
+                    gridRectName = null;
+                    bestGridArea = 0f;
+                }
+
+                LogMenuEvent(
+                    $"ConfigureFromTemplate layout summary: panel='{panelRectName ?? "<default>"}' area={bestPanelArea:F0}, " +
+                    $"content='{contentRectName ?? "<default>"}' area={bestContentArea:F0}, " +
+                    $"grid='{gridRectName ?? "<default>"}' area={bestGridArea:F0}, " +
+                    $"detail='{detailRectName ?? "<default>"}' area={bestDetailArea:F0}");
             }
         }
         catch
