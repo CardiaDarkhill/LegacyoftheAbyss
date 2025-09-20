@@ -67,15 +67,21 @@ public partial class LegacyHelper
             // Ensure pogo target is present for Hornet downslash bounces
             // Add a dedicated pogo target with HitResponse so hero slashes can register even when OnlyDamageEnemies is true
             EnsurePogoTarget();
+            bool hasSavedState = LegacyHelper.HasSavedShadeState;
             try
             {
                 var pd = GameManager.instance != null ? GameManager.instance.playerData : null;
                 if (pd != null)
                 {
                     int computedMax = Mathf.Max(1, (pd.maxHealth + 1) / 2);
-                    shadeMaxHP = computedMax;
-                    if (!LegacyHelper.HasSavedShadeState && shadeHP <= 0)
-                    shadeHP = Mathf.Clamp((pd.health + 1) / 2, 0, shadeMaxHP);
+                    if (!hasSavedState || computedMax > shadeMaxHP)
+                    {
+                        shadeMaxHP = computedMax;
+                    }
+                    if (!hasSavedState && shadeHP <= 0)
+                    {
+                        shadeHP = Mathf.Clamp((pd.health + 1) / 2, 0, shadeMaxHP);
+                    }
                     shadeHP = Mathf.Clamp(shadeHP, 0, shadeMaxHP);
                     PushShadeStatsToHud();
                 }

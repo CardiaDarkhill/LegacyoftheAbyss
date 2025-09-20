@@ -20,6 +20,81 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private static readonly Color DefaultCellColor = new Color(0.18f, 0.2f, 0.26f, BackgroundAlpha);
     private static readonly Color DefaultNewMarkerColor = new Color(1f, 0.85f, 0.25f, 0.95f);
 
+    private struct RectSnapshot
+    {
+        public Vector2 AnchorMin;
+        public Vector2 AnchorMax;
+        public Vector2 Pivot;
+        public Vector2 OffsetMin;
+        public Vector2 OffsetMax;
+        public Vector2 AnchoredPosition;
+        public Vector2 SizeDelta;
+
+        public static RectSnapshot From(RectTransform rect)
+        {
+            return new RectSnapshot
+            {
+                AnchorMin = rect.anchorMin,
+                AnchorMax = rect.anchorMax,
+                Pivot = rect.pivot,
+                OffsetMin = rect.offsetMin,
+                OffsetMax = rect.offsetMax,
+                AnchoredPosition = rect.anchoredPosition,
+                SizeDelta = rect.sizeDelta
+            };
+        }
+
+        public void Apply(RectTransform rect)
+        {
+            rect.anchorMin = AnchorMin;
+            rect.anchorMax = AnchorMax;
+            rect.pivot = Pivot;
+            rect.offsetMin = OffsetMin;
+            rect.offsetMax = OffsetMax;
+            rect.anchoredPosition = AnchoredPosition;
+            rect.sizeDelta = SizeDelta;
+        }
+    }
+
+    private struct GridLayoutSnapshot
+    {
+        public Vector2 CellSize;
+        public Vector2 Spacing;
+        public GridLayoutGroup.Axis StartAxis;
+        public GridLayoutGroup.Corner StartCorner;
+        public GridLayoutGroup.Constraint Constraint;
+        public int ConstraintCount;
+        public RectOffset Padding;
+        public TextAnchor ChildAlignment;
+
+        public static GridLayoutSnapshot From(GridLayoutGroup grid)
+        {
+            return new GridLayoutSnapshot
+            {
+                CellSize = grid.cellSize,
+                Spacing = grid.spacing,
+                StartAxis = grid.startAxis,
+                StartCorner = grid.startCorner,
+                Constraint = grid.constraint,
+                ConstraintCount = grid.constraintCount,
+                Padding = new RectOffset(grid.padding.left, grid.padding.right, grid.padding.top, grid.padding.bottom),
+                ChildAlignment = grid.childAlignment
+            };
+        }
+
+        public void Apply(GridLayoutGroup grid)
+        {
+            grid.cellSize = CellSize;
+            grid.spacing = Spacing;
+            grid.startAxis = StartAxis;
+            grid.startCorner = StartCorner;
+            grid.constraint = Constraint;
+            grid.constraintCount = ConstraintCount;
+            grid.padding = new RectOffset(Padding.left, Padding.right, Padding.top, Padding.bottom);
+            grid.childAlignment = ChildAlignment;
+        }
+    }
+
     private readonly List<CharmEntry> entries = new List<CharmEntry>();
 
     private RectTransform panelRoot = null!;
@@ -68,6 +143,12 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private float labelPulseTimer;
     private Sprite? fallbackSprite;
     private string displayLabel = "Charms";
+
+    private RectSnapshot? panelRectTemplate;
+    private RectSnapshot? contentRectTemplate;
+    private RectSnapshot? gridRectTemplate;
+    private RectSnapshot? detailRectTemplate;
+    private GridLayoutSnapshot? gridLayoutTemplate;
 
     private struct CharmEntry
     {
@@ -397,10 +478,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
         }
 
-        if (changed)
-        {
-            LogMenuEvent($"Label updated to '{displayLabel}'");
-        }
     }
 
     private void SubscribeInput()
@@ -417,6 +494,12 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             return;
         }
+
+        panelRectTemplate = null;
+        contentRectTemplate = null;
+        gridRectTemplate = null;
+        detailRectTemplate = null;
+        gridLayoutTemplate = null;
 
         try
         {
@@ -543,6 +626,45 @@ internal sealed class ShadeInventoryPane : InventoryPane
                     }
                 }
             }
+
+            var rects = template.GetComponentsInChildren<RectTransform>(true);
+            if (rects != null && rects.Length > 0)
+            {
+                foreach (var rect in rects)
+                {
+                    if (rect == null)
+                    {
+                        continue;
+                    }
+
+                    var grid = rect.GetComponent<GridLayoutGroup>();
+                    if (grid != null && gridRectTemplate == null)
+                    {
+                        gridRectTemplate = RectSnapshot.From(rect);
+                        gridLayoutTemplate = GridLayoutSnapshot.From(grid);
+                        continue;
+                    }
+
+                    string lowerName = rect.gameObject != null ? rect.gameObject.name?.ToLowerInvariant() ?? string.Empty : string.Empty;
+                    if (panelRectTemplate == null && !string.IsNullOrEmpty(lowerName) &&
+                        (lowerName.Contains("panel") || lowerName.Contains("background")))
+                    {
+                        panelRectTemplate = RectSnapshot.From(rect);
+                        continue;
+                    }
+
+                    if (contentRectTemplate == null && !string.IsNullOrEmpty(lowerName) && lowerName.Contains("content"))
+                    {
+                        contentRectTemplate = RectSnapshot.From(rect);
+                        continue;
+                    }
+
+                    if (detailRectTemplate == null && !string.IsNullOrEmpty(lowerName) && lowerName.Contains("detail"))
+                    {
+                        detailRectTemplate = RectSnapshot.From(rect);
+                    }
+                }
+            }
         }
         catch
         {
@@ -645,10 +767,17 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         panelRoot = new GameObject("ShadePanel", typeof(RectTransform)).GetComponent<RectTransform>();
         panelRoot.SetParent(transform, false);
-        panelRoot.anchorMin = Vector2.zero;
-        panelRoot.anchorMax = Vector2.one;
-        panelRoot.offsetMin = new Vector2(28f, 28f);
-        panelRoot.offsetMax = new Vector2(-28f, -32f);
+        if (panelRectTemplate.HasValue)
+        {
+            panelRectTemplate.Value.Apply(panelRoot);
+        }
+        else
+        {
+            panelRoot.anchorMin = Vector2.zero;
+            panelRoot.anchorMax = Vector2.one;
+            panelRoot.offsetMin = new Vector2(28f, 28f);
+            panelRoot.offsetMax = new Vector2(-28f, -32f);
+        }
 
         var panelImage = panelRoot.gameObject.AddComponent<Image>();
         if (panelBackgroundSprite != null)
@@ -665,10 +794,17 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         contentRoot = new GameObject("Content", typeof(RectTransform)).GetComponent<RectTransform>();
         contentRoot.SetParent(panelRoot, false);
-        contentRoot.anchorMin = Vector2.zero;
-        contentRoot.anchorMax = Vector2.one;
-        contentRoot.offsetMin = new Vector2(32f, 36f);
-        contentRoot.offsetMax = new Vector2(-32f, -36f);
+        if (contentRectTemplate.HasValue)
+        {
+            contentRectTemplate.Value.Apply(contentRoot);
+        }
+        else
+        {
+            contentRoot.anchorMin = Vector2.zero;
+            contentRoot.anchorMax = Vector2.one;
+            contentRoot.offsetMin = new Vector2(32f, 36f);
+            contentRoot.offsetMax = new Vector2(-32f, -36f);
+        }
 
         titleText = CreateText("Title", contentRoot, FontStyle.Normal, 46, TextAnchor.UpperLeft, out titleTextTMP, useHeaderFont: true);
         var titleRect = ResolveRectTransform(titleText, titleTextTMP);
@@ -695,22 +831,36 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         gridRoot = new GameObject("CharmGrid", typeof(RectTransform)).GetComponent<RectTransform>();
         gridRoot.SetParent(contentRoot, false);
-        gridRoot.anchorMin = new Vector2(0f, 0f);
-        gridRoot.anchorMax = new Vector2(0.58f, 1f);
-        gridRoot.pivot = new Vector2(0f, 1f);
-        gridRoot.offsetMin = new Vector2(0f, 16f);
-        gridRoot.offsetMax = new Vector2(-32f, -104f);
-        gridRoot.anchoredPosition = Vector2.zero;
+        if (gridRectTemplate.HasValue)
+        {
+            gridRectTemplate.Value.Apply(gridRoot);
+        }
+        else
+        {
+            gridRoot.anchorMin = new Vector2(0f, 0f);
+            gridRoot.anchorMax = new Vector2(0.58f, 1f);
+            gridRoot.pivot = new Vector2(0f, 1f);
+            gridRoot.offsetMin = new Vector2(0f, 16f);
+            gridRoot.offsetMax = new Vector2(-32f, -104f);
+            gridRoot.anchoredPosition = Vector2.zero;
+        }
 
         var gridLayout = gridRoot.gameObject.AddComponent<GridLayoutGroup>();
-        gridLayout.cellSize = new Vector2(104f, 112f);
-        gridLayout.spacing = new Vector2(16f, 16f);
-        gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        gridLayout.constraintCount = Columns;
-        gridLayout.startAxis = GridLayoutGroup.Axis.Horizontal;
-        gridLayout.startCorner = GridLayoutGroup.Corner.UpperLeft;
-        gridLayout.childAlignment = TextAnchor.UpperLeft;
-        gridLayout.padding = new RectOffset(4, 4, 4, 4);
+        if (gridLayoutTemplate.HasValue)
+        {
+            gridLayoutTemplate.Value.Apply(gridLayout);
+        }
+        else
+        {
+            gridLayout.cellSize = new Vector2(104f, 112f);
+            gridLayout.spacing = new Vector2(16f, 16f);
+            gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            gridLayout.constraintCount = Columns;
+            gridLayout.startAxis = GridLayoutGroup.Axis.Horizontal;
+            gridLayout.startCorner = GridLayoutGroup.Corner.UpperLeft;
+            gridLayout.childAlignment = TextAnchor.UpperLeft;
+            gridLayout.padding = new RectOffset(4, 4, 4, 4);
+        }
 
         highlight = new GameObject("Highlight", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
         highlight.SetParent(gridRoot, false);
@@ -730,11 +880,18 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         var detailRoot = new GameObject("Details", typeof(RectTransform)).GetComponent<RectTransform>();
         detailRoot.SetParent(contentRoot, false);
-        detailRoot.anchorMin = new Vector2(0.6f, 0f);
-        detailRoot.anchorMax = new Vector2(1f, 1f);
-        detailRoot.pivot = new Vector2(0f, 1f);
-        detailRoot.offsetMin = new Vector2(24f, 16f);
-        detailRoot.offsetMax = new Vector2(-8f, -104f);
+        if (detailRectTemplate.HasValue)
+        {
+            detailRectTemplate.Value.Apply(detailRoot);
+        }
+        else
+        {
+            detailRoot.anchorMin = new Vector2(0.6f, 0f);
+            detailRoot.anchorMax = new Vector2(1f, 1f);
+            detailRoot.pivot = new Vector2(0f, 1f);
+            detailRoot.offsetMin = new Vector2(24f, 16f);
+            detailRoot.offsetMax = new Vector2(-8f, -104f);
+        }
 
         detailTitleText = CreateText("CharmName", detailRoot, FontStyle.Normal, 38, TextAnchor.UpperLeft, out detailTitleTextTMP, useHeaderFont: true);
         var detailTitleRect = ResolveRectTransform(detailTitleText, detailTitleTextTMP);
