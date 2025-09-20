@@ -20,6 +20,13 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private static readonly Color DefaultCellColor = new Color(0.18f, 0.2f, 0.26f, BackgroundAlpha);
     private static readonly Color DefaultNewMarkerColor = new Color(1f, 0.85f, 0.25f, 0.95f);
 
+    private const float MinPanelTemplateArea = 5000f;
+    private const float MinContentTemplateArea = 4000f;
+    private const float MinGridTemplateArea = 4000f;
+    private const float MinDetailTemplateArea = 3000f;
+    private const float MinRootSizeThreshold = 10f;
+    private static readonly Vector2 DefaultRootSize = new Vector2(1280f, 720f);
+
     private struct RectSnapshot
     {
         public Vector2 AnchorMin;
@@ -149,6 +156,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private RectSnapshot? gridRectTemplate;
     private RectSnapshot? detailRectTemplate;
     private GridLayoutSnapshot? gridLayoutTemplate;
+    private Vector2? rootRectTemplateSize;
+    private LayoutElement? rootLayoutElement;
 
     private struct CharmEntry
     {
@@ -235,6 +244,26 @@ internal sealed class ShadeInventoryPane : InventoryPane
         return tmp != null ? tmp.rectTransform : null;
     }
 
+    private static float CalculateRectArea(RectTransform rect)
+    {
+        if (rect == null)
+        {
+            return 0f;
+        }
+
+        try
+        {
+            Vector2 size = rect.rect.size;
+            return Mathf.Abs(size.x * size.y);
+        }
+        catch
+        {
+            return 0f;
+        }
+    }
+
+    private static string FormatSize(Vector2 size) => $"{Mathf.Abs(size.x):F0}x{Mathf.Abs(size.y):F0}";
+
     internal static void LogMenuEvent(string message)
     {
         if (!ModConfig.Instance.logMenu)
@@ -248,6 +277,176 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
         catch
         {
+        }
+    }
+
+    private void ForceLayoutRebuild(string reason)
+    {
+        bool loggingEnabled = ModConfig.Instance.logMenu;
+        var rootRect = transform as RectTransform;
+
+        try
+        {
+            Canvas.ForceUpdateCanvases();
+
+            if (gridRoot != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(gridRoot);
+            }
+
+            if (contentRoot != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(contentRoot);
+            }
+
+            if (panelRoot != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(panelRoot);
+            }
+
+            if (rootRect != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(rootRect);
+                if (rootRect.parent is RectTransform parentRect)
+                {
+                    LayoutRebuilder.ForceRebuildLayoutImmediate(parentRect);
+                }
+
+                Vector2 rootSize = rootRect.rect.size;
+                if (rootSize.x < MinRootSizeThreshold || rootSize.y < MinRootSizeThreshold)
+                {
+                    Vector2 fallbackSize = rootRectTemplateSize ?? DefaultRootSize;
+                    bool updatedLayout = false;
+
+                    rootLayoutElement ??= GetComponent<LayoutElement>();
+                    var layoutElement = rootLayoutElement;
+                    if (layoutElement == null)
+                    {
+                        layoutElement = gameObject.AddComponent<LayoutElement>();
+                        layoutElement.flexibleWidth = 0f;
+                        layoutElement.flexibleHeight = 0f;
+                        layoutElement.ignoreLayout = false;
+                        rootLayoutElement = layoutElement;
+                        updatedLayout = true;
+                    }
+
+                    if (layoutElement.minWidth < fallbackSize.x)
+                    {
+                        layoutElement.minWidth = fallbackSize.x;
+                        updatedLayout = true;
+                    }
+
+                    if (layoutElement.preferredWidth < fallbackSize.x)
+                    {
+                        layoutElement.preferredWidth = fallbackSize.x;
+                        updatedLayout = true;
+                    }
+
+                    if (layoutElement.minHeight < fallbackSize.y)
+                    {
+                        layoutElement.minHeight = fallbackSize.y;
+                        updatedLayout = true;
+                    }
+
+                    if (layoutElement.preferredHeight < fallbackSize.y)
+                    {
+                        layoutElement.preferredHeight = fallbackSize.y;
+                        updatedLayout = true;
+                    }
+
+                    if (updatedLayout)
+                    {
+                        LayoutRebuilder.ForceRebuildLayoutImmediate(rootRect);
+                        if (rootRect.parent is RectTransform parentRect2)
+                        {
+                            LayoutRebuilder.ForceRebuildLayoutImmediate(parentRect2);
+                        }
+                        rootSize = rootRect.rect.size;
+                    }
+
+                    if (loggingEnabled && (rootSize.x < MinRootSizeThreshold || rootSize.y < MinRootSizeThreshold))
+                    {
+                        LogMenuEvent($"ForceLayoutRebuild({reason}) warning: root remained collapsed at {FormatSize(rootSize)} (fallback target {FormatSize(fallbackSize)})");
+                    }
+                }
+
+                if (loggingEnabled)
+                {
+                    Vector2 panelSize = panelRoot != null ? panelRoot.rect.size : Vector2.zero;
+                    Vector2 contentSize = contentRoot != null ? contentRoot.rect.size : Vector2.zero;
+                    Vector2 gridSize = gridRoot != null ? gridRoot.rect.size : Vector2.zero;
+                    LogMenuEvent($"ForceLayoutRebuild({reason}): root={FormatSize(rootRect.rect.size)}, panel={FormatSize(panelSize)}, content={FormatSize(contentSize)}, grid={FormatSize(gridSize)}");
+                }
+            }
+            else if (loggingEnabled)
+            {
+                LogMenuEvent($"ForceLayoutRebuild({reason}): root rect missing");
+            }
+        }
+        catch (Exception ex)
+        {
+            if (loggingEnabled)
+            {
+                try { Debug.LogWarning($"[ShadeInventory] ForceLayoutRebuild({reason}) failed: {ex}"); }
+                catch { }
+            }
+        }
+    }
+
+    private void LogStateSnapshot(string context)
+    {
+        if (!ModConfig.Instance.logMenu)
+        {
+            return;
+        }
+
+        try
+        {
+            var rootRect = transform as RectTransform;
+            string rootSize = rootRect != null
+                ? $"{rootRect.rect.width:F0}x{rootRect.rect.height:F0}"
+                : "<null>";
+            int gridChildren = gridRoot != null ? gridRoot.childCount : -1;
+            int contentChildren = contentRoot != null ? contentRoot.childCount : -1;
+            int activeEntries = 0;
+            int iconCount = 0;
+            foreach (var entry in entries)
+            {
+                if (entry.Root != null && entry.Root.gameObject.activeSelf)
+                {
+                    activeEntries++;
+                }
+
+                if (entry.Icon != null && entry.Icon.sprite != null)
+                {
+                    iconCount++;
+                }
+            }
+
+            float alpha = canvasGroup != null ? canvasGroup.alpha : -1f;
+            bool paneActive = gameObject != null && gameObject.activeInHierarchy;
+            bool panelActive = panelRoot != null && panelRoot.gameObject.activeInHierarchy;
+            bool gridActive = gridRoot != null && gridRoot.gameObject.activeInHierarchy;
+            bool highlightActive = highlight != null && highlight.gameObject.activeSelf;
+            string highlightParent = highlight != null && highlight.parent != null
+                ? highlight.parent.name
+                : "<none>";
+            string panelSize = panelRoot != null
+                ? $"{panelRoot.rect.width:F0}x{panelRoot.rect.height:F0}"
+                : "<null>";
+
+            LogMenuEvent(
+                $"{context} state -> built={isBuilt}, paneActive={isActive}, goActive={paneActive}, canvasAlpha={alpha:F2}, entries={entries.Count}, activeEntries={activeEntries}, icons={iconCount}, gridChildren={gridChildren}, contentChildren={contentChildren}, panelActive={panelActive}, gridActive={gridActive}, panelSize={panelSize}, rootSize={rootSize}, highlightActive={highlightActive}, highlightParent={highlightParent}, selectedIndex={selectedIndex}");
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                Debug.LogWarning($"[ShadeInventory] Failed to log state for {context}: {ex}");
+            }
+            catch
+            {
+            }
         }
     }
 
@@ -278,7 +477,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
         isActive = true;
         RefreshAll();
         UpdateParentListLabel();
-        LogMenuEvent($"OnEnable: entries={entries.Count}, inventoryNull={inventory == null}");
+        ForceLayoutRebuild("OnEnable");
+        float alpha = canvasGroup != null ? canvasGroup.alpha : -1f;
+        LogMenuEvent($"OnEnable: entries={entries.Count}, inventoryNull={inventory == null}, canvasAlpha={alpha:F2}");
+        LogStateSnapshot("OnEnable");
     }
 
     private void OnDisable()
@@ -289,13 +491,15 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
         inventory = null;
         isActive = false;
-        LogMenuEvent("OnDisable");
         if (canvasGroup != null)
         {
             canvasGroup.alpha = 0f;
             canvasGroup.interactable = false;
             canvasGroup.blocksRaycasts = false;
         }
+        float alpha = canvasGroup != null ? canvasGroup.alpha : -1f;
+        LogMenuEvent($"OnDisable: entries={entries.Count}, canvasAlpha={alpha:F2}");
+        LogStateSnapshot("OnDisable");
     }
 
     private void OnDestroy()
@@ -328,6 +532,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         isActive = true;
         RefreshAll();
         UpdateParentListLabel();
+        ForceLayoutRebuild("PaneStart");
         LogMenuEvent($"PaneStart: entries={entries.Count}, inventoryNull={inventory == null}");
     }
 
@@ -495,6 +700,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return;
         }
 
+        rootRectTemplateSize = null;
         panelRectTemplate = null;
         contentRectTemplate = null;
         gridRectTemplate = null;
@@ -503,6 +709,16 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         try
         {
+            var templateRect = template.GetComponent<RectTransform>();
+            if (templateRect != null)
+            {
+                Vector2 templateSize = templateRect.rect.size;
+                if (templateSize.x > 0f && templateSize.y > 0f)
+                {
+                    rootRectTemplateSize = templateSize;
+                }
+            }
+
             var texts = template.GetComponentsInChildren<Text>(true);
             if (texts != null && texts.Length > 0)
             {
@@ -630,6 +846,15 @@ internal sealed class ShadeInventoryPane : InventoryPane
             var rects = template.GetComponentsInChildren<RectTransform>(true);
             if (rects != null && rects.Length > 0)
             {
+                float bestPanelArea = 0f;
+                float bestContentArea = 0f;
+                float bestDetailArea = 0f;
+                float bestGridArea = 0f;
+                string? panelRectName = null;
+                string? contentRectName = null;
+                string? detailRectName = null;
+                string? gridRectName = null;
+
                 foreach (var rect in rects)
                 {
                     if (rect == null)
@@ -637,33 +862,99 @@ internal sealed class ShadeInventoryPane : InventoryPane
                         continue;
                     }
 
-                    var grid = rect.GetComponent<GridLayoutGroup>();
-                    if (grid != null && gridRectTemplate == null)
+                    string name = rect.gameObject != null ? rect.gameObject.name : rect.name;
+                    float area = CalculateRectArea(rect);
+                    if (area <= 0f)
                     {
-                        gridRectTemplate = RectSnapshot.From(rect);
-                        gridLayoutTemplate = GridLayoutSnapshot.From(grid);
                         continue;
                     }
 
-                    string lowerName = rect.gameObject != null ? rect.gameObject.name?.ToLowerInvariant() ?? string.Empty : string.Empty;
-                    if (panelRectTemplate == null && !string.IsNullOrEmpty(lowerName) &&
+                    var grid = rect.GetComponent<GridLayoutGroup>();
+                    if (grid != null)
+                    {
+                        if (area > bestGridArea)
+                        {
+                            gridRectTemplate = RectSnapshot.From(rect);
+                            gridLayoutTemplate = GridLayoutSnapshot.From(grid);
+                            bestGridArea = area;
+                            gridRectName = name;
+                        }
+                        continue;
+                    }
+
+                    string lowerName = string.IsNullOrEmpty(name) ? string.Empty : name.ToLowerInvariant();
+                    if (!string.IsNullOrEmpty(lowerName) &&
                         (lowerName.Contains("panel") || lowerName.Contains("background")))
                     {
-                        panelRectTemplate = RectSnapshot.From(rect);
+                        if (area > bestPanelArea)
+                        {
+                            panelRectTemplate = RectSnapshot.From(rect);
+                            bestPanelArea = area;
+                            panelRectName = name;
+                        }
                         continue;
                     }
 
-                    if (contentRectTemplate == null && !string.IsNullOrEmpty(lowerName) && lowerName.Contains("content"))
+                    if (!string.IsNullOrEmpty(lowerName) && lowerName.Contains("content"))
                     {
-                        contentRectTemplate = RectSnapshot.From(rect);
+                        if (area > bestContentArea)
+                        {
+                            contentRectTemplate = RectSnapshot.From(rect);
+                            bestContentArea = area;
+                            contentRectName = name;
+                        }
                         continue;
                     }
 
-                    if (detailRectTemplate == null && !string.IsNullOrEmpty(lowerName) && lowerName.Contains("detail"))
+                    if (!string.IsNullOrEmpty(lowerName) && lowerName.Contains("detail"))
                     {
-                        detailRectTemplate = RectSnapshot.From(rect);
+                        if (area > bestDetailArea)
+                        {
+                            detailRectTemplate = RectSnapshot.From(rect);
+                            bestDetailArea = area;
+                            detailRectName = name;
+                        }
                     }
                 }
+
+                if (bestPanelArea > 0f && bestPanelArea < MinPanelTemplateArea)
+                {
+                    LogMenuEvent($"ConfigureFromTemplate: panel rect '{panelRectName ?? "<unknown>"}' area={bestPanelArea:F0} below minimum ({MinPanelTemplateArea:F0}); using defaults.");
+                    panelRectTemplate = null;
+                    panelRectName = null;
+                    bestPanelArea = 0f;
+                }
+
+                if (bestContentArea > 0f && bestContentArea < MinContentTemplateArea)
+                {
+                    LogMenuEvent($"ConfigureFromTemplate: content rect '{contentRectName ?? "<unknown>"}' area={bestContentArea:F0} below minimum ({MinContentTemplateArea:F0}); using defaults.");
+                    contentRectTemplate = null;
+                    contentRectName = null;
+                    bestContentArea = 0f;
+                }
+
+                if (bestDetailArea > 0f && bestDetailArea < MinDetailTemplateArea)
+                {
+                    LogMenuEvent($"ConfigureFromTemplate: detail rect '{detailRectName ?? "<unknown>"}' area={bestDetailArea:F0} below minimum ({MinDetailTemplateArea:F0}); using defaults.");
+                    detailRectTemplate = null;
+                    detailRectName = null;
+                    bestDetailArea = 0f;
+                }
+
+                if (bestGridArea > 0f && bestGridArea < MinGridTemplateArea)
+                {
+                    LogMenuEvent($"ConfigureFromTemplate: grid rect '{gridRectName ?? "<unknown>"}' area={bestGridArea:F0} below minimum ({MinGridTemplateArea:F0}); using defaults.");
+                    gridRectTemplate = null;
+                    gridLayoutTemplate = null;
+                    gridRectName = null;
+                    bestGridArea = 0f;
+                }
+
+                LogMenuEvent(
+                    $"ConfigureFromTemplate layout summary: panel='{panelRectName ?? "<default>"}' area={bestPanelArea:F0}, " +
+                    $"content='{contentRectName ?? "<default>"}' area={bestContentArea:F0}, " +
+                    $"grid='{gridRectName ?? "<default>"}' area={bestGridArea:F0}, " +
+                    $"detail='{detailRectName ?? "<default>"}' area={bestDetailArea:F0}");
             }
         }
         catch
@@ -708,7 +999,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
         RefreshAll();
         UpdateParentListLabel();
         labelPulseTimer = 0f;
-        LogMenuEvent($"ForceImmediateRefresh: entries={entries.Count}, inventoryNull={inventory == null}");
+        float alpha = canvasGroup != null ? canvasGroup.alpha : -1f;
+        LogMenuEvent($"ForceImmediateRefresh: entries={entries.Count}, inventoryNull={inventory == null}, canvasAlpha={alpha:F2}");
+        ForceLayoutRebuild("ForceImmediateRefresh");
+        LogStateSnapshot("ForceImmediateRefresh");
     }
 
     private void RebuildUI()
@@ -960,6 +1254,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             LayoutRebuilder.ForceRebuildLayoutImmediate(contentRoot);
         }
+        ForceLayoutRebuild("BuildUI");
+        LogStateSnapshot("BuildUI");
         LogMenuEvent("BuildUI complete");
     }
 
@@ -1078,6 +1374,13 @@ internal sealed class ShadeInventoryPane : InventoryPane
         highlight.offsetMin = Vector2.zero;
         highlight.offsetMax = Vector2.zero;
 
+        string iconName = entry.Icon != null && entry.Icon.sprite != null ? entry.Icon.sprite.name : "<null>";
+        bool entryActive = entry.Root != null && entry.Root.gameObject.activeInHierarchy;
+        int entryChildren = entry.Root != null ? entry.Root.childCount : -1;
+        LogMenuEvent(
+            $"SelectIndex -> index={selectedIndex}, entryActive={entryActive}, entryChildren={entryChildren}, icon={iconName}, highlightParent={(highlight != null && highlight.parent != null ? highlight.parent.name : "<none>")}");
+        LogStateSnapshot("SelectIndex");
+
         var inv = inventory;
         if (inv != null)
         {
@@ -1094,7 +1397,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         ShadeCharmInventory? inv = ShadeRuntime.Charms;
         inventory = inv;
         var definitions = inv != null ? inv.AllCharms : Array.Empty<ShadeCharmDefinition>();
-        LogMenuEvent($"RefreshAll: definitions={definitions.Count}, inventoryNull={inv == null}");
+        int previousEntries = entries.Count;
+        LogMenuEvent($"RefreshAll start: definitions={definitions.Count}, previousEntries={previousEntries}, inventoryNull={inv == null}");
         EnsureEntryCount(definitions.Count);
         for (int i = 0; i < definitions.Count; i++)
         {
@@ -1114,6 +1418,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
             LayoutRebuilder.ForceRebuildLayoutImmediate(gridRoot);
         }
 
+        int gridChildren = gridRoot != null ? gridRoot.childCount : -1;
+        float alpha = canvasGroup != null ? canvasGroup.alpha : -1f;
+        LogMenuEvent($"RefreshAll complete: definitions={definitions.Count}, entries={entries.Count}, gridChildren={gridChildren}, canvasAlpha={alpha:F2}, isActive={isActive}");
+
         if (selectedIndex >= entries.Count)
         {
             selectedIndex = entries.Count > 0 ? entries.Count - 1 : 0;
@@ -1129,6 +1437,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
             RefreshEntryStates();
             UpdateDetailPanel();
         }
+        ForceLayoutRebuild("RefreshAll");
+        LogStateSnapshot("RefreshAll");
     }
 
     private void HandleStateChanged()
@@ -1141,6 +1451,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private void EnsureEntryCount(int count)
     {
         EnsureBuilt();
+        if (gridRoot == null)
+        {
+            LogMenuEvent("EnsureEntryCount: gridRoot null before adjustment");
+        }
         int previous = entries.Count;
         while (entries.Count < count)
         {
@@ -1157,7 +1471,13 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
         if (entries.Count != previous)
         {
-            LogMenuEvent($"EnsureEntryCount -> entries={entries.Count}");
+            int gridChildren = gridRoot != null ? gridRoot.childCount : -1;
+            LogMenuEvent($"EnsureEntryCount -> requested={count}, entries={entries.Count}, gridChildren={gridChildren}");
+            ForceLayoutRebuild("EnsureEntryCount");
+        }
+        else if (gridRoot != null && gridRoot.childCount != entries.Count)
+        {
+            LogMenuEvent($"EnsureEntryCount -> entries={entries.Count}, gridChildren={gridRoot.childCount} (mismatch)");
         }
     }
 
@@ -1209,6 +1529,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
         markerImage.color = newMarkerColor;
         markerImage.raycastTarget = false;
         newMarker.SetActive(false);
+
+        LogMenuEvent(
+            $"CreateEntry -> index={index}, gridChildCount={(gridRoot != null ? gridRoot.childCount : -1)}, iconActive={(icon != null && icon.gameObject.activeSelf)}");
 
         return new CharmEntry
         {
@@ -1418,6 +1741,98 @@ internal sealed class SimpleCanvasNestedFadeGroup : NestedFadeGroupBase
 
 internal static class ShadeInventoryPaneIntegration
 {
+    private static void CopyRectTransform(RectTransform source, RectTransform target)
+    {
+        if (source == null || target == null)
+        {
+            return;
+        }
+
+        target.anchorMin = source.anchorMin;
+        target.anchorMax = source.anchorMax;
+        target.pivot = source.pivot;
+        target.offsetMin = source.offsetMin;
+        target.offsetMax = source.offsetMax;
+        target.anchoredPosition3D = source.anchoredPosition3D;
+        target.sizeDelta = source.sizeDelta;
+        target.localRotation = source.localRotation;
+        target.localScale = source.localScale;
+    }
+
+    private static string CopyLayoutComponents(GameObject? template, GameObject target)
+    {
+        if (template == null || target == null)
+        {
+            return string.Empty;
+        }
+
+        var copied = new List<string>();
+
+        try
+        {
+            var templateLayout = template.GetComponent<LayoutElement>();
+            if (templateLayout != null)
+            {
+                var targetLayout = target.GetComponent<LayoutElement>();
+                if (targetLayout == null)
+                {
+                    targetLayout = target.AddComponent<LayoutElement>();
+                }
+
+                targetLayout.ignoreLayout = templateLayout.ignoreLayout;
+                targetLayout.minWidth = templateLayout.minWidth;
+                targetLayout.minHeight = templateLayout.minHeight;
+                targetLayout.preferredWidth = templateLayout.preferredWidth;
+                targetLayout.preferredHeight = templateLayout.preferredHeight;
+                targetLayout.flexibleWidth = templateLayout.flexibleWidth;
+                targetLayout.flexibleHeight = templateLayout.flexibleHeight;
+                targetLayout.layoutPriority = templateLayout.layoutPriority;
+                targetLayout.enabled = templateLayout.enabled;
+
+                copied.Add($"LayoutElement(min={templateLayout.minWidth:F0}x{templateLayout.minHeight:F0}, " +
+                    $"preferred={templateLayout.preferredWidth:F0}x{templateLayout.preferredHeight:F0}, " +
+                    $"flex={templateLayout.flexibleWidth:F2}x{templateLayout.flexibleHeight:F2})");
+            }
+
+            var templateFitter = template.GetComponent<ContentSizeFitter>();
+            if (templateFitter != null)
+            {
+                var targetFitter = target.GetComponent<ContentSizeFitter>();
+                if (targetFitter == null)
+                {
+                    targetFitter = target.AddComponent<ContentSizeFitter>();
+                }
+
+                targetFitter.horizontalFit = templateFitter.horizontalFit;
+                targetFitter.verticalFit = templateFitter.verticalFit;
+                targetFitter.enabled = templateFitter.enabled;
+
+                copied.Add($"ContentSizeFitter(h={templateFitter.horizontalFit}, v={templateFitter.verticalFit})");
+            }
+
+            var templateAspect = template.GetComponent<AspectRatioFitter>();
+            if (templateAspect != null)
+            {
+                var targetAspect = target.GetComponent<AspectRatioFitter>();
+                if (targetAspect == null)
+                {
+                    targetAspect = target.AddComponent<AspectRatioFitter>();
+                }
+
+                targetAspect.aspectMode = templateAspect.aspectMode;
+                targetAspect.aspectRatio = templateAspect.aspectRatio;
+                targetAspect.enabled = templateAspect.enabled;
+
+                copied.Add($"AspectRatioFitter(mode={templateAspect.aspectMode}, ratio={templateAspect.aspectRatio:F2})");
+            }
+        }
+        catch
+        {
+        }
+
+        return string.Join(", ", copied.Where(s => !string.IsNullOrEmpty(s)));
+    }
+
     private static readonly AccessTools.FieldRef<InventoryPaneList, InventoryPane[]> PanesField =
         AccessTools.FieldRefAccess<InventoryPaneList, InventoryPane[]>("panes");
 
@@ -1659,6 +2074,7 @@ internal static class ShadeInventoryPaneIntegration
         }
         if (display == null)
         {
+            ShadeInventoryPane.LogMenuEvent("RefreshPaneListDisplay skipped: display null");
             return;
         }
 
@@ -1666,8 +2082,9 @@ internal static class ShadeInventoryPaneIntegration
         {
             display.PreInstantiate(panes.Count);
         }
-        catch
+        catch (Exception ex)
         {
+            ShadeInventoryPane.LogMenuEvent($"RefreshPaneListDisplay.PreInstantiate failed: {ex}");
         }
 
         try
@@ -1676,8 +2093,9 @@ internal static class ShadeInventoryPaneIntegration
             int unlocked = GetUnlockedPaneCount(paneList, panes.Count);
             display.UpdateDisplay(selectedIndex, panes, unlocked);
         }
-        catch
+        catch (Exception ex)
         {
+            ShadeInventoryPane.LogMenuEvent($"RefreshPaneListDisplay.UpdateDisplay failed: {ex}");
         }
     }
 
@@ -1722,25 +2140,58 @@ internal static class ShadeInventoryPaneIntegration
         var templateRect = template.GetComponent<RectTransform>();
         var parent = templateRect != null ? templateRect.parent : template.transform.parent;
         ShadeInventoryPane.LogMenuEvent($"Injecting shade pane using template '{template?.GetType().Name ?? "<null>"}'");
+        if (parent == null)
+        {
+            ShadeInventoryPane.LogMenuEvent("EnsurePane warning: template parent was null");
+        }
 
         var go = new GameObject("ShadeInventoryPane", typeof(RectTransform));
+        if (template != null)
+        {
+            go.layer = template.gameObject.layer;
+        }
+
         var rect = go.GetComponent<RectTransform>();
         rect.SetParent(parent, false);
         if (templateRect != null)
         {
-            rect.anchorMin = templateRect.anchorMin;
-            rect.anchorMax = templateRect.anchorMax;
-            rect.pivot = templateRect.pivot;
-            rect.sizeDelta = templateRect.sizeDelta;
-            rect.localScale = templateRect.localScale;
-            rect.localPosition = templateRect.localPosition;
+            CopyRectTransform(templateRect, rect);
+            rect.SetSiblingIndex(templateRect.GetSiblingIndex());
         }
         else
         {
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
             rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition3D = Vector3.zero;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+            rect.sizeDelta = Vector2.zero;
         }
+
+        var templateRoot = templateRect != null
+            ? templateRect.gameObject
+            : template != null
+                ? template.gameObject
+                : null;
+        string layoutSummary = CopyLayoutComponents(templateRoot, go);
+        if (!string.IsNullOrEmpty(layoutSummary))
+        {
+            ShadeInventoryPane.LogMenuEvent($"Copied layout components from template: {layoutSummary}");
+        }
+
+        var parentRect = parent as RectTransform;
+        if (parentRect != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(parentRect);
+        }
+        LayoutRebuilder.ForceRebuildLayoutImmediate(rect);
+
+        var rootSize = rect.rect.size;
+        string anchorInfo = $"({rect.anchorMin.x:F2},{rect.anchorMin.y:F2})->({rect.anchorMax.x:F2},{rect.anchorMax.y:F2})";
+        string offsetInfo = $"({rect.offsetMin.x:F0},{rect.offsetMin.y:F0})/({rect.offsetMax.x:F0},{rect.offsetMax.y:F0})";
+        ShadeInventoryPane.LogMenuEvent(
+            $"Shade pane root rect -> parent={(parent != null ? parent.name : "<null>")}, anchors={anchorInfo}, offsets={offsetInfo}, size={rootSize.x:F0}x{rootSize.y:F0}");
 
         var canvasGroup = go.AddComponent<CanvasGroup>();
         canvasGroup.alpha = 0f;
