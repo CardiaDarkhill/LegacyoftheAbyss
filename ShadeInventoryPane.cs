@@ -30,7 +30,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
         public Vector2 OffsetMin;
         public Vector2 OffsetMax;
         public Vector2 AnchoredPosition;
+        public float AnchoredPositionZ;
         public Vector2 SizeDelta;
+        public Quaternion LocalRotation;
+        public Vector3 LocalScale;
 
         public static RectSnapshot From(RectTransform rect)
         {
@@ -42,7 +45,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 OffsetMin = rect.offsetMin,
                 OffsetMax = rect.offsetMax,
                 AnchoredPosition = rect.anchoredPosition,
-                SizeDelta = rect.sizeDelta
+                AnchoredPositionZ = rect.anchoredPosition3D.z,
+                SizeDelta = rect.sizeDelta,
+                LocalRotation = rect.localRotation,
+                LocalScale = rect.localScale
             };
         }
 
@@ -54,7 +60,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
             rect.offsetMin = OffsetMin;
             rect.offsetMax = OffsetMax;
             rect.anchoredPosition = AnchoredPosition;
+            rect.anchoredPosition3D = new Vector3(AnchoredPosition.x, AnchoredPosition.y, AnchoredPositionZ);
             rect.sizeDelta = SizeDelta;
+            rect.localRotation = LocalRotation;
+            rect.localScale = LocalScale;
         }
     }
 
