@@ -312,8 +312,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
         public float FontSizeMax;
         public TextAlignmentOptions Alignment;
         public Color Color;
-        public bool EnableKerning;
-        public bool EnableWordWrapping;
         public TextOverflowModes OverflowMode;
         public float CharacterSpacing;
         public float LineSpacing;
@@ -401,7 +399,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
                     continue;
                 }
 
-                Object.DestroyImmediate(shadow);
+                UnityEngine.Object.DestroyImmediate(shadow);
             }
         }
         catch
@@ -465,8 +463,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
             FontSizeMax = text.fontSizeMax,
             Alignment = text.alignment,
             Color = text.color,
-            EnableKerning = text.enableKerning,
-            EnableWordWrapping = text.enableWordWrapping,
             OverflowMode = text.overflowMode,
             CharacterSpacing = text.characterSpacing,
             LineSpacing = text.lineSpacing,
@@ -553,8 +549,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
             text.alignment = data.Alignment;
             text.color = data.Color;
-            text.enableKerning = data.EnableKerning;
-            text.enableWordWrapping = data.EnableWordWrapping;
             text.overflowMode = data.OverflowMode;
             text.characterSpacing = data.CharacterSpacing;
             text.lineSpacing = data.LineSpacing;
@@ -575,8 +569,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
         text.enableAutoSizing = false;
         text.alignment = fallbackAlignment;
         text.color = fallbackColor;
-        text.enableKerning = true;
-        text.enableWordWrapping = true;
         text.overflowMode = TextOverflowModes.Overflow;
         text.textWrappingMode = TextWrappingModes.Normal;
         text.characterSpacing = 0f;
@@ -744,8 +736,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 {
                 }
 
-                string? name = candidate.gameObject != null ? candidate.gameObject.name : null;
-                if (name != null)
+                string name = candidate.gameObject.name;
+                if (!string.IsNullOrEmpty(name))
                 {
                     string lower = name.ToLowerInvariant();
 
@@ -768,7 +760,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
                         // Prefer stronger string matches if available later in the iteration.
                         bool currentIsDescription = lower.Contains("description");
                         bool existingIsDescription = false;
-                        string? existingName = matchByName.gameObject != null ? matchByName.gameObject.name : null;
+                        string existingName = matchByName.gameObject.name;
                         if (!string.IsNullOrEmpty(existingName))
                         {
                             existingIsDescription = existingName.IndexOf("description", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -806,7 +798,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         if (rect != null && rect.transform != templateTransform)
         {
-            string rectName = rect.gameObject != null ? rect.gameObject.name : "<null>";
+            string rectName = rect.gameObject.name;
             string templateName = template.gameObject != null ? template.gameObject.name : template.name;
             LogMenuEvent(FormattableString.Invariant(
                 $"Resolved template rect from child '{rectName}' for template '{templateName}'"));
@@ -2878,16 +2870,20 @@ internal sealed class ShadeInventoryPane : InventoryPane
             rootRect = EnsureOverlayCanvas();
         }
 
-        if (!IsUnityObjectAlive(rootRect))
+        RectTransform? resolvedRootRect = rootRect;
+        if (!IsUnityObjectAlive(resolvedRootRect))
         {
-            rootRect = transform as RectTransform;
+            resolvedRootRect = transform as RectTransform;
         }
 
-        if (!IsUnityObjectAlive(rootRect))
+        if (!IsUnityObjectAlive(resolvedRootRect))
         {
             LogMenuEvent("ForceLayoutRebuild skipped: no root RectTransform available");
             return;
         }
+
+        rootRect = resolvedRootRect;
+        var rootRectNonNull = resolvedRootRect!;
 
         if (panelRoot != null)
         {
@@ -2919,11 +2915,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
             LayoutRebuilder.ForceRebuildLayoutImmediate(detailCostRow);
         }
 
-        LayoutRebuilder.ForceRebuildLayoutImmediate(rootRect);
+        LayoutRebuilder.ForceRebuildLayoutImmediate(rootRectNonNull);
 
         LayoutCharmEntries();
 
-        Vector2 rootSize = rootRect.rect.size;
+        Vector2 rootSize = rootRectNonNull.rect.size;
         string panelSizeText = panelRoot != null ? FormatVector2(panelRoot.rect.size) : "<null>";
         string contentSizeText = contentRoot != null ? FormatVector2(contentRoot.rect.size) : "<null>";
         string gridSizeText = gridRoot != null ? FormatVector2(gridRoot.rect.size) : "<null>";
@@ -3394,7 +3390,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             var tmpComponent = go.AddComponent<TextMeshProUGUI>();
             tmpText = tmpComponent;
-            ApplyTmpTextStyle(tmpComponent, tmpStyle, tmpStyle.Value.Font, useHeaderFont ? headerFontColor : bodyFontColor, ConvertFontStyle(style), ConvertAlignment(anchor));
+            ApplyTmpTextStyle(tmpComponent, tmpStyle, tmpStyle.Value.Font, useHeaderFont ? headerFontColor : bodyFontColor, ConvertFontStyle(style), size, ConvertAlignment(anchor));
             tmpComponent.raycastTarget = false;
             tmpComponent.text = string.Empty;
             return null;
