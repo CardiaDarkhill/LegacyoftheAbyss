@@ -28,6 +28,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private const float BackgroundAlpha = 0.82f;
     private const float CharmGridBaseOffsetFraction = 0.15f;
     private const float SectionOffsetFraction = 0.05f;
+    private const float HighlightScaleMultiplier = 1.85f;
+    private const float HighlightMinAlpha = 0.55f;
     // Vanilla charm panes report RectTransform sizes of roughly 6.5 × 8 units even
     // though the UI fills the screen once the canvas scale factor is applied. Treat
     // anything above a minimal epsilon as "valid" so we can adopt those template
@@ -37,7 +39,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     internal const float MinTemplateCopyArea = 4096f;
 
     private static readonly Color DefaultPanelColor = new Color(0.05f, 0.05f, 0.08f, 0.92f);
-    private static readonly Color DefaultHighlightColor = new Color(0.78f, 0.86f, 1f, 0.35f);
+    private static readonly Color DefaultHighlightColor = new Color(0.9f, 0.97f, 1f, 0.78f);
     private static readonly Color DefaultCellColor = new Color(0.18f, 0.2f, 0.26f, BackgroundAlpha);
     private static readonly Vector2 DefaultStandaloneRootSize = new Vector2(1920f, 1080f);
     private const string LockedCharmSpriteName = "shade_charm_charmui0001charmcost02unlit";
@@ -232,6 +234,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private float labelPulseTimer;
     private Sprite? fallbackSprite;
     private string displayLabel = "Charms";
+    private bool inputHandlersRegistered;
 
     private RectSnapshot? panelRectTemplate;
     private RectSnapshot? contentRectTemplate;
@@ -1165,8 +1168,15 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
     }
 
+    protected override void Awake()
+    {
+        base.Awake();
+        RegisterInputHandlers();
+    }
+
     private void OnEnable()
     {
+        RegisterInputHandlers();
         EnsureBuilt();
         labelPulseTimer = 0f;
 
@@ -1189,6 +1199,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void OnDisable()
     {
+        UnregisterInputHandlers();
         UpdateInventoryBinding(false);
         isActive = false;
         labelPulseTimer = 0f;
@@ -1198,6 +1209,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void OnDestroy()
     {
+        UnregisterInputHandlers();
         UpdateInventoryBinding(false);
         DetachPaneList();
 
@@ -1240,6 +1252,56 @@ internal sealed class ShadeInventoryPane : InventoryPane
             Destroy(generatedHighlightTexture);
             generatedHighlightTexture = null;
         }
+    }
+
+    private void RegisterInputHandlers()
+    {
+        if (inputHandlersRegistered)
+        {
+            return;
+        }
+
+        OnInputLeft += HandleInputLeft;
+        OnInputRight += HandleInputRight;
+        OnInputUp += HandleInputUp;
+        OnInputDown += HandleInputDown;
+        inputHandlersRegistered = true;
+        LogMenuEvent("Registered directional input handlers");
+    }
+
+    private void UnregisterInputHandlers()
+    {
+        if (!inputHandlersRegistered)
+        {
+            return;
+        }
+
+        OnInputLeft -= HandleInputLeft;
+        OnInputRight -= HandleInputRight;
+        OnInputUp -= HandleInputUp;
+        OnInputDown -= HandleInputDown;
+        inputHandlersRegistered = false;
+        LogMenuEvent("Unregistered directional input handlers");
+    }
+
+    private void HandleInputLeft()
+    {
+        HandleDirectionalInput(InventoryPaneBase.InputEventType.Left, fromInputComponent: false);
+    }
+
+    private void HandleInputRight()
+    {
+        HandleDirectionalInput(InventoryPaneBase.InputEventType.Right, fromInputComponent: false);
+    }
+
+    private void HandleInputUp()
+    {
+        HandleDirectionalInput(InventoryPaneBase.InputEventType.Up, fromInputComponent: false);
+    }
+
+    private void HandleInputDown()
+    {
+        HandleDirectionalInput(InventoryPaneBase.InputEventType.Down, fromInputComponent: false);
     }
 
     public override void PaneStart()
@@ -2805,6 +2867,16 @@ internal sealed class ShadeInventoryPane : InventoryPane
         return generatedHighlightSprite;
     }
 
+    private Color AdjustHighlightColor(Color color)
+    {
+        if (color.a < HighlightMinAlpha)
+        {
+            color.a = HighlightMinAlpha;
+        }
+
+        return color;
+    }
+
     private RectTransform CreateHighlightRect(RectTransform parent)
     {
         var highlightRect = new GameObject("Highlight", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
@@ -2822,11 +2894,15 @@ internal sealed class ShadeInventoryPane : InventoryPane
             highlightImage.sprite = sprite;
             highlightImage.type = Image.Type.Simple;
             highlightImage.preserveAspect = true;
-            highlightImage.color = highlightColor;
+            var color = AdjustHighlightColor(highlightColor);
+            highlightColor = color;
+            highlightImage.color = color;
         }
         else
         {
-            highlightImage.color = highlightColor;
+            var color = AdjustHighlightColor(highlightColor);
+            highlightColor = color;
+            highlightImage.color = color;
         }
         highlightImage.raycastTarget = false;
         highlightRect.gameObject.SetActive(false);
@@ -2854,8 +2930,13 @@ internal sealed class ShadeInventoryPane : InventoryPane
             baseSize = charmCellSize;
         }
 
-        float glowScale = 1.24f;
-        highlightRect.sizeDelta = new Vector2(baseSize.x * glowScale, baseSize.y * glowScale);
+        float glowScale = HighlightScaleMultiplier;
+        var newSize = new Vector2(baseSize.x * glowScale, baseSize.y * glowScale);
+        highlightRect.sizeDelta = newSize;
+
+        string entryName = entryRoot.gameObject != null ? entryRoot.gameObject.name : "<null>";
+        LogMenuEvent(FormattableString.Invariant(
+            $"PositionHighlight -> entry='{entryName}' baseSize={FormatVector2(baseSize)} scale={glowScale:0.##} finalSize={FormatVector2(newSize)}"));
     }
 
     public void ForceLayoutRebuild()
@@ -3682,6 +3763,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private void MoveSelectionHorizontal(int direction)
     {
         EnsureBuilt();
+        int originIndex = selectedIndex;
+        LogMenuEvent(FormattableString.Invariant(
+            $"MoveSelectionHorizontal -> direction={direction} selected={selectedIndex} entries={entries.Count} positions={entryGridPositions.Count}"));
         if (entries.Count == 0 || direction == 0)
         {
             UpdateEquippedRow();
@@ -3718,13 +3802,23 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         if (candidate >= 0)
         {
+            LogMenuEvent(FormattableString.Invariant(
+                $"MoveSelectionHorizontal success -> {originIndex}->{candidate} row={row} targetColumn={targetColumn}"));
             SelectIndex(candidate);
+        }
+        else
+        {
+            LogMenuEvent(FormattableString.Invariant(
+                $"MoveSelectionHorizontal no candidate -> row={row} targetColumn={targetColumn}"));
         }
     }
 
     private void MoveSelectionVertical(int direction)
     {
         EnsureBuilt();
+        int originIndex = selectedIndex;
+        LogMenuEvent(FormattableString.Invariant(
+            $"MoveSelectionVertical -> direction={direction} selected={selectedIndex} entries={entries.Count} positions={entryGridPositions.Count}"));
         if (entries.Count == 0 || direction == 0)
         {
             return;
@@ -3774,12 +3868,28 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         if (candidate >= 0)
         {
+            LogMenuEvent(FormattableString.Invariant(
+                $"MoveSelectionVertical success -> {originIndex}->{candidate} targetRow={targetRow} distance={candidateDistance:0.###}"));
             SelectIndex(candidate);
+        }
+        else
+        {
+            LogMenuEvent(FormattableString.Invariant(
+                $"MoveSelectionVertical no candidate -> targetRow={targetRow}"));
         }
     }
 
-    internal void HandleDirectionalInput(InventoryPaneBase.InputEventType direction)
+    internal void HandleDirectionalInput(InventoryPaneBase.InputEventType direction, bool fromInputComponent = true)
     {
+        EnsureBuilt();
+        bool skip = fromInputComponent && inputHandlersRegistered;
+        LogMenuEvent(FormattableString.Invariant(
+            $"HandleDirectionalInput -> direction={direction} fromInputComponent={fromInputComponent} skip={skip} selectedIndex={selectedIndex} entryCount={entries.Count}"));
+        if (skip)
+        {
+            return;
+        }
+
         switch (direction)
         {
             case InventoryPaneBase.InputEventType.Left:
@@ -3805,8 +3915,14 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return;
         }
 
+        int previousIndex = Mathf.Clamp(selectedIndex, 0, entries.Count - 1);
         selectedIndex = Mathf.Clamp(index, 0, entries.Count - 1);
         var entry = entries[selectedIndex];
+        string entryName = entry.Root != null && entry.Root.gameObject != null
+            ? entry.Root.gameObject.name
+            : "<null>";
+        LogMenuEvent(FormattableString.Invariant(
+            $"SelectIndex -> {previousIndex}->{selectedIndex} entry='{entryName}' id={entry.Id}"));
         var highlightRect = EnsureHighlightRect();
         RectTransform? entryRoot = entry.Root;
         if (highlightRect != null && entryRoot != null)
