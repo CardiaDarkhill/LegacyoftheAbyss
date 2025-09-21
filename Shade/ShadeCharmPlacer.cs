@@ -2,6 +2,7 @@
 
 using System;
 using System.Linq;
+using GlobalSettings;
 using UnityEngine;
 
 namespace LegacyoftheAbyss.Shade
@@ -28,8 +29,6 @@ namespace LegacyoftheAbyss.Shade
             new Placement(ShadeCharmId.FragileHeart, new Vector2(-2.3f, -0.9f)),
             new Placement(ShadeCharmId.SharpShadow, new Vector2(0.8f, 2.0f))
         };
-
-        private static Sprite? s_defaultPickupSprite;
 
         public static void PopulateScene(string? sceneName, Transform? heroTransform)
         {
@@ -71,10 +70,10 @@ namespace LegacyoftheAbyss.Shade
         {
             try
             {
-                var existing = UnityEngine.Object.FindObjectsByType<ShadeUnlockPickup>(
+                var existing = UnityEngine.Object.FindObjectsByType<CollectableItemPickup>(
                     FindObjectsInactive.Include,
                     FindObjectsSortMode.None);
-                return existing.Any(p => p != null && p.charmId == charmId);
+                return existing.Any(p => p != null && p.Item is ShadeCharmSavedItem item && item.CharmId == charmId);
             }
             catch
             {
@@ -86,31 +85,28 @@ namespace LegacyoftheAbyss.Shade
         {
             try
             {
-                var definition = ShadeRuntime.Charms.GetDefinition(placement.CharmId);
-                var go = new GameObject($"ShadeCharmPickup_{placement.CharmId}");
+                var prefab = Gameplay.CollectableItemPickupPrefab;
+                if (prefab == null)
+                {
+                    return;
+                }
+
+                var pickup = UnityEngine.Object.Instantiate(prefab);
+                if (pickup == null)
+                {
+                    return;
+                }
+
+                pickup.gameObject.name = $"ShadeCharmPickup_{placement.CharmId}";
                 Vector3 basePos = heroTransform.position;
-                go.transform.position = new Vector3(basePos.x + placement.Offset.x, basePos.y + placement.Offset.y, basePos.z);
+                pickup.transform.position = new Vector3(basePos.x + placement.Offset.x, basePos.y + placement.Offset.y, basePos.z);
+                pickup.transform.rotation = Quaternion.identity;
 
-                var spriteRenderer = go.AddComponent<SpriteRenderer>();
-                var sprite = definition.Icon ?? GetDefaultPickupSprite();
-                spriteRenderer.sprite = sprite;
-                spriteRenderer.color = definition.Icon != null ? Color.white : definition.FallbackTint;
-                spriteRenderer.sortingLayerID = TryGetHeroSortingLayer(heroTransform);
-                spriteRenderer.sortingOrder = TryGetHeroSortingOrder(heroTransform) + 1;
-                go.transform.localScale = Vector3.one * 0.85f;
+                pickup.SetItem(ShadeCharmSavedItem.Create(placement.CharmId));
+                pickup.SetPlayerDataBool(string.Empty);
+                pickup.SetFling(false);
 
-                var collider = go.AddComponent<CircleCollider2D>();
-                collider.isTrigger = true;
-                collider.radius = 0.6f;
-
-                var pickup = go.AddComponent<ShadeUnlockPickup>();
-                pickup.grantCharm = true;
-                pickup.charmId = placement.CharmId;
-                pickup.useCharmNameForMessage = true;
-                pickup.notificationKey = $"shade::charm_pickup::{placement.CharmId}";
-                pickup.notificationType = ShadeUnlockNotificationType.Charm;
-                pickup.requirePlayerTag = true;
-                pickup.destroyOnPickup = true;
+                ApplyPickupVisuals(pickup, heroTransform, placement.CharmId);
             }
             catch
             {
@@ -151,32 +147,25 @@ namespace LegacyoftheAbyss.Shade
             return 0;
         }
 
-        private static Sprite GetDefaultPickupSprite()
+        private static void ApplyPickupVisuals(CollectableItemPickup pickup, Transform heroTransform, ShadeCharmId charmId)
         {
-            if (s_defaultPickupSprite != null)
+            try
             {
-                return s_defaultPickupSprite;
-            }
-
-            var tex = new Texture2D(16, 16, TextureFormat.ARGB32, false);
-            for (int x = 0; x < tex.width; x++)
-            {
-                for (int y = 0; y < tex.height; y++)
+                var spriteRenderer = pickup.GetComponentInChildren<SpriteRenderer>();
+                if (spriteRenderer == null)
                 {
-                    float dx = (x + 0.5f) / tex.width - 0.5f;
-                    float dy = (y + 0.5f) / tex.height - 0.5f;
-                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
-                    float alpha = dist <= 0.45f ? 1f : Mathf.Clamp01(0.55f - dist) / 0.1f;
-                    tex.SetPixel(x, y, new Color(0.2f, 0.25f, 0.35f, alpha));
+                    return;
                 }
-            }
-            tex.Apply();
-            tex.filterMode = FilterMode.Point;
-            tex.hideFlags = HideFlags.HideAndDontSave;
 
-            s_defaultPickupSprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f), 32f);
-            s_defaultPickupSprite.hideFlags = HideFlags.HideAndDontSave;
-            return s_defaultPickupSprite;
+                var sprite = ShadeCharmSavedItem.ResolveCharmSprite(charmId, out var tint);
+                spriteRenderer.sprite = sprite;
+                spriteRenderer.color = tint;
+                spriteRenderer.sortingLayerID = TryGetHeroSortingLayer(heroTransform);
+                spriteRenderer.sortingOrder = TryGetHeroSortingOrder(heroTransform) + 1;
+            }
+            catch
+            {
+            }
         }
     }
 }
