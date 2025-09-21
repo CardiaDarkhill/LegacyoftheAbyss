@@ -12,7 +12,11 @@ using LegacyoftheAbyss.Shade;
 
 internal sealed class ShadeInventoryPane : InventoryPane
 {
-    private const int Columns = 7;
+    private const int CharmRows = 4;
+    private const int DefaultCharmColumns = 6;
+    private static readonly Vector2 DefaultCharmCellSize = new Vector2(104f, 112f);
+    private static readonly Vector2 DefaultCharmSpacing = new Vector2(16f, 16f);
+    private const float RowOffsetFactor = 0.5f;
     private const float BackgroundAlpha = 0.82f;
     // Vanilla charm panes report RectTransform sizes of roughly 6.5 × 8 units even
     // though the UI fills the screen once the canvas scale factor is applied. Treat
@@ -164,6 +168,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     }
 
     private readonly List<CharmEntry> entries = new List<CharmEntry>();
+    private readonly List<Vector2Int> entryGridPositions = new List<Vector2Int>();
+    private readonly List<float> entryCenterXs = new List<float>();
 
     private RectTransform panelRoot = null!;
     private RectTransform contentRoot = null!;
@@ -225,6 +231,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private LayoutElementSnapshot? rootLayoutTemplate;
     private bool useNormalizedFallbackLayout;
     private Vector2 normalizedFallbackRootSize;
+    private Vector2 charmCellSize = DefaultCharmCellSize;
+    private Vector2 charmSpacing = DefaultCharmSpacing;
     private RectTransform? leftContentRoot;
     private RectTransform? notchIconContainer;
     private RectTransform? detailCostRow;
@@ -1998,41 +2006,206 @@ internal sealed class ShadeInventoryPane : InventoryPane
         return maxDimension <= 64f;
     }
 
-    private void ConfigureNormalizedGridLayout(GridLayoutGroup gridLayout, Vector2 rootSize)
+    private void ResolveCharmLayoutMetrics(int entryCount)
     {
-        if (gridLayout == null)
+        Vector2 cell = DefaultCharmCellSize;
+        Vector2 spacing = DefaultCharmSpacing;
+
+        if (gridLayoutTemplate.HasValue)
+        {
+            var template = gridLayoutTemplate.Value;
+            if (template.CellSize.x >= MinRootSizeThreshold && template.CellSize.y >= MinRootSizeThreshold)
+            {
+                cell = template.CellSize;
+            }
+
+            if (template.Spacing.x >= 0f || template.Spacing.y >= 0f)
+            {
+                spacing = new Vector2(Mathf.Max(0f, template.Spacing.x), Mathf.Max(0f, template.Spacing.y));
+            }
+        }
+        else if (useNormalizedFallbackLayout)
+        {
+            Vector2 rootSize = normalizedFallbackRootSize;
+            float effectiveWidth = Mathf.Max(rootSize.x * 0.58f, MinRootSizeThreshold);
+            float effectiveHeight = Mathf.Max(rootSize.y * 0.76f, MinRootSizeThreshold);
+
+            float spacingX = Mathf.Max(effectiveWidth * 0.025f, MinRootSizeThreshold * 0.5f);
+            float spacingY = Mathf.Max(effectiveHeight * 0.04f, MinRootSizeThreshold * 0.5f);
+
+            int approxCount = entryCount;
+            if (approxCount <= 0)
+            {
+                approxCount = ShadeRuntime.Charms?.AllCharms.Count ?? (DefaultCharmColumns * CharmRows);
+            }
+
+            int approxColumns = Mathf.Max(1, Mathf.CeilToInt(approxCount / (float)CharmRows));
+            float totalSpacingX = spacingX * Mathf.Max(approxColumns - 1, 0);
+            float totalSpacingY = spacingY * Mathf.Max(CharmRows - 1, 0);
+
+            float cellWidth = Mathf.Max((effectiveWidth - totalSpacingX) / approxColumns, MinRootSizeThreshold);
+            float cellHeight = Mathf.Max((effectiveHeight - totalSpacingY) / CharmRows, MinRootSizeThreshold);
+
+            cell = new Vector2(cellWidth, cellHeight);
+            spacing = new Vector2(spacingX, spacingY);
+        }
+
+        charmCellSize = new Vector2(Mathf.Max(cell.x, MinRootSizeThreshold), Mathf.Max(cell.y, MinRootSizeThreshold));
+        charmSpacing = new Vector2(Mathf.Max(spacing.x, 0f), Mathf.Max(spacing.y, 0f));
+    }
+
+    private int DetermineCharmColumnCount(int entryCount)
+    {
+        if (gridLayoutTemplate.HasValue &&
+            gridLayoutTemplate.Value.Constraint == GridLayoutGroup.Constraint.FixedColumnCount &&
+            gridLayoutTemplate.Value.ConstraintCount > 0)
+        {
+            return gridLayoutTemplate.Value.ConstraintCount;
+        }
+
+        int approxCount = entryCount > 0 ? entryCount : ShadeRuntime.Charms?.AllCharms.Count ?? 0;
+        if (approxCount <= 0)
+        {
+            approxCount = DefaultCharmColumns * CharmRows;
+        }
+
+        if (approxCount % CharmRows != 0)
+        {
+            approxCount += CharmRows - (approxCount % CharmRows);
+        }
+
+        int columns = Mathf.Max(1, approxCount / CharmRows);
+        return columns;
+    }
+
+    private void LayoutCharmEntries()
+    {
+        if (gridRoot == null || leftContentRoot == null)
         {
             return;
         }
 
-        float effectiveWidth = Mathf.Max(rootSize.x * 0.58f, MinRootSizeThreshold);
-        float effectiveHeight = Mathf.Max(rootSize.y * 0.76f, MinRootSizeThreshold);
-
-        float spacingX = Mathf.Max(effectiveWidth * 0.025f, MinRootSizeThreshold * 0.5f);
-        float spacingY = Mathf.Max(effectiveHeight * 0.04f, MinRootSizeThreshold * 0.5f);
-
-        int approxCount = ShadeRuntime.Charms?.AllCharms.Count ?? entries.Count;
-        if (approxCount <= 0)
+        try
         {
-            approxCount = Columns * 3;
+            LayoutRebuilder.ForceRebuildLayoutImmediate(leftContentRoot);
+        }
+        catch
+        {
         }
 
-        int approxRows = Mathf.Max(1, Mathf.CeilToInt(approxCount / (float)Columns));
+        ResolveCharmLayoutMetrics(entries.Count);
 
-        float totalSpacingX = spacingX * Mathf.Max(Columns - 1, 0);
-        float totalSpacingY = spacingY * Mathf.Max(approxRows - 1, 0);
+        entryGridPositions.Clear();
+        entryCenterXs.Clear();
 
-        float cellWidth = Mathf.Max((effectiveWidth - totalSpacingX) / Columns, MinRootSizeThreshold);
-        float cellHeight = Mathf.Max((effectiveHeight - totalSpacingY) / approxRows, MinRootSizeThreshold);
+        if (entries.Count == 0)
+        {
+            gridRoot.sizeDelta = Vector2.zero;
+            gridRoot.anchoredPosition = Vector2.zero;
+            return;
+        }
 
-        gridLayout.cellSize = new Vector2(cellWidth, cellHeight);
-        gridLayout.spacing = new Vector2(spacingX, spacingY);
-        gridLayout.padding = new RectOffset();
-        gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        gridLayout.constraintCount = Columns;
-        gridLayout.startAxis = GridLayoutGroup.Axis.Horizontal;
-        gridLayout.startCorner = GridLayoutGroup.Corner.UpperLeft;
-        gridLayout.childAlignment = TextAnchor.UpperLeft;
+        int columns = Mathf.Max(1, DetermineCharmColumnCount(entries.Count));
+
+        var rowAssignments = new int[entries.Count];
+        var columnAssignments = new int[entries.Count];
+        var rowCounts = new int[CharmRows];
+
+        for (int i = 0; i < entries.Count; i++)
+        {
+            int row = Mathf.Min(i / columns, CharmRows - 1);
+            int column = rowCounts[row];
+            rowCounts[row] = column + 1;
+            rowAssignments[i] = row;
+            columnAssignments[i] = column;
+        }
+
+        int usedRows = 0;
+        for (int row = 0; row < CharmRows; row++)
+        {
+            if (rowCounts[row] > 0)
+            {
+                usedRows = row + 1;
+            }
+        }
+
+        if (usedRows <= 0)
+        {
+            usedRows = 1;
+        }
+
+        float strideX = charmCellSize.x + charmSpacing.x;
+        float strideY = charmCellSize.y + charmSpacing.y;
+        float halfStrideX = strideX * RowOffsetFactor;
+
+        float maxWidth = 0f;
+        for (int row = 0; row < usedRows; row++)
+        {
+            int countInRow = rowCounts[row];
+            if (countInRow <= 0)
+            {
+                continue;
+            }
+
+            float rowWidth = (countInRow - 1) * strideX + charmCellSize.x;
+            if ((row & 1) == 1)
+            {
+                rowWidth += halfStrideX;
+            }
+
+            if (rowWidth > maxWidth)
+            {
+                maxWidth = rowWidth;
+            }
+        }
+
+        if (maxWidth <= 0f)
+        {
+            maxWidth = charmCellSize.x;
+        }
+
+        float totalHeight = usedRows * charmCellSize.y + Mathf.Max(usedRows - 1, 0) * charmSpacing.y;
+
+        Vector2 parentSize = leftContentRoot.rect.size;
+        if (parentSize.x < MinRootSizeThreshold || parentSize.y < MinRootSizeThreshold)
+        {
+            Vector2 fallback = normalizedFallbackRootSize.sqrMagnitude > 0f ? normalizedFallbackRootSize : DefaultStandaloneRootSize;
+            parentSize = new Vector2(Mathf.Max(fallback.x * 0.6f, maxWidth), Mathf.Max(fallback.y * 0.6f, totalHeight));
+        }
+
+        float offsetX = Mathf.Max(0f, parentSize.x * 0.15f);
+        float offsetY = Mathf.Max(0f, parentSize.y * 0.15f);
+        float maxOffsetX = Mathf.Max(0f, parentSize.x - maxWidth);
+        float maxOffsetY = Mathf.Max(0f, parentSize.y - totalHeight);
+        offsetX = Mathf.Min(offsetX, maxOffsetX);
+        offsetY = Mathf.Min(offsetY, maxOffsetY);
+
+        gridRoot.sizeDelta = new Vector2(maxWidth, totalHeight);
+        gridRoot.anchoredPosition = new Vector2(offsetX, offsetY);
+
+        for (int i = 0; i < entries.Count; i++)
+        {
+            int row = rowAssignments[i];
+            int column = columnAssignments[i];
+
+            float x = (row % 2 == 1 ? halfStrideX : 0f) + column * strideX;
+            float y = (usedRows - row - 1) * strideY;
+
+            var entry = entries[i];
+            RectTransform? rect = entry.Root;
+            Vector2 anchored = new Vector2(x + charmCellSize.x * 0.5f, y + charmCellSize.y * 0.5f);
+            if (rect != null)
+            {
+                rect.anchorMin = new Vector2(0f, 0f);
+                rect.anchorMax = new Vector2(0f, 0f);
+                rect.pivot = new Vector2(0.5f, 0.5f);
+                rect.sizeDelta = charmCellSize;
+                rect.anchoredPosition = anchored;
+            }
+
+            entryGridPositions.Add(new Vector2Int(row, column));
+            entryCenterXs.Add(anchored.x);
+        }
     }
 
     public void ForceLayoutRebuild()
@@ -2079,6 +2252,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         LayoutRebuilder.ForceRebuildLayoutImmediate(rootRect);
+
+        LayoutCharmEntries();
 
         Vector2 rootSize = rootRect.rect.size;
         string panelSizeText = panelRoot != null ? FormatVector2(panelRoot.rect.size) : "<null>";
@@ -2317,89 +2492,13 @@ internal sealed class ShadeInventoryPane : InventoryPane
         gridRoot = new GameObject("CharmGrid", typeof(RectTransform)).GetComponent<RectTransform>();
         gridRoot.gameObject.layer = leftContentRoot.gameObject.layer;
         gridRoot.SetParent(leftContentRoot, false);
-        if (gridRectTemplate.HasValue)
-        {
-            gridRectTemplate.Value.Apply(gridRoot);
-        }
-        else if (useNormalizedFallbackLayout)
-        {
-            gridRoot.anchorMin = new Vector2(0f, 0f);
-            gridRoot.anchorMax = new Vector2(1f, 0.74f);
-            gridRoot.pivot = new Vector2(0f, 1f);
-            gridRoot.offsetMin = Vector2.zero;
-            gridRoot.offsetMax = Vector2.zero;
-            gridRoot.anchoredPosition = Vector2.zero;
-        }
-        else
-        {
-            gridRoot.anchorMin = new Vector2(0f, 0f);
-            gridRoot.anchorMax = new Vector2(1f, 1f);
-            gridRoot.pivot = new Vector2(0f, 1f);
-            gridRoot.offsetMin = new Vector2(0f, 0f);
-            gridRoot.offsetMax = new Vector2(-16f, -260f);
-            gridRoot.anchoredPosition = Vector2.zero;
-        }
+        gridRoot.anchorMin = new Vector2(0f, 0f);
+        gridRoot.anchorMax = new Vector2(0f, 0f);
+        gridRoot.pivot = new Vector2(0f, 0f);
+        gridRoot.sizeDelta = Vector2.zero;
+        gridRoot.anchoredPosition = Vector2.zero;
 
-        var gridLayout = gridRoot.gameObject.AddComponent<GridLayoutGroup>();
-        if (gridLayoutTemplate.HasValue)
-        {
-            gridLayoutTemplate.Value.Apply(gridLayout);
-
-            const float minCellDimension = 0.01f;
-            if (gridLayout.cellSize.x < minCellDimension || gridLayout.cellSize.y < minCellDimension)
-            {
-                gridLayout.cellSize = new Vector2(104f, 112f);
-            }
-
-            if (gridLayout.spacing.x < 0f || gridLayout.spacing.y < 0f)
-            {
-                gridLayout.spacing = new Vector2(Mathf.Max(0f, gridLayout.spacing.x), Mathf.Max(0f, gridLayout.spacing.y));
-            }
-
-            if (gridLayout.constraint != GridLayoutGroup.Constraint.FixedColumnCount)
-            {
-                gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-                gridLayout.constraintCount = Columns;
-            }
-            else if (gridLayout.constraintCount <= 0)
-            {
-                gridLayout.constraintCount = Columns;
-            }
-
-            var padding = gridLayout.padding;
-            if (padding != null)
-            {
-                padding.left = Mathf.Max(0, padding.left);
-                padding.right = Mathf.Max(0, padding.right);
-                padding.top = Mathf.Max(0, padding.top);
-                padding.bottom = Mathf.Max(0, padding.bottom);
-                gridLayout.padding = padding;
-            }
-        }
-        else if (useNormalizedFallbackLayout)
-        {
-            ConfigureNormalizedGridLayout(gridLayout, normalizedFallbackRootSize);
-        }
-        else
-        {
-            gridLayout.cellSize = new Vector2(104f, 112f);
-            gridLayout.spacing = new Vector2(16f, 16f);
-            gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-            gridLayout.constraintCount = Columns;
-            gridLayout.startAxis = GridLayoutGroup.Axis.Horizontal;
-            gridLayout.startCorner = GridLayoutGroup.Corner.UpperLeft;
-            gridLayout.childAlignment = TextAnchor.UpperLeft;
-            gridLayout.padding = new RectOffset(4, 4, 4, 4);
-        }
-
-        gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        if (gridLayout.constraintCount <= 0)
-        {
-            gridLayout.constraintCount = Columns;
-        }
-        gridLayout.startAxis = GridLayoutGroup.Axis.Horizontal;
-        gridLayout.startCorner = GridLayoutGroup.Corner.UpperLeft;
-        gridLayout.childAlignment = TextAnchor.UpperLeft;
+        ResolveCharmLayoutMetrics(entries.Count);
 
         highlight = new GameObject("Highlight", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
         highlight.gameObject.layer = gridRoot.gameObject.layer;
@@ -2787,38 +2886,100 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private void MoveSelectionHorizontal(int direction)
     {
         EnsureBuilt();
-        if (entries.Count == 0)
+        if (entries.Count == 0 || direction == 0)
         {
             UpdateEquippedRow();
             return;
         }
 
-        int newIndex = selectedIndex + direction;
-        int row = selectedIndex / Columns;
-        int newRow = newIndex / Columns;
-        if (newIndex < 0 || newIndex >= entries.Count || newRow != row)
+        if (entryGridPositions.Count != entries.Count)
         {
+            LayoutCharmEntries();
+        }
+
+        if (selectedIndex < 0 || selectedIndex >= entries.Count)
+        {
+            SelectIndex(Mathf.Clamp(selectedIndex, 0, entries.Count - 1));
             return;
         }
 
-        SelectIndex(newIndex);
+        Vector2Int current = selectedIndex < entryGridPositions.Count
+            ? entryGridPositions[selectedIndex]
+            : new Vector2Int(0, 0);
+        int targetColumn = current.y + direction;
+        int row = current.x;
+        int candidate = -1;
+
+        for (int i = 0; i < entryGridPositions.Count; i++)
+        {
+            var pos = entryGridPositions[i];
+            if (pos.x == row && pos.y == targetColumn)
+            {
+                candidate = i;
+                break;
+            }
+        }
+
+        if (candidate >= 0)
+        {
+            SelectIndex(candidate);
+        }
     }
 
     private void MoveSelectionVertical(int direction)
     {
         EnsureBuilt();
-        if (entries.Count == 0)
+        if (entries.Count == 0 || direction == 0)
         {
             return;
         }
 
-        int newIndex = selectedIndex + direction * Columns;
-        if (newIndex < 0 || newIndex >= entries.Count)
+        if (entryGridPositions.Count != entries.Count)
+        {
+            LayoutCharmEntries();
+        }
+
+        if (selectedIndex < 0 || selectedIndex >= entries.Count)
+        {
+            SelectIndex(Mathf.Clamp(selectedIndex, 0, entries.Count - 1));
+            return;
+        }
+
+        Vector2Int current = selectedIndex < entryGridPositions.Count
+            ? entryGridPositions[selectedIndex]
+            : new Vector2Int(0, 0);
+        int targetRow = current.x + direction;
+        if (targetRow < 0 || targetRow >= CharmRows)
         {
             return;
         }
 
-        SelectIndex(newIndex);
+        float currentCenterX = entryCenterXs.Count > selectedIndex ? entryCenterXs[selectedIndex] : 0f;
+        int candidate = -1;
+        float candidateDistance = float.MaxValue;
+
+        for (int i = 0; i < entryGridPositions.Count; i++)
+        {
+            var pos = entryGridPositions[i];
+            if (pos.x != targetRow)
+            {
+                continue;
+            }
+
+            float center = entryCenterXs.Count > i ? entryCenterXs[i] : 0f;
+            float distance = Mathf.Abs(center - currentCenterX);
+            if (distance < candidateDistance - 0.01f ||
+                (Mathf.Abs(distance - candidateDistance) <= 0.01f && (candidate < 0 || i < candidate)))
+            {
+                candidateDistance = distance;
+                candidate = i;
+            }
+        }
+
+        if (candidate >= 0)
+        {
+            SelectIndex(candidate);
+        }
     }
 
     private void SelectIndex(int index)
@@ -2882,6 +3043,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
             LayoutRebuilder.ForceRebuildLayoutImmediate(gridRoot);
         }
 
+        LayoutCharmEntries();
+
         if (selectedIndex >= entries.Count)
         {
             selectedIndex = entries.Count > 0 ? entries.Count - 1 : 0;
@@ -2927,6 +3090,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             LogMenuEvent($"EnsureEntryCount -> entries={entries.Count}");
         }
+
+        LayoutCharmEntries();
     }
 
     private CharmEntry CreateEntry(int index)
@@ -2936,19 +3101,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
         var cellRect = cell.GetComponent<RectTransform>();
         cellRect.SetParent(gridRoot, false);
         cellRect.localScale = Vector3.one;
-
-        GridLayoutGroup? gridLayout = null;
-        if (gridRoot != null)
-        {
-            try
-            {
-                gridLayout = gridRoot.GetComponent<GridLayoutGroup>();
-            }
-            catch
-            {
-                gridLayout = null;
-            }
-        }
+        cellRect.anchorMin = new Vector2(0f, 0f);
+        cellRect.anchorMax = new Vector2(0f, 0f);
+        cellRect.pivot = new Vector2(0.5f, 0.5f);
+        cellRect.sizeDelta = charmCellSize;
+        cellRect.anchoredPosition = Vector2.zero;
 
         var background = cell.AddComponent<Image>();
         background.enabled = false;
@@ -2962,15 +3119,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         iconRect.anchorMin = new Vector2(0.5f, 0.5f);
         iconRect.anchorMax = new Vector2(0.5f, 0.5f);
         iconRect.pivot = new Vector2(0.5f, 0.5f);
-        Vector2 iconSize = new Vector2(96f, 96f);
-        if (useNormalizedFallbackLayout && gridLayout != null)
-        {
-            Vector2 cellSize = gridLayout.cellSize;
-            float width = Mathf.Max(cellSize.x * 0.8f, MinRootSizeThreshold);
-            float height = Mathf.Max(cellSize.y * 0.8f, MinRootSizeThreshold);
-            iconSize = new Vector2(width, height);
-        }
-        iconRect.sizeDelta = iconSize;
+        float iconDimension = Mathf.Max(Mathf.Min(charmCellSize.x, charmCellSize.y) * 0.92f, 48f);
+        iconRect.sizeDelta = new Vector2(iconDimension, iconDimension);
         var icon = iconGo.AddComponent<Image>();
         icon.preserveAspect = true;
         icon.raycastTarget = false;
@@ -2983,17 +3133,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
         markerRect.anchorMin = new Vector2(1f, 1f);
         markerRect.anchorMax = new Vector2(1f, 1f);
         markerRect.pivot = new Vector2(1f, 1f);
-        Vector2 markerOffset = new Vector2(-12f, -12f);
-        Vector2 markerSize = new Vector2(18f, 18f);
-        if (useNormalizedFallbackLayout && gridLayout != null)
-        {
-            float markerDimension = Mathf.Max(Mathf.Min(gridLayout.cellSize.x, gridLayout.cellSize.y) * 0.35f, MinRootSizeThreshold);
-            float offsetMagnitude = markerDimension * 0.45f;
-            markerSize = new Vector2(markerDimension, markerDimension);
-            markerOffset = new Vector2(-offsetMagnitude, -offsetMagnitude);
-        }
-        markerRect.anchoredPosition = markerOffset;
-        markerRect.sizeDelta = markerSize;
+        float markerDimension = Mathf.Max(iconDimension * 0.22f, 16f);
+        float markerOffset = markerDimension * 0.45f;
+        markerRect.anchoredPosition = new Vector2(-markerOffset, -markerOffset);
+        markerRect.sizeDelta = new Vector2(markerDimension, markerDimension);
         var markerImage = newMarker.GetComponent<Image>();
         if (newMarkerSpriteTemplate != null)
         {
