@@ -474,6 +474,19 @@ public partial class LegacyHelper
 
         private void Update()
         {
+            if (pendingCharmLoadoutRecompute && baselineStatsInitialized)
+            {
+                pendingCharmLoadoutRecompute = false;
+                try
+                {
+                    RecomputeCharmLoadout();
+                }
+                catch
+                {
+                    pendingCharmLoadoutRecompute = true;
+                }
+            }
+
             if (hornetTransform == null) return;
 
             if (GameIsPaused())

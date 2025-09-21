@@ -571,6 +571,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
         }
 
+        if (changed)
+        {
+            LogMenuEvent(FormattableString.Invariant($"UpdateParentListLabel -> '{displayLabel}'"));
+        }
+
     }
 
     private void SubscribeInput()
@@ -581,7 +586,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         OnInputDown += () => MoveSelectionVertical(1);
     }
 
-    internal void ConfigureFromTemplate(InventoryPane template)
+    internal void ConfigureFromTemplate(InventoryPane? template)
     {
         if (template == null)
         {
@@ -804,16 +809,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         LogMenuEvent($"ForceImmediateRefresh: entries={entries.Count}, inventoryNull={inventory == null}");
     }
 
-    public new void ForceLayoutRebuild()
+    public void ForceLayoutRebuild()
     {
-        try
-        {
-            base.ForceLayoutRebuild();
-        }
-        catch
-        {
-        }
-
         EnsureBuilt();
 
         var selfRect = transform as RectTransform;
@@ -1133,7 +1130,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 tmp.fontMaterial = tmpMaterial;
             }
 
-            tmp.enableWordWrapping = true;
+            tmp.textWrappingMode = TextWrappingModes.Normal;
             tmp.overflowMode = TextOverflowModes.Overflow;
             tmp.raycastTarget = false;
             tmp.text = string.Empty;
@@ -1883,7 +1880,7 @@ internal static class ShadeInventoryPaneIntegration
             return;
         }
 
-        InventoryPaneListDisplay display = null;
+        InventoryPaneListDisplay? display = null;
         if (PaneListDisplayField != null)
         {
             try
@@ -1940,7 +1937,7 @@ internal static class ShadeInventoryPaneIntegration
             return;
         }
 
-        InventoryPane template = panes.FirstOrDefault(p =>
+        InventoryPane? template = panes.FirstOrDefault(p =>
         {
             if (!p)
             {
@@ -1957,8 +1954,14 @@ internal static class ShadeInventoryPaneIntegration
                  typeName.IndexOf("Crest", StringComparison.OrdinalIgnoreCase) >= 0);
             return matchesName || matchesType;
         }) ?? panes.FirstOrDefault(p => p != null) ?? panes[0];
-        var templateRect = template.GetComponent<RectTransform>();
-        var parent = templateRect != null ? templateRect.parent : template.transform.parent;
+        RectTransform? templateRect = null;
+        Transform? parent = null;
+        if (template != null)
+        {
+            templateRect = template.GetComponent<RectTransform>();
+            parent = templateRect != null ? templateRect.parent : template.transform.parent;
+        }
+        parent ??= paneList.transform;
         ShadeInventoryPane.LogMenuEvent($"Injecting shade pane using template '{template?.GetType().Name ?? "<null>"}'");
 
         var go = new GameObject("ShadeInventoryPane", typeof(RectTransform));
