@@ -20,6 +20,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private static readonly Color DefaultHighlightColor = new Color(0.78f, 0.86f, 1f, 0.35f);
     private static readonly Color DefaultCellColor = new Color(0.18f, 0.2f, 0.26f, BackgroundAlpha);
     private static readonly Color DefaultNewMarkerColor = new Color(1f, 0.85f, 0.25f, 0.95f);
+    private static readonly Vector2 DefaultStandaloneRootSize = new Vector2(1920f, 1080f);
 
     private struct RectSnapshot
     {
@@ -994,6 +995,75 @@ internal sealed class ShadeInventoryPane : InventoryPane
         LogMenuEvent($"ForceImmediateRefresh: entries={entries.Count}, inventoryNull={inventory == null}");
     }
 
+    private static Vector2 DetermineStandaloneFallbackSize(RectTransform root, out string source)
+    {
+        source = "default";
+        if (root == null)
+        {
+            return DefaultStandaloneRootSize;
+        }
+
+        try
+        {
+            var canvas = root.GetComponentInParent<Canvas>();
+            if (canvas != null)
+            {
+                var rect = canvas.pixelRect;
+                if (rect.width >= MinRootSizeThreshold && rect.height >= MinRootSizeThreshold)
+                {
+                    source = "canvas.pixelRect";
+                    return new Vector2(rect.width, rect.height);
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            float width = Screen.width;
+            float height = Screen.height;
+            if (width >= MinRootSizeThreshold && height >= MinRootSizeThreshold)
+            {
+                source = "screen";
+                return new Vector2(width, height);
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            var resolution = Screen.currentResolution;
+            if (resolution.width >= MinRootSizeThreshold && resolution.height >= MinRootSizeThreshold)
+            {
+                source = "screen.currentResolution";
+                return new Vector2(resolution.width, resolution.height);
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            var display = Display.main;
+            if (display != null && display.systemWidth >= MinRootSizeThreshold && display.systemHeight >= MinRootSizeThreshold)
+            {
+                source = "display";
+                return new Vector2(display.systemWidth, display.systemHeight);
+            }
+        }
+        catch
+        {
+        }
+
+        source = "constant";
+        return DefaultStandaloneRootSize;
+    }
+
     private bool TryApplyStandaloneRootSizing(RectTransform root, Vector2? desiredSize = null)
     {
         if (root == null)
@@ -1007,6 +1077,18 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         Vector2? candidate = desiredSize ?? templateRootSize;
+        string sizeSource = desiredSize.HasValue ? "override" : "template";
+        if (!candidate.HasValue || candidate.Value.x < MinRootSizeThreshold || candidate.Value.y < MinRootSizeThreshold)
+        {
+            string fallbackSource;
+            Vector2 fallback = DetermineStandaloneFallbackSize(root, out fallbackSource);
+            if (fallback.x >= MinRootSizeThreshold && fallback.y >= MinRootSizeThreshold)
+            {
+                candidate = fallback;
+                sizeSource = fallbackSource;
+            }
+        }
+
         if (!candidate.HasValue)
         {
             return false;
@@ -1069,8 +1151,14 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return false;
         }
 
+        templateRootSize = size;
+        if (!rootRectTemplate.HasValue)
+        {
+            rootRectTemplate = RectSnapshot.From(root);
+        }
+
         LogMenuEvent(FormattableString.Invariant(
-            $"ApplyStandaloneRootSizing -> parent='{root.parent?.name ?? "<null>"}' size={FormatVector2(size)} anchor={FormatVector2(anchor)} pivot={FormatVector2(pivot)} anchored={FormatVector2(anchored)}"));
+            $"ApplyStandaloneRootSizing -> parent='{root.parent?.name ?? "<null>"}' size={FormatVector2(size)} anchor={FormatVector2(anchor)} pivot={FormatVector2(pivot)} anchored={FormatVector2(anchored)} source={sizeSource}"));
         return true;
     }
 
@@ -1099,6 +1187,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         Vector2? desiredSize = templateRootSize;
         bool adjustments = TryApplyStandaloneRootSizing(root, desiredSize);
+        desiredSize = templateRootSize;
         if (desiredSize.HasValue)
         {
             var templateSize = desiredSize.Value;
