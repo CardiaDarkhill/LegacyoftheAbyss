@@ -1168,7 +1168,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
     }
 
-    protected override void Awake()
+    public override void Awake()
     {
         base.Awake();
         RegisterInputHandlers();
