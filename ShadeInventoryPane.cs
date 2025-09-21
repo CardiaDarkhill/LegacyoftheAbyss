@@ -349,6 +349,55 @@ internal sealed class ShadeInventoryPane : InventoryPane
                     skipCandidate = false;
                 }
 
+                if (!skipCandidate)
+                {
+                    try
+                    {
+                        if (candidate.GetComponent<ShadeInventoryPane>() != null)
+                        {
+                            skipCandidate = true;
+                        }
+                    }
+                    catch
+                    {
+                        skipCandidate = false;
+                    }
+                }
+
+                if (!skipCandidate)
+                {
+                    try
+                    {
+                        string? candidateName = candidate.gameObject != null ? candidate.gameObject.name : null;
+                        if (!string.IsNullOrEmpty(candidateName) &&
+                            string.Equals(candidateName, nameof(ShadeInventoryPane), StringComparison.OrdinalIgnoreCase))
+                        {
+                            skipCandidate = true;
+                        }
+
+                        if (!skipCandidate)
+                        {
+                            Transform? current = candidate.transform;
+                            while (current != null)
+                            {
+                                string? currentName = current.gameObject != null ? current.gameObject.name : null;
+                                if (!string.IsNullOrEmpty(currentName) &&
+                                    string.Equals(currentName, nameof(ShadeInventoryPane), StringComparison.OrdinalIgnoreCase))
+                                {
+                                    skipCandidate = true;
+                                    break;
+                                }
+
+                                current = current.parent;
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        skipCandidate = false;
+                    }
+                }
+
                 if (skipCandidate)
                 {
                     continue;
