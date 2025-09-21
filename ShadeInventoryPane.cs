@@ -25,6 +25,15 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private static readonly Color DefaultCellColor = new Color(0.18f, 0.2f, 0.26f, BackgroundAlpha);
     private static readonly Color DefaultNewMarkerColor = new Color(1f, 0.85f, 0.25f, 0.95f);
     private static readonly Vector2 DefaultStandaloneRootSize = new Vector2(1920f, 1080f);
+    private const string LockedCharmSpriteName = "shade_charm_charmui0001charmcost02unlit";
+
+    private static readonly Color LockedIconColor = new Color(1f, 1f, 1f, 0.72f);
+    private static readonly Color InactiveIconColor = new Color(1f, 1f, 1f, 0.3f);
+    private static readonly Color EquippedIconColor = new Color(0.82f, 0.95f, 1f, 1f);
+    private static readonly Color BrokenIconColor = new Color(1f, 0.64f, 0.64f, 1f);
+
+    private static Sprite? lockedCharmSprite;
+    private static bool lockedCharmSpriteSearched;
 
     private struct RectSnapshot
     {
@@ -197,6 +206,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private Color newMarkerColor = DefaultNewMarkerColor;
 
     private ShadeCharmInventory? inventory;
+    private ShadeCharmInventory? subscribedInventory;
+    private InventoryPaneList? attachedPaneList;
     private int selectedIndex;
     private bool isBuilt;
     private bool isActive;
@@ -223,6 +234,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         public Image Icon;
         public Image Background;
         public GameObject NewMarker;
+        public Sprite? BaseSprite;
     }
 
     private static void SetTextValue(Text? text, TMP_Text? tmp, string value)
@@ -824,34 +836,38 @@ internal sealed class ShadeInventoryPane : InventoryPane
     {
         EnsureBuilt();
         labelPulseTimer = 0f;
-        ApplyOverlayVisibility(true);
 
-        ShadeCharmInventory? inv = ShadeRuntime.Charms;
-        if (inv != null)
+        if (IsPaneActive)
         {
-            inv.StateChanged += HandleInventoryChanged;
+            isActive = true;
+            UpdateInventoryBinding(true);
+            ApplyOverlayVisibility(true);
         }
-        inventory = inv;
-        isActive = true;
-        RefreshAll();
-        UpdateParentListLabel();
-        LogMenuEvent($"OnEnable: entries={entries.Count}, inventoryNull={inventory == null}");
+        else
+        {
+            isActive = false;
+            UpdateInventoryBinding(false);
+            ApplyOverlayVisibility(false);
+        }
+
+        LogMenuEvent(FormattableString.Invariant(
+            $"OnEnable: active={isActive} entries={entries.Count} inventoryNull={inventory == null}"));
     }
 
     private void OnDisable()
     {
-        if (inventory != null)
-        {
-            inventory.StateChanged -= HandleInventoryChanged;
-        }
-        inventory = null;
+        UpdateInventoryBinding(false);
         isActive = false;
-        LogMenuEvent("OnDisable");
+        labelPulseTimer = 0f;
         ApplyOverlayVisibility(false);
+        LogMenuEvent("OnDisable");
     }
 
     private void OnDestroy()
     {
+        UpdateInventoryBinding(false);
+        DetachPaneList();
+
         if (fallbackSprite != null)
         {
             if (fallbackSprite.texture != null)
@@ -886,10 +902,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
         base.PaneStart();
         EnsureBuilt();
         labelPulseTimer = 0f;
-        ApplyOverlayVisibility(true);
-
-        inventory ??= ShadeRuntime.Charms;
         isActive = true;
+        UpdateInventoryBinding(true);
+        ApplyOverlayVisibility(true);
         RefreshAll();
         UpdateParentListLabel();
         ForceLayoutRebuild();
@@ -898,7 +913,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     public override void PaneEnd()
     {
+        UpdateInventoryBinding(false);
         isActive = false;
+        labelPulseTimer = 0f;
         ApplyOverlayVisibility(false);
         LogMenuEvent("PaneEnd");
         base.PaneEnd();
@@ -1881,6 +1898,90 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
     }
 
+    private void UpdateInventoryBinding(bool subscribe)
+    {
+        var current = ShadeRuntime.Charms;
+        inventory = current;
+
+        if (subscribe)
+        {
+            if (!ReferenceEquals(subscribedInventory, current))
+            {
+                if (subscribedInventory != null)
+                {
+                    subscribedInventory.StateChanged -= HandleInventoryChanged;
+                }
+
+                if (current != null)
+                {
+                    current.StateChanged += HandleInventoryChanged;
+                }
+
+                subscribedInventory = current;
+            }
+        }
+        else if (subscribedInventory != null)
+        {
+            subscribedInventory.StateChanged -= HandleInventoryChanged;
+            subscribedInventory = null;
+        }
+    }
+
+    internal void AttachToPaneList(InventoryPaneList? paneList)
+    {
+        if (attachedPaneList == paneList)
+        {
+            return;
+        }
+
+        DetachPaneList();
+
+        if (paneList == null)
+        {
+            return;
+        }
+
+        attachedPaneList = paneList;
+
+        try { attachedPaneList.OpeningInventory += HandleInventoryOpened; }
+        catch { }
+
+        try { attachedPaneList.ClosingInventory += HandleInventoryClosed; }
+        catch { }
+    }
+
+    private void DetachPaneList()
+    {
+        if (attachedPaneList == null)
+        {
+            return;
+        }
+
+        try { attachedPaneList.OpeningInventory -= HandleInventoryOpened; }
+        catch { }
+
+        try { attachedPaneList.ClosingInventory -= HandleInventoryClosed; }
+        catch { }
+
+        attachedPaneList = null;
+    }
+
+    private void HandleInventoryOpened()
+    {
+        if (!IsPaneActive)
+        {
+            ApplyOverlayVisibility(false);
+        }
+    }
+
+    private void HandleInventoryClosed()
+    {
+        ApplyOverlayVisibility(false);
+        isActive = false;
+        labelPulseTimer = 0f;
+        UpdateInventoryBinding(false);
+    }
+
     private bool ShouldUseNormalizedFallbackLayout(RectTransform? root, Vector2 rootSize)
     {
         if (root == null)
@@ -2033,12 +2134,12 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         UpdateOverlayCanvasScaler();
 
-        useNormalizedFallbackLayout = true;
         normalizedFallbackRootSize = DetermineOverlayCanvasSize(rootRect);
         if (normalizedFallbackRootSize.sqrMagnitude <= 0f)
         {
             normalizedFallbackRootSize = DefaultStandaloneRootSize;
         }
+        useNormalizedFallbackLayout = ShouldUseNormalizedFallbackLayout(rootRect, normalizedFallbackRootSize);
 
         if (canvasGroup == null || canvasGroup.gameObject != rootRect.gameObject)
         {
@@ -2111,28 +2212,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
             contentRoot.offsetMax = new Vector2(-32f, -36f);
         }
 
-        titleText = CreateText("Title", contentRoot, FontStyle.Normal, 46, TextAnchor.UpperLeft, out titleTextTMP, useHeaderFont: true);
-        var titleRect = ResolveRectTransform(titleText, titleTextTMP);
-        if (titleRect != null)
-        {
-            if (useNormalizedFallbackLayout)
-            {
-                titleRect.anchorMin = new Vector2(0f, 0.88f);
-                titleRect.anchorMax = new Vector2(0.6f, 1f);
-                titleRect.pivot = new Vector2(0f, 1f);
-                titleRect.offsetMin = Vector2.zero;
-                titleRect.offsetMax = Vector2.zero;
-            }
-            else
-            {
-                titleRect.anchorMin = new Vector2(0f, 1f);
-                titleRect.anchorMax = new Vector2(1f, 1f);
-                titleRect.pivot = new Vector2(0f, 1f);
-                titleRect.offsetMin = new Vector2(0f, -60f);
-                titleRect.offsetMax = new Vector2(0f, -8f);
-            }
-        }
-        SetTextValue(titleText, titleTextTMP, displayLabel);
+        titleText = null;
+        titleTextTMP = null;
 
         notchText = CreateText("Notches", contentRoot, FontStyle.Normal, 32, TextAnchor.UpperRight, out notchTextTMP);
         var notchRect = ResolveRectTransform(notchText, notchTextTMP);
@@ -2140,8 +2221,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             if (useNormalizedFallbackLayout)
             {
-                notchRect.anchorMin = new Vector2(0.6f, 0.88f);
-                notchRect.anchorMax = new Vector2(1f, 1f);
+                notchRect.anchorMin = new Vector2(0.6f, 0.82f);
+                notchRect.anchorMax = new Vector2(1f, 0.94f);
                 notchRect.pivot = new Vector2(1f, 1f);
                 notchRect.offsetMin = Vector2.zero;
                 notchRect.offsetMax = Vector2.zero;
@@ -2151,8 +2232,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 notchRect.anchorMin = new Vector2(0.45f, 1f);
                 notchRect.anchorMax = new Vector2(1f, 1f);
                 notchRect.pivot = new Vector2(1f, 1f);
-                notchRect.offsetMin = new Vector2(-12f, -60f);
-                notchRect.offsetMax = new Vector2(0f, -10f);
+                notchRect.offsetMin = new Vector2(-12f, -92f);
+                notchRect.offsetMax = new Vector2(0f, -42f);
             }
         }
 
@@ -2540,9 +2621,16 @@ internal sealed class ShadeInventoryPane : InventoryPane
             entry.Definition = definitions[i];
             entry.Id = definitions[i].EnumId ?? ShadeCharmId.WaywardCompass;
             var sprite = definitions[i].Icon ?? GetFallbackSprite();
+            entry.BaseSprite = sprite;
             if (entry.Icon != null)
             {
                 entry.Icon.sprite = sprite;
+                entry.Icon.enabled = sprite != null;
+            }
+            if (entry.Background != null)
+            {
+                entry.Background.enabled = false;
+                entry.Background.color = Color.clear;
             }
             entries[i] = entry;
         }
@@ -2621,16 +2709,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         var background = cell.AddComponent<Image>();
-        if (cellFrameSprite != null)
-        {
-            background.sprite = cellFrameSprite;
-            background.type = Image.Type.Sliced;
-            background.color = cellFrameColor;
-        }
-        else
-        {
-            background.color = cellFrameColor;
-        }
+        background.enabled = false;
+        background.color = Color.clear;
         background.raycastTarget = false;
 
         var iconGo = new GameObject("Icon", typeof(RectTransform));
@@ -2652,6 +2732,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         var icon = iconGo.AddComponent<Image>();
         icon.preserveAspect = true;
         icon.raycastTarget = false;
+        icon.enabled = false;
 
         var newMarker = new GameObject("New", typeof(RectTransform), typeof(Image));
         newMarker.layer = cell.layer;
@@ -2686,19 +2767,39 @@ internal sealed class ShadeInventoryPane : InventoryPane
             Root = cellRect,
             Background = background,
             Icon = icon,
-            NewMarker = newMarker
+            NewMarker = newMarker,
+            BaseSprite = null
         };
     }
 
     private void RefreshEntryStates()
     {
         EnsureBuilt();
-        if (inventory == null)
+        var inv = inventory ?? ShadeRuntime.Charms;
+        inventory = inv;
+
+        if (entries.Count == 0)
+        {
+            return;
+        }
+
+        if (inv == null)
         {
             foreach (var entry in entries)
             {
-                entry.Icon.color = new Color(1f, 1f, 1f, 0.3f);
-                entry.Background.color = new Color(0.12f, 0.12f, 0.12f, BackgroundAlpha);
+                if (entry.Icon != null)
+                {
+                    entry.Icon.sprite = entry.BaseSprite;
+                    entry.Icon.enabled = entry.Icon.sprite != null;
+                    entry.Icon.color = InactiveIconColor;
+                }
+
+                if (entry.Background != null)
+                {
+                    entry.Background.enabled = false;
+                    entry.Background.color = Color.clear;
+                }
+
                 if (entry.NewMarker != null)
                 {
                     entry.NewMarker.SetActive(false);
@@ -2707,33 +2808,51 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return;
         }
 
+        var lockedSprite = ResolveLockedCharmSprite();
         foreach (var entry in entries)
         {
-            bool owned = inventory.IsOwned(entry.Id);
-            bool equipped = inventory.IsEquipped(entry.Id);
-            bool broken = inventory.IsBroken(entry.Id);
-            bool isNew = inventory.IsNewlyDiscovered(entry.Id);
+            bool owned = inv.IsOwned(entry.Id);
+            bool equipped = inv.IsEquipped(entry.Id);
+            bool broken = inv.IsBroken(entry.Id);
+            bool isNew = owned && inv.IsNewlyDiscovered(entry.Id);
 
-            entry.Icon.color = owned ? Color.white : new Color(1f, 1f, 1f, 0.25f);
+            if (entry.Icon != null)
+            {
+                if (!owned && lockedSprite != null)
+                {
+                    entry.Icon.sprite = lockedSprite;
+                    entry.Icon.enabled = true;
+                    entry.Icon.color = LockedIconColor;
+                }
+                else
+                {
+                    entry.Icon.sprite = entry.BaseSprite;
+                    entry.Icon.enabled = entry.Icon.sprite != null;
 
-            Color bgColor;
-            if (!owned)
-            {
-                bgColor = new Color(0.1f, 0.1f, 0.1f, BackgroundAlpha);
+                    if (!owned)
+                    {
+                        entry.Icon.color = InactiveIconColor;
+                    }
+                    else if (broken)
+                    {
+                        entry.Icon.color = BrokenIconColor;
+                    }
+                    else if (equipped)
+                    {
+                        entry.Icon.color = EquippedIconColor;
+                    }
+                    else
+                    {
+                        entry.Icon.color = Color.white;
+                    }
+                }
             }
-            else if (broken)
+
+            if (entry.Background != null)
             {
-                bgColor = new Color(0.55f, 0.22f, 0.22f, BackgroundAlpha);
+                entry.Background.enabled = false;
+                entry.Background.color = Color.clear;
             }
-            else if (equipped)
-            {
-                bgColor = new Color(0.28f, 0.46f, 0.72f, BackgroundAlpha + 0.05f);
-            }
-            else
-            {
-                bgColor = new Color(0.18f, 0.2f, 0.26f, BackgroundAlpha);
-            }
-            entry.Background.color = bgColor;
 
             if (entry.NewMarker != null)
             {
@@ -2836,6 +2955,33 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         SetTextValue(statusText, statusTextTMP, string.IsNullOrEmpty(notchInfo) ? status : $"{notchInfo}\\n{status}");
+    }
+
+    private static Sprite? ResolveLockedCharmSprite()
+    {
+        if (lockedCharmSpriteSearched)
+        {
+            return lockedCharmSprite;
+        }
+
+        lockedCharmSprite = ShadeCharmIconLoader.TryLoadIcon(LockedCharmSpriteName, LockedCharmSpriteName + ".png");
+        if (lockedCharmSprite == null)
+        {
+            try
+            {
+                lockedCharmSprite = Resources
+                    .FindObjectsOfTypeAll<Sprite>()
+                    .FirstOrDefault(sprite => sprite != null &&
+                        string.Equals(sprite.name, LockedCharmSpriteName, StringComparison.OrdinalIgnoreCase));
+            }
+            catch
+            {
+                lockedCharmSprite = null;
+            }
+        }
+
+        lockedCharmSpriteSearched = true;
+        return lockedCharmSprite;
     }
 
     private Sprite GetFallbackSprite()
@@ -3528,6 +3674,7 @@ internal static class ShadeInventoryPaneIntegration
 
         if (existingShade != null)
         {
+            existingShade.AttachToPaneList(paneList);
             existingShade.ConfigureFromTemplate(template);
             existingShade.SetDisplayLabel("Charms");
             existingShade.ForceImmediateRefresh();
@@ -3566,6 +3713,7 @@ internal static class ShadeInventoryPaneIntegration
         shadePane.SetDisplayLabel("Charms");
         shadePane.ForceImmediateRefresh();
         shadePane.ForceLayoutRebuild();
+        shadePane.AttachToPaneList(paneList);
 
         var input = go.AddComponent<InventoryPaneInput>();
         ConfigureInput(input, paneList, shadePane);
