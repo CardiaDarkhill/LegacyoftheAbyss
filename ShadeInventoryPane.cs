@@ -14,7 +14,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 {
     private const int Columns = 7;
     private const float BackgroundAlpha = 0.82f;
-    private const float MinRootSizeThreshold = 32f;
+    internal const float MinRootSizeThreshold = 32f;
 
     private static readonly Color DefaultPanelColor = new Color(0.05f, 0.05f, 0.08f, 0.92f);
     private static readonly Color DefaultHighlightColor = new Color(0.78f, 0.86f, 1f, 0.35f);
@@ -478,7 +478,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         return rect;
     }
 
-    private static string FormatVector2(Vector2 value)
+    internal static string FormatVector2(Vector2 value)
     {
         return FormattableString.Invariant($"({value.x:0.##}, {value.y:0.##})");
     }
@@ -493,7 +493,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         return FormattableString.Invariant($"(l:{offset.left}, r:{offset.right}, t:{offset.top}, b:{offset.bottom})");
     }
 
-    private static bool HasSufficientRectSize(RectTransform? rect)
+    internal static bool HasSufficientRectSize(RectTransform? rect)
     {
         if (rect == null)
         {
@@ -2782,7 +2782,7 @@ internal static class ShadeInventoryPaneIntegration
                     return false;
                 }
 
-                bool templateHasValidSize = HasSufficientRectSize(templateRect);
+                bool templateHasValidSize = ShadeInventoryPane.HasSufficientRectSize(templateRect);
 
                 var shadeRect = Shade.transform as RectTransform;
                 if (shadeRect != null)
@@ -2820,7 +2820,7 @@ internal static class ShadeInventoryPaneIntegration
                     else
                     {
                         ShadeInventoryPane.LogMenuEvent(FormattableString.Invariant(
-                            $"Template sync skipping layout copy: template size {FormatVector2(templateRect.rect.size)} below threshold {MinRootSizeThreshold}"));
+                            $"Template sync skipping layout copy: template size {ShadeInventoryPane.FormatVector2(templateRect.rect.size)} below threshold {ShadeInventoryPane.MinRootSizeThreshold}"));
                     }
                 }
 
@@ -3021,7 +3021,7 @@ internal static class ShadeInventoryPaneIntegration
             return;
         }
         RectTransform? templateRect = template != null ? ShadeInventoryPane.ResolveTemplateRootRectTransform(template) : null;
-        bool templateHasValidSize = HasSufficientRectSize(templateRect);
+        bool templateHasValidSize = ShadeInventoryPane.HasSufficientRectSize(templateRect);
         Transform? parent = null;
         if (templateRect != null)
         {
@@ -3034,8 +3034,8 @@ internal static class ShadeInventoryPaneIntegration
 
         if (templateRect != null && !templateHasValidSize)
         {
-            LogMenuEvent(FormattableString.Invariant(
-                $"EnsurePane template size {FormatVector2(templateRect.rect.size)} below threshold {MinRootSizeThreshold}; using fallback layout"));
+            ShadeInventoryPane.LogMenuEvent(FormattableString.Invariant(
+                $"EnsurePane template size {ShadeInventoryPane.FormatVector2(templateRect.rect.size)} below threshold {ShadeInventoryPane.MinRootSizeThreshold}; using fallback layout"));
         }
         if (existingShade != null)
         {
