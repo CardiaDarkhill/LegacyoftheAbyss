@@ -323,6 +323,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         RectTransform? matchByName = null;
         RectTransform? matchDirectChild = null;
         RectTransform? firstCandidate = null;
+        RectTransform? scoredCandidate = null;
+        int scoredCandidateValue = int.MinValue;
 
         RectTransform[]? rects = null;
         try
@@ -412,13 +414,45 @@ internal sealed class ShadeInventoryPane : InventoryPane
                     }
                 }
 
-                if (matchByName == null)
+                string? name = candidate.gameObject != null ? candidate.gameObject.name : null;
+                if (name != null)
                 {
-                    string? name = candidate.gameObject != null ? candidate.gameObject.name : null;
-                    if (!string.IsNullOrEmpty(name))
+                    string lower = name.ToLowerInvariant();
+
+                    int candidateScore = ScoreTemplateRootCandidate(template, candidate, lower);
+                    if (candidateScore > scoredCandidateValue)
                     {
-                        string lower = name.ToLowerInvariant();
+                        scoredCandidate = candidate;
+                        scoredCandidateValue = candidateScore;
+                    }
+
+                    if (matchByName == null)
+                    {
                         if (lower.Contains("pane") || lower.Contains("panel"))
+                        {
+                            matchByName = candidate;
+                        }
+                    }
+                    else if (matchByName != null)
+                    {
+                        // Prefer stronger string matches if available later in the iteration.
+                        bool currentIsDescription = lower.Contains("description");
+                        bool existingIsDescription = false;
+                        string? existingName = matchByName.gameObject != null ? matchByName.gameObject.name : null;
+                        if (!string.IsNullOrEmpty(existingName))
+                        {
+                            existingIsDescription = existingName.IndexOf("description", StringComparison.OrdinalIgnoreCase) >= 0;
+                        }
+
+                        if (!existingIsDescription && currentIsDescription)
+                        {
+                            // Keep the existing non-description match.
+                        }
+                        else if (existingIsDescription && !currentIsDescription)
+                        {
+                            matchByName = candidate;
+                        }
+                        else if (lower.Contains("shade") || lower.Contains("inventory"))
                         {
                             matchByName = candidate;
                         }
@@ -431,10 +465,14 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 }
             }
 
-            rect ??= matchByComponent;
-            rect ??= matchByName;
-            rect ??= matchDirectChild;
-            rect ??= firstCandidate;
+        rect ??= matchByComponent;
+        if (rect == null && scoredCandidate != null)
+        {
+            rect = scoredCandidate;
+        }
+        rect ??= matchByName;
+        rect ??= matchDirectChild;
+        rect ??= firstCandidate;
         }
 
         if (rect != null && rect.transform != template.transform)
@@ -453,6 +491,195 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         return rect;
+    }
+
+    private static int ScoreTemplateRootCandidate(InventoryPane template, RectTransform candidate, string lowerName)
+    {
+        if (candidate == null)
+        {
+            return int.MinValue;
+        }
+
+        int score = 0;
+
+        try
+        {
+            if (candidate.transform.parent == template.transform)
+            {
+                score += 75;
+            }
+        }
+        catch
+        {
+        }
+
+        if (!string.IsNullOrEmpty(lowerName))
+        {
+            if (lowerName.Contains("shadeinventory"))
+            {
+                score += 500;
+            }
+            if (lowerName.Contains("inventorypane"))
+            {
+                score += 450;
+            }
+            else if (lowerName.Contains("inventory"))
+            {
+                score += 320;
+            }
+
+            if (lowerName.Contains("shade"))
+            {
+                score += 220;
+            }
+
+            if (lowerName.Contains("charm"))
+            {
+                score += 180;
+            }
+
+            if (lowerName.Contains("pane"))
+            {
+                score += 120;
+            }
+
+            if (lowerName.Contains("panel"))
+            {
+                score += 90;
+            }
+
+            if (lowerName.Contains("description"))
+            {
+                score -= 260;
+            }
+
+            if (lowerName.Contains("detail"))
+            {
+                score -= 200;
+            }
+
+            if (lowerName.Contains("grid"))
+            {
+                score -= 160;
+            }
+
+            if (lowerName.Contains("hint") || lowerName.Contains("status"))
+            {
+                score -= 120;
+            }
+        }
+
+        int childCount = 0;
+        try
+        {
+            childCount = candidate.childCount;
+        }
+        catch
+        {
+            childCount = 0;
+        }
+
+        if (childCount >= 6)
+        {
+            score += 110;
+        }
+        else if (childCount >= 3)
+        {
+            score += 70;
+        }
+        else if (childCount >= 1)
+        {
+            score += 30;
+        }
+
+        bool hasLayoutGroup = false;
+        try
+        {
+            hasLayoutGroup = candidate.GetComponent<LayoutGroup>() != null;
+        }
+        catch
+        {
+            hasLayoutGroup = false;
+        }
+
+        if (hasLayoutGroup)
+        {
+            score += 60;
+        }
+
+        bool hasDirectGrid = false;
+        try
+        {
+            hasDirectGrid = candidate.GetComponent<GridLayoutGroup>() != null;
+        }
+        catch
+        {
+            hasDirectGrid = false;
+        }
+
+        if (hasDirectGrid)
+        {
+            score -= 140;
+        }
+
+        if (HasGridLayoutDescendant(candidate, hasDirectGrid))
+        {
+            score += 240;
+        }
+
+        try
+        {
+            Vector2 size = candidate.rect.size;
+            if (Mathf.Abs(size.x) >= 12f && Mathf.Abs(size.y) >= 12f)
+            {
+                score += 45;
+            }
+        }
+        catch
+        {
+        }
+
+        return score;
+    }
+
+    private static bool HasGridLayoutDescendant(RectTransform candidate, bool excludeSelf)
+    {
+        if (candidate == null)
+        {
+            return false;
+        }
+
+        GridLayoutGroup[]? grids = null;
+        try
+        {
+            grids = candidate.GetComponentsInChildren<GridLayoutGroup>(true);
+        }
+        catch
+        {
+            grids = null;
+        }
+
+        if (grids == null || grids.Length == 0)
+        {
+            return false;
+        }
+
+        foreach (var grid in grids)
+        {
+            if (grid == null)
+            {
+                continue;
+            }
+
+            if (excludeSelf && grid.transform == candidate.transform)
+            {
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     internal static string FormatVector2(Vector2 value)
