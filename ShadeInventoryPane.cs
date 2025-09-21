@@ -1069,6 +1069,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         try
         {
+            bool templateRootHasValidSize = false;
             var templateRect = ResolveTemplateRootRectTransform(template);
             RectTransform? panelRectRef = null;
             RectTransform? contentRectRef = null;
@@ -1077,7 +1078,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
             if (templateRect != null)
             {
                 Vector2 templateSize = templateRect.rect.size;
-                if (HasSufficientRectSize(templateRect))
+                templateRootHasValidSize = HasSufficientRectSize(templateRect);
+                if (templateRootHasValidSize)
                 {
                     rootRectTemplate = RectSnapshot.From(templateRect);
                     templateRootSize = new Vector2(Mathf.Abs(templateSize.x), Mathf.Abs(templateSize.y));
@@ -1354,7 +1356,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
                     }
                 }
 
-                if (panelRectRef == null)
+                if (panelRectRef == null && templateRect != null && templateRootHasValidSize)
                 {
                     panelRectRef = templateRect;
                 }
@@ -1388,22 +1390,22 @@ internal sealed class ShadeInventoryPane : InventoryPane
                     }
                 }
 
-                if (panelRectRef != null)
+                if (panelRectRef != null && HasSufficientRectSize(panelRectRef))
                 {
                     panelRectTemplate = RectSnapshot.From(panelRectRef);
                 }
 
-                if (contentRectRef != null)
+                if (contentRectRef != null && HasSufficientRectSize(contentRectRef))
                 {
                     contentRectTemplate = RectSnapshot.From(contentRectRef);
                 }
 
-                if (gridRectRef != null && !gridRectTemplate.HasValue)
+                if (gridRectRef != null && !gridRectTemplate.HasValue && HasSufficientRectSize(gridRectRef))
                 {
                     gridRectTemplate = RectSnapshot.From(gridRectRef);
                 }
 
-                if (detailRectRef != null)
+                if (detailRectRef != null && HasSufficientRectSize(detailRectRef))
                 {
                     detailRectTemplate = RectSnapshot.From(detailRectRef);
                 }
