@@ -18,6 +18,13 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private static readonly Vector2 DefaultCharmSpacing = new Vector2(16f, 16f);
     private const float RowOffsetFactor = 0.5f;
     private const float CharmIconSizeMultiplier = 0.69f;
+    private const float CharmCellShrinkScale = 0.9f;
+    private const float CharmCellShrinkWidthThreshold = 96f;
+    private const float CharmCellShrinkHeightThreshold = 108f;
+    private const float CharmCellMinWidth = 72f;
+    private const float CharmCellMinHeight = 80f;
+    private const float CharmSpacingScale = 0.4f;
+    private const float CharmSpacingMin = 4f;
     private const float BackgroundAlpha = 0.82f;
     // Vanilla charm panes report RectTransform sizes of roughly 6.5 × 8 units even
     // though the UI fills the screen once the canvas scale factor is applied. Treat
@@ -30,7 +37,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private static readonly Color DefaultPanelColor = new Color(0.05f, 0.05f, 0.08f, 0.92f);
     private static readonly Color DefaultHighlightColor = new Color(0.78f, 0.86f, 1f, 0.35f);
     private static readonly Color DefaultCellColor = new Color(0.18f, 0.2f, 0.26f, BackgroundAlpha);
-    private static readonly Color DefaultNewMarkerColor = new Color(1f, 0.85f, 0.25f, 0.95f);
     private static readonly Vector2 DefaultStandaloneRootSize = new Vector2(1920f, 1080f);
     private const string LockedCharmSpriteName = "shade_charm_charmui0001charmcost02unlit";
     private const string NotchLitSpriteName = "shade_charm_charmui0000charmcost02lit";
@@ -175,7 +181,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private RectTransform panelRoot = null!;
     private RectTransform contentRoot = null!;
     private RectTransform gridRoot = null!;
-    private RectTransform highlight = null!;
+    private RectTransform? highlight;
     private Text? titleText;
     private Text? notchText;
     private Text? detailTitleText;
@@ -210,7 +216,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private Sprite? cellFrameSprite;
     private Color cellFrameColor = DefaultCellColor;
     private Sprite? newMarkerSpriteTemplate;
-    private Color newMarkerColor = DefaultNewMarkerColor;
 
     private ShadeCharmInventory? inventory;
     private ShadeCharmInventory? subscribedInventory;
@@ -253,7 +258,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         public RectTransform Root;
         public Image Icon;
         public Image Background;
-        public GameObject NewMarker;
+        public GameObject? NewMarker;
         public Sprite? BaseSprite;
     }
 
@@ -2058,8 +2063,35 @@ internal sealed class ShadeInventoryPane : InventoryPane
             spacing = new Vector2(spacingX, spacingY);
         }
 
-        charmCellSize = new Vector2(Mathf.Max(cell.x, MinRootSizeThreshold), Mathf.Max(cell.y, MinRootSizeThreshold));
-        charmSpacing = new Vector2(Mathf.Max(spacing.x, 0f), Mathf.Max(spacing.y, 0f));
+        float width = Mathf.Abs(cell.x);
+        if (width >= CharmCellShrinkWidthThreshold)
+        {
+            width = Mathf.Max(width * CharmCellShrinkScale, CharmCellMinWidth);
+        }
+
+        float height = Mathf.Abs(cell.y);
+        if (height >= CharmCellShrinkHeightThreshold)
+        {
+            height = Mathf.Max(height * CharmCellShrinkScale, CharmCellMinHeight);
+        }
+
+        charmCellSize = new Vector2(
+            Mathf.Max(width, MinRootSizeThreshold),
+            Mathf.Max(height, MinRootSizeThreshold));
+
+        float spacingX = Mathf.Max(spacing.x, 0f);
+        float spacingY = Mathf.Max(spacing.y, 0f);
+        if (spacingX > 0f)
+        {
+            spacingX = Mathf.Max(spacingX * CharmSpacingScale, CharmSpacingMin);
+        }
+
+        if (spacingY > 0f)
+        {
+            spacingY = Mathf.Max(spacingY * CharmSpacingScale, CharmSpacingMin);
+        }
+
+        charmSpacing = new Vector2(spacingX, spacingY);
     }
 
     private int DetermineCharmColumnCount(int entryCount)
@@ -2216,6 +2248,43 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
     }
 
+    private RectTransform? EnsureHighlightRect()
+    {
+        if (gridRoot == null)
+        {
+            return null;
+        }
+
+        if (highlight != null && highlight)
+        {
+            return highlight;
+        }
+
+        highlight = CreateHighlightRect(gridRoot);
+        return highlight;
+    }
+
+    private RectTransform CreateHighlightRect(RectTransform parent)
+    {
+        var highlightRect = new GameObject("Highlight", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
+        highlightRect.gameObject.layer = parent.gameObject.layer;
+        highlightRect.SetParent(parent, false);
+        var highlightImage = highlightRect.GetComponent<Image>();
+        if (highlightSpriteTemplate != null)
+        {
+            highlightImage.sprite = highlightSpriteTemplate;
+            highlightImage.type = Image.Type.Sliced;
+            highlightImage.color = highlightColor;
+        }
+        else
+        {
+            highlightImage.color = highlightColor;
+        }
+        highlightImage.raycastTarget = false;
+        highlightRect.gameObject.SetActive(false);
+        return highlightRect;
+    }
+
     public void ForceLayoutRebuild()
     {
         EnsureBuilt();
@@ -2284,7 +2353,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         panelRoot = null!;
         contentRoot = null!;
         gridRoot = null!;
-        highlight = null!;
+        highlight = null;
         titleText = null!;
         notchText = null!;
         detailTitleText = null!;
@@ -2508,22 +2577,12 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         ResolveCharmLayoutMetrics(entries.Count);
 
-        highlight = new GameObject("Highlight", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
-        highlight.gameObject.layer = gridRoot.gameObject.layer;
-        highlight.SetParent(gridRoot, false);
-        var highlightImage = highlight.GetComponent<Image>();
-        if (highlightSpriteTemplate != null)
+        var highlightRect = EnsureHighlightRect();
+        if (highlightRect != null)
         {
-            highlightImage.sprite = highlightSpriteTemplate;
-            highlightImage.type = Image.Type.Sliced;
-            highlightImage.color = highlightColor;
+            highlightRect.SetParent(gridRoot, false);
+            highlightRect.gameObject.SetActive(false);
         }
-        else
-        {
-            highlightImage.color = highlightColor;
-        }
-        highlightImage.raycastTarget = false;
-        highlight.gameObject.SetActive(false);
 
         var detailRoot = new GameObject("Details", typeof(RectTransform)).GetComponent<RectTransform>();
         detailRoot.gameObject.layer = contentRoot.gameObject.layer;
@@ -2569,7 +2628,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 detailTitleRect.anchorMax = new Vector2(1f, 1f);
                 detailTitleRect.pivot = new Vector2(0.5f, 1f);
                 detailTitleRect.offsetMin = new Vector2(24f, 0f);
-                detailTitleRect.offsetMax = new Vector2(-24f, -8f);
+                detailTitleRect.offsetMax = new Vector2(-24f, -4f);
             }
         }
         SetTextValue(detailTitleText, detailTitleTextTMP, displayLabel);
@@ -2590,8 +2649,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
             detailCostRow.anchorMin = new Vector2(0f, 0.76f);
             detailCostRow.anchorMax = new Vector2(1f, 0.84f);
             detailCostRow.pivot = new Vector2(0.5f, 1f);
-            detailCostRow.offsetMin = new Vector2(24f, 0f);
-            detailCostRow.offsetMax = new Vector2(-24f, -6f);
+            detailCostRow.offsetMin = new Vector2(24f, 4f);
+            detailCostRow.offsetMax = new Vector2(-24f, -2f);
         }
 
         var costLayout = detailCostRow.gameObject.AddComponent<HorizontalLayoutGroup>();
@@ -3118,13 +3177,22 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         selectedIndex = Mathf.Clamp(index, 0, entries.Count - 1);
         var entry = entries[selectedIndex];
-        highlight.gameObject.SetActive(true);
-        highlight.SetParent(entry.Root, false);
-        highlight.SetAsFirstSibling();
-        highlight.anchorMin = Vector2.zero;
-        highlight.anchorMax = Vector2.one;
-        highlight.offsetMin = Vector2.zero;
-        highlight.offsetMax = Vector2.zero;
+        var highlightRect = EnsureHighlightRect();
+        RectTransform? entryRoot = entry.Root;
+        if (highlightRect != null && entryRoot != null)
+        {
+            highlightRect.gameObject.SetActive(true);
+            highlightRect.SetParent(entryRoot, false);
+            highlightRect.SetAsFirstSibling();
+            highlightRect.anchorMin = Vector2.zero;
+            highlightRect.anchorMax = Vector2.one;
+            highlightRect.offsetMin = Vector2.zero;
+            highlightRect.offsetMax = Vector2.zero;
+        }
+        else if (highlightRect != null)
+        {
+            highlightRect.gameObject.SetActive(false);
+        }
 
         var inv = inventory;
         if (isActive && inv != null)
@@ -3253,26 +3321,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         icon.raycastTarget = false;
         icon.enabled = false;
 
-        var newMarker = new GameObject("New", typeof(RectTransform), typeof(Image));
-        newMarker.layer = cell.layer;
-        var markerRect = newMarker.GetComponent<RectTransform>();
-        markerRect.SetParent(cellRect, false);
-        markerRect.anchorMin = new Vector2(1f, 1f);
-        markerRect.anchorMax = new Vector2(1f, 1f);
-        markerRect.pivot = new Vector2(1f, 1f);
-        float markerDimension = Mathf.Max(iconDimension * 0.22f, 16f);
-        float markerOffset = markerDimension * 0.45f;
-        markerRect.anchoredPosition = new Vector2(-markerOffset, -markerOffset);
-        markerRect.sizeDelta = new Vector2(markerDimension, markerDimension);
-        var markerImage = newMarker.GetComponent<Image>();
-        if (newMarkerSpriteTemplate != null)
-        {
-            markerImage.sprite = newMarkerSpriteTemplate;
-            markerImage.type = Image.Type.Sliced;
-        }
-        markerImage.color = newMarkerColor;
-        markerImage.raycastTarget = false;
-        newMarker.SetActive(false);
+        GameObject? newMarker = null;
 
         return new CharmEntry
         {
@@ -3457,6 +3506,52 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
     }
 
+    private static bool IsBindingLabelMeaningful(string? label)
+    {
+        return !string.IsNullOrWhiteSpace(label) &&
+               !string.Equals(label, "Unbound", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string DescribeShadeSlashBinding()
+    {
+        try
+        {
+            string primary = ShadeInput.DescribeBindingOption(ShadeInput.GetBindingOption(ShadeAction.Nail, secondary: false));
+            if (IsBindingLabelMeaningful(primary))
+            {
+                return primary;
+            }
+
+            string secondary = ShadeInput.DescribeBindingOption(ShadeInput.GetBindingOption(ShadeAction.Nail, secondary: true));
+            if (IsBindingLabelMeaningful(secondary))
+            {
+                return secondary;
+            }
+        }
+        catch
+        {
+        }
+
+        return string.Empty;
+    }
+
+    private static string BuildEquipPrompt(string bindingLabel)
+    {
+        return string.IsNullOrEmpty(bindingLabel)
+            ? "Equip"
+            : FormattableString.Invariant($"Equip {bindingLabel}");
+    }
+
+    private static string BuildUnequipPrompt(string bindingLabel)
+    {
+        if (string.IsNullOrEmpty(bindingLabel))
+        {
+            return "Submit to unequip.";
+        }
+
+        return FormattableString.Invariant($"Press {bindingLabel} to unequip.");
+    }
+
     private void UpdateDetailPanel()
     {
         EnsureBuilt();
@@ -3482,6 +3577,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
         bool equipped = inventory.IsEquipped(entry.Id);
         bool broken = inventory.IsBroken(entry.Id);
         int notchCost = definition?.NotchCost ?? 0;
+        string bindingLabel = DescribeShadeSlashBinding();
+        string equipPrompt = BuildEquipPrompt(bindingLabel);
+        string unequipPrompt = BuildUnequipPrompt(bindingLabel);
         string status;
         if (!owned)
         {
@@ -3493,7 +3591,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
         else if (equipped)
         {
-            status = "Equipped. Submit to unequip.";
+            status = FormattableString.Invariant($"Equipped. {unequipPrompt}");
         }
         else if (inventory.UsedNotches + notchCost > inventory.NotchCapacity)
         {
@@ -3501,7 +3599,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
         else
         {
-            status = "Submit to equip this charm.";
+            status = equipPrompt;
         }
         int displayCost = Mathf.Clamp(notchCost, 0, MaxNotchIcons);
         if (detailCostRow != null)
