@@ -1679,7 +1679,7 @@ internal static class ShadeInventoryPaneIntegration
         return scaledSprite;
     }
 
-    private static void CopyRectTransform(RectTransform? source, RectTransform destination)
+    private static void CopyRectTransform(RectTransform? source, RectTransform destination, bool copySiblingIndex = true)
     {
         if (source == null || destination == null)
         {
@@ -1697,7 +1697,10 @@ internal static class ShadeInventoryPaneIntegration
         destination.localScale = source.localScale;
         destination.localRotation = source.localRotation;
         destination.localPosition = source.localPosition;
-        destination.SetSiblingIndex(source.GetSiblingIndex());
+        if (copySiblingIndex)
+        {
+            destination.SetSiblingIndex(source.GetSiblingIndex());
+        }
     }
 
     private static void CopyLayoutComponents(RectTransform? source, RectTransform destination)
@@ -1925,10 +1928,17 @@ internal static class ShadeInventoryPaneIntegration
         }
 
         var panes = PanesField(paneList);
-        if (panes != null && panes.Any(p => p && p.TryGetComponent<ShadeInventoryPane>(out _)))
+        ShadeInventoryPane? existingShade = null;
+        if (panes != null)
         {
-            ShadeInventoryPane.LogMenuEvent("EnsurePane skipped: shade pane already present");
-            return;
+            foreach (var pane in panes)
+            {
+                if (pane != null && pane.TryGetComponent<ShadeInventoryPane>(out var shade))
+                {
+                    existingShade = shade;
+                    break;
+                }
+            }
         }
 
         if (panes == null || panes.Length == 0)
@@ -1961,6 +1971,25 @@ internal static class ShadeInventoryPaneIntegration
             templateRect = template.GetComponent<RectTransform>();
             parent = templateRect != null ? templateRect.parent : template.transform.parent;
         }
+        if (existingShade != null)
+        {
+            var shadeRect = existingShade.transform as RectTransform;
+            if (templateRect != null && shadeRect != null)
+            {
+                CopyRectTransform(templateRect, shadeRect, copySiblingIndex: false);
+                CopyLayoutComponents(templateRect, shadeRect);
+            }
+            ShadeInventoryPane.LogRectTransformHierarchy(templateRect, "TemplatePaneLive");
+
+            existingShade.ConfigureFromTemplate(template);
+            existingShade.SetDisplayLabel("Charms");
+            existingShade.ForceImmediateRefresh();
+            existingShade.ForceLayoutRebuild();
+            ShadeInventoryPane.LogMenuEvent(FormattableString.Invariant(
+                $"EnsurePane refreshed existing shade pane from template (active={existingShade.isActiveAndEnabled})"));
+            return;
+        }
+
         parent ??= paneList.transform;
         ShadeInventoryPane.LogMenuEvent($"Injecting shade pane using template '{template?.GetType().Name ?? "<null>"}'");
 
@@ -1971,7 +2000,6 @@ internal static class ShadeInventoryPaneIntegration
         {
             CopyRectTransform(templateRect, rect);
             CopyLayoutComponents(templateRect, rect);
-            ShadeInventoryPane.LogRectTransformHierarchy(templateRect, "TemplatePaneLive");
         }
         else
         {
@@ -1983,6 +2011,7 @@ internal static class ShadeInventoryPaneIntegration
             rect.anchoredPosition = Vector2.zero;
             rect.localScale = Vector3.one;
         }
+        ShadeInventoryPane.LogRectTransformHierarchy(templateRect, "TemplatePaneLive");
 
         var canvasGroup = go.AddComponent<CanvasGroup>();
         canvasGroup.alpha = 0f;
