@@ -206,6 +206,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private GridLayoutSnapshot? gridLayoutTemplate;
     private Vector2? templateRootSize;
     private LayoutElementSnapshot? rootLayoutTemplate;
+    private bool useNormalizedFallbackLayout;
+    private Vector2 normalizedFallbackRootSize;
 
     private struct CharmEntry
     {
@@ -1704,6 +1706,83 @@ internal sealed class ShadeInventoryPane : InventoryPane
             $"ForceLayoutRebuild applied template fallback -> root={FormatVector2(root.rect.size)} template={templateSizeText}"));
     }
 
+    private static float ComputeNormalizedMargin(float dimension, float fraction)
+    {
+        if (dimension <= 0f)
+        {
+            return 0f;
+        }
+
+        float clampedFraction = Mathf.Clamp01(fraction);
+        float margin = dimension * clampedFraction;
+        float maxMargin = dimension * 0.45f;
+        if (margin > maxMargin)
+        {
+            margin = maxMargin;
+        }
+
+        return Mathf.Max(0f, margin);
+    }
+
+    private bool ShouldUseNormalizedFallbackLayout(RectTransform? root, Vector2 rootSize)
+    {
+        if (root == null)
+        {
+            return false;
+        }
+
+        if (panelRectTemplate.HasValue || contentRectTemplate.HasValue || gridRectTemplate.HasValue ||
+            detailRectTemplate.HasValue || gridLayoutTemplate.HasValue)
+        {
+            return false;
+        }
+
+        if (Mathf.Abs(rootSize.x) < MinRootSizeThreshold || Mathf.Abs(rootSize.y) < MinRootSizeThreshold)
+        {
+            return false;
+        }
+
+        float maxDimension = Mathf.Max(rootSize.x, rootSize.y);
+        return maxDimension <= 64f;
+    }
+
+    private void ConfigureNormalizedGridLayout(GridLayoutGroup gridLayout, Vector2 rootSize)
+    {
+        if (gridLayout == null)
+        {
+            return;
+        }
+
+        float effectiveWidth = Mathf.Max(rootSize.x * 0.58f, MinRootSizeThreshold);
+        float effectiveHeight = Mathf.Max(rootSize.y * 0.76f, MinRootSizeThreshold);
+
+        float spacingX = Mathf.Max(effectiveWidth * 0.025f, MinRootSizeThreshold * 0.5f);
+        float spacingY = Mathf.Max(effectiveHeight * 0.04f, MinRootSizeThreshold * 0.5f);
+
+        int approxCount = ShadeRuntime.Charms?.AllCharms.Count ?? entries.Count;
+        if (approxCount <= 0)
+        {
+            approxCount = Columns * 3;
+        }
+
+        int approxRows = Mathf.Max(1, Mathf.CeilToInt(approxCount / (float)Columns));
+
+        float totalSpacingX = spacingX * Mathf.Max(Columns - 1, 0);
+        float totalSpacingY = spacingY * Mathf.Max(approxRows - 1, 0);
+
+        float cellWidth = Mathf.Max((effectiveWidth - totalSpacingX) / Columns, MinRootSizeThreshold);
+        float cellHeight = Mathf.Max((effectiveHeight - totalSpacingY) / approxRows, MinRootSizeThreshold);
+
+        gridLayout.cellSize = new Vector2(cellWidth, cellHeight);
+        gridLayout.spacing = new Vector2(spacingX, spacingY);
+        gridLayout.padding = new RectOffset();
+        gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        gridLayout.constraintCount = Columns;
+        gridLayout.startAxis = GridLayoutGroup.Axis.Horizontal;
+        gridLayout.startCorner = GridLayoutGroup.Corner.UpperLeft;
+        gridLayout.childAlignment = TextAnchor.UpperLeft;
+    }
+
     public void ForceLayoutRebuild()
     {
         EnsureBuilt();
@@ -1811,6 +1890,30 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         EnsureRootSizing();
 
+        useNormalizedFallbackLayout = false;
+        normalizedFallbackRootSize = Vector2.zero;
+
+        var rootRect = transform as RectTransform;
+        if (rootRect != null)
+        {
+            Vector2 rootSize;
+            try
+            {
+                Vector2 rawSize = rootRect.rect.size;
+                rootSize = new Vector2(Mathf.Abs(rawSize.x), Mathf.Abs(rawSize.y));
+            }
+            catch
+            {
+                rootSize = Vector2.zero;
+            }
+
+            useNormalizedFallbackLayout = ShouldUseNormalizedFallbackLayout(rootRect, rootSize);
+            if (useNormalizedFallbackLayout)
+            {
+                normalizedFallbackRootSize = rootSize;
+            }
+        }
+
         canvasGroup = GetComponent<CanvasGroup>();
         if (canvasGroup == null)
         {
@@ -1825,6 +1928,13 @@ internal sealed class ShadeInventoryPane : InventoryPane
         if (panelRectTemplate.HasValue)
         {
             panelRectTemplate.Value.Apply(panelRoot);
+        }
+        else if (useNormalizedFallbackLayout)
+        {
+            panelRoot.anchorMin = Vector2.zero;
+            panelRoot.anchorMax = Vector2.one;
+            panelRoot.offsetMin = Vector2.zero;
+            panelRoot.offsetMax = Vector2.zero;
         }
         else
         {
@@ -1853,6 +1963,15 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             contentRectTemplate.Value.Apply(contentRoot);
         }
+        else if (useNormalizedFallbackLayout)
+        {
+            contentRoot.anchorMin = Vector2.zero;
+            contentRoot.anchorMax = Vector2.one;
+            float marginX = ComputeNormalizedMargin(normalizedFallbackRootSize.x, 0.04f);
+            float marginY = ComputeNormalizedMargin(normalizedFallbackRootSize.y, 0.05f);
+            contentRoot.offsetMin = new Vector2(marginX, marginY);
+            contentRoot.offsetMax = new Vector2(-marginX, -marginY);
+        }
         else
         {
             contentRoot.anchorMin = Vector2.zero;
@@ -1865,11 +1984,22 @@ internal sealed class ShadeInventoryPane : InventoryPane
         var titleRect = ResolveRectTransform(titleText, titleTextTMP);
         if (titleRect != null)
         {
-            titleRect.anchorMin = new Vector2(0f, 1f);
-            titleRect.anchorMax = new Vector2(1f, 1f);
-            titleRect.pivot = new Vector2(0f, 1f);
-            titleRect.offsetMin = new Vector2(0f, -60f);
-            titleRect.offsetMax = new Vector2(0f, -8f);
+            if (useNormalizedFallbackLayout)
+            {
+                titleRect.anchorMin = new Vector2(0f, 0.88f);
+                titleRect.anchorMax = new Vector2(0.6f, 1f);
+                titleRect.pivot = new Vector2(0f, 1f);
+                titleRect.offsetMin = Vector2.zero;
+                titleRect.offsetMax = Vector2.zero;
+            }
+            else
+            {
+                titleRect.anchorMin = new Vector2(0f, 1f);
+                titleRect.anchorMax = new Vector2(1f, 1f);
+                titleRect.pivot = new Vector2(0f, 1f);
+                titleRect.offsetMin = new Vector2(0f, -60f);
+                titleRect.offsetMax = new Vector2(0f, -8f);
+            }
         }
         SetTextValue(titleText, titleTextTMP, displayLabel);
 
@@ -1877,11 +2007,22 @@ internal sealed class ShadeInventoryPane : InventoryPane
         var notchRect = ResolveRectTransform(notchText, notchTextTMP);
         if (notchRect != null)
         {
-            notchRect.anchorMin = new Vector2(0.45f, 1f);
-            notchRect.anchorMax = new Vector2(1f, 1f);
-            notchRect.pivot = new Vector2(1f, 1f);
-            notchRect.offsetMin = new Vector2(-12f, -60f);
-            notchRect.offsetMax = new Vector2(0f, -10f);
+            if (useNormalizedFallbackLayout)
+            {
+                notchRect.anchorMin = new Vector2(0.6f, 0.88f);
+                notchRect.anchorMax = new Vector2(1f, 1f);
+                notchRect.pivot = new Vector2(1f, 1f);
+                notchRect.offsetMin = Vector2.zero;
+                notchRect.offsetMax = Vector2.zero;
+            }
+            else
+            {
+                notchRect.anchorMin = new Vector2(0.45f, 1f);
+                notchRect.anchorMax = new Vector2(1f, 1f);
+                notchRect.pivot = new Vector2(1f, 1f);
+                notchRect.offsetMin = new Vector2(-12f, -60f);
+                notchRect.offsetMax = new Vector2(0f, -10f);
+            }
         }
 
         gridRoot = new GameObject("CharmGrid", typeof(RectTransform)).GetComponent<RectTransform>();
@@ -1889,6 +2030,15 @@ internal sealed class ShadeInventoryPane : InventoryPane
         if (gridRectTemplate.HasValue)
         {
             gridRectTemplate.Value.Apply(gridRoot);
+        }
+        else if (useNormalizedFallbackLayout)
+        {
+            gridRoot.anchorMin = new Vector2(0f, 0.12f);
+            gridRoot.anchorMax = new Vector2(0.58f, 0.88f);
+            gridRoot.pivot = new Vector2(0f, 1f);
+            gridRoot.offsetMin = Vector2.zero;
+            gridRoot.offsetMax = Vector2.zero;
+            gridRoot.anchoredPosition = Vector2.zero;
         }
         else
         {
@@ -1936,6 +2086,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 gridLayout.padding = padding;
             }
         }
+        else if (useNormalizedFallbackLayout)
+        {
+            ConfigureNormalizedGridLayout(gridLayout, normalizedFallbackRootSize);
+        }
         else
         {
             gridLayout.cellSize = new Vector2(104f, 112f);
@@ -1979,6 +2133,16 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             detailRectTemplate.Value.Apply(detailRoot);
         }
+        else if (useNormalizedFallbackLayout)
+        {
+            detailRoot.anchorMin = new Vector2(0.58f, 0.12f);
+            detailRoot.anchorMax = new Vector2(1f, 0.88f);
+            detailRoot.pivot = new Vector2(0f, 1f);
+            float detailMarginX = ComputeNormalizedMargin(normalizedFallbackRootSize.x, 0.02f);
+            float detailMarginY = ComputeNormalizedMargin(normalizedFallbackRootSize.y, 0.02f);
+            detailRoot.offsetMin = new Vector2(detailMarginX, detailMarginY);
+            detailRoot.offsetMax = new Vector2(-detailMarginX, -detailMarginY);
+        }
         else
         {
             detailRoot.anchorMin = new Vector2(0.6f, 0f);
@@ -1992,11 +2156,22 @@ internal sealed class ShadeInventoryPane : InventoryPane
         var detailTitleRect = ResolveRectTransform(detailTitleText, detailTitleTextTMP);
         if (detailTitleRect != null)
         {
-            detailTitleRect.anchorMin = new Vector2(0f, 0.74f);
-            detailTitleRect.anchorMax = new Vector2(1f, 1f);
-            detailTitleRect.pivot = new Vector2(0f, 1f);
-            detailTitleRect.offsetMin = Vector2.zero;
-            detailTitleRect.offsetMax = new Vector2(0f, -6f);
+            if (useNormalizedFallbackLayout)
+            {
+                detailTitleRect.anchorMin = new Vector2(0f, 0.74f);
+                detailTitleRect.anchorMax = new Vector2(1f, 0.94f);
+                detailTitleRect.pivot = new Vector2(0f, 1f);
+                detailTitleRect.offsetMin = Vector2.zero;
+                detailTitleRect.offsetMax = Vector2.zero;
+            }
+            else
+            {
+                detailTitleRect.anchorMin = new Vector2(0f, 0.74f);
+                detailTitleRect.anchorMax = new Vector2(1f, 1f);
+                detailTitleRect.pivot = new Vector2(0f, 1f);
+                detailTitleRect.offsetMin = Vector2.zero;
+                detailTitleRect.offsetMax = new Vector2(0f, -6f);
+            }
         }
         SetTextValue(detailTitleText, detailTitleTextTMP, displayLabel);
 
@@ -2004,10 +2179,21 @@ internal sealed class ShadeInventoryPane : InventoryPane
         var descRect = ResolveRectTransform(descriptionText, descriptionTextTMP);
         if (descRect != null)
         {
-            descRect.anchorMin = new Vector2(0f, 0.32f);
-            descRect.anchorMax = new Vector2(1f, 0.74f);
-            descRect.offsetMin = Vector2.zero;
-            descRect.offsetMax = new Vector2(-6f, -4f);
+            if (useNormalizedFallbackLayout)
+            {
+                descRect.anchorMin = new Vector2(0f, 0.34f);
+                descRect.anchorMax = new Vector2(1f, 0.74f);
+                descRect.pivot = new Vector2(0f, 1f);
+                descRect.offsetMin = Vector2.zero;
+                descRect.offsetMax = Vector2.zero;
+            }
+            else
+            {
+                descRect.anchorMin = new Vector2(0f, 0.32f);
+                descRect.anchorMax = new Vector2(1f, 0.74f);
+                descRect.offsetMin = Vector2.zero;
+                descRect.offsetMax = new Vector2(-6f, -4f);
+            }
         }
         if (descriptionText != null)
         {
@@ -2024,20 +2210,42 @@ internal sealed class ShadeInventoryPane : InventoryPane
         var statusRect = ResolveRectTransform(statusText, statusTextTMP);
         if (statusRect != null)
         {
-            statusRect.anchorMin = new Vector2(0f, 0.18f);
-            statusRect.anchorMax = new Vector2(1f, 0.34f);
-            statusRect.offsetMin = new Vector2(0f, 4f);
-            statusRect.offsetMax = new Vector2(-6f, 0f);
+            if (useNormalizedFallbackLayout)
+            {
+                statusRect.anchorMin = new Vector2(0f, 0.18f);
+                statusRect.anchorMax = new Vector2(1f, 0.34f);
+                statusRect.pivot = new Vector2(0f, 1f);
+                statusRect.offsetMin = Vector2.zero;
+                statusRect.offsetMax = Vector2.zero;
+            }
+            else
+            {
+                statusRect.anchorMin = new Vector2(0f, 0.18f);
+                statusRect.anchorMax = new Vector2(1f, 0.34f);
+                statusRect.offsetMin = new Vector2(0f, 4f);
+                statusRect.offsetMax = new Vector2(-6f, 0f);
+            }
         }
 
         hintText = CreateText("Hint", detailRoot, FontStyle.Normal, 24, TextAnchor.UpperLeft, out hintTextTMP);
         var hintRect = ResolveRectTransform(hintText, hintTextTMP);
         if (hintRect != null)
         {
-            hintRect.anchorMin = new Vector2(0f, 0f);
-            hintRect.anchorMax = new Vector2(1f, 0.18f);
-            hintRect.offsetMin = new Vector2(0f, 4f);
-            hintRect.offsetMax = new Vector2(-6f, 0f);
+            if (useNormalizedFallbackLayout)
+            {
+                hintRect.anchorMin = new Vector2(0f, 0f);
+                hintRect.anchorMax = new Vector2(1f, 0.18f);
+                hintRect.pivot = new Vector2(0f, 0f);
+                hintRect.offsetMin = Vector2.zero;
+                hintRect.offsetMax = Vector2.zero;
+            }
+            else
+            {
+                hintRect.anchorMin = new Vector2(0f, 0f);
+                hintRect.anchorMax = new Vector2(1f, 0.18f);
+                hintRect.offsetMin = new Vector2(0f, 4f);
+                hintRect.offsetMax = new Vector2(-6f, 0f);
+            }
         }
         SetTextValue(hintText, hintTextTMP, "Submit to equip or unequip. Ctrl + ` unlocks all charms (debug).");
         var hintColor = new Color(0.78f, 0.82f, 0.92f, 0.8f);
@@ -2263,6 +2471,19 @@ internal sealed class ShadeInventoryPane : InventoryPane
         cellRect.SetParent(gridRoot, false);
         cellRect.localScale = Vector3.one;
 
+        GridLayoutGroup? gridLayout = null;
+        if (gridRoot != null)
+        {
+            try
+            {
+                gridLayout = gridRoot.GetComponent<GridLayoutGroup>();
+            }
+            catch
+            {
+                gridLayout = null;
+            }
+        }
+
         var background = cell.AddComponent<Image>();
         if (cellFrameSprite != null)
         {
@@ -2282,7 +2503,15 @@ internal sealed class ShadeInventoryPane : InventoryPane
         iconRect.anchorMin = new Vector2(0.5f, 0.5f);
         iconRect.anchorMax = new Vector2(0.5f, 0.5f);
         iconRect.pivot = new Vector2(0.5f, 0.5f);
-        iconRect.sizeDelta = new Vector2(96f, 96f);
+        Vector2 iconSize = new Vector2(96f, 96f);
+        if (useNormalizedFallbackLayout && gridLayout != null)
+        {
+            Vector2 cellSize = gridLayout.cellSize;
+            float width = Mathf.Max(cellSize.x * 0.8f, MinRootSizeThreshold);
+            float height = Mathf.Max(cellSize.y * 0.8f, MinRootSizeThreshold);
+            iconSize = new Vector2(width, height);
+        }
+        iconRect.sizeDelta = iconSize;
         var icon = iconGo.AddComponent<Image>();
         icon.preserveAspect = true;
         icon.raycastTarget = false;
@@ -2293,8 +2522,17 @@ internal sealed class ShadeInventoryPane : InventoryPane
         markerRect.anchorMin = new Vector2(1f, 1f);
         markerRect.anchorMax = new Vector2(1f, 1f);
         markerRect.pivot = new Vector2(1f, 1f);
-        markerRect.anchoredPosition = new Vector2(-12f, -12f);
-        markerRect.sizeDelta = new Vector2(18f, 18f);
+        Vector2 markerOffset = new Vector2(-12f, -12f);
+        Vector2 markerSize = new Vector2(18f, 18f);
+        if (useNormalizedFallbackLayout && gridLayout != null)
+        {
+            float markerDimension = Mathf.Max(Mathf.Min(gridLayout.cellSize.x, gridLayout.cellSize.y) * 0.35f, MinRootSizeThreshold);
+            float offsetMagnitude = markerDimension * 0.45f;
+            markerSize = new Vector2(markerDimension, markerDimension);
+            markerOffset = new Vector2(-offsetMagnitude, -offsetMagnitude);
+        }
+        markerRect.anchoredPosition = markerOffset;
+        markerRect.sizeDelta = markerSize;
         var markerImage = newMarker.GetComponent<Image>();
         if (newMarkerSpriteTemplate != null)
         {
