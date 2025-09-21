@@ -205,8 +205,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private Font? bodyFont;
     private Font? headerFont;
-    private Material? bodyFontMaterial;
-    private Material? headerFontMaterial;
     private Color bodyFontColor = Color.white;
     private Color headerFontColor = Color.white;
     private Sprite? panelBackgroundSprite;
@@ -215,7 +213,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private Color highlightColor = DefaultHighlightColor;
     private Sprite? cellFrameSprite;
     private Color cellFrameColor = DefaultCellColor;
-    private Sprite? newMarkerSpriteTemplate;
 
     private ShadeCharmInventory? inventory;
     private ShadeCharmInventory? subscribedInventory;
@@ -331,12 +328,18 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     internal static RectTransform? ResolveTemplateRootRectTransform(InventoryPane? template)
     {
-        if (!template)
+        if (template == null)
         {
             return null;
         }
 
-        RectTransform? rect = template.transform as RectTransform;
+        Transform templateTransform = template.transform;
+        if (templateTransform == null)
+        {
+            return null;
+        }
+
+        RectTransform? rect = templateTransform as RectTransform;
         if (rect != null)
         {
             return rect;
@@ -378,6 +381,12 @@ internal sealed class ShadeInventoryPane : InventoryPane
                     continue;
                 }
 
+                Transform candidateTransform = candidate.transform;
+                if (candidateTransform == null)
+                {
+                    continue;
+                }
+
                 bool skipCandidate = false;
                 try
                 {
@@ -392,7 +401,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
                         }
                         else
                         {
-                            Transform? current = candidate.transform.parent;
+                            Transform? current = candidateTransform.parent;
                             while (current != null)
                             {
                                 if (current.GetComponent<ShadeInventoryPane>() != null)
@@ -416,13 +425,13 @@ internal sealed class ShadeInventoryPane : InventoryPane
                     continue;
                 }
 
-                if (candidate.transform == template.transform)
+                if (candidateTransform == templateTransform)
                 {
                     rect = candidate;
                     break;
                 }
 
-                if (matchDirectChild == null && candidate.transform.parent == template.transform)
+                if (matchDirectChild == null && candidateTransform.parent == templateTransform)
                 {
                     matchDirectChild = candidate;
                 }
@@ -500,7 +509,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         rect ??= firstCandidate;
         }
 
-        if (rect != null && rect.transform != template.transform)
+        if (rect != null && rect.transform != templateTransform)
         {
             string rectName = rect.gameObject != null ? rect.gameObject.name : "<null>";
             string templateName = template.gameObject != null ? template.gameObject.name : template.name;
@@ -1133,8 +1142,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
         var arial = Resources.GetBuiltinResource<Font>("Arial.ttf");
         bodyFont = arial;
         headerFont = arial;
-        bodyFontMaterial = null;
-        headerFontMaterial = null;
         bodyFontColor = Color.white;
         headerFontColor = Color.white;
 
@@ -1204,16 +1211,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
                         if (img.color.a > 0f)
                         {
                             highlightColor = img.color;
-                        }
-                        continue;
-                    }
-
-                    if (newMarkerSpriteTemplate == null && lower.Contains("new"))
-                    {
-                        newMarkerSpriteTemplate = sprite;
-                        if (img.color.a > 0f)
-                        {
-                            newMarkerColor = img.color;
                         }
                         continue;
                     }
@@ -2043,8 +2040,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
             float effectiveWidth = Mathf.Max(rootSize.x * 0.58f, MinRootSizeThreshold);
             float effectiveHeight = Mathf.Max(rootSize.y * 0.76f, MinRootSizeThreshold);
 
-            float spacingX = Mathf.Max(effectiveWidth * 0.025f, MinRootSizeThreshold * 0.5f);
-            float spacingY = Mathf.Max(effectiveHeight * 0.04f, MinRootSizeThreshold * 0.5f);
+            float normalizedSpacingX = Mathf.Max(effectiveWidth * 0.025f, MinRootSizeThreshold * 0.5f);
+            float normalizedSpacingY = Mathf.Max(effectiveHeight * 0.04f, MinRootSizeThreshold * 0.5f);
 
             int approxCount = entryCount;
             if (approxCount <= 0)
@@ -2053,14 +2050,14 @@ internal sealed class ShadeInventoryPane : InventoryPane
             }
 
             int approxColumns = Mathf.Max(1, Mathf.CeilToInt(approxCount / (float)CharmRows));
-            float totalSpacingX = spacingX * Mathf.Max(approxColumns - 1, 0);
-            float totalSpacingY = spacingY * Mathf.Max(CharmRows - 1, 0);
+            float totalSpacingX = normalizedSpacingX * Mathf.Max(approxColumns - 1, 0);
+            float totalSpacingY = normalizedSpacingY * Mathf.Max(CharmRows - 1, 0);
 
             float cellWidth = Mathf.Max((effectiveWidth - totalSpacingX) / approxColumns, MinRootSizeThreshold);
             float cellHeight = Mathf.Max((effectiveHeight - totalSpacingY) / CharmRows, MinRootSizeThreshold);
 
             cell = new Vector2(cellWidth, cellHeight);
-            spacing = new Vector2(spacingX, spacingY);
+            spacing = new Vector2(normalizedSpacingX, normalizedSpacingY);
         }
 
         float width = Mathf.Abs(cell.x);
@@ -2720,7 +2717,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         else if (descriptionTextTMP != null)
         {
             descriptionTextTMP.lineSpacing = 1.1f;
-            descriptionTextTMP.enableWordWrapping = true;
+            descriptionTextTMP.textWrappingMode = TextWrappingModes.Normal;
             descriptionTextTMP.fontSize = 26f;
         }
 
@@ -2938,7 +2935,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 continue;
             }
 
-            if (i < usedCount)
+            if (assignments != null && i < usedCount)
             {
                 var assignment = assignments[i];
                 Sprite? sprite = assignment.Icon;
@@ -4328,21 +4325,23 @@ internal static class ShadeInventoryPaneIntegration
             ShadeInventoryPane.LogMenuEvent("EnsurePane skipped: no suitable template pane found");
             return;
         }
-        RectTransform? templateRect = template != null ? ShadeInventoryPane.ResolveTemplateRootRectTransform(template) : null;
+
+        InventoryPane templatePane = template;
+        RectTransform? templateRect = ShadeInventoryPane.ResolveTemplateRootRectTransform(templatePane);
         Transform? parent = null;
         if (templateRect != null)
         {
             parent = templateRect.parent;
         }
-        else if (template != null)
+        else
         {
-            parent = template.transform.parent;
+            parent = templatePane.transform.parent;
         }
 
         if (existingShade != null)
         {
             existingShade.AttachToPaneList(paneList);
-            existingShade.ConfigureFromTemplate(template);
+            existingShade.ConfigureFromTemplate(templatePane);
             existingShade.SetDisplayLabel("Charms");
             existingShade.ForceImmediateRefresh();
             existingShade.ForceLayoutRebuild();
@@ -4352,10 +4351,10 @@ internal static class ShadeInventoryPaneIntegration
         }
 
         parent ??= paneList.transform;
-        ShadeInventoryPane.LogMenuEvent($"Injecting shade overlay pane using template '{template?.GetType().Name ?? "<null>"}'");
+        ShadeInventoryPane.LogMenuEvent($"Injecting shade overlay pane using template '{templatePane.GetType().Name}'");
 
         var go = new GameObject("ShadeInventoryPane", typeof(RectTransform));
-        int templateLayer = template.gameObject != null ? template.gameObject.layer : paneList.gameObject.layer;
+        int templateLayer = templatePane.gameObject != null ? templatePane.gameObject.layer : paneList.gameObject.layer;
         go.layer = templateLayer;
         var rect = go.GetComponent<RectTransform>();
         rect.SetParent(parent, false);
@@ -4376,7 +4375,7 @@ internal static class ShadeInventoryPaneIntegration
 
         var shadePane = go.AddComponent<ShadeInventoryPane>();
         shadePane.RootPane = shadePane;
-        shadePane.ConfigureFromTemplate(template);
+        shadePane.ConfigureFromTemplate(templatePane);
         shadePane.SetDisplayLabel("Charms");
         shadePane.ForceImmediateRefresh();
         shadePane.ForceLayoutRebuild();
