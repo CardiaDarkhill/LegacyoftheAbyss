@@ -327,6 +327,24 @@ internal sealed class ShadeInventoryPane : InventoryPane
                     continue;
                 }
 
+                bool skipCandidate = false;
+                try
+                {
+                    if (candidate.GetComponentInParent<ShadeInventoryPane>() != null)
+                    {
+                        skipCandidate = true;
+                    }
+                }
+                catch
+                {
+                    skipCandidate = false;
+                }
+
+                if (skipCandidate)
+                {
+                    continue;
+                }
+
                 if (candidate.transform == template.transform)
                 {
                     rect = candidate;
@@ -2401,6 +2419,22 @@ internal static class ShadeInventoryPaneIntegration
                 var shadeRect = Shade.transform as RectTransform;
                 if (shadeRect != null)
                 {
+                    if (templateRect == shadeRect)
+                    {
+                        return false;
+                    }
+
+                    try
+                    {
+                        if (templateRect.transform.IsChildOf(shadeRect))
+                        {
+                            return false;
+                        }
+                    }
+                    catch
+                    {
+                    }
+
                     Transform? templateParent = templateRect.parent;
                     if (templateParent != null && shadeRect.parent != templateParent)
                     {
@@ -2589,7 +2623,7 @@ internal static class ShadeInventoryPaneIntegration
 
         InventoryPane? template = panes.FirstOrDefault(p =>
         {
-            if (!p)
+            if (!p || p is ShadeInventoryPane)
             {
                 return false;
             }
@@ -2603,7 +2637,13 @@ internal static class ShadeInventoryPaneIntegration
                 (typeName.IndexOf("Charm", StringComparison.OrdinalIgnoreCase) >= 0 ||
                  typeName.IndexOf("Crest", StringComparison.OrdinalIgnoreCase) >= 0);
             return matchesName || matchesType;
-        }) ?? panes.FirstOrDefault(p => p != null) ?? panes[0];
+        }) ?? panes.FirstOrDefault(p => p != null && !(p is ShadeInventoryPane));
+
+        if (template == null)
+        {
+            ShadeInventoryPane.LogMenuEvent("EnsurePane skipped: no suitable template pane found");
+            return;
+        }
         RectTransform? templateRect = template != null ? ShadeInventoryPane.ResolveTemplateRootRectTransform(template) : null;
         Transform? parent = null;
         if (templateRect != null)
