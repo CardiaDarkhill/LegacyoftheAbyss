@@ -278,6 +278,129 @@ internal sealed class ShadeInventoryPane : InventoryPane
         return tmp != null ? tmp.rectTransform : null;
     }
 
+    internal static RectTransform? ResolveTemplateRootRectTransform(InventoryPane? template)
+    {
+        if (!template)
+        {
+            return null;
+        }
+
+        RectTransform? rect = template.transform as RectTransform;
+        if (rect != null)
+        {
+            return rect;
+        }
+
+        try
+        {
+            rect = template.GetComponent<RectTransform>();
+            if (rect != null)
+            {
+                return rect;
+            }
+        }
+        catch
+        {
+        }
+
+        RectTransform? matchByComponent = null;
+        RectTransform? matchByName = null;
+        RectTransform? matchDirectChild = null;
+        RectTransform? firstCandidate = null;
+
+        RectTransform[]? rects = null;
+        try
+        {
+            rects = template.GetComponentsInChildren<RectTransform>(true);
+        }
+        catch
+        {
+        }
+
+        if (rects != null && rects.Length > 0)
+        {
+            foreach (var candidate in rects)
+            {
+                if (candidate == null)
+                {
+                    continue;
+                }
+
+                if (candidate.transform == template.transform)
+                {
+                    rect = candidate;
+                    break;
+                }
+
+                if (matchDirectChild == null && candidate.transform.parent == template.transform)
+                {
+                    matchDirectChild = candidate;
+                }
+
+                if (matchByComponent == null)
+                {
+                    try
+                    {
+                        var paneComponent = candidate.GetComponent<InventoryPane>();
+                        if (paneComponent != null)
+                        {
+                            if (paneComponent == template)
+                            {
+                                rect = candidate;
+                                break;
+                            }
+
+                            matchByComponent = candidate;
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                if (matchByName == null)
+                {
+                    string? name = candidate.gameObject != null ? candidate.gameObject.name : null;
+                    if (!string.IsNullOrEmpty(name))
+                    {
+                        string lower = name.ToLowerInvariant();
+                        if (lower.Contains("pane") || lower.Contains("panel"))
+                        {
+                            matchByName = candidate;
+                        }
+                    }
+                }
+
+                if (firstCandidate == null)
+                {
+                    firstCandidate = candidate;
+                }
+            }
+
+            rect ??= matchByComponent;
+            rect ??= matchByName;
+            rect ??= matchDirectChild;
+            rect ??= firstCandidate;
+        }
+
+        if (rect != null && rect.transform != template.transform)
+        {
+            string rectName = rect.gameObject != null ? rect.gameObject.name : "<null>";
+            string templateName = template.gameObject != null ? template.gameObject.name : template.name;
+            LogMenuEvent(FormattableString.Invariant(
+                $"Resolved template rect from child '{rectName}' for template '{templateName}'"));
+        }
+
+        if (rect == null)
+        {
+            string templateName = template.gameObject != null ? template.gameObject.name : template.name;
+            LogMenuEvent(FormattableString.Invariant(
+                $"ResolveTemplateRootRectTransform failed for template '{templateName}'"));
+        }
+
+        return rect;
+    }
+
     private static string FormatVector2(Vector2 value)
     {
         return FormattableString.Invariant($"({value.x:0.##}, {value.y:0.##})");
@@ -651,7 +774,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         try
         {
-            var templateRect = template.GetComponent<RectTransform>();
+            var templateRect = ResolveTemplateRootRectTransform(template);
             if (templateRect != null)
             {
                 rootRectTemplate = RectSnapshot.From(templateRect);
@@ -2242,12 +2365,15 @@ internal static class ShadeInventoryPaneIntegration
                  typeName.IndexOf("Crest", StringComparison.OrdinalIgnoreCase) >= 0);
             return matchesName || matchesType;
         }) ?? panes.FirstOrDefault(p => p != null) ?? panes[0];
-        RectTransform? templateRect = null;
+        RectTransform? templateRect = template != null ? ShadeInventoryPane.ResolveTemplateRootRectTransform(template) : null;
         Transform? parent = null;
-        if (template != null)
+        if (templateRect != null)
         {
-            templateRect = template.GetComponent<RectTransform>();
-            parent = templateRect != null ? templateRect.parent : template.transform.parent;
+            parent = templateRect.parent;
+        }
+        else if (template != null)
+        {
+            parent = template.transform.parent;
         }
         if (existingShade != null)
         {
