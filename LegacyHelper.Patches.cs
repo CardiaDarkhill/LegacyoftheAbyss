@@ -264,6 +264,22 @@ public partial class LegacyHelper
         }
     }
 
+    [HarmonyPatch(typeof(InventoryPaneInput), "PressDirection")]
+    private class InventoryPaneInput_PressDirection_Shade
+    {
+        private static void Postfix(InventoryPaneInput __instance, InventoryPaneBase.InputEventType direction)
+        {
+            try
+            {
+                var shadePane = ShadeInventoryPaneIntegration.TryGetShadePane(__instance);
+                shadePane?.HandleDirectionalInput(direction);
+            }
+            catch
+            {
+            }
+        }
+    }
+
     [HarmonyPatch(typeof(StartManager), "Start")]
     private class StartManager_Start_Enumerator_Patch
     {

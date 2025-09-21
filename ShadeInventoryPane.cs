@@ -197,6 +197,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private TMP_Text? descriptionTextTMP;
     private TMP_Text? statusTextTMP;
     private TMP_Text? hintTextTMP;
+    private TMP_Text? detailCostLabelTMP;
     private CanvasGroup canvasGroup = null!;
 
     private GameObject? overlayCanvasObject;
@@ -215,6 +216,12 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private Color highlightColor = DefaultHighlightColor;
     private Sprite? cellFrameSprite;
     private Color cellFrameColor = DefaultCellColor;
+    private TextStyle? bodyTextStyle;
+    private TextStyle? headerTextStyle;
+    private TmpTextStyle? bodyTmpTextStyle;
+    private TmpTextStyle? headerTmpTextStyle;
+    private Sprite? generatedHighlightSprite;
+    private Texture2D? generatedHighlightTexture;
 
     private ShadeCharmInventory? inventory;
     private ShadeCharmInventory? subscribedInventory;
@@ -268,6 +275,55 @@ internal sealed class ShadeInventoryPane : InventoryPane
         public ShadeCharmId? CharmId;
     }
 
+    private struct ShadowStyle
+    {
+        public Type Type;
+        public Color EffectColor;
+        public Vector2 EffectDistance;
+        public bool UseGraphicAlpha;
+    }
+
+    private struct TextStyle
+    {
+        public Font? Font;
+        public int FontSize;
+        public FontStyle FontStyle;
+        public TextAnchor Alignment;
+        public Color Color;
+        public bool RichText;
+        public bool BestFit;
+        public int BestFitMin;
+        public int BestFitMax;
+        public float LineSpacing;
+        public bool AlignByGeometry;
+        public HorizontalWrapMode HorizontalOverflow;
+        public VerticalWrapMode VerticalOverflow;
+        public List<ShadowStyle>? Shadows;
+    }
+
+    private struct TmpTextStyle
+    {
+        public TMP_FontAsset? Font;
+        public Material? FontMaterial;
+        public FontStyles FontStyle;
+        public float FontSize;
+        public bool EnableAutoSizing;
+        public float FontSizeMin;
+        public float FontSizeMax;
+        public TextAlignmentOptions Alignment;
+        public Color Color;
+        public bool EnableKerning;
+        public bool EnableWordWrapping;
+        public TextOverflowModes OverflowMode;
+        public float CharacterSpacing;
+        public float LineSpacing;
+        public float ParagraphSpacing;
+        public TMP_Text.TextWrappingModes WrappingMode;
+        public Vector4 Margin;
+        public bool RichText;
+        public List<ShadowStyle>? Shadows;
+    }
+
     private static void SetTextValue(Text? text, TMP_Text? tmp, string value)
     {
         if (text != null)
@@ -294,6 +350,241 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         return string.Empty;
+    }
+
+    private static List<ShadowStyle> CaptureShadowStyles(Graphic graphic)
+    {
+        var list = new List<ShadowStyle>();
+        if (graphic == null)
+        {
+            return list;
+        }
+
+        try
+        {
+            foreach (var shadow in graphic.GetComponents<Shadow>())
+            {
+                if (shadow == null)
+                {
+                    continue;
+                }
+
+                list.Add(new ShadowStyle
+                {
+                    Type = shadow.GetType(),
+                    EffectColor = shadow.effectColor,
+                    EffectDistance = shadow.effectDistance,
+                    UseGraphicAlpha = shadow.useGraphicAlpha
+                });
+            }
+        }
+        catch
+        {
+        }
+
+        return list;
+    }
+
+    private static void ClearAndApplyShadows(Graphic graphic, List<ShadowStyle>? styles)
+    {
+        if (graphic == null)
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var shadow in graphic.GetComponents<Shadow>())
+            {
+                if (shadow == null)
+                {
+                    continue;
+                }
+
+                Object.DestroyImmediate(shadow);
+            }
+        }
+        catch
+        {
+        }
+
+        if (styles == null)
+        {
+            return;
+        }
+
+        foreach (var style in styles)
+        {
+            if (style.Type == null)
+            {
+                continue;
+            }
+
+            if (!(graphic.gameObject.AddComponent(style.Type) is Shadow newShadow))
+            {
+                continue;
+            }
+
+            newShadow.effectColor = style.EffectColor;
+            newShadow.effectDistance = style.EffectDistance;
+            newShadow.useGraphicAlpha = style.UseGraphicAlpha;
+        }
+    }
+
+    private static TextStyle CaptureTextStyle(Text text)
+    {
+        return new TextStyle
+        {
+            Font = text.font,
+            FontSize = text.fontSize,
+            FontStyle = text.fontStyle,
+            Alignment = text.alignment,
+            Color = text.color,
+            RichText = text.supportRichText,
+            BestFit = text.resizeTextForBestFit,
+            BestFitMin = text.resizeTextMinSize,
+            BestFitMax = text.resizeTextMaxSize,
+            LineSpacing = text.lineSpacing,
+            AlignByGeometry = text.alignByGeometry,
+            HorizontalOverflow = text.horizontalOverflow,
+            VerticalOverflow = text.verticalOverflow,
+            Shadows = CaptureShadowStyles(text)
+        };
+    }
+
+    private static TmpTextStyle CaptureTmpTextStyle(TMP_Text text)
+    {
+        return new TmpTextStyle
+        {
+            Font = text.font,
+            FontMaterial = text.fontSharedMaterial,
+            FontStyle = text.fontStyle,
+            FontSize = text.fontSize,
+            EnableAutoSizing = text.enableAutoSizing,
+            FontSizeMin = text.fontSizeMin,
+            FontSizeMax = text.fontSizeMax,
+            Alignment = text.alignment,
+            Color = text.color,
+            EnableKerning = text.enableKerning,
+            EnableWordWrapping = text.enableWordWrapping,
+            OverflowMode = text.overflowMode,
+            CharacterSpacing = text.characterSpacing,
+            LineSpacing = text.lineSpacing,
+            ParagraphSpacing = text.paragraphSpacing,
+            WrappingMode = text.textWrappingMode,
+            Margin = text.margin,
+            RichText = text.richText,
+            Shadows = CaptureShadowStyles(text)
+        };
+    }
+
+    private void ApplyTextStyle(Text text, TextStyle? style, Font? fallbackFont, Color fallbackColor, FontStyle fallbackStyle, int fallbackSize, TextAnchor fallbackAlignment)
+    {
+        if (text == null)
+        {
+            return;
+        }
+
+        if (style.HasValue)
+        {
+            var data = style.Value;
+            text.font = data.Font ?? fallbackFont ?? text.font ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
+            text.fontSize = data.FontSize > 0 ? data.FontSize : Mathf.Max(fallbackSize, 1);
+            text.fontStyle = data.FontStyle;
+            text.alignment = data.Alignment;
+            text.color = data.Color;
+            text.supportRichText = data.RichText;
+            text.resizeTextForBestFit = data.BestFit;
+            if (data.BestFit)
+            {
+                text.resizeTextMinSize = data.BestFitMin;
+                text.resizeTextMaxSize = data.BestFitMax;
+            }
+            text.lineSpacing = data.LineSpacing;
+            text.alignByGeometry = data.AlignByGeometry;
+            text.horizontalOverflow = data.HorizontalOverflow;
+            text.verticalOverflow = data.VerticalOverflow;
+            ClearAndApplyShadows(text, data.Shadows);
+            return;
+        }
+
+        text.font = fallbackFont ?? text.font ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
+        text.fontStyle = fallbackStyle;
+        text.fontSize = Mathf.Max(fallbackSize, 1);
+        text.alignment = fallbackAlignment;
+        text.color = fallbackColor;
+        text.supportRichText = true;
+        text.resizeTextForBestFit = false;
+        text.lineSpacing = 1f;
+        text.alignByGeometry = false;
+        text.horizontalOverflow = HorizontalWrapMode.Wrap;
+        text.verticalOverflow = VerticalWrapMode.Overflow;
+        ClearAndApplyShadows(text, null);
+    }
+
+    private void ApplyTmpTextStyle(TMP_Text text, TmpTextStyle? style, TMP_FontAsset? fallbackFont, Color fallbackColor, FontStyles fallbackStyle, float fallbackSize, TextAlignmentOptions fallbackAlignment)
+    {
+        if (text == null)
+        {
+            return;
+        }
+
+        if (style.HasValue)
+        {
+            var data = style.Value;
+            if (data.Font != null)
+            {
+                text.font = data.Font;
+            }
+
+            if (data.FontMaterial != null)
+            {
+                text.fontSharedMaterial = data.FontMaterial;
+            }
+
+            text.fontStyle = data.FontStyle;
+            text.fontSize = data.FontSize > 0f ? data.FontSize : Mathf.Max(fallbackSize, 1f);
+            text.enableAutoSizing = data.EnableAutoSizing;
+            if (data.EnableAutoSizing)
+            {
+                text.fontSizeMin = data.FontSizeMin;
+                text.fontSizeMax = data.FontSizeMax > 0f ? data.FontSizeMax : text.fontSizeMax;
+            }
+
+            text.alignment = data.Alignment;
+            text.color = data.Color;
+            text.enableKerning = data.EnableKerning;
+            text.enableWordWrapping = data.EnableWordWrapping;
+            text.overflowMode = data.OverflowMode;
+            text.characterSpacing = data.CharacterSpacing;
+            text.lineSpacing = data.LineSpacing;
+            text.paragraphSpacing = data.ParagraphSpacing;
+            text.textWrappingMode = data.WrappingMode;
+            text.margin = data.Margin;
+            text.richText = data.RichText;
+            ClearAndApplyShadows(text, data.Shadows);
+            return;
+        }
+
+        if (fallbackFont != null)
+        {
+            text.font = fallbackFont;
+        }
+        text.fontStyle = fallbackStyle;
+        text.fontSize = Mathf.Max(fallbackSize, 1f);
+        text.enableAutoSizing = false;
+        text.alignment = fallbackAlignment;
+        text.color = fallbackColor;
+        text.enableKerning = true;
+        text.enableWordWrapping = true;
+        text.overflowMode = TextOverflowModes.Overflow;
+        text.textWrappingMode = TMP_Text.TextWrappingModes.Normal;
+        text.characterSpacing = 0f;
+        text.lineSpacing = 1f;
+        text.paragraphSpacing = 0f;
+        text.margin = Vector4.zero;
+        text.richText = true;
+        ClearAndApplyShadows(text, null);
     }
 
     private static FontStyles ConvertFontStyle(FontStyle style) => style switch
@@ -882,12 +1173,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
     }
 
-    public override void Awake()
-    {
-        base.Awake();
-        SubscribeInput();
-    }
-
     private void OnEnable()
     {
         EnsureBuilt();
@@ -950,6 +1235,18 @@ internal sealed class ShadeInventoryPane : InventoryPane
             overlayCanvasScaler = null;
             overlayRaycaster = null;
             canvasGroup = null!;
+        }
+
+        if (generatedHighlightSprite != null)
+        {
+            Destroy(generatedHighlightSprite);
+            generatedHighlightSprite = null;
+        }
+
+        if (generatedHighlightTexture != null)
+        {
+            Destroy(generatedHighlightTexture);
+            generatedHighlightTexture = null;
         }
     }
 
@@ -1119,14 +1416,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     }
 
-    private void SubscribeInput()
-    {
-        OnInputLeft += () => MoveSelectionHorizontal(-1);
-        OnInputRight += () => MoveSelectionHorizontal(1);
-        OnInputUp += () => MoveSelectionVertical(-1);
-        OnInputDown += () => MoveSelectionVertical(1);
-    }
-
     internal void ConfigureFromTemplate(InventoryPane? template)
     {
         if (template == null)
@@ -1148,6 +1437,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
         headerFont = arial;
         bodyFontColor = Color.white;
         headerFontColor = Color.white;
+        bodyTextStyle = null;
+        headerTextStyle = null;
+        bodyTmpTextStyle = null;
+        headerTmpTextStyle = null;
         bool bodyFontAssigned = false;
         bool headerFontAssigned = false;
 
@@ -1190,6 +1483,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
                             bodyFontAssigned = true;
                         }
 
+                        bodyTextStyle = CaptureTextStyle(bodySample);
+
                         if (bodySample.color.a > 0f)
                         {
                             bodyFontColor = bodySample.color;
@@ -1217,6 +1512,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
                             headerFont = headerSample.font;
                             headerFontAssigned = true;
                         }
+
+                        headerTextStyle = CaptureTextStyle(headerSample);
 
                         if (headerSample.color.a > 0f)
                         {
@@ -1270,6 +1567,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
                             }
                         }
 
+                        if (bodySample != null)
+                        {
+                            bodyTmpTextStyle = CaptureTmpTextStyle(bodySample);
+                        }
+
                         if (!headerFontAssigned && headerSample != null)
                         {
                             var source = headerSample.font != null ? headerSample.font.sourceFontFile : null;
@@ -1283,6 +1585,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
                             {
                                 headerFontColor = headerSample.color;
                             }
+                        }
+
+                        if (headerSample != null)
+                        {
+                            headerTmpTextStyle = CaptureTmpTextStyle(headerSample);
                         }
                     }
                 }
@@ -1396,6 +1703,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         statusText = null;
         hintText = null;
         detailCostLabel = null;
+        detailCostLabelTMP = null;
         titleTextTMP = null;
         notchTextTMP = null;
         detailTitleTextTMP = null;
@@ -2408,7 +2716,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         Vector2 screenSize = normalizedFallbackRootSize.sqrMagnitude > 0f
             ? normalizedFallbackRootSize
             : DefaultStandaloneRootSize;
-        float gridShiftX = Mathf.Min(ComputeNormalizedMargin(screenSize.x, SectionOffsetFraction), maxOffsetX);
+        float gridShiftX = Mathf.Min(ComputeNormalizedMargin(screenSize.x, SectionOffsetFraction * 0.5f), maxOffsetX);
         float gridShiftY = Mathf.Min(ComputeNormalizedMargin(screenSize.y, SectionOffsetFraction), maxOffsetY);
 
         float offsetX = Mathf.Clamp(baseOffsetX - gridShiftX, 0f, maxOffsetX);
@@ -2458,16 +2766,70 @@ internal sealed class ShadeInventoryPane : InventoryPane
         return highlight;
     }
 
+    private Sprite? ResolveHighlightSprite()
+    {
+        if (highlightSpriteTemplate != null)
+        {
+            return highlightSpriteTemplate;
+        }
+
+        if (generatedHighlightSprite != null)
+        {
+            return generatedHighlightSprite;
+        }
+
+        const int size = 128;
+        var tex = new Texture2D(size, size, TextureFormat.ARGB32, false)
+        {
+            name = "ShadeCharmHighlightGlowTex",
+            hideFlags = HideFlags.HideAndDontSave,
+            wrapMode = TextureWrapMode.Clamp,
+            filterMode = FilterMode.Bilinear
+        };
+
+        Vector2 center = new Vector2((size - 1) * 0.5f, (size - 1) * 0.5f);
+        float radius = (size - 1) * 0.5f;
+        Color inner = Color.white;
+        Color outer = new Color(1f, 1f, 1f, 0f);
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float distance = Vector2.Distance(new Vector2(x, y), center);
+                float t = Mathf.Clamp01(distance / radius);
+                float falloff = 1f - t;
+                falloff = Mathf.Pow(falloff, 2.35f);
+                tex.SetPixel(x, y, Color.Lerp(outer, inner, falloff));
+            }
+        }
+
+        tex.Apply();
+
+        generatedHighlightTexture = tex;
+        generatedHighlightSprite = Sprite.Create(tex, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), size);
+        generatedHighlightSprite.name = "ShadeCharmHighlightGlow";
+        generatedHighlightSprite.hideFlags = HideFlags.HideAndDontSave;
+        return generatedHighlightSprite;
+    }
+
     private RectTransform CreateHighlightRect(RectTransform parent)
     {
         var highlightRect = new GameObject("Highlight", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
         highlightRect.gameObject.layer = parent.gameObject.layer;
         highlightRect.SetParent(parent, false);
+        highlightRect.anchorMin = new Vector2(0.5f, 0.5f);
+        highlightRect.anchorMax = new Vector2(0.5f, 0.5f);
+        highlightRect.pivot = new Vector2(0.5f, 0.5f);
+        highlightRect.localScale = Vector3.one;
+
         var highlightImage = highlightRect.GetComponent<Image>();
-        if (highlightSpriteTemplate != null)
+        var sprite = ResolveHighlightSprite();
+        if (sprite != null)
         {
-            highlightImage.sprite = highlightSpriteTemplate;
-            highlightImage.type = Image.Type.Sliced;
+            highlightImage.sprite = sprite;
+            highlightImage.type = Image.Type.Simple;
+            highlightImage.preserveAspect = true;
             highlightImage.color = highlightColor;
         }
         else
@@ -2477,6 +2839,31 @@ internal sealed class ShadeInventoryPane : InventoryPane
         highlightImage.raycastTarget = false;
         highlightRect.gameObject.SetActive(false);
         return highlightRect;
+    }
+
+    private void PositionHighlight(RectTransform highlightRect, RectTransform entryRoot)
+    {
+        if (highlightRect == null || entryRoot == null)
+        {
+            return;
+        }
+
+        highlightRect.SetParent(entryRoot, false);
+        highlightRect.SetAsFirstSibling();
+        highlightRect.anchorMin = new Vector2(0.5f, 0.5f);
+        highlightRect.anchorMax = new Vector2(0.5f, 0.5f);
+        highlightRect.pivot = new Vector2(0.5f, 0.5f);
+        highlightRect.anchoredPosition = Vector2.zero;
+        highlightRect.localScale = Vector3.one;
+
+        Vector2 baseSize = entryRoot.rect.size;
+        if (baseSize.x <= 0f || baseSize.y <= 0f)
+        {
+            baseSize = charmCellSize;
+        }
+
+        float glowScale = 1.24f;
+        highlightRect.sizeDelta = new Vector2(baseSize.x * glowScale, baseSize.y * glowScale);
     }
 
     public void ForceLayoutRebuild()
@@ -2565,6 +2952,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         statusText = null!;
         hintText = null!;
         detailCostLabel = null;
+        detailCostLabelTMP = null;
         entries.Clear();
         notchMeterIcons.Clear();
         detailCostIcons.Clear();
@@ -2618,7 +3006,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         Vector2 screenSize = normalizedFallbackRootSize.sqrMagnitude > 0f
             ? normalizedFallbackRootSize
             : DefaultStandaloneRootSize;
-        float sectionOffsetX = ComputeNormalizedMargin(screenSize.x, SectionOffsetFraction);
+        float sectionOffsetX = ComputeNormalizedMargin(screenSize.x, SectionOffsetFraction * 0.5f);
         float sectionOffsetY = ComputeNormalizedMargin(screenSize.y, SectionOffsetFraction);
 
         if (canvasGroup == null || canvasGroup.gameObject != rootRect.gameObject)
@@ -2715,8 +3103,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
             leftContentRoot.offsetMax = new Vector2(-24f, -24f);
         }
 
-        var equippedLabel = CreateText("EquippedLabel", leftContentRoot, FontStyle.Normal, 34, TextAnchor.UpperLeft, out _);
-        var equippedLabelRect = ResolveRectTransform(equippedLabel, null);
+        var equippedLabel = CreateText("EquippedLabel", leftContentRoot, FontStyle.Normal, 34, TextAnchor.UpperLeft, out var equippedLabelTMP);
+        var equippedLabelRect = ResolveRectTransform(equippedLabel, equippedLabelTMP);
         if (equippedLabelRect != null)
         {
             equippedLabelRect.anchorMin = new Vector2(0f, 1f);
@@ -2725,7 +3113,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
             equippedLabelRect.anchoredPosition = new Vector2(16f + sectionOffsetX, -(28f + sectionOffsetY));
             equippedLabelRect.sizeDelta = new Vector2(360f, 40f);
         }
-        SetTextValue(equippedLabel, null, "Equipped");
+        SetTextValue(equippedLabel, equippedLabelTMP, "Equipped");
 
         equippedIconsRoot = new GameObject("EquippedIcons", typeof(RectTransform)).GetComponent<RectTransform>();
         equippedIconsRoot.gameObject.layer = leftContentRoot.gameObject.layer;
@@ -2872,8 +3260,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         costLayout.childForceExpandHeight = false;
         costLayout.padding = new RectOffset();
 
-        detailCostLabel = CreateText("CostLabel", detailCostRow, FontStyle.Normal, 28, TextAnchor.MiddleCenter, out _);
-        var detailCostLabelRect = ResolveRectTransform(detailCostLabel, null);
+        detailCostLabel = CreateText("CostLabel", detailCostRow, FontStyle.Normal, 28, TextAnchor.MiddleCenter, out detailCostLabelTMP);
+        var detailCostLabelRect = ResolveRectTransform(detailCostLabel, detailCostLabelTMP);
         if (detailCostLabelRect != null)
         {
             detailCostLabelRect.anchorMin = new Vector2(0.5f, 0.5f);
@@ -2881,7 +3269,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
             detailCostLabelRect.pivot = new Vector2(0.5f, 0.5f);
             detailCostLabelRect.sizeDelta = new Vector2(120f, 32f);
         }
-        SetTextValue(detailCostLabel, null, "Cost");
+        SetTextValue(detailCostLabel, detailCostLabelTMP, "Cost");
 
         detailCostIconContainer = new GameObject("CostIcons", typeof(RectTransform)).GetComponent<RectTransform>();
         detailCostIconContainer.gameObject.layer = detailRoot.gameObject.layer;
@@ -3001,28 +3389,31 @@ internal sealed class ShadeInventoryPane : InventoryPane
         go.layer = parent.gameObject.layer;
         var rect = go.GetComponent<RectTransform>();
         rect.SetParent(parent, false);
-        var text = go.AddComponent<Text>();
-        Font? targetFont = useHeaderFont ? headerFont : bodyFont;
-        if (targetFont == null)
+        var tmpStyle = useHeaderFont ? headerTmpTextStyle : bodyTmpTextStyle;
+        if (tmpStyle.HasValue && tmpStyle.Value.Font != null)
         {
-            targetFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            if (useHeaderFont)
-            {
-                headerFont = targetFont;
-            }
-            else
-            {
-                bodyFont = targetFont;
-            }
+            var tmpComponent = go.AddComponent<TextMeshProUGUI>();
+            tmpText = tmpComponent;
+            ApplyTmpTextStyle(tmpComponent, tmpStyle, tmpStyle.Value.Font, useHeaderFont ? headerFontColor : bodyFontColor, ConvertFontStyle(style), ConvertAlignment(anchor));
+            tmpComponent.raycastTarget = false;
+            tmpComponent.text = string.Empty;
+            return null;
         }
 
-        text.font = targetFont;
-        text.fontStyle = style;
-        text.fontSize = size;
-        text.alignment = anchor;
-        text.color = useHeaderFont ? headerFontColor : bodyFontColor;
-        text.horizontalOverflow = HorizontalWrapMode.Wrap;
-        text.verticalOverflow = VerticalWrapMode.Overflow;
+        var text = go.AddComponent<Text>();
+        var styleData = useHeaderFont ? headerTextStyle : bodyTextStyle;
+        Font? fallbackFont = useHeaderFont ? headerFont : bodyFont;
+        Color fallbackColor = useHeaderFont ? headerFontColor : bodyFontColor;
+        ApplyTextStyle(text, styleData, fallbackFont, fallbackColor, style, size, anchor);
+        if (useHeaderFont && headerFont == null)
+        {
+            headerFont = text.font;
+        }
+        else if (!useHeaderFont && bodyFont == null)
+        {
+            bodyFont = text.font;
+        }
+
         text.raycastTarget = false;
         text.text = string.Empty;
         return text;
@@ -3391,6 +3782,25 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
     }
 
+    internal void HandleDirectionalInput(InventoryPaneBase.InputEventType direction)
+    {
+        switch (direction)
+        {
+            case InventoryPaneBase.InputEventType.Left:
+                MoveSelectionHorizontal(-1);
+                break;
+            case InventoryPaneBase.InputEventType.Right:
+                MoveSelectionHorizontal(1);
+                break;
+            case InventoryPaneBase.InputEventType.Up:
+                MoveSelectionVertical(-1);
+                break;
+            case InventoryPaneBase.InputEventType.Down:
+                MoveSelectionVertical(1);
+                break;
+        }
+    }
+
     private void SelectIndex(int index)
     {
         EnsureBuilt();
@@ -3406,12 +3816,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         if (highlightRect != null && entryRoot != null)
         {
             highlightRect.gameObject.SetActive(true);
-            highlightRect.SetParent(entryRoot, false);
-            highlightRect.SetAsFirstSibling();
-            highlightRect.anchorMin = Vector2.zero;
-            highlightRect.anchorMax = Vector2.one;
-            highlightRect.offsetMin = Vector2.zero;
-            highlightRect.offsetMax = Vector2.zero;
+            PositionHighlight(highlightRect, entryRoot);
         }
         else if (highlightRect != null)
         {
