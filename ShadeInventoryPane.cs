@@ -343,50 +343,21 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 bool skipCandidate = false;
                 try
                 {
-                    if (candidate.GetComponentInParent<ShadeInventoryPane>() != null)
+                    if (candidate != null)
                     {
-                        skipCandidate = true;
-                    }
-                }
-                catch
-                {
-                    skipCandidate = false;
-                }
-
-                if (!skipCandidate)
-                {
-                    try
-                    {
+                        // Skip any RectTransform that belongs to the shade pane we injected.
+                        // Vanilla templates can reuse the "ShadeInventoryPane" object name, so we check
+                        // for the actual component in the hierarchy instead of relying on string matches.
                         if (candidate.GetComponent<ShadeInventoryPane>() != null)
                         {
                             skipCandidate = true;
                         }
-                    }
-                    catch
-                    {
-                        skipCandidate = false;
-                    }
-                }
-
-                if (!skipCandidate)
-                {
-                    try
-                    {
-                        string? candidateName = candidate.gameObject != null ? candidate.gameObject.name : null;
-                        if (!string.IsNullOrEmpty(candidateName) &&
-                            string.Equals(candidateName, nameof(ShadeInventoryPane), StringComparison.OrdinalIgnoreCase))
+                        else
                         {
-                            skipCandidate = true;
-                        }
-
-                        if (!skipCandidate)
-                        {
-                            Transform? current = candidate.transform;
+                            Transform? current = candidate.transform.parent;
                             while (current != null)
                             {
-                                string? currentName = current.gameObject != null ? current.gameObject.name : null;
-                                if (!string.IsNullOrEmpty(currentName) &&
-                                    string.Equals(currentName, nameof(ShadeInventoryPane), StringComparison.OrdinalIgnoreCase))
+                                if (current.GetComponent<ShadeInventoryPane>() != null)
                                 {
                                     skipCandidate = true;
                                     break;
@@ -396,10 +367,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
                             }
                         }
                     }
-                    catch
-                    {
-                        skipCandidate = false;
-                    }
+                }
+                catch
+                {
+                    skipCandidate = false;
                 }
 
                 if (skipCandidate)
