@@ -169,6 +169,12 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private TMP_Text? hintTextTMP;
     private CanvasGroup canvasGroup = null!;
 
+    private GameObject? overlayCanvasObject;
+    private RectTransform? overlayRoot;
+    private Canvas? overlayCanvas;
+    private CanvasScaler? overlayCanvasScaler;
+    private GraphicRaycaster? overlayRaycaster;
+
     private Font? bodyFont;
     private Font? headerFont;
     private Material? bodyFontMaterial;
@@ -818,13 +824,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     {
         EnsureBuilt();
         labelPulseTimer = 0f;
-        canvasGroup ??= GetComponent<CanvasGroup>();
-        if (canvasGroup != null)
-        {
-            canvasGroup.alpha = 1f;
-            canvasGroup.interactable = true;
-            canvasGroup.blocksRaycasts = true;
-        }
+        ApplyOverlayVisibility(true);
 
         ShadeCharmInventory? inv = ShadeRuntime.Charms;
         if (inv != null)
@@ -847,12 +847,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         inventory = null;
         isActive = false;
         LogMenuEvent("OnDisable");
-        if (canvasGroup != null)
-        {
-            canvasGroup.alpha = 0f;
-            canvasGroup.interactable = false;
-            canvasGroup.blocksRaycasts = false;
-        }
+        ApplyOverlayVisibility(false);
     }
 
     private void OnDestroy()
@@ -866,6 +861,24 @@ internal sealed class ShadeInventoryPane : InventoryPane
             Destroy(fallbackSprite);
             fallbackSprite = null;
         }
+
+        if (overlayCanvasObject != null)
+        {
+            try
+            {
+                Destroy(overlayCanvasObject);
+            }
+            catch
+            {
+            }
+
+            overlayCanvasObject = null;
+            overlayRoot = null;
+            overlayCanvas = null;
+            overlayCanvasScaler = null;
+            overlayRaycaster = null;
+            canvasGroup = null!;
+        }
     }
 
     public override void PaneStart()
@@ -873,13 +886,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         base.PaneStart();
         EnsureBuilt();
         labelPulseTimer = 0f;
-        canvasGroup ??= GetComponent<CanvasGroup>();
-        if (canvasGroup != null)
-        {
-            canvasGroup.alpha = 1f;
-            canvasGroup.interactable = true;
-            canvasGroup.blocksRaycasts = true;
-        }
+        ApplyOverlayVisibility(true);
 
         inventory ??= ShadeRuntime.Charms;
         isActive = true;
@@ -892,11 +899,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     public override void PaneEnd()
     {
         isActive = false;
-        if (canvasGroup != null)
-        {
-            canvasGroup.interactable = false;
-            canvasGroup.blocksRaycasts = false;
-        }
+        ApplyOverlayVisibility(false);
         LogMenuEvent("PaneEnd");
         base.PaneEnd();
     }
@@ -1069,30 +1072,14 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         try
         {
-            bool templateRootHasValidSize = false;
             var templateRect = ResolveTemplateRootRectTransform(template);
-            RectTransform? panelRectRef = null;
-            RectTransform? contentRectRef = null;
-            RectTransform? gridRectRef = null;
-            RectTransform? detailRectRef = null;
             if (templateRect != null)
             {
                 Vector2 templateSize = templateRect.rect.size;
-                templateRootHasValidSize = HasSufficientRectSize(templateRect);
-                if (templateRootHasValidSize)
-                {
-                    rootRectTemplate = RectSnapshot.From(templateRect);
-                    templateRootSize = new Vector2(Mathf.Abs(templateSize.x), Mathf.Abs(templateSize.y));
-                    var templateLayout = templateRect.GetComponent<LayoutElement>();
-                    if (templateLayout != null)
-                    {
-                        rootLayoutTemplate = LayoutElementSnapshot.From(templateLayout);
-                    }
-                }
-                else
+                if (!HasSufficientRectSize(templateRect))
                 {
                     LogMenuEvent(FormattableString.Invariant(
-                        $"ConfigureFromTemplate: template root size {FormatVector2(templateSize)} below threshold {MinRootSizeThreshold}; using fallback layout"));
+                        $"ConfigureFromTemplate: template root size {FormatVector2(templateSize)} below threshold {MinRootSizeThreshold}; ignoring template layout"));
                 }
             }
 
@@ -1220,196 +1207,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 }
             }
 
-            var rects = template.GetComponentsInChildren<RectTransform>(true);
-            if (rects != null && rects.Length > 0)
-            {
-                foreach (var rect in rects)
-                {
-                    if (rect == null)
-                    {
-                        continue;
-                    }
-
-                    string lowerName = rect.gameObject != null ? rect.gameObject.name?.ToLowerInvariant() ?? string.Empty : string.Empty;
-
-                    var grid = rect.GetComponent<GridLayoutGroup>();
-                    if (grid != null && gridRectRef == null)
-                    {
-                        gridRectRef = rect;
-                        gridRectTemplate = RectSnapshot.From(rect);
-                        gridLayoutTemplate = GridLayoutSnapshot.From(grid);
-
-                        var parentRect = rect.parent as RectTransform;
-                        if (contentRectRef == null && parentRect != null)
-                        {
-                            contentRectRef = parentRect;
-                        }
-
-                        if (panelRectRef == null)
-                        {
-                            var panelCandidate = parentRect != null ? parentRect.parent as RectTransform : null;
-                            if (panelCandidate != null)
-                            {
-                                panelRectRef = panelCandidate;
-                            }
-                        }
-
-                        continue;
-                    }
-
-                    if (detailRectRef == null)
-                    {
-                        bool nameMatches = !string.IsNullOrEmpty(lowerName) &&
-                            (lowerName.Contains("detail") || lowerName.Contains("description") || lowerName.Contains("info"));
-
-                        bool hasLayout = false;
-                        try
-                        {
-                            hasLayout = rect.GetComponent<VerticalLayoutGroup>() != null;
-                        }
-                        catch
-                        {
-                            hasLayout = false;
-                        }
-
-                        bool hasText = false;
-                        if (!nameMatches)
-                        {
-                            try
-                            {
-                                hasText = rect.GetComponentsInChildren<Text>(true)?.Any(t => t != null) == true ||
-                                    rect.GetComponentsInChildren<TMP_Text>(true)?.Any(t => t != null) == true;
-                            }
-                            catch
-                            {
-                                hasText = false;
-                            }
-                        }
-
-                        if (nameMatches || (hasLayout && hasText))
-                        {
-                            detailRectRef = rect;
-                            continue;
-                        }
-                    }
-
-                    if (contentRectRef == null)
-                    {
-                        HorizontalOrVerticalLayoutGroup? layoutGroup = null;
-                        try
-                        {
-                            layoutGroup = rect.GetComponent<HorizontalOrVerticalLayoutGroup>();
-                        }
-                        catch
-                        {
-                            layoutGroup = null;
-                        }
-
-                        if (layoutGroup != null && rect.childCount > 0)
-                        {
-                            bool hasGridChild = false;
-                            for (int i = 0; i < rect.childCount; i++)
-                            {
-                                if (rect.GetChild(i) is RectTransform child && child.GetComponent<GridLayoutGroup>() != null)
-                                {
-                                    hasGridChild = true;
-                                    break;
-                                }
-                            }
-
-                            if (hasGridChild)
-                            {
-                                contentRectRef = rect;
-                                if (panelRectRef == null)
-                                {
-                                    panelRectRef = rect.parent as RectTransform;
-                                }
-                                continue;
-                            }
-                        }
-                    }
-
-                    if (panelRectRef == null)
-                    {
-                        Image? image = null;
-                        try
-                        {
-                            image = rect.GetComponent<Image>();
-                        }
-                        catch
-                        {
-                            image = null;
-                        }
-
-                        if (image != null)
-                        {
-                            bool matches = !string.IsNullOrEmpty(lowerName) &&
-                                (lowerName.Contains("panel") || lowerName.Contains("pane") || lowerName.Contains("background") ||
-                                 lowerName.Contains("bg") || lowerName.Contains("frame"));
-
-                            if (matches || rect == templateRect)
-                            {
-                                panelRectRef = rect;
-                                continue;
-                            }
-                        }
-                    }
-                }
-
-                if (panelRectRef == null && templateRect != null && templateRootHasValidSize)
-                {
-                    panelRectRef = templateRect;
-                }
-
-                if (contentRectRef == null && panelRectRef != null)
-                {
-                    for (int i = 0; i < panelRectRef.childCount; i++)
-                    {
-                        if (panelRectRef.GetChild(i) is RectTransform child)
-                        {
-                            if (child == gridRectRef)
-                            {
-                                contentRectRef = child.parent as RectTransform;
-                                break;
-                            }
-
-                            for (int j = 0; j < child.childCount; j++)
-                            {
-                                if (child.GetChild(j) is RectTransform grandChild && grandChild.GetComponent<GridLayoutGroup>() != null)
-                                {
-                                    contentRectRef = child;
-                                    break;
-                                }
-                            }
-
-                            if (contentRectRef != null)
-                            {
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                if (panelRectRef != null && HasSufficientRectSize(panelRectRef))
-                {
-                    panelRectTemplate = RectSnapshot.From(panelRectRef);
-                }
-
-                if (contentRectRef != null && HasSufficientRectSize(contentRectRef))
-                {
-                    contentRectTemplate = RectSnapshot.From(contentRectRef);
-                }
-
-                if (gridRectRef != null && !gridRectTemplate.HasValue && HasSufficientRectSize(gridRectRef))
-                {
-                    gridRectTemplate = RectSnapshot.From(gridRectRef);
-                }
-
-                if (detailRectRef != null && HasSufficientRectSize(detailRectRef))
-                {
-                    detailRectTemplate = RectSnapshot.From(detailRectRef);
-                }
-            }
         }
         catch
         {
@@ -1791,6 +1588,12 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     internal void EnsureRootSizing()
     {
+        if (overlayRoot != null)
+        {
+            UpdateOverlayCanvasScaler();
+            return;
+        }
+
         var root = transform as RectTransform;
         if (root == null)
         {
@@ -1948,6 +1751,136 @@ internal sealed class ShadeInventoryPane : InventoryPane
         return Mathf.Max(0f, margin);
     }
 
+    private RectTransform? EnsureOverlayCanvas()
+    {
+        if (overlayRoot != null)
+        {
+            return overlayRoot;
+        }
+
+        GameObject? overlayObject = null;
+        try
+        {
+            overlayObject = new GameObject("ShadeInventoryOverlay", typeof(RectTransform));
+        }
+        catch
+        {
+            overlayObject = null;
+        }
+
+        if (overlayObject == null)
+        {
+            return null;
+        }
+
+        overlayCanvasObject = overlayObject;
+        overlayObject.layer = gameObject.layer;
+
+        overlayRoot = overlayObject.GetComponent<RectTransform>();
+        overlayRoot.SetParent(null, false);
+        overlayRoot.anchorMin = Vector2.zero;
+        overlayRoot.anchorMax = Vector2.one;
+        overlayRoot.pivot = new Vector2(0.5f, 0.5f);
+        overlayRoot.offsetMin = Vector2.zero;
+        overlayRoot.offsetMax = Vector2.zero;
+
+        overlayCanvas = overlayObject.AddComponent<Canvas>();
+        overlayCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        overlayCanvas.sortingOrder = 1000;
+        overlayCanvas.pixelPerfect = false;
+
+        overlayCanvasScaler = overlayObject.AddComponent<CanvasScaler>();
+        overlayCanvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        overlayCanvasScaler.referenceResolution = DefaultStandaloneRootSize;
+        overlayCanvasScaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        overlayCanvasScaler.matchWidthOrHeight = 0.5f;
+
+        overlayRaycaster = overlayObject.AddComponent<GraphicRaycaster>();
+        overlayRaycaster.ignoreReversedGraphics = false;
+        overlayRaycaster.blockingObjects = GraphicRaycaster.BlockingObjects.None;
+
+        canvasGroup = overlayObject.GetComponent<CanvasGroup>();
+        if (canvasGroup == null)
+        {
+            canvasGroup = overlayObject.AddComponent<CanvasGroup>();
+        }
+        canvasGroup.alpha = 0f;
+        canvasGroup.interactable = false;
+        canvasGroup.blocksRaycasts = false;
+
+        return overlayRoot;
+    }
+
+    private Vector2 DetermineOverlayCanvasSize(RectTransform root)
+    {
+        if (root == null)
+        {
+            return Vector2.zero;
+        }
+
+        if (overlayCanvas != null)
+        {
+            try
+            {
+                Rect pixelRect = overlayCanvas.pixelRect;
+                if (pixelRect.width > MinRootSizeThreshold && pixelRect.height > MinRootSizeThreshold)
+                {
+                    return new Vector2(pixelRect.width, pixelRect.height);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        string fallbackSource;
+        Vector2 fallback = DetermineStandaloneFallbackSize(root, out fallbackSource);
+        if (fallback.x >= MinRootSizeThreshold && fallback.y >= MinRootSizeThreshold)
+        {
+            return fallback;
+        }
+
+        return DefaultStandaloneRootSize;
+    }
+
+    private void UpdateOverlayCanvasScaler()
+    {
+        if (overlayCanvasScaler == null)
+        {
+            return;
+        }
+
+        if (overlayCanvasScaler.uiScaleMode != CanvasScaler.ScaleMode.ScaleWithScreenSize)
+        {
+            overlayCanvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        }
+
+        if (overlayCanvasScaler.referenceResolution.sqrMagnitude <= 0f)
+        {
+            overlayCanvasScaler.referenceResolution = DefaultStandaloneRootSize;
+        }
+
+        overlayCanvasScaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        overlayCanvasScaler.matchWidthOrHeight = 0.5f;
+    }
+
+    private void ApplyOverlayVisibility(bool visible)
+    {
+        if (overlayRoot == null || canvasGroup == null)
+        {
+            return;
+        }
+
+        canvasGroup.alpha = visible ? 1f : 0f;
+        canvasGroup.interactable = visible;
+        canvasGroup.blocksRaycasts = visible;
+
+        if (overlayCanvas != null)
+        {
+            overlayCanvas.enabled = true;
+        }
+    }
+
     private bool ShouldUseNormalizedFallbackLayout(RectTransform? root, Vector2 rootSize)
     {
         if (root == null)
@@ -2013,10 +1946,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         EnsureRootSizing();
 
-        var selfRect = transform as RectTransform;
-        if (selfRect == null)
+        var rootRect = overlayRoot ?? transform as RectTransform;
+        if (rootRect == null)
         {
-            LogMenuEvent("ForceLayoutRebuild skipped: transform lacks RectTransform");
+            LogMenuEvent("ForceLayoutRebuild skipped: no root RectTransform available");
             return;
         }
 
@@ -2035,36 +1968,15 @@ internal sealed class ShadeInventoryPane : InventoryPane
             LayoutRebuilder.ForceRebuildLayoutImmediate(gridRoot);
         }
 
-        LayoutRebuilder.ForceRebuildLayoutImmediate(selfRect);
+        LayoutRebuilder.ForceRebuildLayoutImmediate(rootRect);
 
-        Vector2 rootSize = selfRect.rect.size;
+        Vector2 rootSize = rootRect.rect.size;
         string panelSizeText = panelRoot != null ? FormatVector2(panelRoot.rect.size) : "<null>";
         string contentSizeText = contentRoot != null ? FormatVector2(contentRoot.rect.size) : "<null>";
         string gridSizeText = gridRoot != null ? FormatVector2(gridRoot.rect.size) : "<null>";
 
-        bool rootTooSmall = Mathf.Abs(rootSize.x) < MinRootSizeThreshold || Mathf.Abs(rootSize.y) < MinRootSizeThreshold;
-        if (rootTooSmall)
-        {
-            LogMenuEvent(FormattableString.Invariant(
-                $"ForceLayoutRebuild -> root={FormatVector2(rootSize)}, panel={panelSizeText}, content={contentSizeText}, grid={gridSizeText} (threshold={MinRootSizeThreshold})"));
-            LogRectTransformHierarchy(selfRect, $"ShadePaneRoot[{gameObject.name}].BeforeFallback");
-            ApplyTemplateRootLayoutFallback(selfRect);
-            EnsureRootSizing();
-
-            rootSize = selfRect.rect.size;
-            panelSizeText = panelRoot != null ? FormatVector2(panelRoot.rect.size) : "<null>";
-            contentSizeText = contentRoot != null ? FormatVector2(contentRoot.rect.size) : "<null>";
-            gridSizeText = gridRoot != null ? FormatVector2(gridRoot.rect.size) : "<null>";
-
-            LogMenuEvent(FormattableString.Invariant(
-                $"ForceLayoutRebuild post-fallback -> root={FormatVector2(rootSize)}, panel={panelSizeText}, content={contentSizeText}, grid={gridSizeText}"));
-            LogRectTransformHierarchy(selfRect, $"ShadePaneRoot[{gameObject.name}].AfterFallback");
-        }
-        else
-        {
-            LogMenuEvent(FormattableString.Invariant(
-                $"ForceLayoutRebuild -> root={FormatVector2(rootSize)}, panel={panelSizeText}, content={contentSizeText}, grid={gridSizeText}"));
-        }
+        LogMenuEvent(FormattableString.Invariant(
+            $"ForceLayoutRebuild -> root={FormatVector2(rootSize)}, panel={panelSizeText}, content={contentSizeText}, grid={gridSizeText}"));
     }
 
     private void RebuildUI()
@@ -2112,43 +2024,37 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return;
         }
 
-        EnsureRootSizing();
-
-        useNormalizedFallbackLayout = false;
-        normalizedFallbackRootSize = Vector2.zero;
-
-        var rootRect = transform as RectTransform;
-        if (rootRect != null)
+        var rootRect = EnsureOverlayCanvas();
+        if (rootRect == null)
         {
-            Vector2 rootSize;
-            try
-            {
-                Vector2 rawSize = rootRect.rect.size;
-                rootSize = new Vector2(Mathf.Abs(rawSize.x), Mathf.Abs(rawSize.y));
-            }
-            catch
-            {
-                rootSize = Vector2.zero;
-            }
-
-            useNormalizedFallbackLayout = ShouldUseNormalizedFallbackLayout(rootRect, rootSize);
-            if (useNormalizedFallbackLayout)
-            {
-                normalizedFallbackRootSize = rootSize;
-            }
+            LogMenuEvent("BuildUI skipped: overlay canvas unavailable");
+            return;
         }
 
-        canvasGroup = GetComponent<CanvasGroup>();
-        if (canvasGroup == null)
+        UpdateOverlayCanvasScaler();
+
+        useNormalizedFallbackLayout = true;
+        normalizedFallbackRootSize = DetermineOverlayCanvasSize(rootRect);
+        if (normalizedFallbackRootSize.sqrMagnitude <= 0f)
         {
-            canvasGroup = gameObject.AddComponent<CanvasGroup>();
+            normalizedFallbackRootSize = DefaultStandaloneRootSize;
+        }
+
+        if (canvasGroup == null || canvasGroup.gameObject != rootRect.gameObject)
+        {
+            canvasGroup = rootRect.GetComponent<CanvasGroup>();
+            if (canvasGroup == null)
+            {
+                canvasGroup = rootRect.gameObject.AddComponent<CanvasGroup>();
+            }
         }
         canvasGroup.alpha = 0f;
         canvasGroup.interactable = false;
         canvasGroup.blocksRaycasts = false;
 
         panelRoot = new GameObject("ShadePanel", typeof(RectTransform)).GetComponent<RectTransform>();
-        panelRoot.SetParent(transform, false);
+        panelRoot.gameObject.layer = rootRect.gameObject.layer;
+        panelRoot.SetParent(rootRect, false);
         if (panelRectTemplate.HasValue)
         {
             panelRectTemplate.Value.Apply(panelRoot);
@@ -2182,6 +2088,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         panelImage.raycastTarget = false;
 
         contentRoot = new GameObject("Content", typeof(RectTransform)).GetComponent<RectTransform>();
+        contentRoot.gameObject.layer = panelRoot.gameObject.layer;
         contentRoot.SetParent(panelRoot, false);
         if (contentRectTemplate.HasValue)
         {
@@ -2250,6 +2157,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         gridRoot = new GameObject("CharmGrid", typeof(RectTransform)).GetComponent<RectTransform>();
+        gridRoot.gameObject.layer = contentRoot.gameObject.layer;
         gridRoot.SetParent(contentRoot, false);
         if (gridRectTemplate.HasValue)
         {
@@ -2336,6 +2244,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         gridLayout.childAlignment = TextAnchor.UpperLeft;
 
         highlight = new GameObject("Highlight", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
+        highlight.gameObject.layer = gridRoot.gameObject.layer;
         highlight.SetParent(gridRoot, false);
         var highlightImage = highlight.GetComponent<Image>();
         if (highlightSpriteTemplate != null)
@@ -2352,6 +2261,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         highlight.gameObject.SetActive(false);
 
         var detailRoot = new GameObject("Details", typeof(RectTransform)).GetComponent<RectTransform>();
+        detailRoot.gameObject.layer = contentRoot.gameObject.layer;
         detailRoot.SetParent(contentRoot, false);
         if (detailRectTemplate.HasValue)
         {
@@ -2495,6 +2405,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         tmpText = null;
 
         var go = new GameObject(name, typeof(RectTransform));
+        go.layer = parent.gameObject.layer;
         var rect = go.GetComponent<RectTransform>();
         rect.SetParent(parent, false);
 
@@ -2691,6 +2602,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private CharmEntry CreateEntry(int index)
     {
         var cell = new GameObject($"CharmCell_{index}", typeof(RectTransform));
+        cell.layer = gridRoot.gameObject.layer;
         var cellRect = cell.GetComponent<RectTransform>();
         cellRect.SetParent(gridRoot, false);
         cellRect.localScale = Vector3.one;
@@ -2722,6 +2634,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         background.raycastTarget = false;
 
         var iconGo = new GameObject("Icon", typeof(RectTransform));
+        iconGo.layer = cell.layer;
         var iconRect = iconGo.GetComponent<RectTransform>();
         iconRect.SetParent(cellRect, false);
         iconRect.anchorMin = new Vector2(0.5f, 0.5f);
@@ -2741,6 +2654,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         icon.raycastTarget = false;
 
         var newMarker = new GameObject("New", typeof(RectTransform), typeof(Image));
+        newMarker.layer = cell.layer;
         var markerRect = newMarker.GetComponent<RectTransform>();
         markerRect.SetParent(cellRect, false);
         markerRect.anchorMin = new Vector2(1f, 1f);
@@ -3267,18 +3181,6 @@ internal static class ShadeInventoryPaneIntegration
 
     private static void ScheduleTemplateSync(InventoryPaneList paneList, InventoryPane? template, ShadeInventoryPane shadePane)
     {
-        if (paneList == null || template == null || shadePane == null)
-        {
-            return;
-        }
-
-        var host = paneList.GetComponent<TemplateSyncHost>();
-        if (host == null)
-        {
-            host = paneList.gameObject.AddComponent<TemplateSyncHost>();
-        }
-
-        host.Schedule(template, shadePane);
     }
 
     private sealed class TemplateSyncHost : MonoBehaviour
@@ -3614,7 +3516,6 @@ internal static class ShadeInventoryPaneIntegration
             return;
         }
         RectTransform? templateRect = template != null ? ShadeInventoryPane.ResolveTemplateRootRectTransform(template) : null;
-        bool templateHasValidSize = ShadeInventoryPane.HasSufficientRectSize(templateRect);
         Transform? parent = null;
         if (templateRect != null)
         {
@@ -3625,63 +3526,32 @@ internal static class ShadeInventoryPaneIntegration
             parent = template.transform.parent;
         }
 
-        if (templateRect != null && !templateHasValidSize)
-        {
-            ShadeInventoryPane.LogMenuEvent(FormattableString.Invariant(
-                $"EnsurePane template size {ShadeInventoryPane.FormatVector2(templateRect.rect.size)} below threshold {ShadeInventoryPane.MinRootSizeThreshold}; using fallback layout"));
-        }
         if (existingShade != null)
         {
-            var shadeRect = existingShade.transform as RectTransform;
-            if (templateRect != null && shadeRect != null && templateHasValidSize)
-            {
-                CopyRectTransform(templateRect, shadeRect, copySiblingIndex: false);
-                CopyLayoutComponents(templateRect, shadeRect, copyLayoutGroups: false, copyGridLayout: false);
-            }
-            ShadeInventoryPane.LogRectTransformHierarchy(templateRect, "TemplatePaneLive");
-            if (shadeRect != null)
-            {
-                ShadeInventoryPane.LogRectTransformHierarchy(shadeRect, "ShadePaneBeforeForce");
-            }
-
             existingShade.ConfigureFromTemplate(template);
             existingShade.SetDisplayLabel("Charms");
-            existingShade.EnsureRootSizing();
             existingShade.ForceImmediateRefresh();
             existingShade.ForceLayoutRebuild();
-            if (shadeRect != null)
-            {
-                ShadeInventoryPane.LogRectTransformHierarchy(shadeRect, "ShadePaneAfterForce");
-            }
             ShadeInventoryPane.LogMenuEvent(FormattableString.Invariant(
-                $"EnsurePane refreshed existing shade pane from template (active={existingShade.isActiveAndEnabled})"));
-            ScheduleTemplateSync(paneList, template, existingShade);
+                $"EnsurePane refreshed existing shade overlay pane (active={existingShade.isActiveAndEnabled})"));
             return;
         }
 
         parent ??= paneList.transform;
-        ShadeInventoryPane.LogMenuEvent($"Injecting shade pane using template '{template?.GetType().Name ?? "<null>"}'");
+        ShadeInventoryPane.LogMenuEvent($"Injecting shade overlay pane using template '{template?.GetType().Name ?? "<null>"}'");
 
         var go = new GameObject("ShadeInventoryPane", typeof(RectTransform));
+        int templateLayer = template.gameObject != null ? template.gameObject.layer : paneList.gameObject.layer;
+        go.layer = templateLayer;
         var rect = go.GetComponent<RectTransform>();
         rect.SetParent(parent, false);
-        if (templateRect != null && templateHasValidSize)
-        {
-            CopyRectTransform(templateRect, rect);
-            CopyLayoutComponents(templateRect, rect, copyLayoutGroups: false, copyGridLayout: false);
-        }
-        else
-        {
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = Vector2.zero;
-            rect.anchoredPosition = Vector2.zero;
-            rect.localScale = Vector3.one;
-        }
-        ShadeInventoryPane.LogRectTransformHierarchy(templateRect, "TemplatePaneLive");
-        ShadeInventoryPane.LogRectTransformHierarchy(rect, "ShadePaneBeforeForce");
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+        rect.anchoredPosition = Vector2.zero;
+        rect.localScale = Vector3.one;
 
         var canvasGroup = go.AddComponent<CanvasGroup>();
         canvasGroup.alpha = 0f;
@@ -3694,12 +3564,8 @@ internal static class ShadeInventoryPaneIntegration
         shadePane.RootPane = shadePane;
         shadePane.ConfigureFromTemplate(template);
         shadePane.SetDisplayLabel("Charms");
-        shadePane.EnsureRootSizing();
         shadePane.ForceImmediateRefresh();
         shadePane.ForceLayoutRebuild();
-        ShadeInventoryPane.LogRectTransformHierarchy(rect, "ShadePaneAfterForce");
-
-        ScheduleTemplateSync(paneList, template, shadePane);
 
         var input = go.AddComponent<InventoryPaneInput>();
         ConfigureInput(input, paneList, shadePane);
