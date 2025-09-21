@@ -57,6 +57,45 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
     }
 
+    private struct LayoutElementSnapshot
+    {
+        public bool IgnoreLayout;
+        public float MinWidth;
+        public float PreferredWidth;
+        public float FlexibleWidth;
+        public float MinHeight;
+        public float PreferredHeight;
+        public float FlexibleHeight;
+        public int LayoutPriority;
+
+        public static LayoutElementSnapshot From(LayoutElement element)
+        {
+            return new LayoutElementSnapshot
+            {
+                IgnoreLayout = element.ignoreLayout,
+                MinWidth = element.minWidth,
+                PreferredWidth = element.preferredWidth,
+                FlexibleWidth = element.flexibleWidth,
+                MinHeight = element.minHeight,
+                PreferredHeight = element.preferredHeight,
+                FlexibleHeight = element.flexibleHeight,
+                LayoutPriority = element.layoutPriority
+            };
+        }
+
+        public void Apply(LayoutElement element)
+        {
+            element.ignoreLayout = IgnoreLayout;
+            element.minWidth = MinWidth;
+            element.preferredWidth = PreferredWidth;
+            element.flexibleWidth = FlexibleWidth;
+            element.minHeight = MinHeight;
+            element.preferredHeight = PreferredHeight;
+            element.flexibleHeight = FlexibleHeight;
+            element.layoutPriority = LayoutPriority;
+        }
+    }
+
     private struct GridLayoutSnapshot
     {
         public Vector2 CellSize;
@@ -150,6 +189,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private RectSnapshot? gridRectTemplate;
     private RectSnapshot? detailRectTemplate;
     private GridLayoutSnapshot? gridLayoutTemplate;
+    private Vector2? templateRootSize;
+    private LayoutElementSnapshot? rootLayoutTemplate;
 
     private struct CharmEntry
     {
@@ -598,9 +639,22 @@ internal sealed class ShadeInventoryPane : InventoryPane
         gridRectTemplate = null;
         detailRectTemplate = null;
         gridLayoutTemplate = null;
+        templateRootSize = null;
+        rootLayoutTemplate = null;
 
         try
         {
+            var templateRect = template.GetComponent<RectTransform>();
+            if (templateRect != null)
+            {
+                templateRootSize = templateRect.rect.size;
+                var templateLayout = templateRect.GetComponent<LayoutElement>();
+                if (templateLayout != null)
+                {
+                    rootLayoutTemplate = LayoutElementSnapshot.From(templateLayout);
+                }
+            }
+
             var texts = template.GetComponentsInChildren<Text>(true);
             if (texts != null && texts.Length > 0)
             {
@@ -809,6 +863,111 @@ internal sealed class ShadeInventoryPane : InventoryPane
         LogMenuEvent($"ForceImmediateRefresh: entries={entries.Count}, inventoryNull={inventory == null}");
     }
 
+    private void ApplyTemplateRootLayoutFallback(RectTransform root)
+    {
+        if (root == null)
+        {
+            return;
+        }
+
+        bool adjustments = false;
+        Vector2? desiredSize = templateRootSize;
+        if (desiredSize.HasValue)
+        {
+            var templateSize = desiredSize.Value;
+            if (templateSize.x >= MinRootSizeThreshold)
+            {
+                float before = root.rect.width;
+                root.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, templateSize.x);
+                if (!Mathf.Approximately(before, root.rect.width))
+                {
+                    adjustments = true;
+                }
+            }
+
+            if (templateSize.y >= MinRootSizeThreshold)
+            {
+                float before = root.rect.height;
+                root.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, templateSize.y);
+                if (!Mathf.Approximately(before, root.rect.height))
+                {
+                    adjustments = true;
+                }
+            }
+        }
+
+        var layoutElement = root.GetComponent<LayoutElement>();
+        if (layoutElement != null)
+        {
+            bool layoutAdjusted = false;
+            if (rootLayoutTemplate.HasValue)
+            {
+                rootLayoutTemplate.Value.Apply(layoutElement);
+                layoutAdjusted = true;
+            }
+
+            if (desiredSize.HasValue)
+            {
+                var templateSize = desiredSize.Value;
+                if (templateSize.x >= MinRootSizeThreshold)
+                {
+                    if (layoutElement.minWidth < templateSize.x)
+                    {
+                        layoutElement.minWidth = templateSize.x;
+                        layoutAdjusted = true;
+                    }
+                    if (layoutElement.preferredWidth < templateSize.x)
+                    {
+                        layoutElement.preferredWidth = templateSize.x;
+                        layoutAdjusted = true;
+                    }
+                }
+
+                if (templateSize.y >= MinRootSizeThreshold)
+                {
+                    if (layoutElement.minHeight < templateSize.y)
+                    {
+                        layoutElement.minHeight = templateSize.y;
+                        layoutAdjusted = true;
+                    }
+                    if (layoutElement.preferredHeight < templateSize.y)
+                    {
+                        layoutElement.preferredHeight = templateSize.y;
+                        layoutAdjusted = true;
+                    }
+                }
+            }
+
+            if (layoutAdjusted)
+            {
+                layoutElement.flexibleWidth = Mathf.Max(0f, layoutElement.flexibleWidth);
+                layoutElement.flexibleHeight = Mathf.Max(0f, layoutElement.flexibleHeight);
+                adjustments = true;
+            }
+        }
+
+        if (!adjustments)
+        {
+            return;
+        }
+
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(root);
+
+        var parent = root.parent as RectTransform;
+        int guard = 0;
+        while (parent != null && guard < 3)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(parent);
+            parent = parent.parent as RectTransform;
+            guard++;
+        }
+
+        string templateSizeText = desiredSize.HasValue ? FormatVector2(desiredSize.Value) : "<null>";
+        LogMenuEvent(FormattableString.Invariant(
+            $"ForceLayoutRebuild applied template fallback -> root={FormatVector2(root.rect.size)} template={templateSizeText}"));
+    }
+
     public void ForceLayoutRebuild()
     {
         EnsureBuilt();
@@ -842,11 +1001,22 @@ internal sealed class ShadeInventoryPane : InventoryPane
         string contentSizeText = contentRoot != null ? FormatVector2(contentRoot.rect.size) : "<null>";
         string gridSizeText = gridRoot != null ? FormatVector2(gridRoot.rect.size) : "<null>";
 
-        if (rootSize.x < MinRootSizeThreshold || rootSize.y < MinRootSizeThreshold)
+        bool rootTooSmall = rootSize.x < MinRootSizeThreshold || rootSize.y < MinRootSizeThreshold;
+        if (rootTooSmall)
         {
             LogMenuEvent(FormattableString.Invariant(
                 $"ForceLayoutRebuild -> root={FormatVector2(rootSize)}, panel={panelSizeText}, content={contentSizeText}, grid={gridSizeText} (threshold={MinRootSizeThreshold})"));
-            LogRectTransformHierarchy(selfRect, $"ShadePaneRoot[{gameObject.name}]");
+            LogRectTransformHierarchy(selfRect, $"ShadePaneRoot[{gameObject.name}].BeforeFallback");
+            ApplyTemplateRootLayoutFallback(selfRect);
+
+            rootSize = selfRect.rect.size;
+            panelSizeText = panelRoot != null ? FormatVector2(panelRoot.rect.size) : "<null>";
+            contentSizeText = contentRoot != null ? FormatVector2(contentRoot.rect.size) : "<null>";
+            gridSizeText = gridRoot != null ? FormatVector2(gridRoot.rect.size) : "<null>";
+
+            LogMenuEvent(FormattableString.Invariant(
+                $"ForceLayoutRebuild post-fallback -> root={FormatVector2(rootSize)}, panel={panelSizeText}, content={contentSizeText}, grid={gridSizeText}"));
+            LogRectTransformHierarchy(selfRect, $"ShadePaneRoot[{gameObject.name}].AfterFallback");
         }
         else
         {
@@ -1980,11 +2150,19 @@ internal static class ShadeInventoryPaneIntegration
                 CopyLayoutComponents(templateRect, shadeRect);
             }
             ShadeInventoryPane.LogRectTransformHierarchy(templateRect, "TemplatePaneLive");
+            if (shadeRect != null)
+            {
+                ShadeInventoryPane.LogRectTransformHierarchy(shadeRect, "ShadePaneBeforeForce");
+            }
 
             existingShade.ConfigureFromTemplate(template);
             existingShade.SetDisplayLabel("Charms");
             existingShade.ForceImmediateRefresh();
             existingShade.ForceLayoutRebuild();
+            if (shadeRect != null)
+            {
+                ShadeInventoryPane.LogRectTransformHierarchy(shadeRect, "ShadePaneAfterForce");
+            }
             ShadeInventoryPane.LogMenuEvent(FormattableString.Invariant(
                 $"EnsurePane refreshed existing shade pane from template (active={existingShade.isActiveAndEnabled})"));
             return;
@@ -2012,6 +2190,7 @@ internal static class ShadeInventoryPaneIntegration
             rect.localScale = Vector3.one;
         }
         ShadeInventoryPane.LogRectTransformHierarchy(templateRect, "TemplatePaneLive");
+        ShadeInventoryPane.LogRectTransformHierarchy(rect, "ShadePaneBeforeForce");
 
         var canvasGroup = go.AddComponent<CanvasGroup>();
         canvasGroup.alpha = 0f;
@@ -2025,6 +2204,8 @@ internal static class ShadeInventoryPaneIntegration
         shadePane.ConfigureFromTemplate(template);
         shadePane.SetDisplayLabel("Charms");
         shadePane.ForceImmediateRefresh();
+        shadePane.ForceLayoutRebuild();
+        ShadeInventoryPane.LogRectTransformHierarchy(rect, "ShadePaneAfterForce");
 
         var input = go.AddComponent<InventoryPaneInput>();
         ConfigureInput(input, paneList, shadePane);
