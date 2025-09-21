@@ -188,6 +188,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private RectSnapshot? contentRectTemplate;
     private RectSnapshot? gridRectTemplate;
     private RectSnapshot? detailRectTemplate;
+    private RectSnapshot? rootRectTemplate;
     private GridLayoutSnapshot? gridLayoutTemplate;
     private Vector2? templateRootSize;
     private LayoutElementSnapshot? rootLayoutTemplate;
@@ -290,6 +291,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         return FormattableString.Invariant($"(l:{offset.left}, r:{offset.right}, t:{offset.top}, b:{offset.bottom})");
+    }
+
+    private static bool Approximately(Vector2 a, Vector2 b, float tolerance = 0.001f)
+    {
+        return Mathf.Abs(a.x - b.x) <= tolerance && Mathf.Abs(a.y - b.y) <= tolerance;
     }
 
     private static string DescribeLayoutComponents(RectTransform rect)
@@ -638,6 +644,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         contentRectTemplate = null;
         gridRectTemplate = null;
         detailRectTemplate = null;
+        rootRectTemplate = null;
         gridLayoutTemplate = null;
         templateRootSize = null;
         rootLayoutTemplate = null;
@@ -647,6 +654,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
             var templateRect = template.GetComponent<RectTransform>();
             if (templateRect != null)
             {
+                rootRectTemplate = RectSnapshot.From(templateRect);
                 templateRootSize = templateRect.rect.size;
                 var templateLayout = templateRect.GetComponent<LayoutElement>();
                 if (templateLayout != null)
@@ -863,6 +871,102 @@ internal sealed class ShadeInventoryPane : InventoryPane
         LogMenuEvent($"ForceImmediateRefresh: entries={entries.Count}, inventoryNull={inventory == null}");
     }
 
+    private bool TryApplyStandaloneRootSizing(RectTransform root, Vector2? desiredSize = null)
+    {
+        if (root == null)
+        {
+            return false;
+        }
+
+        if (root.parent is RectTransform)
+        {
+            return false;
+        }
+
+        Vector2? candidate = desiredSize ?? templateRootSize;
+        if (!candidate.HasValue)
+        {
+            return false;
+        }
+
+        Vector2 size = candidate.Value;
+        if (size.x < MinRootSizeThreshold || size.y < MinRootSizeThreshold)
+        {
+            return false;
+        }
+
+        Vector2 anchor = new Vector2(0.5f, 0.5f);
+        Vector2 pivot = rootRectTemplate?.Pivot ?? new Vector2(0.5f, 0.5f);
+        Vector2 anchored = rootRectTemplate?.AnchoredPosition ?? Vector2.zero;
+
+        bool changed = false;
+
+        if (!Approximately(root.anchorMin, anchor) || !Approximately(root.anchorMax, anchor))
+        {
+            root.anchorMin = anchor;
+            root.anchorMax = anchor;
+            changed = true;
+        }
+
+        if (!Approximately(root.pivot, pivot))
+        {
+            root.pivot = pivot;
+            changed = true;
+        }
+
+        if (!Approximately(root.sizeDelta, size))
+        {
+            root.sizeDelta = size;
+            changed = true;
+        }
+
+        if (!Approximately(root.anchoredPosition, anchored))
+        {
+            root.anchoredPosition = anchored;
+            changed = true;
+        }
+
+        Vector2 offsetMin = anchored - Vector2.Scale(size, pivot);
+        Vector2 offsetMax = anchored + Vector2.Scale(size, Vector2.one - pivot);
+
+        if (!Approximately(root.offsetMin, offsetMin))
+        {
+            root.offsetMin = offsetMin;
+            changed = true;
+        }
+
+        if (!Approximately(root.offsetMax, offsetMax))
+        {
+            root.offsetMax = offsetMax;
+            changed = true;
+        }
+
+        if (!changed)
+        {
+            return false;
+        }
+
+        LogMenuEvent(FormattableString.Invariant(
+            $"ApplyStandaloneRootSizing -> parent='{root.parent?.name ?? "<null>"}' size={FormatVector2(size)} anchor={FormatVector2(anchor)} pivot={FormatVector2(pivot)} anchored={FormatVector2(anchored)}"));
+        return true;
+    }
+
+    internal void EnsureRootSizing()
+    {
+        var root = transform as RectTransform;
+        if (root == null)
+        {
+            return;
+        }
+
+        if (root.rect.width >= MinRootSizeThreshold && root.rect.height >= MinRootSizeThreshold && root.parent is RectTransform)
+        {
+            return;
+        }
+
+        TryApplyStandaloneRootSizing(root);
+    }
+
     private void ApplyTemplateRootLayoutFallback(RectTransform root)
     {
         if (root == null)
@@ -870,8 +974,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return;
         }
 
-        bool adjustments = false;
         Vector2? desiredSize = templateRootSize;
+        bool adjustments = TryApplyStandaloneRootSizing(root, desiredSize);
         if (desiredSize.HasValue)
         {
             var templateSize = desiredSize.Value;
@@ -979,6 +1083,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return;
         }
 
+        TryApplyStandaloneRootSizing(selfRect);
+
         if (panelRoot != null)
         {
             LayoutRebuilder.ForceRebuildLayoutImmediate(panelRoot);
@@ -1069,6 +1175,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             return;
         }
+
+        EnsureRootSizing();
 
         canvasGroup = GetComponent<CanvasGroup>();
         if (canvasGroup == null)
@@ -2157,6 +2265,7 @@ internal static class ShadeInventoryPaneIntegration
 
             existingShade.ConfigureFromTemplate(template);
             existingShade.SetDisplayLabel("Charms");
+            existingShade.EnsureRootSizing();
             existingShade.ForceImmediateRefresh();
             existingShade.ForceLayoutRebuild();
             if (shadeRect != null)
@@ -2203,6 +2312,7 @@ internal static class ShadeInventoryPaneIntegration
         shadePane.RootPane = shadePane;
         shadePane.ConfigureFromTemplate(template);
         shadePane.SetDisplayLabel("Charms");
+        shadePane.EnsureRootSizing();
         shadePane.ForceImmediateRefresh();
         shadePane.ForceLayoutRebuild();
         ShadeInventoryPane.LogRectTransformHierarchy(rect, "ShadePaneAfterForce");
