@@ -14,7 +14,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
 {
     private const int Columns = 7;
     private const float BackgroundAlpha = 0.82f;
-    internal const float MinRootSizeThreshold = 32f;
+    // Vanilla charm panes report RectTransform sizes of roughly 6.5 × 8 units even
+    // though the UI fills the screen once the canvas scale factor is applied. Treat
+    // anything above a minimal epsilon as "valid" so we can adopt those template
+    // metrics instead of falling back to oversized screen-space defaults.
+    internal const float MinRootSizeThreshold = 0.1f;
 
     private static readonly Color DefaultPanelColor = new Color(0.05f, 0.05f, 0.08f, 0.92f);
     private static readonly Color DefaultHighlightColor = new Color(0.78f, 0.86f, 1f, 0.35f);
