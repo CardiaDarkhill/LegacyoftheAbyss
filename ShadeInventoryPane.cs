@@ -804,7 +804,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         LogMenuEvent($"ForceImmediateRefresh: entries={entries.Count}, inventoryNull={inventory == null}");
     }
 
-    protected override void ForceLayoutRebuild()
+    public new void ForceLayoutRebuild()
     {
         try
         {
@@ -840,21 +840,21 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         LayoutRebuilder.ForceRebuildLayoutImmediate(selfRect);
 
-        Vector2 selfSize = selfRect.rect.size;
+        Vector2 rootSize = selfRect.rect.size;
         string panelSizeText = panelRoot != null ? FormatVector2(panelRoot.rect.size) : "<null>";
         string contentSizeText = contentRoot != null ? FormatVector2(contentRoot.rect.size) : "<null>";
         string gridSizeText = gridRoot != null ? FormatVector2(gridRoot.rect.size) : "<null>";
 
-        if (selfSize.x < MinRootSizeThreshold || selfSize.y < MinRootSizeThreshold)
+        if (rootSize.x < MinRootSizeThreshold || rootSize.y < MinRootSizeThreshold)
         {
             LogMenuEvent(FormattableString.Invariant(
-                $"ForceLayoutRebuild -> self={FormatVector2(selfSize)}, panel={panelSizeText}, content={contentSizeText}, grid={gridSizeText} (threshold={MinRootSizeThreshold})"));
+                $"ForceLayoutRebuild -> root={FormatVector2(rootSize)}, panel={panelSizeText}, content={contentSizeText}, grid={gridSizeText} (threshold={MinRootSizeThreshold})"));
             LogRectTransformHierarchy(selfRect, $"ShadePaneRoot[{gameObject.name}]");
         }
         else
         {
             LogMenuEvent(FormattableString.Invariant(
-                $"ForceLayoutRebuild -> self={FormatVector2(selfSize)}, panel={panelSizeText}, content={contentSizeText}, grid={gridSizeText}"));
+                $"ForceLayoutRebuild -> root={FormatVector2(rootSize)}, panel={panelSizeText}, content={contentSizeText}, grid={gridSizeText}"));
         }
     }
 
