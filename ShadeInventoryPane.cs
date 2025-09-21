@@ -2280,6 +2280,156 @@ internal static class ShadeInventoryPaneIntegration
         }
     }
 
+    private static void ScheduleTemplateSync(InventoryPaneList paneList, InventoryPane? template, ShadeInventoryPane shadePane)
+    {
+        if (paneList == null || template == null || shadePane == null)
+        {
+            return;
+        }
+
+        var host = paneList.GetComponent<TemplateSyncHost>();
+        if (host == null)
+        {
+            host = paneList.gameObject.AddComponent<TemplateSyncHost>();
+        }
+
+        host.Schedule(template, shadePane);
+    }
+
+    private sealed class TemplateSyncHost : MonoBehaviour
+    {
+        private readonly List<SyncRequest> pending = new List<SyncRequest>();
+
+        private void Awake()
+        {
+            hideFlags |= HideFlags.HideInInspector;
+        }
+
+        public void Schedule(InventoryPane template, ShadeInventoryPane shade)
+        {
+            if (!template || !shade)
+            {
+                return;
+            }
+
+            for (int i = pending.Count - 1; i >= 0; i--)
+            {
+                if (!pending[i].IsValid)
+                {
+                    pending.RemoveAt(i);
+                }
+            }
+
+            for (int i = 0; i < pending.Count; i++)
+            {
+                if (pending[i].Matches(template, shade))
+                {
+                    return;
+                }
+            }
+
+            pending.Add(new SyncRequest(template, shade));
+            enabled = true;
+        }
+
+        private void LateUpdate()
+        {
+            bool hasPending = false;
+
+            for (int i = pending.Count - 1; i >= 0; i--)
+            {
+                var request = pending[i];
+                if (!request.IsValid)
+                {
+                    pending.RemoveAt(i);
+                    continue;
+                }
+
+                if (request.TrySynchronize())
+                {
+                    pending.RemoveAt(i);
+                }
+                else
+                {
+                    hasPending = true;
+                }
+            }
+
+            if (!hasPending)
+            {
+                enabled = false;
+            }
+        }
+
+        private struct SyncRequest
+        {
+            private const float MinRectSize = 1f;
+
+            public SyncRequest(InventoryPane template, ShadeInventoryPane shade)
+            {
+                Template = template;
+                Shade = shade;
+            }
+
+            public InventoryPane Template { get; }
+
+            public ShadeInventoryPane Shade { get; }
+
+            public bool IsValid => Template && Shade;
+
+            public bool Matches(InventoryPane template, ShadeInventoryPane shade) => Template == template && Shade == shade;
+
+            public bool TrySynchronize()
+            {
+                if (!Template || !Shade)
+                {
+                    return true;
+                }
+
+                RectTransform? templateRect = ShadeInventoryPane.ResolveTemplateRootRectTransform(Template);
+                if (templateRect == null)
+                {
+                    return false;
+                }
+
+                Vector2 templateSize = templateRect.rect.size;
+                if (templateSize.x < MinRectSize || templateSize.y < MinRectSize)
+                {
+                    return false;
+                }
+
+                var shadeRect = Shade.transform as RectTransform;
+                if (shadeRect != null)
+                {
+                    Transform? templateParent = templateRect.parent;
+                    if (templateParent != null && shadeRect.parent != templateParent)
+                    {
+                        shadeRect.SetParent(templateParent, false);
+                    }
+
+                    CopyRectTransform(templateRect, shadeRect, copySiblingIndex: false);
+                    CopyLayoutComponents(templateRect, shadeRect);
+
+                    ShadeInventoryPane.LogRectTransformHierarchy(templateRect, "TemplatePaneSynced");
+                    ShadeInventoryPane.LogRectTransformHierarchy(shadeRect, "ShadePaneBeforeSync");
+                }
+
+                Shade.ConfigureFromTemplate(Template);
+                Shade.SetDisplayLabel(Shade.DisplayLabel);
+                Shade.EnsureRootSizing();
+                Shade.ForceImmediateRefresh();
+                Shade.ForceLayoutRebuild();
+
+                if (shadeRect != null)
+                {
+                    ShadeInventoryPane.LogRectTransformHierarchy(shadeRect, "ShadePaneAfterSync");
+                }
+
+                return true;
+            }
+        }
+    }
+
     internal static bool TrySetCurrentPaneLabel(InventoryPaneList paneList, string label)
     {
         if (paneList == null || string.IsNullOrEmpty(label))
@@ -2489,6 +2639,7 @@ internal static class ShadeInventoryPaneIntegration
             }
             ShadeInventoryPane.LogMenuEvent(FormattableString.Invariant(
                 $"EnsurePane refreshed existing shade pane from template (active={existingShade.isActiveAndEnabled})"));
+            ScheduleTemplateSync(paneList, template, existingShade);
             return;
         }
 
@@ -2531,6 +2682,8 @@ internal static class ShadeInventoryPaneIntegration
         shadePane.ForceImmediateRefresh();
         shadePane.ForceLayoutRebuild();
         ShadeInventoryPane.LogRectTransformHierarchy(rect, "ShadePaneAfterForce");
+
+        ScheduleTemplateSync(paneList, template, shadePane);
 
         var input = go.AddComponent<InventoryPaneInput>();
         ConfigureInput(input, paneList, shadePane);
