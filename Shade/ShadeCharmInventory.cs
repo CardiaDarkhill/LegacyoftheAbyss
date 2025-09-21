@@ -35,7 +35,7 @@ namespace LegacyoftheAbyss.Shade
                     OnRemoved = ctx => ctx.Controller?.AdjustLeash(-8f, -4f, -6f, -6f)
                 },
                 displayName: "Wayward Compass",
-                description: "The shade feels Hornet's call more keenly, extending their leash so the companion is easier to find in the fray.",
+                description: "The shade feels their own presence more firmly in the world, allowing them to gather their bearings and pinpoint their location.",
                 notchCost: 1,
                 fallbackTint: new Color(0.74f, 0.77f, 0.83f),
                 enumId: ShadeCharmId.WaywardCompass,
