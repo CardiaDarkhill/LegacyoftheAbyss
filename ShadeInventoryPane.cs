@@ -319,7 +319,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
         }
 
-        RectTransform? matchByComponent = null;
         RectTransform? matchByName = null;
         RectTransform? matchDirectChild = null;
         RectTransform? firstCandidate = null;
@@ -393,25 +392,17 @@ internal sealed class ShadeInventoryPane : InventoryPane
                     matchDirectChild = candidate;
                 }
 
-                if (matchByComponent == null)
+                try
                 {
-                    try
+                    var paneComponent = candidate.GetComponent<InventoryPane>();
+                    if (paneComponent != null && paneComponent == template)
                     {
-                        var paneComponent = candidate.GetComponent<InventoryPane>();
-                        if (paneComponent != null)
-                        {
-                            if (paneComponent == template)
-                            {
-                                rect = candidate;
-                                break;
-                            }
-
-                            matchByComponent = candidate;
-                        }
+                        rect = candidate;
+                        break;
                     }
-                    catch
-                    {
-                    }
+                }
+                catch
+                {
                 }
 
                 string? name = candidate.gameObject != null ? candidate.gameObject.name : null;
@@ -465,7 +456,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 }
             }
 
-        rect ??= matchByComponent;
         if (rect == null && scoredCandidate != null)
         {
             rect = scoredCandidate;
@@ -566,6 +556,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
             if (lowerName.Contains("hint") || lowerName.Contains("status"))
             {
                 score -= 120;
+            }
+
+            if (lowerName.Contains("button") || lowerName.Contains("prompt"))
+            {
+                score -= 200;
             }
         }
 
