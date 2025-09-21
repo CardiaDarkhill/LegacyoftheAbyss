@@ -26,6 +26,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private const float CharmSpacingScale = 0.4f;
     private const float CharmSpacingMin = 4f;
     private const float BackgroundAlpha = 0.82f;
+    private const float CharmGridBaseOffsetFraction = 0.15f;
+    private const float SectionOffsetFraction = 0.05f;
     // Vanilla charm panes report RectTransform sizes of roughly 6.5 × 8 units even
     // though the UI fills the screen once the canvas scale factor is applied. Treat
     // anything above a minimal epsilon as "valid" so we can adopt those template
@@ -325,6 +327,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         return tmp != null ? tmp.rectTransform : null;
     }
+
+    private static bool IsUnityObjectAlive(UnityEngine.Object? obj) => obj != null;
 
     internal static RectTransform? ResolveTemplateRootRectTransform(InventoryPane? template)
     {
@@ -1144,6 +1148,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         headerFont = arial;
         bodyFontColor = Color.white;
         headerFontColor = Color.white;
+        bool bodyFontAssigned = false;
+        bool headerFontAssigned = false;
 
         try
         {
@@ -1164,25 +1170,121 @@ internal sealed class ShadeInventoryPane : InventoryPane
             var texts = template.GetComponentsInChildren<Text>(true);
             if (texts != null && texts.Length > 0)
             {
-                var ordered = texts
+                var validTexts = texts
                     .Where(t => t != null && t.font != null)
-                    .OrderBy(t => t.fontSize)
                     .ToArray();
 
-                if (ordered.Length > 0)
+                if (validTexts.Length > 0)
                 {
+                    var ordered = validTexts
+                        .OrderBy(t => t.fontSize)
+                        .ToArray();
+
                     int bodyIndex = Mathf.Clamp(ordered.Length > 1 ? ordered.Length / 2 : 0, 0, ordered.Length - 1);
                     var bodySample = ordered[bodyIndex];
-                    if (bodySample != null && bodySample.color.a > 0f)
+                    if (bodySample != null)
                     {
-                        bodyFontColor = bodySample.color;
+                        if (bodySample.font != null)
+                        {
+                            bodyFont = bodySample.font;
+                            bodyFontAssigned = true;
+                        }
+
+                        if (bodySample.color.a > 0f)
+                        {
+                            bodyFontColor = bodySample.color;
+                        }
+                    }
+
+                    Text? headerSample = null;
+                    foreach (var candidate in ordered)
+                    {
+                        string value = candidate.text ?? string.Empty;
+                        if (!string.IsNullOrWhiteSpace(value) &&
+                            string.Equals(value.Trim(), "Charms", StringComparison.OrdinalIgnoreCase))
+                        {
+                            headerSample = candidate;
+                            break;
+                        }
+                    }
+
+                    headerSample ??= ordered.LastOrDefault();
+
+                    if (headerSample != null)
+                    {
+                        if (headerSample.font != null)
+                        {
+                            headerFont = headerSample.font;
+                            headerFontAssigned = true;
+                        }
+
+                        if (headerSample.color.a > 0f)
+                        {
+                            headerFontColor = headerSample.color;
+                        }
                     }
                 }
+            }
 
-                var headerSample = ordered.LastOrDefault();
-                if (headerSample != null && headerSample.color.a > 0f)
+            if (!bodyFontAssigned || !headerFontAssigned)
+            {
+                var tmpTexts = template.GetComponentsInChildren<TMP_Text>(true);
+                if (tmpTexts != null && tmpTexts.Length > 0)
                 {
-                    headerFontColor = headerSample.color;
+                    var validTmp = tmpTexts
+                        .Where(t => t != null && t.font != null)
+                        .OrderBy(t => t.fontSize)
+                        .ToArray();
+
+                    if (validTmp.Length > 0)
+                    {
+                        int bodyIndex = Mathf.Clamp(validTmp.Length > 1 ? validTmp.Length / 2 : 0, 0, validTmp.Length - 1);
+                        TMP_Text? bodySample = validTmp[bodyIndex];
+                        TMP_Text? headerSample = null;
+
+                        foreach (var candidate in validTmp)
+                        {
+                            string value = candidate.text ?? string.Empty;
+                            if (!string.IsNullOrWhiteSpace(value) &&
+                                string.Equals(value.Trim(), "Charms", StringComparison.OrdinalIgnoreCase))
+                            {
+                                headerSample = candidate;
+                                break;
+                            }
+                        }
+
+                        headerSample ??= validTmp.LastOrDefault();
+
+                        if (!bodyFontAssigned && bodySample != null)
+                        {
+                            var source = bodySample.font != null ? bodySample.font.sourceFontFile : null;
+                            if (source != null)
+                            {
+                                bodyFont = source;
+                                bodyFontAssigned = true;
+                            }
+
+                            if (bodySample.color.a > 0f)
+                            {
+                                bodyFontColor = bodySample.color;
+                            }
+                        }
+
+                        if (!headerFontAssigned && headerSample != null)
+                        {
+                            var source = headerSample.font != null ? headerSample.font.sourceFontFile : null;
+                            if (source != null)
+                            {
+                                headerFont = source;
+                                headerFontAssigned = true;
+                            }
+
+                            if (headerSample.color.a > 0f)
+                            {
+                                headerFontColor = headerSample.color;
+                            }
+                        }
+                    }
                 }
             }
 
@@ -1265,8 +1367,95 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
     }
 
+    private void ResetOverlayReferences()
+    {
+        overlayCanvasObject = null;
+        overlayRoot = null;
+        overlayCanvas = null;
+        overlayCanvasScaler = null;
+        overlayRaycaster = null;
+        canvasGroup = null!;
+    }
+
+    private void ResetBuiltUiState()
+    {
+        if (IsUnityObjectAlive(panelRoot))
+        {
+            try { Destroy(panelRoot.gameObject); }
+            catch { }
+        }
+
+        panelRoot = null!;
+        contentRoot = null!;
+        gridRoot = null!;
+        highlight = null;
+        titleText = null;
+        notchText = null;
+        detailTitleText = null;
+        descriptionText = null;
+        statusText = null;
+        hintText = null;
+        detailCostLabel = null;
+        titleTextTMP = null;
+        notchTextTMP = null;
+        detailTitleTextTMP = null;
+        descriptionTextTMP = null;
+        statusTextTMP = null;
+        hintTextTMP = null;
+        leftContentRoot = null;
+        notchIconContainer = null;
+        detailCostRow = null;
+        detailCostIconContainer = null;
+        equippedIconsRoot = null;
+        entries.Clear();
+        entryGridPositions.Clear();
+        entryCenterXs.Clear();
+        notchMeterIcons.Clear();
+        detailCostIcons.Clear();
+        equippedIcons.Clear();
+        isBuilt = false;
+    }
+
     private void EnsureBuilt()
     {
+        if (isBuilt)
+        {
+            bool overlayValid = IsUnityObjectAlive(overlayRoot) && IsUnityObjectAlive(canvasGroup) &&
+                (overlayCanvasObject == null || IsUnityObjectAlive(overlayCanvasObject));
+
+            if (!overlayValid)
+            {
+                ResetOverlayReferences();
+                ResetBuiltUiState();
+            }
+            else
+            {
+                bool hierarchyValid = IsUnityObjectAlive(panelRoot) &&
+                    IsUnityObjectAlive(contentRoot) &&
+                    IsUnityObjectAlive(gridRoot);
+
+                if (hierarchyValid)
+                {
+                    try
+                    {
+                        if (panelRoot != null && overlayRoot != null && panelRoot.transform.parent != overlayRoot)
+                        {
+                            hierarchyValid = false;
+                        }
+                    }
+                    catch
+                    {
+                        hierarchyValid = false;
+                    }
+                }
+
+                if (!hierarchyValid)
+                {
+                    ResetBuiltUiState();
+                }
+            }
+        }
+
         if (!isBuilt)
         {
             BuildUI();
@@ -2210,12 +2399,20 @@ internal sealed class ShadeInventoryPane : InventoryPane
             parentSize = new Vector2(Mathf.Max(fallback.x * 0.6f, maxWidth), Mathf.Max(fallback.y * 0.6f, totalHeight));
         }
 
-        float offsetX = Mathf.Max(0f, parentSize.x * 0.15f);
-        float offsetY = Mathf.Max(0f, parentSize.y * 0.15f);
         float maxOffsetX = Mathf.Max(0f, parentSize.x - maxWidth);
         float maxOffsetY = Mathf.Max(0f, parentSize.y - totalHeight);
-        offsetX = Mathf.Min(offsetX, maxOffsetX);
-        offsetY = Mathf.Min(offsetY, maxOffsetY);
+
+        float baseOffsetX = Mathf.Min(Mathf.Max(0f, parentSize.x * CharmGridBaseOffsetFraction), maxOffsetX);
+        float baseOffsetY = Mathf.Min(Mathf.Max(0f, parentSize.y * CharmGridBaseOffsetFraction), maxOffsetY);
+
+        Vector2 screenSize = normalizedFallbackRootSize.sqrMagnitude > 0f
+            ? normalizedFallbackRootSize
+            : DefaultStandaloneRootSize;
+        float gridShiftX = Mathf.Min(ComputeNormalizedMargin(screenSize.x, SectionOffsetFraction), maxOffsetX);
+        float gridShiftY = Mathf.Min(ComputeNormalizedMargin(screenSize.y, SectionOffsetFraction), maxOffsetY);
+
+        float offsetX = Mathf.Clamp(baseOffsetX - gridShiftX, 0f, maxOffsetX);
+        float offsetY = Mathf.Clamp(baseOffsetY - gridShiftY, 0f, maxOffsetY);
 
         gridRoot.sizeDelta = new Vector2(maxWidth, totalHeight);
         gridRoot.anchoredPosition = new Vector2(offsetX, offsetY);
@@ -2288,8 +2485,18 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         EnsureRootSizing();
 
-        var rootRect = overlayRoot ?? transform as RectTransform;
-        if (rootRect == null)
+        RectTransform? rootRect = overlayRoot;
+        if (!IsUnityObjectAlive(rootRect))
+        {
+            rootRect = EnsureOverlayCanvas();
+        }
+
+        if (!IsUnityObjectAlive(rootRect))
+        {
+            rootRect = transform as RectTransform;
+        }
+
+        if (!IsUnityObjectAlive(rootRect))
         {
             LogMenuEvent("ForceLayoutRebuild skipped: no root RectTransform available");
             return;
@@ -2408,6 +2615,12 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
         useNormalizedFallbackLayout = ShouldUseNormalizedFallbackLayout(rootRect, normalizedFallbackRootSize);
 
+        Vector2 screenSize = normalizedFallbackRootSize.sqrMagnitude > 0f
+            ? normalizedFallbackRootSize
+            : DefaultStandaloneRootSize;
+        float sectionOffsetX = ComputeNormalizedMargin(screenSize.x, SectionOffsetFraction);
+        float sectionOffsetY = ComputeNormalizedMargin(screenSize.y, SectionOffsetFraction);
+
         if (canvasGroup == null || canvasGroup.gameObject != rootRect.gameObject)
         {
             canvasGroup = rootRect.GetComponent<CanvasGroup>();
@@ -2509,7 +2722,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
             equippedLabelRect.anchorMin = new Vector2(0f, 1f);
             equippedLabelRect.anchorMax = new Vector2(0f, 1f);
             equippedLabelRect.pivot = new Vector2(0f, 1f);
-            equippedLabelRect.anchoredPosition = new Vector2(16f, -28f);
+            equippedLabelRect.anchoredPosition = new Vector2(16f + sectionOffsetX, -(28f + sectionOffsetY));
             equippedLabelRect.sizeDelta = new Vector2(360f, 40f);
         }
         SetTextValue(equippedLabel, null, "Equipped");
@@ -2520,7 +2733,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         equippedIconsRoot.anchorMin = new Vector2(0f, 1f);
         equippedIconsRoot.anchorMax = new Vector2(1f, 1f);
         equippedIconsRoot.pivot = new Vector2(0f, 1f);
-        equippedIconsRoot.anchoredPosition = new Vector2(16f, -96f);
+        equippedIconsRoot.anchoredPosition = new Vector2(16f + sectionOffsetX, -(96f + sectionOffsetY));
         equippedIconsRoot.sizeDelta = new Vector2(0f, useNormalizedFallbackLayout ? 96f : 112f);
         var equippedLayout = equippedIconsRoot.gameObject.AddComponent<HorizontalLayoutGroup>();
         equippedLayout.spacing = 12f;
@@ -2538,7 +2751,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
             notchLabelRect.anchorMin = new Vector2(0f, 1f);
             notchLabelRect.anchorMax = new Vector2(0f, 1f);
             notchLabelRect.pivot = new Vector2(0f, 1f);
-            notchLabelRect.anchoredPosition = new Vector2(16f, -236f);
+            notchLabelRect.anchoredPosition = new Vector2(16f + sectionOffsetX, -(236f + sectionOffsetY));
             notchLabelRect.sizeDelta = new Vector2(220f, 36f);
         }
         SetTextValue(notchText, notchTextTMP, "Notches");
@@ -2549,7 +2762,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         notchIconContainer.anchorMin = new Vector2(0f, 1f);
         notchIconContainer.anchorMax = new Vector2(1f, 1f);
         notchIconContainer.pivot = new Vector2(0f, 1f);
-        notchIconContainer.anchoredPosition = new Vector2(16f, -284f);
+        notchIconContainer.anchoredPosition = new Vector2(16f + sectionOffsetX, -(284f + sectionOffsetY));
         notchIconContainer.sizeDelta = new Vector2(0f, useNormalizedFallbackLayout ? 52f : 56f);
         var notchLayout = notchIconContainer.gameObject.AddComponent<HorizontalLayoutGroup>();
         notchLayout.spacing = 8f;
@@ -2789,7 +3002,21 @@ internal sealed class ShadeInventoryPane : InventoryPane
         var rect = go.GetComponent<RectTransform>();
         rect.SetParent(parent, false);
         var text = go.AddComponent<Text>();
-        text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        Font? targetFont = useHeaderFont ? headerFont : bodyFont;
+        if (targetFont == null)
+        {
+            targetFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            if (useHeaderFont)
+            {
+                headerFont = targetFont;
+            }
+            else
+            {
+                bodyFont = targetFont;
+            }
+        }
+
+        text.font = targetFont;
         text.fontStyle = style;
         text.fontSize = size;
         text.alignment = anchor;
