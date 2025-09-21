@@ -1559,6 +1559,37 @@ internal sealed class ShadeInventoryPane : InventoryPane
         if (gridLayoutTemplate.HasValue)
         {
             gridLayoutTemplate.Value.Apply(gridLayout);
+
+            const float minCellDimension = 0.01f;
+            if (gridLayout.cellSize.x < minCellDimension || gridLayout.cellSize.y < minCellDimension)
+            {
+                gridLayout.cellSize = new Vector2(104f, 112f);
+            }
+
+            if (gridLayout.spacing.x < 0f || gridLayout.spacing.y < 0f)
+            {
+                gridLayout.spacing = new Vector2(Mathf.Max(0f, gridLayout.spacing.x), Mathf.Max(0f, gridLayout.spacing.y));
+            }
+
+            if (gridLayout.constraint != GridLayoutGroup.Constraint.FixedColumnCount)
+            {
+                gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+                gridLayout.constraintCount = Columns;
+            }
+            else if (gridLayout.constraintCount <= 0)
+            {
+                gridLayout.constraintCount = Columns;
+            }
+
+            var padding = gridLayout.padding;
+            if (padding != null)
+            {
+                padding.left = Mathf.Max(0, padding.left);
+                padding.right = Mathf.Max(0, padding.right);
+                padding.top = Mathf.Max(0, padding.top);
+                padding.bottom = Mathf.Max(0, padding.bottom);
+                gridLayout.padding = padding;
+            }
         }
         else
         {
@@ -1571,6 +1602,15 @@ internal sealed class ShadeInventoryPane : InventoryPane
             gridLayout.childAlignment = TextAnchor.UpperLeft;
             gridLayout.padding = new RectOffset(4, 4, 4, 4);
         }
+
+        gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        if (gridLayout.constraintCount <= 0)
+        {
+            gridLayout.constraintCount = Columns;
+        }
+        gridLayout.startAxis = GridLayoutGroup.Axis.Horizontal;
+        gridLayout.startCorner = GridLayoutGroup.Corner.UpperLeft;
+        gridLayout.childAlignment = TextAnchor.UpperLeft;
 
         highlight = new GameObject("Highlight", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
         highlight.SetParent(gridRoot, false);
@@ -2269,9 +2309,71 @@ internal static class ShadeInventoryPaneIntegration
         }
     }
 
-    private static void CopyLayoutComponents(RectTransform? source, RectTransform destination)
+    private static void CopyLayoutComponents(
+        RectTransform? source,
+        RectTransform destination,
+        bool copyLayoutGroups = true,
+        bool copyGridLayout = true)
     {
-        if (source == null || destination == null)
+        if (destination == null)
+        {
+            return;
+        }
+
+        if (!copyGridLayout)
+        {
+            try
+            {
+                var existingGrids = destination.GetComponents<GridLayoutGroup>();
+                if (existingGrids != null)
+                {
+                    foreach (var existing in existingGrids)
+                    {
+                        if (existing == null)
+                        {
+                            continue;
+                        }
+
+                        try { UnityEngine.Object.Destroy(existing); }
+                        catch { }
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        if (!copyLayoutGroups)
+        {
+            try
+            {
+                var existingGroups = destination.GetComponents<LayoutGroup>();
+                if (existingGroups != null)
+                {
+                    foreach (var group in existingGroups)
+                    {
+                        if (group == null)
+                        {
+                            continue;
+                        }
+
+                        if (!copyGridLayout && group is GridLayoutGroup)
+                        {
+                            continue;
+                        }
+
+                        try { UnityEngine.Object.Destroy(group); }
+                        catch { }
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        if (source == null)
         {
             return;
         }
@@ -2299,7 +2401,7 @@ internal static class ShadeInventoryPaneIntegration
         }
 
         var grid = source.GetComponent<GridLayoutGroup>();
-        if (grid != null)
+        if (grid != null && copyGridLayout)
         {
             var targetGrid = destination.GetComponent<GridLayoutGroup>() ?? destination.gameObject.AddComponent<GridLayoutGroup>();
             targetGrid.cellSize = grid.cellSize;
@@ -2314,7 +2416,7 @@ internal static class ShadeInventoryPaneIntegration
         }
 
         var layoutGroup = source.GetComponent<LayoutGroup>();
-        if (layoutGroup != null)
+        if (layoutGroup != null && copyLayoutGroups && (copyGridLayout || !(layoutGroup is GridLayoutGroup)))
         {
             var targetGroupComponent = destination.GetComponent(layoutGroup.GetType()) as LayoutGroup;
             if (targetGroupComponent == null)
@@ -2500,7 +2602,7 @@ internal static class ShadeInventoryPaneIntegration
                     }
 
                     CopyRectTransform(templateRect, shadeRect, copySiblingIndex: false);
-                    CopyLayoutComponents(templateRect, shadeRect);
+                    CopyLayoutComponents(templateRect, shadeRect, copyLayoutGroups: false, copyGridLayout: false);
 
                     ShadeInventoryPane.LogRectTransformHierarchy(templateRect, "TemplatePaneSynced");
                     ShadeInventoryPane.LogRectTransformHierarchy(shadeRect, "ShadePaneBeforeSync");
@@ -2718,7 +2820,7 @@ internal static class ShadeInventoryPaneIntegration
             if (templateRect != null && shadeRect != null)
             {
                 CopyRectTransform(templateRect, shadeRect, copySiblingIndex: false);
-                CopyLayoutComponents(templateRect, shadeRect);
+                CopyLayoutComponents(templateRect, shadeRect, copyLayoutGroups: false, copyGridLayout: false);
             }
             ShadeInventoryPane.LogRectTransformHierarchy(templateRect, "TemplatePaneLive");
             if (shadeRect != null)
@@ -2750,7 +2852,7 @@ internal static class ShadeInventoryPaneIntegration
         if (templateRect != null)
         {
             CopyRectTransform(templateRect, rect);
-            CopyLayoutComponents(templateRect, rect);
+            CopyLayoutComponents(templateRect, rect, copyLayoutGroups: false, copyGridLayout: false);
         }
         else
         {
