@@ -875,6 +875,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
         try
         {
             var templateRect = ResolveTemplateRootRectTransform(template);
+            RectTransform? panelRectRef = null;
+            RectTransform? contentRectRef = null;
+            RectTransform? gridRectRef = null;
+            RectTransform? detailRectRef = null;
             if (templateRect != null)
             {
                 Vector2 templateSize = templateRect.rect.size;
@@ -1029,32 +1033,184 @@ internal sealed class ShadeInventoryPane : InventoryPane
                         continue;
                     }
 
+                    string lowerName = rect.gameObject != null ? rect.gameObject.name?.ToLowerInvariant() ?? string.Empty : string.Empty;
+
                     var grid = rect.GetComponent<GridLayoutGroup>();
-                    if (grid != null && gridRectTemplate == null)
+                    if (grid != null && gridRectRef == null)
                     {
+                        gridRectRef = rect;
                         gridRectTemplate = RectSnapshot.From(rect);
                         gridLayoutTemplate = GridLayoutSnapshot.From(grid);
+
+                        var parentRect = rect.parent as RectTransform;
+                        if (contentRectRef == null && parentRect != null)
+                        {
+                            contentRectRef = parentRect;
+                        }
+
+                        if (panelRectRef == null)
+                        {
+                            var panelCandidate = parentRect != null ? parentRect.parent as RectTransform : null;
+                            if (panelCandidate != null)
+                            {
+                                panelRectRef = panelCandidate;
+                            }
+                        }
+
                         continue;
                     }
 
-                    string lowerName = rect.gameObject != null ? rect.gameObject.name?.ToLowerInvariant() ?? string.Empty : string.Empty;
-                    if (panelRectTemplate == null && !string.IsNullOrEmpty(lowerName) &&
-                        (lowerName.Contains("panel") || lowerName.Contains("background")))
+                    if (detailRectRef == null)
                     {
-                        panelRectTemplate = RectSnapshot.From(rect);
-                        continue;
+                        bool nameMatches = !string.IsNullOrEmpty(lowerName) &&
+                            (lowerName.Contains("detail") || lowerName.Contains("description") || lowerName.Contains("info"));
+
+                        bool hasLayout = false;
+                        try
+                        {
+                            hasLayout = rect.GetComponent<VerticalLayoutGroup>() != null;
+                        }
+                        catch
+                        {
+                            hasLayout = false;
+                        }
+
+                        bool hasText = false;
+                        if (!nameMatches)
+                        {
+                            try
+                            {
+                                hasText = rect.GetComponentsInChildren<Text>(true)?.Any(t => t != null) == true ||
+                                    rect.GetComponentsInChildren<TMP_Text>(true)?.Any(t => t != null) == true;
+                            }
+                            catch
+                            {
+                                hasText = false;
+                            }
+                        }
+
+                        if (nameMatches || (hasLayout && hasText))
+                        {
+                            detailRectRef = rect;
+                            continue;
+                        }
                     }
 
-                    if (contentRectTemplate == null && !string.IsNullOrEmpty(lowerName) && lowerName.Contains("content"))
+                    if (contentRectRef == null)
                     {
-                        contentRectTemplate = RectSnapshot.From(rect);
-                        continue;
+                        HorizontalOrVerticalLayoutGroup? layoutGroup = null;
+                        try
+                        {
+                            layoutGroup = rect.GetComponent<HorizontalOrVerticalLayoutGroup>();
+                        }
+                        catch
+                        {
+                            layoutGroup = null;
+                        }
+
+                        if (layoutGroup != null && rect.childCount > 0)
+                        {
+                            bool hasGridChild = false;
+                            for (int i = 0; i < rect.childCount; i++)
+                            {
+                                if (rect.GetChild(i) is RectTransform child && child.GetComponent<GridLayoutGroup>() != null)
+                                {
+                                    hasGridChild = true;
+                                    break;
+                                }
+                            }
+
+                            if (hasGridChild)
+                            {
+                                contentRectRef = rect;
+                                if (panelRectRef == null)
+                                {
+                                    panelRectRef = rect.parent as RectTransform;
+                                }
+                                continue;
+                            }
+                        }
                     }
 
-                    if (detailRectTemplate == null && !string.IsNullOrEmpty(lowerName) && lowerName.Contains("detail"))
+                    if (panelRectRef == null)
                     {
-                        detailRectTemplate = RectSnapshot.From(rect);
+                        Image? image = null;
+                        try
+                        {
+                            image = rect.GetComponent<Image>();
+                        }
+                        catch
+                        {
+                            image = null;
+                        }
+
+                        if (image != null)
+                        {
+                            bool matches = !string.IsNullOrEmpty(lowerName) &&
+                                (lowerName.Contains("panel") || lowerName.Contains("pane") || lowerName.Contains("background") ||
+                                 lowerName.Contains("bg") || lowerName.Contains("frame"));
+
+                            if (matches || rect == templateRect)
+                            {
+                                panelRectRef = rect;
+                                continue;
+                            }
+                        }
                     }
+                }
+
+                if (panelRectRef == null)
+                {
+                    panelRectRef = templateRect;
+                }
+
+                if (contentRectRef == null && panelRectRef != null)
+                {
+                    for (int i = 0; i < panelRectRef.childCount; i++)
+                    {
+                        if (panelRectRef.GetChild(i) is RectTransform child)
+                        {
+                            if (child == gridRectRef)
+                            {
+                                contentRectRef = child.parent as RectTransform;
+                                break;
+                            }
+
+                            for (int j = 0; j < child.childCount; j++)
+                            {
+                                if (child.GetChild(j) is RectTransform grandChild && grandChild.GetComponent<GridLayoutGroup>() != null)
+                                {
+                                    contentRectRef = child;
+                                    break;
+                                }
+                            }
+
+                            if (contentRectRef != null)
+                            {
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (panelRectRef != null)
+                {
+                    panelRectTemplate = RectSnapshot.From(panelRectRef);
+                }
+
+                if (contentRectRef != null)
+                {
+                    contentRectTemplate = RectSnapshot.From(contentRectRef);
+                }
+
+                if (gridRectRef != null && !gridRectTemplate.HasValue)
+                {
+                    gridRectTemplate = RectSnapshot.From(gridRectRef);
+                }
+
+                if (detailRectRef != null)
+                {
+                    detailRectTemplate = RectSnapshot.From(detailRectRef);
                 }
             }
         }
