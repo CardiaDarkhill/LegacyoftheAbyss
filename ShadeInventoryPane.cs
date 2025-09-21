@@ -318,7 +318,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         public float CharacterSpacing;
         public float LineSpacing;
         public float ParagraphSpacing;
-        public TMP_Text.TextWrappingModes WrappingMode;
+        public TextWrappingModes WrappingMode;
         public Vector4 Margin;
         public bool RichText;
         public List<ShadowStyle>? Shadows;
@@ -578,7 +578,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         text.enableKerning = true;
         text.enableWordWrapping = true;
         text.overflowMode = TextOverflowModes.Overflow;
-        text.textWrappingMode = TMP_Text.TextWrappingModes.Normal;
+        text.textWrappingMode = TextWrappingModes.Normal;
         text.characterSpacing = 0f;
         text.lineSpacing = 1f;
         text.paragraphSpacing = 0f;
