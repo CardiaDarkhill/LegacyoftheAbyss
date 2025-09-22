@@ -313,6 +313,52 @@ public class ShadeInputConfig
         else
             binding.primary = option;
     }
+
+    private static ShadeBinding CloneBinding(ShadeBinding binding)
+    {
+        return binding != null ? binding.Clone() : new ShadeBinding();
+    }
+
+    public ShadeInputConfig Clone()
+    {
+        var clone = new ShadeInputConfig();
+        clone.controllerDeviceIndex = controllerDeviceIndex;
+        clone.controllerDeadzone = controllerDeadzone;
+        clone.moveLeft = CloneBinding(moveLeft);
+        clone.moveRight = CloneBinding(moveRight);
+        clone.moveUp = CloneBinding(moveUp);
+        clone.moveDown = CloneBinding(moveDown);
+        clone.fire = CloneBinding(fire);
+        clone.nail = CloneBinding(nail);
+        clone.nailUp = CloneBinding(nailUp);
+        clone.nailDown = CloneBinding(nailDown);
+        clone.teleport = CloneBinding(teleport);
+        clone.focus = CloneBinding(focus);
+        clone.sprint = CloneBinding(sprint);
+        clone.assistMode = CloneBinding(assistMode);
+        return clone;
+    }
+
+    public void CopyBindingsFrom(ShadeInputConfig other)
+    {
+        if (other == null)
+            return;
+
+        controllerDeviceIndex = other.controllerDeviceIndex;
+        controllerDeadzone = other.controllerDeadzone;
+        moveLeft = CloneBinding(other.moveLeft);
+        moveRight = CloneBinding(other.moveRight);
+        moveUp = CloneBinding(other.moveUp);
+        moveDown = CloneBinding(other.moveDown);
+        fire = CloneBinding(other.fire);
+        nail = CloneBinding(other.nail);
+        nailUp = CloneBinding(other.nailUp);
+        nailDown = CloneBinding(other.nailDown);
+        teleport = CloneBinding(other.teleport);
+        focus = CloneBinding(other.focus);
+        sprint = CloneBinding(other.sprint);
+        assistMode = CloneBinding(other.assistMode);
+    }
 }
 
 public static class ShadeInput
@@ -418,8 +464,23 @@ public static class ShadeInput
         ConfigInstance.controllerDeviceIndex = index;
     }
 
+    private static bool ShouldSuppressOption(ShadeBindingOption option)
+    {
+        try
+        {
+            return LegacyHelper.InputDeviceBlocker.ShouldSuppressShadeOption(option);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static bool IsOptionHeld(ShadeBindingOption option)
     {
+        if (ShouldSuppressOption(option))
+            return false;
+
         return option.type switch
         {
             ShadeBindingOptionType.Key => option.key != KeyCode.None && Input.GetKey(option.key),
@@ -430,6 +491,9 @@ public static class ShadeInput
 
     private static bool WasOptionPressed(ShadeBindingOption option)
     {
+        if (ShouldSuppressOption(option))
+            return false;
+
         return option.type switch
         {
             ShadeBindingOptionType.Key => option.key != KeyCode.None && Input.GetKeyDown(option.key),
@@ -440,6 +504,9 @@ public static class ShadeInput
 
     private static float GetOptionValue(ShadeBindingOption option)
     {
+        if (ShouldSuppressOption(option))
+            return 0f;
+
         return option.type switch
         {
             ShadeBindingOptionType.Key => option.key != KeyCode.None && Input.GetKey(option.key) ? 1f : 0f,

@@ -495,6 +495,11 @@ public partial class LegacyHelper
             "QuickMap"
         };
 
+        private static bool menuTransferActive;
+        private static bool menuTransferShadeUsesController;
+        private static bool menuTransferHornetControllerEnabled = true;
+        private static ShadeInputConfig menuTransferSavedBindings;
+
         private static void SetDeviceRestricted(InputDevice device, bool restrict)
         {
             if (device == null || device == InputDevice.Null)
@@ -560,10 +565,106 @@ public partial class LegacyHelper
             return false;
         }
 
+        private static void UpdateMenuTransfer()
+        {
+            bool menuActive = false;
+            try
+            {
+                menuActive = MenuStateUtility.IsMenuActive();
+            }
+            catch
+            {
+                menuActive = false;
+            }
+
+            if (menuActive)
+            {
+                if (!menuTransferActive)
+                {
+                    ActivateMenuTransfer();
+                }
+            }
+            else if (menuTransferActive)
+            {
+                DeactivateMenuTransfer();
+            }
+        }
+
+        private static void ActivateMenuTransfer()
+        {
+            menuTransferActive = true;
+            menuTransferShadeUsesController = false;
+            menuTransferSavedBindings = null;
+
+            try
+            {
+                var cfg = ModConfig.Instance;
+                if (cfg != null)
+                {
+                    menuTransferHornetControllerEnabled = cfg.hornetControllerEnabled;
+                    if (!menuTransferHornetControllerEnabled)
+                    {
+                        cfg.hornetControllerEnabled = true;
+                    }
+
+                    var shadeConfig = cfg.shadeInput;
+                    if (shadeConfig != null && shadeConfig.UsesControllerBindings())
+                    {
+                        menuTransferShadeUsesController = true;
+                        try
+                        {
+                            menuTransferSavedBindings = shadeConfig.Clone();
+                        }
+                        catch
+                        {
+                            menuTransferSavedBindings = null;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                menuTransferShadeUsesController = false;
+                menuTransferSavedBindings = null;
+            }
+        }
+
+        private static void DeactivateMenuTransfer()
+        {
+            try
+            {
+                var cfg = ModConfig.Instance;
+                if (cfg != null)
+                {
+                    cfg.hornetControllerEnabled = menuTransferHornetControllerEnabled;
+                    if (menuTransferShadeUsesController && menuTransferSavedBindings != null)
+                    {
+                        var shadeConfig = cfg.shadeInput;
+                        if (shadeConfig != null)
+                        {
+                            shadeConfig.CopyBindingsFrom(menuTransferSavedBindings);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            menuTransferActive = false;
+            menuTransferShadeUsesController = false;
+            menuTransferSavedBindings = null;
+        }
+
         internal static bool ShouldBlockShadeDeviceInput()
         {
             try
             {
+                if (menuTransferActive)
+                {
+                    return false;
+                }
+
                 var gm = MenuStateUtility.TryGetGameManager();
                 if (ReferenceEquals(gm, null))
                 {
@@ -605,6 +706,14 @@ public partial class LegacyHelper
 
         internal static void RefreshShadeDevices(InputHandler handler)
         {
+            UpdateMenuTransfer();
+
+            if (menuTransferActive)
+            {
+                ReleaseTrackedDevices(handler);
+                return;
+            }
+
             if (!InputManager.IsSetup)
             {
                 ReleaseTrackedDevices(handler);
@@ -648,6 +757,12 @@ public partial class LegacyHelper
 
         internal static bool ShouldIgnoreDevice(InputHandler handler, InputDevice device)
         {
+            if (menuTransferActive)
+            {
+                SetDeviceRestricted(device, false);
+                return false;
+            }
+
             bool restrict = false;
 
             try
@@ -720,6 +835,14 @@ public partial class LegacyHelper
             }
         }
 
+        internal static bool ShouldSuppressShadeOption(ShadeBindingOption option)
+        {
+            if (!menuTransferActive || !menuTransferShadeUsesController)
+                return false;
+
+            return option.type == ShadeBindingOptionType.Controller;
+        }
+
         internal static void EnsureLastActiveController(InputHandler handler)
         {
             if (handler == null)
@@ -738,6 +861,53 @@ public partial class LegacyHelper
             catch
             {
             }
+        }
+
+        internal readonly struct MenuTransferSaveScope : IDisposable
+        {
+            private readonly bool restore;
+
+            public MenuTransferSaveScope(bool isActive)
+            {
+                restore = isActive;
+                if (restore)
+                {
+                    try
+                    {
+                        var cfg = ModConfig.Instance;
+                        if (cfg != null)
+                        {
+                            cfg.hornetControllerEnabled = menuTransferHornetControllerEnabled;
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+
+            public void Dispose()
+            {
+                if (!restore || !menuTransferActive)
+                    return;
+
+                try
+                {
+                    var cfg = ModConfig.Instance;
+                    if (cfg != null)
+                    {
+                        cfg.hornetControllerEnabled = true;
+                    }
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        internal static MenuTransferSaveScope CreateSaveScope()
+        {
+            return new MenuTransferSaveScope(menuTransferActive);
         }
     }
 
