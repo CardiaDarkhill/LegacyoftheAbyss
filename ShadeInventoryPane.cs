@@ -26,7 +26,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private const float CharmSpacingScale = 0.4f;
     private const float CharmSpacingMin = 4f;
     private const float BackgroundAlpha = 0.82f;
-    private const float CharmGridBaseOffsetFraction = 0.15f;
+    private const float CharmGridHorizontalScreenFraction = 0.15f;
+    private const float CharmGridVerticalScreenFraction = 0.12f;
+    private const float CharmGridHorizontalParentFraction = 0.12f;
+    private const float CharmGridVerticalParentFraction = 0.08f;
     private const float SectionOffsetFraction = 0.05f;
     private const float DetailPreviewScale = 1.6f;
     private const float HighlightScaleMultiplier = 1.85f;
@@ -3208,14 +3211,20 @@ internal sealed class ShadeInventoryPane : InventoryPane
             ? normalizedFallbackRootSize
             : DefaultStandaloneRootSize;
 
-        float desiredLeftMargin = ComputeNormalizedMargin(screenSize.x, CharmGridBaseOffsetFraction);
-        float desiredBottomMargin = ComputeNormalizedMargin(screenSize.y, CharmGridBaseOffsetFraction);
+        float desiredLeftMargin = ComputeNormalizedMargin(screenSize.x, CharmGridHorizontalScreenFraction);
+        float desiredBottomMargin = ComputeNormalizedMargin(screenSize.y, CharmGridVerticalScreenFraction);
+
+        float parentLeftMargin = ComputeNormalizedMargin(parentSize.x, CharmGridHorizontalParentFraction);
+        float parentBottomMargin = ComputeNormalizedMargin(parentSize.y, CharmGridVerticalParentFraction);
+
+        float targetLeftMargin = Mathf.Min(desiredLeftMargin, parentLeftMargin);
+        float targetBottomMargin = Mathf.Min(desiredBottomMargin, parentBottomMargin);
 
         float maxLeftMargin = Mathf.Max(0f, parentSize.x - maxWidth);
-        float leftMargin = Mathf.Clamp(desiredLeftMargin, 0f, maxLeftMargin);
+        float leftMargin = Mathf.Clamp(targetLeftMargin, 0f, maxLeftMargin);
 
         float maxBottomMargin = Mathf.Max(0f, parentSize.y - totalHeight);
-        float bottomMargin = Mathf.Clamp(desiredBottomMargin, 0f, maxBottomMargin);
+        float bottomMargin = Mathf.Clamp(targetBottomMargin, 0f, maxBottomMargin);
 
         gridRoot.anchorMin = new Vector2(0f, 0f);
         gridRoot.anchorMax = new Vector2(0f, 0f);
