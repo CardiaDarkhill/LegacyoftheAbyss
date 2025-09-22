@@ -27,15 +27,11 @@ namespace LegacyoftheAbyss.Shade
 
             bool furyActive = false;
 
+            // TODO: Surface the shade's map position while Wayward Compass is equipped.
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.WaywardCompass),
-                hooks: new ShadeCharmHooks
-                {
-                    OnApplied = ctx => ctx.Controller?.AdjustLeash(8f, 4f, 6f, 6f),
-                    OnRemoved = ctx => ctx.Controller?.AdjustLeash(-8f, -4f, -6f, -6f)
-                },
                 displayName: "Wayward Compass",
-                description: "The shade feels their own presence more firmly in the world, allowing them to gather their bearings and pinpoint their location.",
+                description: "Whispers its location to the bearer whenever a map is open, allowing wanderers to pinpoint their current location.",
                 notchCost: 1,
                 fallbackTint: new Color(0.74f, 0.77f, 0.83f),
                 enumId: ShadeCharmId.WaywardCompass,
@@ -50,22 +46,21 @@ namespace LegacyoftheAbyss.Shade
                     SprintDashCooldownMultiplier = 0.85f
                 },
                 displayName: "Sprintmaster",
-                description: "Fleet voidstuff guides the companion's steps, boosting both its pace and the responsiveness of its sprint.",
+                description: "Bears the likeness of a strange bug known only as 'The Sprintmaster'. Increases the running speed of the bearer, allowing them to avoid danger or overtake rivals.",
                 notchCost: 1,
                 fallbackTint: new Color(0.92f, 0.58f, 0.36f),
                 enumId: ShadeCharmId.Sprintmaster,
                 iconName: "shade_charm_sprintmaster"));
 
+            // TODO: Allow the shade to dash downward when Dashmaster is equipped.
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.Dashmaster),
                 statModifiers: new ShadeCharmStatModifiers
                 {
-                    SprintDashCooldownMultiplier = 0.75f,
-                    SprintDashDurationMultiplier = 1.3f,
-                    SprintDashSpeedMultiplier = 1.1f
+                    SprintDashCooldownMultiplier = 0.75f
                 },
                 displayName: "Dashmaster",
-                description: "Teaches the shade relentless motion, shortening the recovery after quick bursts and carrying momentum further.",
+                description: "Bears the likeness of an eccentric bug known only as 'The Dashmaster'. The bearer will be able to dash more often as well as dash downwards. Perfect for those who want to move around as quickly as possible.",
                 notchCost: 2,
                 fallbackTint: new Color(0.35f, 0.70f, 0.78f),
                 enumId: ShadeCharmId.Dashmaster,
@@ -73,18 +68,13 @@ namespace LegacyoftheAbyss.Shade
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.ShamanStone),
-                statModifiers: new ShadeCharmStatModifiers
-                {
-                    ShriekCooldownMultiplier = 0.9f,
-                    QuakeCooldownMultiplier = 0.9f
-                },
                 hooks: new ShadeCharmHooks
                 {
                     OnApplied = ctx => ctx.Controller?.MultiplySpellDamage(1.3f),
                     OnRemoved = ctx => ctx.Controller?.MultiplySpellDamage(1f / 1.3f)
                 },
                 displayName: "Shaman Stone",
-                description: "Empowers the shade's spells, letting screams and quakes strike harder while returning to readiness more quickly.",
+                description: "Said to contain the knowledge of past generations. Increases the power of Spells, dealing more damage to foes.",
                 notchCost: 3,
                 fallbackTint: new Color(0.56f, 0.32f, 0.66f),
                 enumId: ShadeCharmId.ShamanStone,
@@ -96,11 +86,10 @@ namespace LegacyoftheAbyss.Shade
                 {
                     ProjectileSoulCostMultiplier = 0.85f,
                     ShriekSoulCostMultiplier = 0.85f,
-                    QuakeSoulCostMultiplier = 0.85f,
-                    FocusSoulCostMultiplier = 0.9f
+                    QuakeSoulCostMultiplier = 0.85f
                 },
                 displayName: "Spell Twister",
-                description: "Refines void channeling so spells and focus alike draw less soul from the shared reserve.",
+                description: "Reflecting the desire of the Soul Sanctum for mastery over SOUL. Increases the bearer's mastery of Spells, reducing the SOUL cost of casting them.",
                 notchCost: 2,
                 fallbackTint: new Color(0.40f, 0.48f, 0.86f),
                 enumId: ShadeCharmId.SpellTwister,
@@ -113,7 +102,7 @@ namespace LegacyoftheAbyss.Shade
                     NailCooldownMultiplier = 0.6f
                 },
                 displayName: "Quick Slash",
-                description: "The companion's blade darts with relentless rhythm, dramatically reducing the pause between nail strikes.",
+                description: "Born from imperfect, discarded Nails that have fused together. The Nails still long to feel proper use and will grant the bearer faster attacks.",
                 notchCost: 3,
                 fallbackTint: new Color(0.86f, 0.32f, 0.32f),
                 enumId: ShadeCharmId.QuickSlash,
@@ -127,7 +116,7 @@ namespace LegacyoftheAbyss.Shade
                     OnRemoved = ctx => ctx.Controller?.MultiplyNailScale(1f / 1.35f)
                 },
                 displayName: "Mark of Pride",
-                description: "Ancient sigils elongate the shade's nail, allowing its swings to cover a far wider span around Hornet.",
+                description: "Contains the passion, skill and pride of the Moth Tribe. Increases the range of the bearer's nail, allowing them to strike foes from further away.",
                 notchCost: 3,
                 fallbackTint: new Color(0.74f, 0.43f, 0.24f),
                 enumId: ShadeCharmId.MarkOfPride,
@@ -141,7 +130,7 @@ namespace LegacyoftheAbyss.Shade
                     OnRemoved = ctx => ctx.Controller?.MultiplyNailScale(1f / 1.2f)
                 },
                 displayName: "Longnail",
-                description: "Woven strands stretch the companion's reach, slightly increasing the length of its nail arcs.",
+                description: "A Nail forged long ago. Increases the range of the bearer's nail, allowing them to strike foes from further away.",
                 notchCost: 2,
                 fallbackTint: new Color(0.58f, 0.66f, 0.44f),
                 enumId: ShadeCharmId.Longnail,
@@ -155,7 +144,7 @@ namespace LegacyoftheAbyss.Shade
                     OnRemoved = ctx => ctx.Controller?.AddSoulGainBonus(-6)
                 },
                 displayName: "Soul Catcher",
-                description: "The shade draws more soul from each successful strike, helping Hornet recover resources mid-fight.",
+                description: "Used by shamans to draw more SOUL from the world around them. Increases the amount of SOUL gained when striking an enemy with the nail.",
                 notchCost: 2,
                 fallbackTint: new Color(0.30f, 0.62f, 0.68f),
                 enumId: ShadeCharmId.SoulCatcher,
@@ -169,7 +158,7 @@ namespace LegacyoftheAbyss.Shade
                     OnRemoved = ctx => ctx.Controller?.MultiplyNailDamage(1f / 1.5f)
                 },
                 displayName: "Fragile Strength",
-                description: "Greatly boosts the companion's nail damage, but the charm will shatter if the shade is destroyed.",
+                description: "Strengthens the bearer, allowing them to deal more damage to foes. If its bearer is killed, this charm will break.",
                 notchCost: 3,
                 fallbackTint: new Color(0.82f, 0.52f, 0.18f),
                 enumId: ShadeCharmId.FragileStrength,
@@ -183,7 +172,7 @@ namespace LegacyoftheAbyss.Shade
                     OnRemoved = ctx => ctx.Controller?.AddSoulGainBonus(-12)
                 },
                 displayName: "Soul Eater",
-                description: "Hunger for essence swells within the shade, drawing far more soul from each strike to fuel spells and focus.",
+                description: "Forgotten shaman artefact, used to draw SOUL from still-living creatures. Greatly increases the amount of SOUL gained when striking an enemy with the nail.",
                 notchCost: 4,
                 fallbackTint: new Color(0.39f, 0.24f, 0.52f),
                 enumId: ShadeCharmId.SoulEater,
@@ -205,7 +194,7 @@ namespace LegacyoftheAbyss.Shade
                     }
                 },
                 displayName: "Grubsong",
-                description: "When the shade is struck it sings with collected kin, restoring a measure of soul to keep the fight alive.",
+                description: "Contains the gratitude of freed Grubs. Gain SOUL when taking damage.",
                 notchCost: 1,
                 fallbackTint: new Color(0.47f, 0.73f, 0.54f),
                 enumId: ShadeCharmId.Grubsong,
@@ -219,7 +208,7 @@ namespace LegacyoftheAbyss.Shade
                     OnRemoved = ctx => ctx.Controller?.MultiplyFocusTime(1f / 0.65f)
                 },
                 displayName: "Quick Focus",
-                description: "Channeling void becomes second nature, greatly reducing the time required for the shade to mend wounds.",
+                description: "Allows the bearer to focus SOUL at a much faster rate.",
                 notchCost: 3,
                 fallbackTint: new Color(0.52f, 0.77f, 0.93f),
                 enumId: ShadeCharmId.QuickFocus,
@@ -243,12 +232,13 @@ namespace LegacyoftheAbyss.Shade
                     }
                 },
                 displayName: "Deep Focus",
-                description: "The shade's meditations flow slowly but mend extra wounds and share greater restorative energy with Hornet.",
+                description: "Naturally formed within a crystal over a long period. Draws in SOUL from the surrounding air. The bearer will focus SOUL at a slower rate, but the healing effect will double.",
                 notchCost: 4,
                 fallbackTint: new Color(0.28f, 0.52f, 0.76f),
                 enumId: ShadeCharmId.DeepFocus,
                 iconName: "shade_charm_deep_focus"));
 
+            // TODO: Morph the shade while focusing to better mirror Shape of Unn's form change.
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.ShapeOfUnn),
                 hooks: new ShadeCharmHooks
@@ -257,7 +247,7 @@ namespace LegacyoftheAbyss.Shade
                     OnRemoved = ctx => ctx.Controller?.SetFocusMovementAllowed(false)
                 },
                 displayName: "Shape of Unn",
-                description: "Blessing of Unn lets the shade glide while focusing, keeping pace with Hornet without breaking concentration.",
+                description: "Reveals the form of Unn within the bearer's SOUL. While focusing SOUL, the bearer will take on a new shape and can move freely to avoid danger.",
                 notchCost: 2,
                 fallbackTint: new Color(0.32f, 0.68f, 0.40f),
                 enumId: ShadeCharmId.ShapeOfUnn,
@@ -271,7 +261,7 @@ namespace LegacyoftheAbyss.Shade
                     OnRemoved = ctx => ctx.Controller?.ModifyKnockbackSuppression(-1)
                 },
                 displayName: "Steady Body",
-                description: "The shade plants itself firmly, resisting enemy blows so its position beside Hornet barely shifts.",
+                description: "Keeps its bearer from recoiling backwards when they strike an enemy with a nail.",
                 notchCost: 1,
                 fallbackTint: new Color(0.78f, 0.74f, 0.48f),
                 enumId: ShadeCharmId.SteadyBody,
@@ -285,7 +275,7 @@ namespace LegacyoftheAbyss.Shade
                     OnRemoved = ctx => ctx.Controller?.MultiplyHurtInvulnerability(1f / 1.35f)
                 },
                 displayName: "Stalwart Shell",
-                description: "Layers of hardened void linger after each hit, extending the shade's invulnerability to survive brutal fights.",
+                description: "Builds resilience. When recovering from damage, the bearer will remain invulnerable for longer.",
                 notchCost: 2,
                 fallbackTint: new Color(0.64f, 0.58f, 0.44f),
                 enumId: ShadeCharmId.StalwartShell,
@@ -322,20 +312,17 @@ namespace LegacyoftheAbyss.Shade
                     }
                 },
                 displayName: "Fury of the Fallen",
-                description: "When only a sliver of vitality remains the shade fights with reckless ferocity, greatly amplifying nail damage.",
+                description: "Embodies the fury and heroism that comes upon those who are about to die. When close to death, the bearer's strength will increase.",
                 notchCost: 2,
                 fallbackTint: new Color(0.82f, 0.29f, 0.35f),
                 enumId: ShadeCharmId.FuryOfTheFallen,
                 iconName: "shade_charm_fury_of_the_fallen"));
 
+            // TODO: Teach the companion to unleash Nail Arts faster when Nailmaster's Glory is equipped.
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.NailmastersGlory),
-                statModifiers: new ShadeCharmStatModifiers
-                {
-                    NailCooldownMultiplier = 0.7f
-                },
                 displayName: "Nailmaster's Glory",
-                description: "Lessons from the Nailmasters echo through the shade, letting their blade recover swiftly between strikes.",
+                description: "Contains the passion of Nailmasters past. Increases the power of Nail Arts, allowing them to be unleashed much quicker.",
                 notchCost: 3,
                 fallbackTint: new Color(0.83f, 0.68f, 0.41f),
                 enumId: ShadeCharmId.NailmastersGlory,
@@ -349,25 +336,17 @@ namespace LegacyoftheAbyss.Shade
                     OnRemoved = ctx => ctx.Controller?.AddMaxHpBonus(-2, false)
                 },
                 displayName: "Fragile Heart",
-                description: "Bolsters the shade with additional vitality, but the charm will shatter if the companion falls in battle.",
+                description: "Increases the health of the bearer, allowing them to take more damage. If its bearer is killed, this charm will break.",
                 notchCost: 2,
                 fallbackTint: new Color(0.94f, 0.56f, 0.60f),
                 enumId: ShadeCharmId.FragileHeart,
                 iconName: "shade_charm_fragile_heart"));
 
+            // TODO: Empower the shade's teleport to damage foes and extend its reach for Sharp Shadow.
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.SharpShadow),
-                statModifiers: new ShadeCharmStatModifiers
-                {
-                    TeleportCooldownMultiplier = 0.7f
-                },
-                hooks: new ShadeCharmHooks
-                {
-                    OnApplied = ctx => ctx.Controller?.MultiplyTeleportChannelTime(0.85f),
-                    OnRemoved = ctx => ctx.Controller?.MultiplyTeleportChannelTime(1f / 0.85f)
-                },
                 displayName: "Sharp Shadow",
-                description: "Streamlined void lets the companion blink more readily, shortening both the charge-up and recovery of teleports.",
+                description: "Contains a forbidden spell that transforms shadows into deadly weapons. When using Shadow Dash, the bearer's body will sharpen and damage enemies.",
                 notchCost: 2,
                 fallbackTint: new Color(0.28f, 0.24f, 0.42f),
                 enumId: ShadeCharmId.SharpShadow,
