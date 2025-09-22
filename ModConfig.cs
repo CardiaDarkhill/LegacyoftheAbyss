@@ -163,12 +163,24 @@ public class ModConfig
 
     private static string Serialize(ModConfig config)
     {
-        if (TrySerializeWithUnity(config, out var json))
+        try
         {
-            return json;
+            string json = JsonConvert.SerializeObject(config, FallbackJsonSettings);
+            if (!string.IsNullOrWhiteSpace(json))
+            {
+                return json;
+            }
+        }
+        catch
+        {
         }
 
-        return JsonConvert.SerializeObject(config, FallbackJsonSettings);
+        if (TrySerializeWithUnity(config, out var unityJson))
+        {
+            return unityJson;
+        }
+
+        return string.Empty;
     }
 
     private static bool TrySerializeWithUnity(ModConfig config, out string json)
@@ -196,19 +208,24 @@ public class ModConfig
             return null;
         }
 
-        if (TryDeserializeWithUnity(json, out var config))
-        {
-            return config;
-        }
-
         try
         {
-            return JsonConvert.DeserializeObject<ModConfig>(json, FallbackJsonSettings);
+            var config = JsonConvert.DeserializeObject<ModConfig>(json, FallbackJsonSettings);
+            if (config != null)
+            {
+                return config;
+            }
         }
         catch
         {
-            return null;
         }
+
+        if (TryDeserializeWithUnity(json, out var unityConfig))
+        {
+            return unityConfig;
+        }
+
+        return null;
     }
 
     private static bool TryDeserializeWithUnity(string json, out ModConfig? config)

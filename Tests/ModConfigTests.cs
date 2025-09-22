@@ -1,3 +1,4 @@
+using InControl;
 using UnityEngine;
 using Xunit;
 
@@ -27,7 +28,7 @@ public class ModConfigTests
         Assert.False(loaded.shadeEnabled);
         loaded.shadeEnabled = true;
         ModConfig.Save();
-}
+    }
 
     [Fact]
     public void ShadeBindingRebindPersists()
@@ -41,5 +42,31 @@ public class ModConfigTests
         var binding = loaded.shadeInput.GetBinding(ShadeAction.Nail);
         Assert.Equal(ShadeBindingOptionType.Key, binding.primary.type);
         Assert.Equal(KeyCode.P, binding.primary.key);
+    }
+
+    [Fact]
+    public void ShadeControllerBindingPersists()
+    {
+        var cfg = ModConfig.Instance;
+        cfg.shadeInput.ResetToDefaults();
+        cfg.shadeInput.controllerDeviceIndex = 2;
+        cfg.shadeInput.SetBindingOption(ShadeAction.MoveLeft, false, ShadeBindingOption.FromControl(InputControlType.LeftStickLeft, 1));
+        cfg.shadeInput.SetBindingOption(ShadeAction.Focus, true, ShadeBindingOption.FromControl(InputControlType.RightTrigger));
+        ModConfig.Save();
+        var loaded = ModConfig.Load();
+
+        Assert.Equal(2, loaded.shadeInput.controllerDeviceIndex);
+
+        var moveLeft = loaded.shadeInput.GetBinding(ShadeAction.MoveLeft);
+        Assert.NotNull(moveLeft);
+        Assert.Equal(ShadeBindingOptionType.Controller, moveLeft.primary.type);
+        Assert.Equal(InputControlType.LeftStickLeft, moveLeft.primary.control);
+        Assert.Equal(1, moveLeft.primary.controllerDevice);
+
+        var focus = loaded.shadeInput.GetBinding(ShadeAction.Focus);
+        Assert.NotNull(focus);
+        Assert.Equal(ShadeBindingOptionType.Controller, focus.secondary.type);
+        Assert.Equal(InputControlType.RightTrigger, focus.secondary.control);
+        Assert.Equal(-1, focus.secondary.controllerDevice);
     }
 }

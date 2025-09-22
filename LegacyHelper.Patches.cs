@@ -461,7 +461,17 @@ public partial class LegacyHelper
             try
             {
                 var cfg = ModConfig.Instance;
-                return cfg == null || cfg.hornetControllerEnabled;
+                if (cfg == null)
+                    return true;
+
+                if (cfg.hornetControllerEnabled)
+                    return true;
+
+                var shadeConfig = cfg.shadeInput;
+                if (shadeConfig != null && shadeConfig.UsesControllerBindings())
+                    return true;
+
+                return false;
             }
             catch
             {
@@ -557,7 +567,30 @@ public partial class LegacyHelper
                 var gm = GameManager.instance;
                 if (gm == null)
                     return false;
-                return gm.GameState == GameState.PLAYING;
+
+                if (gm.GameState != GameState.PLAYING)
+                    return false;
+
+                UIManager ui = null;
+                try { ui = UIManager.instance; } catch { }
+                if (ui == null)
+                {
+                    try { ui = gm.ui; } catch { }
+                }
+
+                if (ui != null)
+                {
+                    try
+                    {
+                        if (ui.uiState != UIState.PLAYING)
+                            return false;
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                return true;
             }
             catch
             {
