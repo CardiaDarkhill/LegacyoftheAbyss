@@ -610,14 +610,35 @@ public partial class LegacyHelper
                     var shadeConfig = cfg.shadeInput;
                     if (shadeConfig != null && shadeConfig.UsesControllerBindings())
                     {
-                        menuTransferShadeUsesController = true;
+                        ShadeInputConfig savedBindings = null;
                         try
                         {
-                            menuTransferSavedBindings = shadeConfig.Clone();
+                            savedBindings = shadeConfig.Clone();
                         }
                         catch
                         {
-                            menuTransferSavedBindings = null;
+                            savedBindings = null;
+                        }
+
+                        if (savedBindings != null)
+                        {
+                            menuTransferShadeUsesController = true;
+                            menuTransferSavedBindings = savedBindings;
+
+                            try
+                            {
+                                shadeConfig.ResetToDefaults();
+                            }
+                            catch
+                            {
+                                try
+                                {
+                                    shadeConfig.CopyBindingsFrom(ShadeInputConfig.CreateDefault());
+                                }
+                                catch
+                                {
+                                }
+                            }
                         }
                     }
                 }

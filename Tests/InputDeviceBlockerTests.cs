@@ -78,6 +78,65 @@ public class InputDeviceBlockerTests
         }
     }
 
+    [Fact]
+    public void MenuTransferTemporarilyClearsShadeControllerBindings()
+    {
+        using (var environment = new InputBlockerEnvironment())
+        {
+            var config = ModConfig.Instance;
+            var initialShadeConfig = config.shadeInput.Clone();
+            bool initialHornetControllerEnabled = config.hornetControllerEnabled;
+
+            try
+            {
+                config.shadeInput.ApplyShadeControllerPreset();
+                var controllerBindings = config.shadeInput.Clone();
+
+                Assert.True(config.shadeInput.UsesControllerBindings());
+
+                environment.SetPaused(true);
+                LegacyHelper.InputDeviceBlocker.RefreshShadeDevices(null);
+
+                Assert.False(config.shadeInput.UsesControllerBindings());
+                Assert.Equal(ShadeBindingOptionType.Key, config.shadeInput.moveLeft.primary.type);
+                Assert.Equal(ShadeBindingOptionType.Key, config.shadeInput.moveRight.primary.type);
+
+                environment.SetPaused(false);
+                LegacyHelper.InputDeviceBlocker.RefreshShadeDevices(null);
+
+                Assert.True(config.shadeInput.UsesControllerBindings());
+                AssertShadeBindingEqual(controllerBindings.moveLeft, config.shadeInput.moveLeft);
+                AssertShadeBindingEqual(controllerBindings.moveRight, config.shadeInput.moveRight);
+                AssertShadeBindingEqual(controllerBindings.nail, config.shadeInput.nail);
+                Assert.Equal(initialHornetControllerEnabled, config.hornetControllerEnabled);
+            }
+            finally
+            {
+                if (initialShadeConfig != null)
+                {
+                    config.shadeInput.CopyBindingsFrom(initialShadeConfig);
+                }
+                config.hornetControllerEnabled = initialHornetControllerEnabled;
+            }
+        }
+    }
+
+    private static void AssertShadeBindingEqual(ShadeBinding expected, ShadeBinding actual)
+    {
+        Assert.NotNull(expected);
+        Assert.NotNull(actual);
+        AssertBindingOptionEqual(expected.primary, actual.primary);
+        AssertBindingOptionEqual(expected.secondary, actual.secondary);
+    }
+
+    private static void AssertBindingOptionEqual(ShadeBindingOption expected, ShadeBindingOption actual)
+    {
+        Assert.Equal(expected.type, actual.type);
+        Assert.Equal(expected.key, actual.key);
+        Assert.Equal(expected.control, actual.control);
+        Assert.Equal(expected.controllerDevice, actual.controllerDevice);
+    }
+
     private sealed class InputBlockerEnvironment : IDisposable
     {
         private readonly object originalGameManager;
