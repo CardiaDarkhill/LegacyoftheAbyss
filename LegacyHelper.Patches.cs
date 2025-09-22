@@ -251,7 +251,7 @@ public partial class LegacyHelper
         {
             try
             {
-                var shadePane = ShadeInventoryPaneIntegration.TryGetShadePane(__instance);
+                var shadePane = ShadeInventoryPaneIntegration.TryGetShadePane(__instance) ?? ShadeInventoryPane.ActivePane;
                 if (shadePane != null)
                 {
                     shadePane.HandleSubmit();
@@ -271,8 +271,37 @@ public partial class LegacyHelper
         {
             try
             {
-                var shadePane = ShadeInventoryPaneIntegration.TryGetShadePane(__instance);
+                var shadePane = ShadeInventoryPaneIntegration.TryGetShadePane(__instance) ?? ShadeInventoryPane.ActivePane;
                 shadePane?.HandleDirectionalInput(direction);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(InventoryPaneList), nameof(InventoryPaneList.BeginPane))]
+    private class InventoryPaneList_BeginPane_BindShadeInput
+    {
+        private static void Postfix(InventoryPaneList __instance, InventoryPane pane)
+        {
+            try
+            {
+                if (__instance == null || pane == null)
+                {
+                    return;
+                }
+
+                var shadePane = pane as ShadeInventoryPane;
+                if (shadePane == null)
+                {
+                    shadePane = pane.RootPane as ShadeInventoryPane;
+                }
+
+                if (shadePane != null)
+                {
+                    ShadeInventoryPaneIntegration.BindInput(shadePane, __instance);
+                }
             }
             catch
             {

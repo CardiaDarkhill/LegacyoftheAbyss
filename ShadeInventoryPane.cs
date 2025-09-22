@@ -28,6 +28,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private const float BackgroundAlpha = 0.82f;
     private const float CharmGridBaseOffsetFraction = 0.15f;
     private const float SectionOffsetFraction = 0.05f;
+    private const float DetailPreviewScale = 1.6f;
     private const float HighlightScaleMultiplier = 1.85f;
     private const float HighlightMinAlpha = 0.55f;
     // Vanilla charm panes report RectTransform sizes of roughly 6.5 × 8 units even
@@ -54,6 +55,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private static Sprite? lockedCharmSprite;
     private static bool lockedCharmSpriteSearched;
+    private static TMP_FontAsset? cachedTrajanFont;
+    private static Font? cachedTrajanSourceFont;
+    private static bool searchedTrajanFont;
+    private static ShadeInventoryPane? activePane;
 
     private struct RectSnapshot
     {
@@ -200,7 +205,13 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private TMP_Text? statusTextTMP;
     private TMP_Text? hintTextTMP;
     private TMP_Text? detailCostLabelTMP;
+    private Image? detailPreviewImage;
+    private RectTransform? detailPreviewRect;
     private CanvasGroup canvasGroup = null!;
+    private float detailPreviewTopOffset;
+    private float detailDescriptionGap;
+    private float detailDescriptionBottomPadding;
+    private float detailHorizontalMargin;
 
     private GameObject? overlayCanvasObject;
     private RectTransform? overlayRoot;
@@ -251,6 +262,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private Vector2 normalizedFallbackRootSize;
     private Vector2 charmCellSize = DefaultCharmCellSize;
     private Vector2 charmSpacing = DefaultCharmSpacing;
+    private float currentCharmIconSize = Mathf.Max(DefaultCharmCellSize.x, DefaultCharmCellSize.y) * CharmIconSizeMultiplier;
     private RectTransform? leftContentRoot;
     private RectTransform? notchIconContainer;
     private RectTransform? detailCostRow;
@@ -507,6 +519,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
             text.horizontalOverflow = data.HorizontalOverflow;
             text.verticalOverflow = data.VerticalOverflow;
             ClearAndApplyShadows(text, data.Shadows);
+            if (fallbackFont != null && text.font != null &&
+                text.font.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                text.font = fallbackFont;
+            }
             return;
         }
 
@@ -538,6 +555,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
             {
                 text.font = data.Font;
             }
+            else if (fallbackFont != null)
+            {
+                text.font = fallbackFont;
+            }
 
             if (data.FontMaterial != null)
             {
@@ -563,6 +584,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
             text.margin = data.Margin;
             text.richText = data.RichText;
             ClearAndApplyShadows(text, data.Shadows);
+            if (fallbackFont != null && text.font != null &&
+                text.font.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                text.font = fallbackFont;
+            }
             return;
         }
 
@@ -1274,6 +1300,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
         isActive = false;
         labelPulseTimer = 0f;
         ApplyOverlayVisibility(false);
+        if (ReferenceEquals(activePane, this))
+        {
+            activePane = null;
+        }
         LogMenuEvent("OnDisable");
     }
 
@@ -1282,6 +1312,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
         UnregisterInputHandlers();
         UpdateInventoryBinding(false);
         DetachPaneList();
+        if (ReferenceEquals(activePane, this))
+        {
+            activePane = null;
+        }
 
         if (fallbackSprite != null)
         {
@@ -1390,9 +1424,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
     {
         base.PaneStart();
         EnsureBuilt();
+        activePane = this;
         labelPulseTimer = 0f;
         isActive = true;
         UpdateInventoryBinding(true);
+        ShadeInventoryPaneIntegration.BindInput(this, attachedPaneList);
         ApplyOverlayVisibility(true);
         RefreshAll();
         UpdateParentListLabel();
@@ -1406,6 +1442,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
         isActive = false;
         labelPulseTimer = 0f;
         ApplyOverlayVisibility(false);
+        if (ReferenceEquals(activePane, this))
+        {
+            activePane = null;
+        }
         LogMenuEvent("PaneEnd");
         base.PaneEnd();
     }
@@ -1424,6 +1464,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     }
 
     internal string DisplayLabel => displayLabel;
+
+    internal static ShadeInventoryPane? ActivePane => activePane;
 
     internal void HandleSubmit()
     {
@@ -1571,6 +1613,12 @@ internal sealed class ShadeInventoryPane : InventoryPane
         var arial = Resources.GetBuiltinResource<Font>("Arial.ttf");
         bodyFont = arial;
         headerFont = arial;
+        var trajanFont = ResolveTrajanSourceFont();
+        if (trajanFont != null)
+        {
+            bodyFont = trajanFont;
+            headerFont = trajanFont;
+        }
         bodyFontColor = Color.white;
         headerFontColor = Color.white;
         bodyTextStyle = null;
@@ -1820,6 +1868,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
         }
 
+        EnsureTrajanFallbacks();
+
         if (isBuilt)
         {
             bool wasActive = isActive;
@@ -1874,6 +1924,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         hintText = null;
         detailCostLabel = null;
         detailCostLabelTMP = null;
+        detailPreviewImage = null;
+        detailPreviewRect = null;
         titleTextTMP = null;
         notchTextTMP = null;
         detailTitleTextTMP = null;
@@ -1891,6 +1943,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
         notchMeterIcons.Clear();
         detailCostIcons.Clear();
         equippedIcons.Clear();
+        detailPreviewTopOffset = 0f;
+        detailDescriptionGap = 0f;
+        detailDescriptionBottomPadding = 0f;
+        detailHorizontalMargin = 0f;
         isBuilt = false;
     }
 
@@ -2447,6 +2503,232 @@ internal sealed class ShadeInventoryPane : InventoryPane
         return Mathf.Max(0f, margin);
     }
 
+    private static TMP_FontAsset? ResolveTrajanFontAsset()
+    {
+        if (cachedTrajanFont != null)
+        {
+            return cachedTrajanFont;
+        }
+
+        if (searchedTrajanFont)
+        {
+            return cachedTrajanFont;
+        }
+
+        searchedTrajanFont = true;
+
+        try
+        {
+            cachedTrajanFont = Resources
+                .FindObjectsOfTypeAll<TMP_FontAsset>()
+                .FirstOrDefault(asset => asset != null &&
+                    asset.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0);
+
+            if (cachedTrajanFont == null)
+            {
+                var settings = TMP_Settings.instance;
+                if (settings != null)
+                {
+                    if (settings.defaultFontAsset != null &&
+                        settings.defaultFontAsset.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        cachedTrajanFont = settings.defaultFontAsset;
+                    }
+
+                    if (cachedTrajanFont == null && settings.fallbackFontAssets != null)
+                    {
+                        cachedTrajanFont = settings.fallbackFontAssets
+                            .FirstOrDefault(asset => asset != null &&
+                                asset.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0);
+                    }
+                }
+            }
+
+            if (cachedTrajanFont == null)
+            {
+                string[] candidatePaths =
+                {
+                    "Fonts & Materials/TrajanPro-Regular SDF",
+                    "Fonts & Materials/Trajan Pro-Regular SDF",
+                    "Fonts & Materials/Trajan Pro SDF",
+                    "Fonts & Materials/TrajanPro SDF",
+                    "Fonts & Materials/Trajan SDF",
+                    "TrajanPro-Regular SDF"
+                };
+
+                foreach (var path in candidatePaths)
+                {
+                    var loaded = Resources.Load<TMP_FontAsset>(path);
+                    if (loaded != null)
+                    {
+                        cachedTrajanFont = loaded;
+                        break;
+                    }
+                }
+            }
+
+            if (cachedTrajanFont == null)
+            {
+                foreach (var asset in Resources.LoadAll<TMP_FontAsset>("Fonts & Materials"))
+                {
+                    if (asset == null)
+                    {
+                        continue;
+                    }
+
+                    if (asset.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        cachedTrajanFont = asset;
+                        break;
+                    }
+                }
+            }
+
+            if (cachedTrajanFont != null && cachedTrajanFont.sourceFontFile != null)
+            {
+                cachedTrajanSourceFont = cachedTrajanFont.sourceFontFile;
+            }
+        }
+        catch
+        {
+            cachedTrajanFont = null;
+        }
+
+        return cachedTrajanFont;
+    }
+
+    private static Font? ResolveTrajanSourceFont()
+    {
+        if (cachedTrajanSourceFont != null)
+        {
+            return cachedTrajanSourceFont;
+        }
+
+        var asset = ResolveTrajanFontAsset();
+        if (asset != null && asset.sourceFontFile != null)
+        {
+            cachedTrajanSourceFont = asset.sourceFontFile;
+            return cachedTrajanSourceFont;
+        }
+
+        try
+        {
+            cachedTrajanSourceFont = Resources
+                .FindObjectsOfTypeAll<Font>()
+                .FirstOrDefault(font => font != null &&
+                    font.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+        catch
+        {
+            cachedTrajanSourceFont = null;
+        }
+
+        if (cachedTrajanSourceFont == null)
+        {
+            string[] candidatePaths =
+            {
+                "Fonts/TrajanPro-Regular",
+                "Fonts/Trajan Pro-Regular",
+                "Fonts/Trajan Pro",
+                "Fonts/Trajan",
+                "TrajanPro-Regular"
+            };
+
+            foreach (var path in candidatePaths)
+            {
+                try
+                {
+                    var loaded = Resources.Load<Font>(path);
+                    if (loaded != null)
+                    {
+                        cachedTrajanSourceFont = loaded;
+                        break;
+                    }
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        if (cachedTrajanSourceFont == null)
+        {
+            try
+            {
+                foreach (var font in Resources.LoadAll<Font>("Fonts"))
+                {
+                    if (font == null)
+                    {
+                        continue;
+                    }
+
+                    if (font.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        cachedTrajanSourceFont = font;
+                        break;
+                    }
+                }
+            }
+            catch
+            {
+                cachedTrajanSourceFont = null;
+            }
+        }
+
+        return cachedTrajanSourceFont;
+    }
+
+    private static bool FontMatchesTrajan(TMP_FontAsset? font)
+    {
+        return font != null && font.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool FontMatchesTrajan(Font? font)
+    {
+        return font != null && font.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private void EnsureTrajanFallbacks()
+    {
+        var tmpFallback = ResolveTrajanFontAsset();
+        if (tmpFallback != null)
+        {
+            if (bodyTmpTextStyle.HasValue)
+            {
+                var body = bodyTmpTextStyle.Value;
+                if (!FontMatchesTrajan(body.Font))
+                {
+                    body.Font = tmpFallback;
+                    bodyTmpTextStyle = body;
+                }
+            }
+
+            if (headerTmpTextStyle.HasValue)
+            {
+                var header = headerTmpTextStyle.Value;
+                if (!FontMatchesTrajan(header.Font))
+                {
+                    header.Font = tmpFallback;
+                    headerTmpTextStyle = header;
+                }
+            }
+        }
+
+        var sourceFallback = ResolveTrajanSourceFont();
+        if (sourceFallback != null)
+        {
+            if (!FontMatchesTrajan(bodyFont))
+            {
+                bodyFont = sourceFallback;
+            }
+
+            if (!FontMatchesTrajan(headerFont))
+            {
+                headerFont = sourceFallback;
+            }
+        }
+    }
+
     private RectTransform? EnsureOverlayCanvas()
     {
         if (overlayRoot != null)
@@ -2606,6 +2888,49 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
     }
 
+    private float CalculateCharmIconSize()
+    {
+        float minDimension = Mathf.Min(Mathf.Abs(charmCellSize.x), Mathf.Abs(charmCellSize.y));
+        if (minDimension < MinRootSizeThreshold)
+        {
+            minDimension = Mathf.Min(DefaultCharmCellSize.x, DefaultCharmCellSize.y);
+        }
+
+        return Mathf.Max(minDimension * CharmIconSizeMultiplier, 48f);
+    }
+
+    private float CalculateDetailPreviewSize()
+    {
+        float baseSize = currentCharmIconSize > 0f ? currentCharmIconSize : CalculateCharmIconSize();
+        return Mathf.Max(baseSize * DetailPreviewScale, baseSize);
+    }
+
+    private void UpdateCharmIconSizeCache()
+    {
+        currentCharmIconSize = CalculateCharmIconSize();
+        UpdateDetailPreviewSize();
+    }
+
+    private void UpdateDetailPreviewSize()
+    {
+        if (detailPreviewRect == null)
+        {
+            return;
+        }
+
+        float previewSize = CalculateDetailPreviewSize();
+        detailPreviewRect.sizeDelta = new Vector2(previewSize, previewSize);
+        detailPreviewRect.anchoredPosition = new Vector2(detailPreviewRect.anchoredPosition.x, -detailPreviewTopOffset);
+
+        var descRect = ResolveRectTransform(descriptionText, descriptionTextTMP);
+        if (descRect != null)
+        {
+            float descriptionTop = detailPreviewTopOffset + previewSize + detailDescriptionGap;
+            descRect.offsetMin = new Vector2(detailHorizontalMargin, detailDescriptionBottomPadding);
+            descRect.offsetMax = new Vector2(-detailHorizontalMargin, -descriptionTop);
+        }
+    }
+
     internal void AttachToPaneList(InventoryPaneList? paneList)
     {
         if (attachedPaneList == paneList)
@@ -2627,6 +2952,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         try { attachedPaneList.ClosingInventory += HandleInventoryClosed; }
         catch { }
+
+        ShadeInventoryPaneIntegration.BindInput(this, attachedPaneList);
     }
 
     private void DetachPaneList()
@@ -2756,6 +3083,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         charmSpacing = new Vector2(spacingX, spacingY);
+        UpdateCharmIconSizeCache();
     }
 
     private int DetermineCharmColumnCount(int entryCount)
@@ -2806,118 +3134,120 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             gridRoot.sizeDelta = Vector2.zero;
             gridRoot.anchoredPosition = Vector2.zero;
+            UpdateDetailPreviewSize();
             return;
         }
 
         int columns = Mathf.Max(1, DetermineCharmColumnCount(entries.Count));
-
-        var rowAssignments = new int[entries.Count];
-        var columnAssignments = new int[entries.Count];
-        var rowCounts = new int[CharmRows];
-
-        for (int i = 0; i < entries.Count; i++)
+        int requiredColumns = Mathf.CeilToInt(entries.Count / (float)CharmRows);
+        if (requiredColumns > columns)
         {
-            int row = Mathf.Min(i / columns, CharmRows - 1);
-            int column = rowCounts[row];
-            rowCounts[row] = column + 1;
-            rowAssignments[i] = row;
-            columnAssignments[i] = column;
-        }
-
-        int usedRows = 0;
-        for (int row = 0; row < CharmRows; row++)
-        {
-            if (rowCounts[row] > 0)
-            {
-                usedRows = row + 1;
-            }
-        }
-
-        if (usedRows <= 0)
-        {
-            usedRows = 1;
+            columns = requiredColumns;
         }
 
         float strideX = charmCellSize.x + charmSpacing.x;
         float strideY = charmCellSize.y + charmSpacing.y;
         float halfStrideX = strideX * RowOffsetFactor;
 
-        float maxWidth = 0f;
-        for (int row = 0; row < usedRows; row++)
+        var rowCounts = new int[CharmRows];
+        int remaining = entries.Count;
+        for (int row = 0; row < CharmRows; row++)
         {
-            int countInRow = rowCounts[row];
-            if (countInRow <= 0)
+            int count = Mathf.Min(columns, remaining);
+            rowCounts[row] = count;
+            remaining -= count;
+        }
+
+        float baseRowWidth = charmCellSize.x + Mathf.Max(0, columns - 1) * strideX;
+        float offsetRowWidth = baseRowWidth + halfStrideX;
+        float maxWidth = Mathf.Max(baseRowWidth, offsetRowWidth);
+        int usedRows = 0;
+
+        for (int row = 0; row < CharmRows; row++)
+        {
+            int count = rowCounts[row];
+            if (count <= 0)
             {
                 continue;
             }
 
-            float rowWidth = (countInRow - 1) * strideX + charmCellSize.x;
-            if ((row & 1) == 1)
-            {
-                rowWidth += halfStrideX;
-            }
-
+            usedRows = row + 1;
+            float offset = (row & 1) == 1 ? halfStrideX : 0f;
+            float rowWidth = offset + charmCellSize.x + Mathf.Max(0, count - 1) * strideX;
             if (rowWidth > maxWidth)
             {
                 maxWidth = rowWidth;
             }
         }
 
-        if (maxWidth <= 0f)
+        if (usedRows <= 0)
         {
-            maxWidth = charmCellSize.x;
+            usedRows = Mathf.Min(CharmRows, Mathf.Max(1, Mathf.CeilToInt(entries.Count / (float)columns)));
         }
 
-        float totalHeight = usedRows * charmCellSize.y + Mathf.Max(usedRows - 1, 0) * charmSpacing.y;
+        float totalHeight = usedRows * charmCellSize.y + Mathf.Max(0, usedRows - 1) * charmSpacing.y;
 
         Vector2 parentSize = leftContentRoot.rect.size;
         if (parentSize.x < MinRootSizeThreshold || parentSize.y < MinRootSizeThreshold)
         {
             Vector2 fallback = normalizedFallbackRootSize.sqrMagnitude > 0f ? normalizedFallbackRootSize : DefaultStandaloneRootSize;
-            parentSize = new Vector2(Mathf.Max(fallback.x * 0.6f, maxWidth), Mathf.Max(fallback.y * 0.6f, totalHeight));
+            parentSize = new Vector2(Mathf.Max(fallback.x * 0.58f, maxWidth), Mathf.Max(fallback.y * 0.55f, totalHeight));
         }
-
-        float maxOffsetX = Mathf.Max(0f, parentSize.x - maxWidth);
-        float maxOffsetY = Mathf.Max(0f, parentSize.y - totalHeight);
-
-        float baseOffsetX = Mathf.Min(Mathf.Max(0f, parentSize.x * CharmGridBaseOffsetFraction), maxOffsetX);
-        float baseOffsetY = Mathf.Min(Mathf.Max(0f, parentSize.y * CharmGridBaseOffsetFraction), maxOffsetY);
 
         Vector2 screenSize = normalizedFallbackRootSize.sqrMagnitude > 0f
             ? normalizedFallbackRootSize
             : DefaultStandaloneRootSize;
-        float gridShiftX = Mathf.Min(ComputeNormalizedMargin(screenSize.x, SectionOffsetFraction * 0.5f), maxOffsetX);
-        float gridShiftY = Mathf.Min(ComputeNormalizedMargin(screenSize.y, SectionOffsetFraction), maxOffsetY);
 
-        float offsetX = Mathf.Clamp(baseOffsetX - gridShiftX, 0f, maxOffsetX);
-        float offsetY = Mathf.Clamp(baseOffsetY - gridShiftY, 0f, maxOffsetY);
+        float desiredLeftMargin = ComputeNormalizedMargin(screenSize.x, CharmGridBaseOffsetFraction);
+        float desiredBottomMargin = ComputeNormalizedMargin(screenSize.y, CharmGridBaseOffsetFraction);
 
+        float maxLeftMargin = Mathf.Max(0f, parentSize.x - maxWidth);
+        float leftMargin = Mathf.Clamp(desiredLeftMargin, 0f, maxLeftMargin);
+
+        float maxBottomMargin = Mathf.Max(0f, parentSize.y - totalHeight);
+        float bottomMargin = Mathf.Clamp(desiredBottomMargin, 0f, maxBottomMargin);
+
+        gridRoot.anchorMin = new Vector2(0f, 0f);
+        gridRoot.anchorMax = new Vector2(0f, 0f);
+        gridRoot.pivot = new Vector2(0f, 0f);
         gridRoot.sizeDelta = new Vector2(maxWidth, totalHeight);
-        gridRoot.anchoredPosition = new Vector2(offsetX, offsetY);
+        gridRoot.anchoredPosition = new Vector2(leftMargin, bottomMargin);
 
-        for (int i = 0; i < entries.Count; i++)
+        for (int row = 0, index = 0; row < CharmRows && index < entries.Count; row++)
         {
-            int row = rowAssignments[i];
-            int column = columnAssignments[i];
-
-            float x = (row % 2 == 1 ? halfStrideX : 0f) + column * strideX;
-            float y = (usedRows - row - 1) * strideY;
-
-            var entry = entries[i];
-            RectTransform? rect = entry.Root;
-            Vector2 anchored = new Vector2(x + charmCellSize.x * 0.5f, y + charmCellSize.y * 0.5f);
-            if (rect != null)
+            int count = rowCounts[row];
+            if (count <= 0)
             {
-                rect.anchorMin = new Vector2(0f, 0f);
-                rect.anchorMax = new Vector2(0f, 0f);
-                rect.pivot = new Vector2(0.5f, 0.5f);
-                rect.sizeDelta = charmCellSize;
-                rect.anchoredPosition = anchored;
+                continue;
             }
 
-            entryGridPositions.Add(new Vector2Int(row, column));
-            entryCenterXs.Add(anchored.x);
+            float offset = (row & 1) == 1 ? halfStrideX : 0f;
+            float targetRowWidth = offset + charmCellSize.x + Mathf.Max(0, columns - 1) * strideX;
+            float actualRowWidth = offset + charmCellSize.x + Mathf.Max(0, count - 1) * strideX;
+            float horizontalPadding = Mathf.Max(0f, (targetRowWidth - actualRowWidth) * 0.5f);
+
+            for (int column = 0; column < count && index < entries.Count; column++, index++)
+            {
+                var entry = entries[index];
+                RectTransform? rect = entry.Root;
+                float centerX = offset + horizontalPadding + column * strideX + charmCellSize.x * 0.5f;
+                float centerY = charmCellSize.y * 0.5f + row * strideY;
+
+                if (rect != null)
+                {
+                    rect.anchorMin = new Vector2(0f, 0f);
+                    rect.anchorMax = new Vector2(0f, 0f);
+                    rect.pivot = new Vector2(0.5f, 0.5f);
+                    rect.sizeDelta = charmCellSize;
+                    rect.anchoredPosition = new Vector2(centerX, centerY);
+                }
+
+                entryGridPositions.Add(new Vector2Int(row, column));
+                entryCenterXs.Add(centerX);
+            }
         }
+
+        UpdateDetailPreviewSize();
     }
 
     private RectTransform? EnsureHighlightRect()
@@ -3403,46 +3733,61 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         detailTitleText = CreateText("CharmName", detailRoot, FontStyle.Normal, 38, TextAnchor.UpperCenter, out detailTitleTextTMP, useHeaderFont: true);
         var detailTitleRect = ResolveRectTransform(detailTitleText, detailTitleTextTMP);
+
+        float detailTopPadding;
+        float titleHeight;
+        float costHeight;
+        float rowGap;
+        float previewGap;
+        float descriptionGap;
+        float bottomPadding;
+
+        if (useNormalizedFallbackLayout)
+        {
+            detailHorizontalMargin = ComputeNormalizedMargin(normalizedFallbackRootSize.x, 0.05f);
+            detailTopPadding = ComputeNormalizedMargin(normalizedFallbackRootSize.y, 0.05f);
+            titleHeight = ComputeNormalizedMargin(normalizedFallbackRootSize.y, 0.085f);
+            costHeight = ComputeNormalizedMargin(normalizedFallbackRootSize.y, 0.06f);
+            rowGap = ComputeNormalizedMargin(normalizedFallbackRootSize.y, 0.005f);
+            previewGap = ComputeNormalizedMargin(normalizedFallbackRootSize.y, 0.015f);
+            descriptionGap = ComputeNormalizedMargin(normalizedFallbackRootSize.y, 0.02f);
+            bottomPadding = ComputeNormalizedMargin(normalizedFallbackRootSize.y, 0.045f);
+        }
+        else
+        {
+            detailHorizontalMargin = 48f;
+            detailTopPadding = 32f;
+            titleHeight = 64f;
+            costHeight = 44f;
+            rowGap = 4f;
+            previewGap = 18f;
+            descriptionGap = 24f;
+            bottomPadding = 48f;
+        }
+
+        detailDescriptionGap = descriptionGap;
+        detailDescriptionBottomPadding = bottomPadding;
+        detailPreviewTopOffset = detailTopPadding + titleHeight + rowGap + costHeight + previewGap;
+
         if (detailTitleRect != null)
         {
-            if (useNormalizedFallbackLayout)
-            {
-                detailTitleRect.anchorMin = new Vector2(0f, 0.84f);
-                detailTitleRect.anchorMax = new Vector2(1f, 1f);
-                detailTitleRect.pivot = new Vector2(0.5f, 1f);
-                detailTitleRect.offsetMin = Vector2.zero;
-                detailTitleRect.offsetMax = Vector2.zero;
-            }
-            else
-            {
-                detailTitleRect.anchorMin = new Vector2(0f, 0.84f);
-                detailTitleRect.anchorMax = new Vector2(1f, 1f);
-                detailTitleRect.pivot = new Vector2(0.5f, 1f);
-                detailTitleRect.offsetMin = new Vector2(24f, 0f);
-                detailTitleRect.offsetMax = new Vector2(-24f, -4f);
-            }
+            detailTitleRect.anchorMin = new Vector2(0f, 1f);
+            detailTitleRect.anchorMax = new Vector2(1f, 1f);
+            detailTitleRect.pivot = new Vector2(0.5f, 1f);
+            detailTitleRect.offsetMin = new Vector2(detailHorizontalMargin, -(detailTopPadding + titleHeight));
+            detailTitleRect.offsetMax = new Vector2(-detailHorizontalMargin, -detailTopPadding);
         }
         SetTextValue(detailTitleText, detailTitleTextTMP, displayLabel);
 
         detailCostRow = new GameObject("CostRow", typeof(RectTransform)).GetComponent<RectTransform>();
         detailCostRow.gameObject.layer = detailRoot.gameObject.layer;
         detailCostRow.SetParent(detailRoot, false);
-        if (useNormalizedFallbackLayout)
-        {
-            detailCostRow.anchorMin = new Vector2(0f, 0.76f);
-            detailCostRow.anchorMax = new Vector2(1f, 0.84f);
-            detailCostRow.pivot = new Vector2(0.5f, 1f);
-            detailCostRow.offsetMin = Vector2.zero;
-            detailCostRow.offsetMax = Vector2.zero;
-        }
-        else
-        {
-            detailCostRow.anchorMin = new Vector2(0f, 0.76f);
-            detailCostRow.anchorMax = new Vector2(1f, 0.84f);
-            detailCostRow.pivot = new Vector2(0.5f, 1f);
-            detailCostRow.offsetMin = new Vector2(24f, 4f);
-            detailCostRow.offsetMax = new Vector2(-24f, -2f);
-        }
+        detailCostRow.anchorMin = new Vector2(0f, 1f);
+        detailCostRow.anchorMax = new Vector2(1f, 1f);
+        detailCostRow.pivot = new Vector2(0.5f, 1f);
+        float costTop = detailTopPadding + titleHeight + rowGap;
+        detailCostRow.offsetMin = new Vector2(detailHorizontalMargin, -(costTop + costHeight));
+        detailCostRow.offsetMax = new Vector2(-detailHorizontalMargin, -costTop);
 
         var costLayout = detailCostRow.gameObject.AddComponent<HorizontalLayoutGroup>();
         costLayout.spacing = 12f;
@@ -3460,7 +3805,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
             detailCostLabelRect.anchorMin = new Vector2(0.5f, 0.5f);
             detailCostLabelRect.anchorMax = new Vector2(0.5f, 0.5f);
             detailCostLabelRect.pivot = new Vector2(0.5f, 0.5f);
-            detailCostLabelRect.sizeDelta = new Vector2(120f, 32f);
+            detailCostLabelRect.sizeDelta = new Vector2(160f, costHeight);
         }
         SetTextValue(detailCostLabel, detailCostLabelTMP, "Cost");
 
@@ -3477,42 +3822,49 @@ internal sealed class ShadeInventoryPane : InventoryPane
         costIconsLayout.padding = new RectOffset();
         var costIconsElement = detailCostIconContainer.gameObject.AddComponent<LayoutElement>();
         costIconsElement.flexibleWidth = 1f;
-        costIconsElement.minHeight = 32f;
+        costIconsElement.minHeight = costHeight;
         BuildIconPool(detailCostIconContainer, detailCostIcons, MaxNotchIcons, "CostIcon", new Vector2(32f, 32f));
 
-        descriptionText = CreateText("Description", detailRoot, FontStyle.Normal, 26, TextAnchor.UpperLeft, out descriptionTextTMP);
+        detailPreviewRect = new GameObject("CharmPreview", typeof(RectTransform)).GetComponent<RectTransform>();
+        detailPreviewRect.gameObject.layer = detailRoot.gameObject.layer;
+        detailPreviewRect.SetParent(detailRoot, false);
+        detailPreviewRect.anchorMin = new Vector2(0.5f, 1f);
+        detailPreviewRect.anchorMax = new Vector2(0.5f, 1f);
+        detailPreviewRect.pivot = new Vector2(0.5f, 1f);
+        detailPreviewRect.anchoredPosition = new Vector2(0f, -detailPreviewTopOffset);
+
+        detailPreviewImage = detailPreviewRect.gameObject.AddComponent<Image>();
+        detailPreviewImage.raycastTarget = false;
+        detailPreviewImage.preserveAspect = true;
+        detailPreviewImage.enabled = false;
+        UpdateDetailPreviewSize();
+
+        descriptionText = CreateText("Description", detailRoot, FontStyle.Normal, 20, TextAnchor.UpperLeft, out descriptionTextTMP);
         var descRect = ResolveRectTransform(descriptionText, descriptionTextTMP);
         if (descRect != null)
         {
-            if (useNormalizedFallbackLayout)
-            {
-                descRect.anchorMin = new Vector2(0f, 0.34f);
-                descRect.anchorMax = new Vector2(1f, 0.74f);
-                descRect.pivot = new Vector2(0f, 1f);
-                float margin = ComputeNormalizedMargin(normalizedFallbackRootSize.x, 0.03f);
-                descRect.offsetMin = new Vector2(margin, 0f);
-                descRect.offsetMax = new Vector2(-margin, 0f);
-            }
-            else
-            {
-                descRect.anchorMin = new Vector2(0f, 0.32f);
-                descRect.anchorMax = new Vector2(1f, 0.74f);
-                descRect.offsetMin = new Vector2(18f, 0f);
-                descRect.offsetMax = new Vector2(-24f, -4f);
-            }
+            descRect.anchorMin = new Vector2(0f, 0f);
+            descRect.anchorMax = new Vector2(1f, 1f);
+            descRect.pivot = new Vector2(0f, 1f);
+            float previewSize = detailPreviewRect != null ? detailPreviewRect.sizeDelta.y : CalculateDetailPreviewSize();
+            float descriptionTop = detailPreviewTopOffset + previewSize + detailDescriptionGap;
+            descRect.offsetMin = new Vector2(detailHorizontalMargin, detailDescriptionBottomPadding);
+            descRect.offsetMax = new Vector2(-detailHorizontalMargin, -descriptionTop);
         }
         if (descriptionText != null)
         {
             descriptionText.horizontalOverflow = HorizontalWrapMode.Wrap;
             descriptionText.verticalOverflow = VerticalWrapMode.Overflow;
             descriptionText.lineSpacing = 1.1f;
-            descriptionText.fontSize = 26;
+            descriptionText.fontSize = 20;
         }
         else if (descriptionTextTMP != null)
         {
             descriptionTextTMP.lineSpacing = 1.1f;
             descriptionTextTMP.textWrappingMode = TextWrappingModes.Normal;
-            descriptionTextTMP.fontSize = 26f;
+            descriptionTextTMP.enableWordWrapping = true;
+            descriptionTextTMP.fontSize = 20f;
+            descriptionTextTMP.margin = new Vector4(0f, 0f, 0f, 0f);
         }
 
         statusText = CreateText("Status", detailRoot, FontStyle.Italic, 28, TextAnchor.UpperLeft, out statusTextTMP);
@@ -3521,17 +3873,17 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             if (useNormalizedFallbackLayout)
             {
-                statusRect.anchorMin = new Vector2(0f, 0.18f);
-                statusRect.anchorMax = new Vector2(1f, 0.34f);
+                statusRect.anchorMin = new Vector2(0f, 0.12f);
+                statusRect.anchorMax = new Vector2(1f, 0.24f);
                 statusRect.pivot = new Vector2(0f, 1f);
                 statusRect.offsetMin = Vector2.zero;
                 statusRect.offsetMax = Vector2.zero;
             }
             else
             {
-                statusRect.anchorMin = new Vector2(0f, 0.18f);
-                statusRect.anchorMax = new Vector2(1f, 0.34f);
-                statusRect.offsetMin = new Vector2(0f, 4f);
+                statusRect.anchorMin = new Vector2(0f, 0.12f);
+                statusRect.anchorMax = new Vector2(1f, 0.24f);
+                statusRect.offsetMin = new Vector2(0f, 6f);
                 statusRect.offsetMax = new Vector2(-6f, 0f);
             }
         }
@@ -3543,7 +3895,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
             if (useNormalizedFallbackLayout)
             {
                 hintRect.anchorMin = new Vector2(0f, 0f);
-                hintRect.anchorMax = new Vector2(1f, 0.18f);
+                hintRect.anchorMax = new Vector2(1f, 0.12f);
                 hintRect.pivot = new Vector2(0f, 0f);
                 hintRect.offsetMin = Vector2.zero;
                 hintRect.offsetMax = Vector2.zero;
@@ -3551,8 +3903,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
             else
             {
                 hintRect.anchorMin = new Vector2(0f, 0f);
-                hintRect.anchorMax = new Vector2(1f, 0.18f);
-                hintRect.offsetMin = new Vector2(0f, 4f);
+                hintRect.anchorMax = new Vector2(1f, 0.12f);
+                hintRect.offsetMin = new Vector2(0f, 2f);
                 hintRect.offsetMax = new Vector2(-6f, 0f);
             }
         }
@@ -3583,19 +3935,57 @@ internal sealed class ShadeInventoryPane : InventoryPane
         var rect = go.GetComponent<RectTransform>();
         rect.SetParent(parent, false);
         var tmpStyle = useHeaderFont ? headerTmpTextStyle : bodyTmpTextStyle;
+        TMP_FontAsset? fallbackTmpFont = null;
         if (tmpStyle.HasValue && tmpStyle.Value.Font != null)
+        {
+            fallbackTmpFont = tmpStyle.Value.Font;
+        }
+        else
+        {
+            fallbackTmpFont = ResolveTrajanFontAsset();
+        }
+
+        fallbackTmpFont ??= ResolveTrajanFontAsset();
+
+        if (tmpStyle.HasValue || fallbackTmpFont != null)
         {
             var tmpComponent = go.AddComponent<TextMeshProUGUI>();
             tmpText = tmpComponent;
-            ApplyTmpTextStyle(tmpComponent, tmpStyle, tmpStyle.Value.Font, useHeaderFont ? headerFontColor : bodyFontColor, ConvertFontStyle(style), size, ConvertAlignment(anchor));
+            ApplyTmpTextStyle(tmpComponent, tmpStyle, fallbackTmpFont, useHeaderFont ? headerFontColor : bodyFontColor, ConvertFontStyle(style), size, ConvertAlignment(anchor));
             tmpComponent.raycastTarget = false;
             tmpComponent.text = string.Empty;
+
+            if (fallbackTmpFont != null && !FontMatchesTrajan(tmpComponent.font))
+            {
+                tmpComponent.font = fallbackTmpFont;
+            }
+
+            if (fallbackTmpFont != null)
+            {
+                var sourceFont = fallbackTmpFont.sourceFontFile ?? ResolveTrajanSourceFont();
+                if (useHeaderFont)
+                {
+                    if (headerFont == null && sourceFont != null)
+                    {
+                        headerFont = sourceFont;
+                    }
+                }
+                else if (bodyFont == null && sourceFont != null)
+                {
+                    bodyFont = sourceFont;
+                }
+            }
+
             return null;
         }
 
         var text = go.AddComponent<Text>();
         var styleData = useHeaderFont ? headerTextStyle : bodyTextStyle;
         Font? fallbackFont = useHeaderFont ? headerFont : bodyFont;
+        if (fallbackFont == null)
+        {
+            fallbackFont = ResolveTrajanSourceFont() ?? fallbackFont;
+        }
         Color fallbackColor = useHeaderFont ? headerFontColor : bodyFontColor;
         ApplyTextStyle(text, styleData, fallbackFont, fallbackColor, style, size, anchor);
         if (useHeaderFont && headerFont == null)
@@ -4180,7 +4570,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         iconRect.anchorMin = new Vector2(0.5f, 0.5f);
         iconRect.anchorMax = new Vector2(0.5f, 0.5f);
         iconRect.pivot = new Vector2(0.5f, 0.5f);
-        float iconDimension = Mathf.Max(Mathf.Min(charmCellSize.x, charmCellSize.y) * CharmIconSizeMultiplier, 48f);
+        float iconDimension = currentCharmIconSize > 0f ? currentCharmIconSize : CalculateCharmIconSize();
         iconRect.sizeDelta = new Vector2(iconDimension, iconDimension);
         var icon = iconGo.AddComponent<Image>();
         icon.preserveAspect = true;
@@ -4418,6 +4808,67 @@ internal sealed class ShadeInventoryPane : InventoryPane
         return FormattableString.Invariant($"Press {bindingLabel} to unequip.");
     }
 
+    private void UpdateDetailPreview(ShadeCharmDefinition? definition, bool owned, bool equipped, bool broken)
+    {
+        if (detailPreviewImage == null)
+        {
+            return;
+        }
+
+        if (definition == null && !owned)
+        {
+            detailPreviewImage.sprite = null;
+            detailPreviewImage.enabled = false;
+            detailPreviewImage.gameObject.SetActive(false);
+            return;
+        }
+
+        Sprite? sprite = null;
+        if (!owned)
+        {
+            sprite = ResolveLockedCharmSprite() ?? definition?.Icon ?? GetFallbackSprite();
+        }
+        else
+        {
+            sprite = definition?.Icon ?? GetFallbackSprite();
+        }
+
+        if (sprite != null)
+        {
+            detailPreviewImage.sprite = sprite;
+            detailPreviewImage.enabled = true;
+            detailPreviewImage.preserveAspect = true;
+            detailPreviewImage.gameObject.SetActive(true);
+
+            Color color;
+            if (!owned)
+            {
+                color = InactiveIconColor;
+            }
+            else if (broken)
+            {
+                color = BrokenIconColor;
+            }
+            else if (equipped)
+            {
+                color = EquippedIconColor;
+            }
+            else
+            {
+                color = Color.white;
+            }
+
+            detailPreviewImage.color = color;
+            UpdateDetailPreviewSize();
+        }
+        else
+        {
+            detailPreviewImage.sprite = null;
+            detailPreviewImage.enabled = false;
+            detailPreviewImage.gameObject.SetActive(false);
+        }
+    }
+
     private void UpdateDetailPanel()
     {
         EnsureBuilt();
@@ -4431,6 +4882,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 detailCostRow.gameObject.SetActive(false);
             }
             RenderNotchStrip(detailCostIcons, 0, 0, false);
+            UpdateDetailPreview(null, false, false, false);
             return;
         }
 
@@ -4442,6 +4894,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         bool owned = inventory.IsOwned(entry.Id);
         bool equipped = inventory.IsEquipped(entry.Id);
         bool broken = inventory.IsBroken(entry.Id);
+        UpdateDetailPreview(definition, owned, equipped, broken);
         int notchCost = definition?.NotchCost ?? 0;
         string bindingLabel = DescribeShadeSlashBinding();
         string equipPrompt = BuildEquipPrompt(bindingLabel);
@@ -5211,6 +5664,7 @@ internal static class ShadeInventoryPaneIntegration
         {
             existingShade.AttachToPaneList(paneList);
             existingShade.ConfigureFromTemplate(templatePane);
+            BindInput(existingShade, paneList);
             existingShade.SetDisplayLabel("Charms");
             existingShade.ForceImmediateRefresh();
             existingShade.ForceLayoutRebuild();
@@ -5252,6 +5706,7 @@ internal static class ShadeInventoryPaneIntegration
 
         var input = go.AddComponent<InventoryPaneInput>();
         ConfigureInput(input, paneList, shadePane);
+        BindInput(shadePane, paneList);
 
         PlayerDataTestField(shadePane) = new PlayerDataTest();
         HasNewPdField(shadePane) = string.Empty;
@@ -5324,12 +5779,88 @@ internal static class ShadeInventoryPaneIntegration
         ShadeInventoryPane.LogMenuEvent($"Shade pane inserted at index {insertIndex}; total panes={newList.Count}");
     }
 
+    internal static void BindInput(ShadeInventoryPane shadePane, InventoryPaneList paneList)
+    {
+        if (shadePane == null || paneList == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var inputs = shadePane.GetComponents<InventoryPaneInput>();
+            if (inputs != null)
+            {
+                foreach (var input in inputs)
+                {
+                    if (input == null)
+                    {
+                        continue;
+                    }
+
+                    ConfigureInput(input, paneList, shadePane);
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            var sharedInputs = paneList.GetComponentsInChildren<InventoryPaneInput>(true);
+            if (sharedInputs == null)
+            {
+                return;
+            }
+
+            foreach (var input in sharedInputs)
+            {
+                if (input == null)
+                {
+                    continue;
+                }
+
+                InventoryPaneBase? currentPane = null;
+                if (PaneField != null)
+                {
+                    try
+                    {
+                        currentPane = PaneField.GetValue(input) as InventoryPaneBase;
+                    }
+                    catch
+                    {
+                        currentPane = null;
+                    }
+                }
+
+                if (currentPane is ShadeInventoryPane existingShade && !ReferenceEquals(existingShade, shadePane))
+                {
+                    continue;
+                }
+
+                if (currentPane == null || ReferenceEquals(currentPane, shadePane) || shadePane.IsPaneActive)
+                {
+                    ConfigureInput(input, paneList, shadePane);
+                }
+            }
+        }
+        catch
+        {
+        }
+    }
+
     private static void ConfigureInput(InventoryPaneInput input, InventoryPaneList paneList, ShadeInventoryPane shadePane)
     {
         if (input == null)
         {
             ShadeInventoryPane.LogMenuEvent("ConfigureInput skipped: input null");
             return;
+        }
+
+        if (!input.enabled)
+        {
+            input.enabled = true;
         }
 
         PaneControlField(input) = InventoryPaneList.PaneTypes.None;
@@ -5343,7 +5874,8 @@ internal static class ShadeInventoryPaneIntegration
         {
             try
             {
-                if (PaneField.GetValue(input) == null)
+                var currentPane = PaneField.GetValue(input) as InventoryPaneBase;
+                if (!ReferenceEquals(currentPane, shadePane))
                 {
                     PaneField.SetValue(input, shadePane);
                     ShadeInventoryPane.LogMenuEvent("Bound InventoryPaneInput to shade pane");
