@@ -35,8 +35,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     // anything above a minimal epsilon as "valid" so we can adopt those template
     // metrics instead of falling back to oversized screen-space defaults.
     internal const float MinRootSizeThreshold = 0.1f;
-    internal const float MinTemplateCopyDimension = 48f;
-    internal const float MinTemplateCopyArea = 4096f;
+    internal const float MinTemplateCopyDimension = 4f;
+    internal const float MinTemplateCopyArea = 16f;
 
     private static readonly Color DefaultPanelColor = new Color(0.05f, 0.05f, 0.08f, 0.92f);
     private static readonly Color DefaultHighlightColor = new Color(0.9f, 0.97f, 1f, 0.78f);
@@ -235,6 +235,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private Sprite? fallbackSprite;
     private string displayLabel = "Charms";
     private bool inputHandlersRegistered;
+    private int lastPaneInputFrame = -1;
+    private InventoryPaneBase.InputEventType lastPaneInputDirection = InventoryPaneBase.InputEventType.Left;
+    private bool lastPaneInputCameFromEvent;
 
     private RectSnapshot? panelRectTemplate;
     private RectSnapshot? contentRectTemplate;
@@ -603,6 +606,73 @@ internal sealed class ShadeInventoryPane : InventoryPane
         TextAnchor.LowerRight => TextAlignmentOptions.BottomRight,
         _ => TextAlignmentOptions.Center
     };
+
+    private static FontStyle ConvertFontStyleFromTmp(FontStyles style)
+    {
+        bool bold = (style & FontStyles.Bold) != 0;
+        bool italic = (style & FontStyles.Italic) != 0;
+        if (bold && italic)
+        {
+            return FontStyle.BoldAndItalic;
+        }
+
+        if (bold)
+        {
+            return FontStyle.Bold;
+        }
+
+        if (italic)
+        {
+            return FontStyle.Italic;
+        }
+
+        return FontStyle.Normal;
+    }
+
+    private static TextAnchor ConvertAlignment(TextAlignmentOptions alignment) => alignment switch
+    {
+        TextAlignmentOptions.TopLeft => TextAnchor.UpperLeft,
+        TextAlignmentOptions.Top => TextAnchor.UpperCenter,
+        TextAlignmentOptions.TopRight => TextAnchor.UpperRight,
+        TextAlignmentOptions.Left => TextAnchor.MiddleLeft,
+        TextAlignmentOptions.Center => TextAnchor.MiddleCenter,
+        TextAlignmentOptions.Right => TextAnchor.MiddleRight,
+        TextAlignmentOptions.BottomLeft => TextAnchor.LowerLeft,
+        TextAlignmentOptions.Bottom => TextAnchor.LowerCenter,
+        TextAlignmentOptions.BottomRight => TextAnchor.LowerRight,
+        TextAlignmentOptions.MidlineLeft => TextAnchor.MiddleLeft,
+        TextAlignmentOptions.Midline => TextAnchor.MiddleCenter,
+        TextAlignmentOptions.MidlineRight => TextAnchor.MiddleRight,
+        _ => TextAnchor.MiddleCenter
+    };
+
+    private static TextStyle? ConvertTmpToTextStyle(TMP_Text text)
+    {
+        if (text == null)
+        {
+            return null;
+        }
+
+        var style = new TextStyle
+        {
+            Font = text.font != null ? text.font.sourceFontFile : null,
+            FontSize = Mathf.RoundToInt(text.fontSize),
+            FontStyle = ConvertFontStyleFromTmp(text.fontStyle),
+            Alignment = ConvertAlignment(text.alignment),
+            Color = text.color,
+            RichText = text.richText,
+            BestFit = text.enableAutoSizing,
+            BestFitMin = Mathf.RoundToInt(text.enableAutoSizing ? text.fontSizeMin : text.fontSize),
+            BestFitMax = Mathf.RoundToInt(text.enableAutoSizing ? (text.fontSizeMax > 0f ? text.fontSizeMax : text.fontSize) : text.fontSize),
+            LineSpacing = text.lineSpacing,
+            AlignByGeometry = false,
+            HorizontalOverflow = text.textWrappingMode == TextWrappingModes.NoWrap ? HorizontalWrapMode.Overflow : HorizontalWrapMode.Wrap,
+            VerticalOverflow = VerticalWrapMode.Overflow,
+            Shadows = CaptureShadowStyles(text)
+        };
+
+        return style;
+    }
 
     private static RectTransform? ResolveRectTransform(Text? text, TMP_Text? tmp)
     {
@@ -1286,21 +1356,33 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void HandleInputLeft()
     {
+        lastPaneInputFrame = Time.frameCount;
+        lastPaneInputDirection = InventoryPaneBase.InputEventType.Left;
+        lastPaneInputCameFromEvent = true;
         HandleDirectionalInput(InventoryPaneBase.InputEventType.Left, fromInputComponent: false);
     }
 
     private void HandleInputRight()
     {
+        lastPaneInputFrame = Time.frameCount;
+        lastPaneInputDirection = InventoryPaneBase.InputEventType.Right;
+        lastPaneInputCameFromEvent = true;
         HandleDirectionalInput(InventoryPaneBase.InputEventType.Right, fromInputComponent: false);
     }
 
     private void HandleInputUp()
     {
+        lastPaneInputFrame = Time.frameCount;
+        lastPaneInputDirection = InventoryPaneBase.InputEventType.Up;
+        lastPaneInputCameFromEvent = true;
         HandleDirectionalInput(InventoryPaneBase.InputEventType.Up, fromInputComponent: false);
     }
 
     private void HandleInputDown()
     {
+        lastPaneInputFrame = Time.frameCount;
+        lastPaneInputDirection = InventoryPaneBase.InputEventType.Down;
+        lastPaneInputCameFromEvent = true;
         HandleDirectionalInput(InventoryPaneBase.InputEventType.Down, fromInputComponent: false);
     }
 
@@ -1497,6 +1579,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
         headerTmpTextStyle = null;
         bool bodyFontAssigned = false;
         bool headerFontAssigned = false;
+        bool bodyTmpAssigned = false;
+        bool headerTmpAssigned = false;
+        bool bodyTextAssigned = false;
+        bool headerTextAssigned = false;
 
         try
         {
@@ -1511,6 +1597,100 @@ internal sealed class ShadeInventoryPane : InventoryPane
                     float area = width * height;
                     LogMenuEvent(FormattableString.Invariant(
                         $"ConfigureFromTemplate: template root size {FormatVector2(templateSize)} unsuitable (minDimThreshold={MinTemplateCopyDimension}, minAreaThreshold={MinTemplateCopyArea}, area={area:0.##}); ignoring template layout"));
+                }
+            }
+
+            var tmpTexts = template.GetComponentsInChildren<TMP_Text>(true);
+            if (tmpTexts != null && tmpTexts.Length > 0)
+            {
+                var validTmp = tmpTexts
+                    .Where(t => t != null && t.font != null)
+                    .ToArray();
+
+                if (validTmp.Length > 0)
+                {
+                    var orderedTmp = validTmp
+                        .OrderBy(t => t.fontSize)
+                        .ToArray();
+
+                    TMP_Text? headerSampleTmp = null;
+                    foreach (var candidate in validTmp)
+                    {
+                        string value = candidate.text ?? string.Empty;
+                        if (!string.IsNullOrWhiteSpace(value) &&
+                            string.Equals(value.Trim(), "Charms", StringComparison.OrdinalIgnoreCase))
+                        {
+                            headerSampleTmp = candidate;
+                            break;
+                        }
+                    }
+
+                    headerSampleTmp ??= orderedTmp.LastOrDefault();
+
+                    TMP_Text? bodySampleTmp = orderedTmp.Length > 0
+                        ? orderedTmp[Mathf.Clamp(orderedTmp.Length > 1 ? orderedTmp.Length / 2 : 0, 0, orderedTmp.Length - 1)]
+                        : null;
+
+                    if (bodySampleTmp == headerSampleTmp)
+                    {
+                        bodySampleTmp = orderedTmp.FirstOrDefault(t => t != headerSampleTmp) ?? bodySampleTmp;
+                    }
+
+                    if (bodySampleTmp != null)
+                    {
+                        bodyTmpTextStyle = CaptureTmpTextStyle(bodySampleTmp);
+                        var converted = ConvertTmpToTextStyle(bodySampleTmp);
+                        if (converted.HasValue)
+                        {
+                            bodyTextStyle = converted;
+                            bodyTextAssigned = true;
+                        }
+
+                        if (bodySampleTmp.font != null)
+                        {
+                            var source = bodySampleTmp.font.sourceFontFile;
+                            if (source != null)
+                            {
+                                bodyFont = source;
+                                bodyFontAssigned = true;
+                            }
+                        }
+
+                        if (bodySampleTmp.color.a > 0f)
+                        {
+                            bodyFontColor = bodySampleTmp.color;
+                        }
+
+                        bodyTmpAssigned = true;
+                    }
+
+                    if (headerSampleTmp != null)
+                    {
+                        headerTmpTextStyle = CaptureTmpTextStyle(headerSampleTmp);
+                        var convertedHeader = ConvertTmpToTextStyle(headerSampleTmp);
+                        if (convertedHeader.HasValue)
+                        {
+                            headerTextStyle = convertedHeader;
+                            headerTextAssigned = true;
+                        }
+
+                        if (headerSampleTmp.font != null)
+                        {
+                            var source = headerSampleTmp.font.sourceFontFile;
+                            if (source != null)
+                            {
+                                headerFont = source;
+                                headerFontAssigned = true;
+                            }
+                        }
+
+                        if (headerSampleTmp.color.a > 0f)
+                        {
+                            headerFontColor = headerSampleTmp.color;
+                        }
+
+                        headerTmpAssigned = true;
+                    }
                 }
             }
 
@@ -1531,15 +1711,19 @@ internal sealed class ShadeInventoryPane : InventoryPane
                     var bodySample = ordered[bodyIndex];
                     if (bodySample != null)
                     {
-                        if (bodySample.font != null)
+                        if (!bodyFontAssigned && bodySample.font != null)
                         {
                             bodyFont = bodySample.font;
                             bodyFontAssigned = true;
                         }
 
-                        bodyTextStyle = CaptureTextStyle(bodySample);
+                        if (!bodyTextAssigned)
+                        {
+                            bodyTextStyle = CaptureTextStyle(bodySample);
+                            bodyTextAssigned = true;
+                        }
 
-                        if (bodySample.color.a > 0f)
+                        if (!bodyTmpAssigned && bodySample.color.a > 0f)
                         {
                             bodyFontColor = bodySample.color;
                         }
@@ -1561,89 +1745,21 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
                     if (headerSample != null)
                     {
-                        if (headerSample.font != null)
+                        if (!headerFontAssigned && headerSample.font != null)
                         {
                             headerFont = headerSample.font;
                             headerFontAssigned = true;
                         }
 
-                        headerTextStyle = CaptureTextStyle(headerSample);
+                        if (!headerTextAssigned)
+                        {
+                            headerTextStyle = CaptureTextStyle(headerSample);
+                            headerTextAssigned = true;
+                        }
 
-                        if (headerSample.color.a > 0f)
+                        if (!headerTmpAssigned && headerSample.color.a > 0f)
                         {
                             headerFontColor = headerSample.color;
-                        }
-                    }
-                }
-            }
-
-            if (!bodyFontAssigned || !headerFontAssigned)
-            {
-                var tmpTexts = template.GetComponentsInChildren<TMP_Text>(true);
-                if (tmpTexts != null && tmpTexts.Length > 0)
-                {
-                    var validTmp = tmpTexts
-                        .Where(t => t != null && t.font != null)
-                        .OrderBy(t => t.fontSize)
-                        .ToArray();
-
-                    if (validTmp.Length > 0)
-                    {
-                        int bodyIndex = Mathf.Clamp(validTmp.Length > 1 ? validTmp.Length / 2 : 0, 0, validTmp.Length - 1);
-                        TMP_Text? bodySample = validTmp[bodyIndex];
-                        TMP_Text? headerSample = null;
-
-                        foreach (var candidate in validTmp)
-                        {
-                            string value = candidate.text ?? string.Empty;
-                            if (!string.IsNullOrWhiteSpace(value) &&
-                                string.Equals(value.Trim(), "Charms", StringComparison.OrdinalIgnoreCase))
-                            {
-                                headerSample = candidate;
-                                break;
-                            }
-                        }
-
-                        headerSample ??= validTmp.LastOrDefault();
-
-                        if (!bodyFontAssigned && bodySample != null)
-                        {
-                            var source = bodySample.font != null ? bodySample.font.sourceFontFile : null;
-                            if (source != null)
-                            {
-                                bodyFont = source;
-                                bodyFontAssigned = true;
-                            }
-
-                            if (bodySample.color.a > 0f)
-                            {
-                                bodyFontColor = bodySample.color;
-                            }
-                        }
-
-                        if (bodySample != null)
-                        {
-                            bodyTmpTextStyle = CaptureTmpTextStyle(bodySample);
-                        }
-
-                        if (!headerFontAssigned && headerSample != null)
-                        {
-                            var source = headerSample.font != null ? headerSample.font.sourceFontFile : null;
-                            if (source != null)
-                            {
-                                headerFont = source;
-                                headerFontAssigned = true;
-                            }
-
-                            if (headerSample.color.a > 0f)
-                            {
-                                headerFontColor = headerSample.color;
-                            }
-                        }
-
-                        if (headerSample != null)
-                        {
-                            headerTmpTextStyle = CaptureTmpTextStyle(headerSample);
                         }
                     }
                 }
@@ -3882,12 +3998,21 @@ internal sealed class ShadeInventoryPane : InventoryPane
     internal void HandleDirectionalInput(InventoryPaneBase.InputEventType direction, bool fromInputComponent = true)
     {
         EnsureBuilt();
-        bool skip = fromInputComponent && inputHandlersRegistered;
+        bool skipDuplicate = fromInputComponent && inputHandlersRegistered && lastPaneInputCameFromEvent &&
+            lastPaneInputFrame == Time.frameCount && lastPaneInputDirection == direction;
         LogMenuEvent(FormattableString.Invariant(
-            $"HandleDirectionalInput -> direction={direction} fromInputComponent={fromInputComponent} skip={skip} selectedIndex={selectedIndex} entryCount={entries.Count}"));
-        if (skip)
+            $"HandleDirectionalInput -> direction={direction} fromInputComponent={fromInputComponent} skipDuplicate={skipDuplicate} selectedIndex={selectedIndex} entryCount={entries.Count}"));
+        if (skipDuplicate)
         {
+            lastPaneInputCameFromEvent = false;
             return;
+        }
+
+        if (fromInputComponent)
+        {
+            lastPaneInputFrame = Time.frameCount;
+            lastPaneInputDirection = direction;
+            lastPaneInputCameFromEvent = false;
         }
 
         switch (direction)
