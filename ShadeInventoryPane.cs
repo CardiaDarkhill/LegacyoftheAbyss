@@ -257,6 +257,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private int selectedIndex;
     private bool isBuilt;
     private bool isActive;
+    private readonly HashSet<InventoryPaneInput> boundInputs = new HashSet<InventoryPaneInput>();
     private float labelPulseTimer;
     private Sprite? fallbackSprite;
     private string displayLabel = "Charms";
@@ -1311,12 +1312,18 @@ internal sealed class ShadeInventoryPane : InventoryPane
             ApplyOverlayVisibility(false);
         }
 
+        if (attachedPaneList != null)
+        {
+            ShadeInventoryPaneIntegration.BindInput(this, attachedPaneList, captureFocus: IsPaneActive);
+        }
+
         LogMenuEvent(FormattableString.Invariant(
             $"OnEnable: active={isActive} entries={entries.Count} inventoryNull={inventory == null}"));
     }
 
     private void OnDisable()
     {
+        ShadeInventoryPaneIntegration.RestoreInputBindings(this);
         UnregisterInputHandlers();
         UpdateInventoryBinding(false);
         isActive = false;
@@ -1332,6 +1339,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void OnDestroy()
     {
+        ShadeInventoryPaneIntegration.RestoreInputBindings(this);
         UnregisterInputHandlers();
         UpdateInventoryBinding(false);
         DetachPaneList();
@@ -1411,6 +1419,56 @@ internal sealed class ShadeInventoryPane : InventoryPane
         LogMenuEvent("Unregistered directional input handlers");
     }
 
+    private bool HasBoundInputs
+    {
+        get
+        {
+            boundInputs.RemoveWhere(input => input == null);
+            return boundInputs.Count > 0;
+        }
+    }
+
+    internal void RegisterBoundInput(InventoryPaneInput input)
+    {
+        if (input == null)
+        {
+            return;
+        }
+
+        boundInputs.RemoveWhere(candidate => candidate == null);
+        if (boundInputs.Add(input))
+        {
+            LogMenuEvent(FormattableString.Invariant(
+                $"RegisterBoundInput -> count={boundInputs.Count}"));
+        }
+    }
+
+    internal void UnregisterBoundInput(InventoryPaneInput input)
+    {
+        if (input == null)
+        {
+            return;
+        }
+
+        boundInputs.RemoveWhere(candidate => candidate == null);
+        if (boundInputs.Remove(input))
+        {
+            LogMenuEvent(FormattableString.Invariant(
+                $"UnregisterBoundInput -> count={boundInputs.Count}"));
+        }
+    }
+
+    internal void ClearBoundInputs()
+    {
+        if (boundInputs.Count == 0)
+        {
+            return;
+        }
+
+        boundInputs.Clear();
+        LogMenuEvent("ClearBoundInputs");
+    }
+
     private void HandleInputLeft()
     {
         lastPaneInputFrame = Time.frameCount;
@@ -1454,7 +1512,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         UpdateInventoryBinding(true);
         if (attachedPaneList != null)
         {
-            ShadeInventoryPaneIntegration.BindInput(this, attachedPaneList);
+            ShadeInventoryPaneIntegration.BindInput(this, attachedPaneList, captureFocus: true);
         }
         ApplyOverlayVisibility(true);
         RefreshAll();
@@ -1465,6 +1523,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     public override void PaneEnd()
     {
+        ShadeInventoryPaneIntegration.RestoreInputBindings(this);
         UpdateInventoryBinding(false);
         isActive = false;
         labelPulseTimer = 0f;
@@ -2995,7 +3054,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         if (attachedPaneList != null)
         {
-            ShadeInventoryPaneIntegration.BindInput(this, attachedPaneList);
+            ShadeInventoryPaneIntegration.BindInput(this, attachedPaneList, captureFocus: IsPaneActive);
         }
     }
 
@@ -3025,6 +3084,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void HandleInventoryClosed()
     {
+        ShadeInventoryPaneIntegration.RestoreInputBindings(this);
         ApplyOverlayVisibility(false);
         isActive = false;
         labelPulseTimer = 0f;
@@ -4795,7 +4855,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         if (!CanProcessShadeInput())
         {
             LogMenuEvent(FormattableString.Invariant(
-                $"ProcessShadeInputTick skipped: active={isActive} enabled={isActiveAndEnabled} inHierarchy={gameObject.activeInHierarchy} cheatOpen={CheatManager.IsOpen}"));
+                $"ProcessShadeInputTick skipped: active={isActive} enabled={isActiveAndEnabled} inHierarchy={gameObject.activeInHierarchy} cheatOpen={CheatManager.IsOpen} boundCount={boundInputs.Count}"));
             ResetShadeInputState("CannotProcessShadeInput");
             return;
         }
@@ -4818,7 +4878,12 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private bool CanProcessShadeInput()
     {
-        return isActive && isActiveAndEnabled && gameObject.activeInHierarchy && !CheatManager.IsOpen;
+        if (!HasBoundInputs)
+        {
+            return false;
+        }
+
+        return !CheatManager.IsOpen;
     }
 
     private void ProcessShadeDirectionalInput()
@@ -5459,6 +5524,55 @@ internal static class ShadeInventoryPaneIntegration
     private static readonly FieldInfo PaneField = AccessTools.Field(typeof(InventoryPaneInput), "pane");
     private static readonly FieldInfo PaneListField = AccessTools.Field(typeof(InventoryPaneInput), "paneList");
 
+    private sealed class InputBindingSnapshot
+    {
+        public InputBindingSnapshot(
+            InventoryPaneBase? pane,
+            InventoryPaneList? paneList,
+            bool allowHorizontal,
+            bool allowVertical,
+            bool allowRepeat,
+            bool allowRepeatSubmit,
+            bool allowRightStick,
+            InventoryPaneList.PaneTypes paneControl,
+            bool enabled)
+        {
+            Pane = pane;
+            PaneList = paneList;
+            AllowHorizontal = allowHorizontal;
+            AllowVertical = allowVertical;
+            AllowRepeat = allowRepeat;
+            AllowRepeatSubmit = allowRepeatSubmit;
+            AllowRightStick = allowRightStick;
+            PaneControl = paneControl;
+            Enabled = enabled;
+        }
+
+        public InventoryPaneBase? Pane { get; }
+
+        public InventoryPaneList? PaneList { get; }
+
+        public bool AllowHorizontal { get; }
+
+        public bool AllowVertical { get; }
+
+        public bool AllowRepeat { get; }
+
+        public bool AllowRepeatSubmit { get; }
+
+        public bool AllowRightStick { get; }
+
+        public InventoryPaneList.PaneTypes PaneControl { get; }
+
+        public bool Enabled { get; }
+    }
+
+    private static readonly Dictionary<InventoryPaneInput, InputBindingSnapshot> OriginalInputBindings =
+        new Dictionary<InventoryPaneInput, InputBindingSnapshot>();
+
+    private static readonly Dictionary<ShadeInventoryPane, HashSet<InventoryPaneInput>> CapturedInputs =
+        new Dictionary<ShadeInventoryPane, HashSet<InventoryPaneInput>>();
+
     private const float ListIconScaleFactor = 0.5625f;
 
     private static Sprite? cachedListIcon;
@@ -6066,7 +6180,7 @@ internal static class ShadeInventoryPaneIntegration
         {
             existingShade.AttachToPaneList(paneList);
             existingShade.ConfigureFromTemplate(templatePane);
-            BindInput(existingShade, paneList);
+            BindInput(existingShade, paneList, captureFocus: existingShade.IsPaneActive);
             existingShade.SetDisplayLabel("Charms");
             existingShade.ForceImmediateRefresh();
             existingShade.ForceLayoutRebuild();
@@ -6107,8 +6221,8 @@ internal static class ShadeInventoryPaneIntegration
         shadePane.AttachToPaneList(paneList);
 
         var input = go.AddComponent<InventoryPaneInput>();
-        ConfigureInput(input, paneList, shadePane);
-        BindInput(shadePane, paneList);
+        ConfigureInput(input, paneList, shadePane, captureFocus: false, isLocal: true);
+        BindInput(shadePane, paneList, captureFocus: false);
 
         PlayerDataTestField(shadePane) = new PlayerDataTest();
         HasNewPdField(shadePane) = string.Empty;
@@ -6181,11 +6295,233 @@ internal static class ShadeInventoryPaneIntegration
         ShadeInventoryPane.LogMenuEvent($"Shade pane inserted at index {insertIndex}; total panes={newList.Count}");
     }
 
-    internal static void BindInput(ShadeInventoryPane shadePane, InventoryPaneList paneList)
+    private static bool TryGetBool(FieldInfo? field, InventoryPaneInput input, bool defaultValue)
+    {
+        if (field == null)
+        {
+            return defaultValue;
+        }
+
+        try
+        {
+            object? value = field.GetValue(input);
+            if (value is bool flag)
+            {
+                return flag;
+            }
+        }
+        catch
+        {
+        }
+
+        return defaultValue;
+    }
+
+    private static InputBindingSnapshot CreateSnapshot(InventoryPaneInput input)
+    {
+        InventoryPaneBase? pane = null;
+        if (PaneField != null)
+        {
+            try { pane = PaneField.GetValue(input) as InventoryPaneBase; }
+            catch { pane = null; }
+        }
+
+        InventoryPaneList? paneList = null;
+        if (PaneListField != null)
+        {
+            try { paneList = PaneListField.GetValue(input) as InventoryPaneList; }
+            catch { paneList = null; }
+        }
+
+        bool allowHorizontal = TryGetBool(AllowHorizontalField, input, true);
+        bool allowVertical = TryGetBool(AllowVerticalField, input, true);
+        bool allowRepeat = TryGetBool(AllowRepeatField, input, false);
+        bool allowRepeatSubmit = TryGetBool(AllowRepeatSubmitField, input, false);
+        bool allowRightStick = TryGetBool(AllowRightStickField, input, false);
+
+        InventoryPaneList.PaneTypes paneControl = InventoryPaneList.PaneTypes.None;
+        if (PaneControlField != null)
+        {
+            try { paneControl = PaneControlField(input); }
+            catch { paneControl = InventoryPaneList.PaneTypes.None; }
+        }
+
+        bool enabled = false;
+        try { enabled = input.enabled; }
+        catch { enabled = false; }
+
+        return new InputBindingSnapshot(
+            pane,
+            paneList,
+            allowHorizontal,
+            allowVertical,
+            allowRepeat,
+            allowRepeatSubmit,
+            allowRightStick,
+            paneControl,
+            enabled);
+    }
+
+    private static void StoreOriginalBinding(InventoryPaneInput input)
+    {
+        if (input == null || OriginalInputBindings.ContainsKey(input))
+        {
+            return;
+        }
+
+        try
+        {
+            OriginalInputBindings[input] = CreateSnapshot(input);
+        }
+        catch
+        {
+        }
+    }
+
+    private static void ApplyShadeInputSettings(InventoryPaneInput input)
+    {
+        if (input == null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!input.enabled)
+            {
+                input.enabled = true;
+            }
+        }
+        catch
+        {
+        }
+
+        if (PaneControlField != null)
+        {
+            try { PaneControlField(input) = InventoryPaneList.PaneTypes.None; }
+            catch { }
+        }
+
+        AllowHorizontalField?.SetValue(input, true);
+        AllowVerticalField?.SetValue(input, true);
+        AllowRepeatField?.SetValue(input, true);
+        AllowRepeatSubmitField?.SetValue(input, false);
+        AllowRightStickField?.SetValue(input, false);
+    }
+
+    private static void TrackCapturedInput(ShadeInventoryPane shadePane, InventoryPaneInput input)
+    {
+        if (shadePane == null || input == null)
+        {
+            return;
+        }
+
+        if (!CapturedInputs.TryGetValue(shadePane, out var inputs))
+        {
+            inputs = new HashSet<InventoryPaneInput>();
+            CapturedInputs[shadePane] = inputs;
+        }
+
+        inputs.RemoveWhere(candidate => candidate == null);
+        if (inputs.Add(input))
+        {
+            shadePane.RegisterBoundInput(input);
+        }
+    }
+
+    private static void RestoreSingleInput(ShadeInventoryPane shadePane, InventoryPaneInput input)
+    {
+        if (input == null)
+        {
+            shadePane.UnregisterBoundInput(input);
+            return;
+        }
+
+        try
+        {
+            if (OriginalInputBindings.TryGetValue(input, out var snapshot))
+            {
+                if (PaneField != null)
+                {
+                    try { PaneField.SetValue(input, snapshot.Pane); }
+                    catch { }
+                }
+
+                if (PaneListField != null)
+                {
+                    try { PaneListField.SetValue(input, snapshot.PaneList); }
+                    catch { }
+                }
+
+                AllowHorizontalField?.SetValue(input, snapshot.AllowHorizontal);
+                AllowVerticalField?.SetValue(input, snapshot.AllowVertical);
+                AllowRepeatField?.SetValue(input, snapshot.AllowRepeat);
+                AllowRepeatSubmitField?.SetValue(input, snapshot.AllowRepeatSubmit);
+                AllowRightStickField?.SetValue(input, snapshot.AllowRightStick);
+
+                if (PaneControlField != null)
+                {
+                    try { PaneControlField(input) = snapshot.PaneControl; }
+                    catch { }
+                }
+
+                try { input.enabled = snapshot.Enabled; }
+                catch { }
+
+                OriginalInputBindings.Remove(input);
+            }
+            else if (PaneField != null)
+            {
+                try { PaneField.SetValue(input, null); }
+                catch { }
+            }
+        }
+        catch
+        {
+        }
+
+        shadePane.UnregisterBoundInput(input);
+    }
+
+    internal static void RestoreInputBindings(ShadeInventoryPane shadePane)
+    {
+        if (shadePane == null)
+        {
+            return;
+        }
+
+        if (!CapturedInputs.TryGetValue(shadePane, out var inputs) || inputs.Count == 0)
+        {
+            shadePane.ClearBoundInputs();
+            return;
+        }
+
+        var toRestore = new List<InventoryPaneInput>(inputs);
+        foreach (var input in toRestore)
+        {
+            RestoreSingleInput(shadePane, input);
+            inputs.Remove(input);
+        }
+
+        if (inputs.Count == 0)
+        {
+            CapturedInputs.Remove(shadePane);
+        }
+
+        shadePane.ClearBoundInputs();
+    }
+
+    internal static void BindInput(ShadeInventoryPane shadePane, InventoryPaneList paneList, bool captureFocus)
     {
         if (shadePane == null || paneList == null)
         {
             return;
+        }
+
+        if (captureFocus)
+        {
+            CapturedInputs.Remove(shadePane);
+            shadePane.ClearBoundInputs();
         }
 
         try
@@ -6200,7 +6536,7 @@ internal static class ShadeInventoryPaneIntegration
                         continue;
                     }
 
-                    ConfigureInput(input, paneList, shadePane);
+                    ConfigureInput(input, paneList, shadePane, captureFocus, isLocal: true);
                 }
             }
         }
@@ -6236,15 +6572,22 @@ internal static class ShadeInventoryPaneIntegration
                     }
                 }
 
+                bool currentlyShade = ReferenceEquals(currentPane, shadePane);
+                if (!captureFocus)
+                {
+                    if (currentlyShade)
+                    {
+                        ConfigureInput(input, paneList, shadePane, captureFocus: false, isLocal: false);
+                    }
+                    continue;
+                }
+
                 if (currentPane is ShadeInventoryPane existingShade && !ReferenceEquals(existingShade, shadePane))
                 {
                     continue;
                 }
 
-                if (currentPane == null || ReferenceEquals(currentPane, shadePane) || shadePane.IsPaneActive)
-                {
-                    ConfigureInput(input, paneList, shadePane);
-                }
+                ConfigureInput(input, paneList, shadePane, captureFocus: true, isLocal: false);
             }
         }
         catch
@@ -6252,7 +6595,12 @@ internal static class ShadeInventoryPaneIntegration
         }
     }
 
-    private static void ConfigureInput(InventoryPaneInput input, InventoryPaneList paneList, ShadeInventoryPane shadePane)
+    private static void ConfigureInput(
+        InventoryPaneInput input,
+        InventoryPaneList paneList,
+        ShadeInventoryPane shadePane,
+        bool captureFocus,
+        bool isLocal)
     {
         if (input == null)
         {
@@ -6260,30 +6608,48 @@ internal static class ShadeInventoryPaneIntegration
             return;
         }
 
-        if (!input.enabled)
+        InventoryPaneBase? currentPane = null;
+        if (PaneField != null)
         {
-            input.enabled = true;
+            try
+            {
+                currentPane = PaneField.GetValue(input) as InventoryPaneBase;
+            }
+            catch
+            {
+                currentPane = null;
+            }
         }
 
-        PaneControlField(input) = InventoryPaneList.PaneTypes.None;
-        AllowHorizontalField?.SetValue(input, true);
-        AllowVerticalField?.SetValue(input, true);
-        AllowRepeatField?.SetValue(input, true);
-        AllowRepeatSubmitField?.SetValue(input, false);
-        AllowRightStickField?.SetValue(input, false);
+        bool alreadyShade = ReferenceEquals(currentPane, shadePane);
+        if (!isLocal && !captureFocus && !alreadyShade)
+        {
+            return;
+        }
+
+        if (captureFocus)
+        {
+            StoreOriginalBinding(input);
+        }
+
+        if (captureFocus || isLocal)
+        {
+            ApplyShadeInputSettings(input);
+        }
 
         if (shadePane != null && PaneField != null)
         {
             try
             {
-                var currentPane = PaneField.GetValue(input) as InventoryPaneBase;
                 if (!ReferenceEquals(currentPane, shadePane))
                 {
                     PaneField.SetValue(input, shadePane);
                     ShadeInventoryPane.LogMenuEvent("Bound InventoryPaneInput to shade pane");
                 }
             }
-            catch { }
+            catch
+            {
+            }
         }
 
         if (paneList != null && PaneListField != null)
@@ -6292,7 +6658,14 @@ internal static class ShadeInventoryPaneIntegration
             {
                 PaneListField.SetValue(input, paneList);
             }
-            catch { }
+            catch
+            {
+            }
+        }
+
+        if (captureFocus)
+        {
+            TrackCapturedInput(shadePane, input);
         }
     }
 

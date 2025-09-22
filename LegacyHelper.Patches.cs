@@ -316,7 +316,7 @@ public partial class LegacyHelper
 
                 if (shadePane != null)
                 {
-                    ShadeInventoryPaneIntegration.BindInput(shadePane, __instance);
+                    ShadeInventoryPaneIntegration.BindInput(shadePane, __instance, captureFocus: true);
                 }
             }
             catch
