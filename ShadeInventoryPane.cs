@@ -4782,7 +4782,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     internal void ProcessShadeInputTick()
     {
-        if (!isActive || !isActiveAndEnabled || !gameObject.activeInHierarchy || InventoryPaneInput.IsInputBlocked || CheatManager.IsOpen)
+        if (!CanProcessShadeInput())
         {
             ResetShadeInputState();
             return;
@@ -4797,6 +4797,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         ProcessShadeDirectionalInput();
         ProcessShadeSubmitInput();
+    }
+
+    private bool CanProcessShadeInput()
+    {
+        return isActive && isActiveAndEnabled && gameObject.activeInHierarchy && !CheatManager.IsOpen;
     }
 
     private void ProcessShadeDirectionalInput()
@@ -5045,6 +5050,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
         lastShadeInputFrame = -1;
     }
 
+    private void Update()
+    {
+        ProcessShadeInputTick();
+    }
+
     private void LateUpdate()
     {
         if (!isActive)
@@ -5072,6 +5082,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
                !string.Equals(label, "Unbound", StringComparison.OrdinalIgnoreCase);
     }
 
+    private const string DefaultShadeSlashEquipPrompt = "Perform Shade side-slash to equip.";
+    private const string DefaultShadeSlashUnequipPrompt = "Perform Shade side-slash again to unequip.";
+
     private static string DescribeShadeSlashBinding()
     {
         try
@@ -5097,19 +5110,22 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private static string BuildEquipPrompt(string bindingLabel)
     {
-        return string.IsNullOrEmpty(bindingLabel)
-            ? "Equip"
-            : FormattableString.Invariant($"Equip {bindingLabel}");
+        if (string.IsNullOrEmpty(bindingLabel))
+        {
+            return DefaultShadeSlashEquipPrompt;
+        }
+
+        return FormattableString.Invariant($"Press {bindingLabel} (Shade side-slash) to equip.");
     }
 
     private static string BuildUnequipPrompt(string bindingLabel)
     {
         if (string.IsNullOrEmpty(bindingLabel))
         {
-            return "Submit to unequip.";
+            return DefaultShadeSlashUnequipPrompt;
         }
 
-        return FormattableString.Invariant($"Press {bindingLabel} to unequip.");
+        return FormattableString.Invariant($"Press {bindingLabel} (Shade side-slash) again to unequip.");
     }
 
     private void UpdateDetailPreview(ShadeCharmDefinition? definition, bool owned, bool equipped, bool broken)
