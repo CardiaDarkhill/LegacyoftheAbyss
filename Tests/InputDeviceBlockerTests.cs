@@ -13,8 +13,29 @@ public class InputDeviceBlockerTests
         using (var environment = new InputBlockerEnvironment())
         {
             environment.SetUiState(UIState.PLAYING);
+            environment.ClearMenuState();
+            environment.SetPaused(false);
+            environment.SetInventoryOpen(false);
             Assert.True(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
 
+            environment.SetPaused(true);
+            Assert.False(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
+
+            environment.SetPaused(false);
+            environment.SetUiState(UIState.PLAYING);
+            Assert.True(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
+
+            environment.SetInventoryOpen(true);
+            Assert.False(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
+
+            environment.SetInventoryOpen(false);
+            environment.SetUiState(UIState.PLAYING);
+            Assert.True(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
+
+            environment.SetMenuState(MainMenuState.PAUSE_MENU);
+            Assert.False(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
+
+            environment.ClearMenuState();
             environment.SetUiState("inventory_overlay");
             Assert.False(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
 
@@ -27,24 +48,30 @@ public class InputDeviceBlockerTests
     {
         private readonly object originalGameManager;
         private readonly object originalUiManager;
+        private readonly object originalPlayerData;
         private readonly float originalTimeScale;
         private readonly GameManager gm;
         private readonly TestUIManager ui;
+        private readonly PlayerData playerData;
 
         internal InputBlockerEnvironment()
         {
             originalGameManager = GetStaticField(typeof(GameManager), "_instance");
             originalUiManager = GetStaticField(typeof(UIManager), "_instance");
+            originalPlayerData = GetStaticField(typeof(PlayerData), "_instance");
             originalTimeScale = Time.timeScale;
 
             gm = (GameManager)FormatterServices.GetUninitializedObject(typeof(GameManager));
             ui = (TestUIManager)FormatterServices.GetUninitializedObject(typeof(TestUIManager));
+            playerData = (PlayerData)FormatterServices.GetUninitializedObject(typeof(PlayerData));
 
             SetProperty(gm, "GameState", GameState.PLAYING);
             SetProperty(gm, "ui", ui);
+            playerData.isInventoryOpen = false;
 
             SetStaticField(typeof(GameManager), "_instance", gm);
             SetStaticField(typeof(UIManager), "_instance", ui);
+            SetStaticField(typeof(PlayerData), "_instance", playerData);
 
             Time.timeScale = 1f;
         }
@@ -59,10 +86,31 @@ public class InputDeviceBlockerTests
             ui.uiState = stateName;
         }
 
+        internal void SetMenuState(object state)
+        {
+            ui.menuState = state;
+        }
+
+        internal void ClearMenuState()
+        {
+            ui.menuState = null;
+        }
+
+        internal void SetPaused(bool value)
+        {
+            gm.isPaused = value;
+        }
+
+        internal void SetInventoryOpen(bool value)
+        {
+            playerData.isInventoryOpen = value;
+        }
+
         public void Dispose()
         {
             SetStaticField(typeof(GameManager), "_instance", originalGameManager);
             SetStaticField(typeof(UIManager), "_instance", originalUiManager);
+            SetStaticField(typeof(PlayerData), "_instance", originalPlayerData);
             Time.timeScale = originalTimeScale;
         }
 
@@ -92,6 +140,7 @@ public class InputDeviceBlockerTests
         private sealed class TestUIManager : UIManager
         {
             public new object uiState;
+            public new object menuState;
         }
     }
 }

@@ -683,8 +683,14 @@ public partial class LegacyHelper
                 restrict = false;
             }
 
-            SetDeviceRestricted(device, restrict);
-            return restrict && ShouldBlockShadeDeviceInput();
+            bool block = false;
+            if (restrict)
+            {
+                block = ShouldBlockShadeDeviceInput();
+            }
+
+            SetDeviceRestricted(device, block);
+            return block;
         }
 
         internal static void ReleaseDevice(InputHandler handler, InputDevice device)

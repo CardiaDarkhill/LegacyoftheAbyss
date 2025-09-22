@@ -121,7 +121,39 @@ internal static class MenuStateUtility
         {
             try
             {
+                if (gm.isPaused)
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
                 if (gm.IsGamePaused())
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            var inventoryState = TryGetInventoryStateName(gm);
+            if (IsMenuStateName(inventoryState))
+            {
+                return true;
+            }
+        }
+
+        var playerData = TryGetPlayerData();
+        if (!ReferenceEquals(playerData, null))
+        {
+            try
+            {
+                if (playerData.isInventoryOpen)
                 {
                     return true;
                 }
@@ -139,6 +171,12 @@ internal static class MenuStateUtility
         if (ReferenceEquals(ui, null))
         {
             ui = TryGetUiManager(gm);
+        }
+
+        string menuStateName = TryGetMenuStateName(ui);
+        if (IsMenuStateName(menuStateName))
+        {
+            return true;
         }
 
         string stateName = TryGetUiStateName(ui);
@@ -194,6 +232,113 @@ internal static class MenuStateUtility
         return null;
     }
 
+    internal static string TryGetMenuStateName(UIManager ui)
+    {
+        if (ReferenceEquals(ui, null))
+        {
+            return null;
+        }
+
+        try
+        {
+            var type = ui.GetType();
+            while (type != null)
+            {
+                var field = type.GetField("menuState", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                if (field != null)
+                {
+                    return ConvertStateValueToName(field.GetValue(ui));
+                }
+
+                var property = type.GetProperty("menuState", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                if (property != null && property.GetIndexParameters().Length == 0)
+                {
+                    return ConvertStateValueToName(property.GetValue(ui, null));
+                }
+
+                type = type.BaseType;
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
+    internal static string TryGetInventoryStateName(GameManager gm)
+    {
+        if (ReferenceEquals(gm, null))
+        {
+            return null;
+        }
+
+        try
+        {
+            var type = gm.GetType();
+            while (type != null)
+            {
+                var property = type.GetProperty("inventoryFSM", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                if (property != null && property.GetIndexParameters().Length == 0)
+                {
+                    var value = property.GetValue(gm, null);
+                    var stateName = TryGetPlaymakerStateName(value);
+                    if (!string.IsNullOrEmpty(stateName))
+                    {
+                        return stateName;
+                    }
+                }
+
+                var field = type.GetField("inventoryFSM", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                if (field != null)
+                {
+                    var value = field.GetValue(gm);
+                    var stateName = TryGetPlaymakerStateName(value);
+                    if (!string.IsNullOrEmpty(stateName))
+                    {
+                        return stateName;
+                    }
+                }
+
+                type = type.BaseType;
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
+    internal static PlayerData TryGetPlayerData()
+    {
+        try
+        {
+            var field = typeof(PlayerData).GetField("_instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            if (field != null)
+            {
+                var existing = field.GetValue(null) as PlayerData;
+                if (!ReferenceEquals(existing, null))
+                {
+                    return existing;
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            return PlayerData.instance;
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
     private static string ConvertStateValueToName(object value)
     {
         if (value == null)
@@ -228,6 +373,53 @@ internal static class MenuStateUtility
         }
 
         return value.ToString();
+    }
+
+    private static string TryGetPlaymakerStateName(object fsm)
+    {
+        if (fsm == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var type = fsm.GetType();
+            object machine = null;
+
+            var property = type.GetProperty("Fsm", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (property != null && property.GetIndexParameters().Length == 0)
+            {
+                machine = property.GetValue(fsm, null);
+            }
+
+            if (machine == null)
+            {
+                var field = type.GetField("fsm", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (field != null)
+                {
+                    machine = field.GetValue(fsm);
+                }
+            }
+
+            if (machine != null)
+            {
+                var stateProperty = machine.GetType().GetProperty("ActiveStateName", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (stateProperty != null && stateProperty.GetIndexParameters().Length == 0)
+                {
+                    var state = stateProperty.GetValue(machine, null) as string;
+                    if (!string.IsNullOrEmpty(state))
+                    {
+                        return state;
+                    }
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
     }
 
     internal static bool IsMenuState(UIState state)
