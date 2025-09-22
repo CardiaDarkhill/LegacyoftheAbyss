@@ -41,6 +41,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     internal const float MinRootSizeThreshold = 0.1f;
     internal const float MinTemplateCopyDimension = 4f;
     internal const float MinTemplateCopyArea = 16f;
+    private const float ShadeInputInitialRepeatDelay = 0.25f;
+    private const float ShadeInputRepeatInterval = 0.15f;
 
     private static readonly Color DefaultPanelColor = new Color(0.05f, 0.05f, 0.08f, 0.92f);
     private static readonly Color DefaultHighlightColor = new Color(0.9f, 0.97f, 1f, 0.78f);
@@ -252,6 +254,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private int lastPaneInputFrame = -1;
     private InventoryPaneBase.InputEventType lastPaneInputDirection = InventoryPaneBase.InputEventType.Left;
     private bool lastPaneInputCameFromEvent;
+    private InventoryPaneBase.InputEventType? shadeHeldDirection;
+    private float shadeDirectionRepeatTimer;
 
     private RectSnapshot? panelRectTemplate;
     private RectSnapshot? contentRectTemplate;
@@ -1302,6 +1306,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         UpdateInventoryBinding(false);
         isActive = false;
         labelPulseTimer = 0f;
+        ResetShadeInputState();
         ApplyOverlayVisibility(false);
         if (ReferenceEquals(activePane, this))
         {
@@ -1430,6 +1435,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         activePane = this;
         labelPulseTimer = 0f;
         isActive = true;
+        ResetShadeInputState();
         UpdateInventoryBinding(true);
         if (attachedPaneList != null)
         {
@@ -1447,6 +1453,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         UpdateInventoryBinding(false);
         isActive = false;
         labelPulseTimer = 0f;
+        ResetShadeInputState();
         ApplyOverlayVisibility(false);
         if (ReferenceEquals(activePane, this))
         {
@@ -2998,6 +3005,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         ApplyOverlayVisibility(false);
         isActive = false;
         labelPulseTimer = 0f;
+        ResetShadeInputState();
         UpdateInventoryBinding(false);
     }
 
@@ -4757,6 +4765,102 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         RenderNotchMeter(notchMeterIcons, assignments, capacity, highlightCost, selectedDefinition, selectedId, highlightEquippedSlots);
+    }
+
+    private void Update()
+    {
+        if (!isActive)
+        {
+            ResetShadeInputState();
+            return;
+        }
+
+        ProcessShadeDirectionalInput();
+        ProcessShadeSubmitInput();
+    }
+
+    private void ProcessShadeDirectionalInput()
+    {
+        var pressed = TryGetShadeDirectionalPress();
+        if (pressed.HasValue)
+        {
+            shadeHeldDirection = pressed;
+            shadeDirectionRepeatTimer = ShadeInputInitialRepeatDelay;
+            HandleDirectionalInput(pressed.Value, fromInputComponent: false);
+            return;
+        }
+
+        if (!shadeHeldDirection.HasValue)
+        {
+            return;
+        }
+
+        var direction = shadeHeldDirection.Value;
+        if (!IsShadeDirectionHeld(direction))
+        {
+            ResetShadeInputState();
+            return;
+        }
+
+        shadeDirectionRepeatTimer -= Time.unscaledDeltaTime;
+        if (shadeDirectionRepeatTimer > 0f)
+        {
+            return;
+        }
+
+        shadeDirectionRepeatTimer = ShadeInputRepeatInterval;
+        HandleDirectionalInput(direction, fromInputComponent: false);
+    }
+
+    private InventoryPaneBase.InputEventType? TryGetShadeDirectionalPress()
+    {
+        if (ShadeInput.WasActionPressed(ShadeAction.MoveLeft))
+        {
+            return InventoryPaneBase.InputEventType.Left;
+        }
+
+        if (ShadeInput.WasActionPressed(ShadeAction.MoveRight))
+        {
+            return InventoryPaneBase.InputEventType.Right;
+        }
+
+        if (ShadeInput.WasActionPressed(ShadeAction.MoveUp))
+        {
+            return InventoryPaneBase.InputEventType.Up;
+        }
+
+        if (ShadeInput.WasActionPressed(ShadeAction.MoveDown))
+        {
+            return InventoryPaneBase.InputEventType.Down;
+        }
+
+        return null;
+    }
+
+    private static bool IsShadeDirectionHeld(InventoryPaneBase.InputEventType direction)
+    {
+        return direction switch
+        {
+            InventoryPaneBase.InputEventType.Left => ShadeInput.IsActionHeld(ShadeAction.MoveLeft),
+            InventoryPaneBase.InputEventType.Right => ShadeInput.IsActionHeld(ShadeAction.MoveRight),
+            InventoryPaneBase.InputEventType.Up => ShadeInput.IsActionHeld(ShadeAction.MoveUp),
+            InventoryPaneBase.InputEventType.Down => ShadeInput.IsActionHeld(ShadeAction.MoveDown),
+            _ => false
+        };
+    }
+
+    private void ProcessShadeSubmitInput()
+    {
+        if (ShadeInput.WasActionPressed(ShadeAction.Nail))
+        {
+            HandleSubmit();
+        }
+    }
+
+    private void ResetShadeInputState()
+    {
+        shadeHeldDirection = null;
+        shadeDirectionRepeatTimer = 0f;
     }
 
     private void LateUpdate()
