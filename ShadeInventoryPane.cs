@@ -22,14 +22,14 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private const float CharmCellShrinkWidthThreshold = 96f;
     private const float CharmCellShrinkHeightThreshold = 108f;
     private const float CharmCellMinWidth = 72f;
-    private const float CharmCellMinHeight = 80f;
+    private const float CharmCellMinHeight = 60f;
     private const float CharmSpacingScale = 0.4f;
     private const float CharmSpacingMin = 4f;
     private const float BackgroundAlpha = 0.82f;
     private const float CharmGridHorizontalScreenFraction = 0.15f;
     private const float CharmGridVerticalScreenFraction = 0.12f;
     private const float CharmGridHorizontalParentFraction = 0.12f;
-    private const float CharmGridVerticalParentFraction = 0.08f;
+    private const float CharmGridVerticalParentFraction = 0.04f;
     private const float SectionOffsetFraction = 0.05f;
     private const float DetailPreviewScale = 1.6f;
     private const float HighlightScaleMultiplier = 1.85f;

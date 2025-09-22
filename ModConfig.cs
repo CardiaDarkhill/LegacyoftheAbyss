@@ -86,6 +86,7 @@ internal static class ModPaths
     }
 }
 
+[Serializable]
 public class ModConfig
 {
     public bool logDamage = true;
