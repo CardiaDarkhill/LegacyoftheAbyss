@@ -480,7 +480,7 @@ public partial class LegacyHelper
         }
     }
 
-    private static class InputDeviceBlocker
+    internal static class InputDeviceBlocker
     {
         private static readonly HashSet<InputDevice> restrictedShadeDevices = new();
         private static readonly List<InputDevice> cleanupList = new();
@@ -564,30 +564,21 @@ public partial class LegacyHelper
         {
             try
             {
-                var gm = GameManager.instance;
-                if (gm == null)
-                    return false;
-
-                if (gm.GameState != GameState.PLAYING)
-                    return false;
-
-                UIManager ui = null;
-                try { ui = UIManager.instance; } catch { }
-                if (ui == null)
+                var gm = MenuStateUtility.TryGetGameManager();
+                if (ReferenceEquals(gm, null))
                 {
-                    try { ui = gm.ui; } catch { }
+                    return false;
                 }
 
-                if (ui != null)
+                if (gm.GameState != GameState.PLAYING)
                 {
-                    try
-                    {
-                        if (ui.uiState != UIState.PLAYING)
-                            return false;
-                    }
-                    catch
-                    {
-                    }
+                    return false;
+                }
+
+                var ui = MenuStateUtility.TryGetUiManager(gm);
+                if (MenuStateUtility.IsMenuActive(gm, ui))
+                {
+                    return false;
                 }
 
                 return true;

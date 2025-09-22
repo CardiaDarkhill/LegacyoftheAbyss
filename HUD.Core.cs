@@ -1,8 +1,6 @@
 #nullable disable
 using System;
 using System.Collections;
-using System.Reflection;
-using GlobalEnums;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -213,107 +211,12 @@ public partial class SimpleHUD : MonoBehaviour
     {
         try
         {
-            if (ShadeSettingsMenu.IsShowing)
-            {
-                return true;
-            }
+            return MenuStateUtility.IsMenuActive();
         }
         catch
-        {
-        }
-
-        try
-        {
-            var gm = GameManager.instance;
-            if (gm != null && gm.IsGamePaused())
-            {
-                return true;
-            }
-        }
-        catch
-        {
-        }
-
-        if (Time.timeScale <= 0.0001f)
-        {
-            return true;
-        }
-
-        try
-        {
-            var ui = UIManager.instance;
-            var state = TryGetUiState(ui);
-            if (state.HasValue && IsMenuState(state.Value))
-            {
-                return true;
-            }
-        }
-        catch
-        {
-        }
-
-        return false;
-    }
-
-    private static UIState? TryGetUiState(UIManager ui)
-    {
-        if (ui == null)
-        {
-            return null;
-        }
-
-        try
-        {
-            return ui.uiState;
-        }
-        catch
-        {
-            try
-            {
-                var field = typeof(UIManager).GetField("uiState", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (field != null)
-                {
-                    object value = field.GetValue(ui);
-                    if (value is UIState state)
-                    {
-                        return state;
-                    }
-
-                    if (value is int raw)
-                    {
-                        return (UIState)raw;
-                    }
-                }
-            }
-            catch
-            {
-            }
-        }
-
-        return null;
-    }
-
-    private static bool IsMenuState(UIState state)
-    {
-        string name = state.ToString();
-        if (string.IsNullOrEmpty(name))
         {
             return false;
         }
-
-        if (string.Equals(name, "PLAYING", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(name, "GAMEPLAY", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        return name.IndexOf("PAUSE", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               name.IndexOf("MENU", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               name.IndexOf("INVENTORY", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               name.IndexOf("MAP", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               name.IndexOf("JOURNAL", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               name.IndexOf("SHOP", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               name.IndexOf("OPTION", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private void UpdateMenuOrientation(bool menuActive)
