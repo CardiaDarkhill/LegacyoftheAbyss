@@ -472,138 +472,66 @@ public partial class LegacyHelper
 
     private static class InputDeviceBlocker
     {
-        private static readonly Dictionary<InputDevice, Dictionary<InputControlType, bool>> restrictedDeviceControls = new();
+        private static readonly HashSet<InputDevice> restrictedShadeDevices = new();
         private static readonly List<InputDevice> cleanupList = new();
-        private static readonly InputControlType[] ControlsToDisable =
+        private static readonly HashSet<string> AllowedHeroActions = new(StringComparer.Ordinal)
         {
-            InputControlType.LeftStickLeft,
-            InputControlType.LeftStickRight,
-            InputControlType.LeftStickUp,
-            InputControlType.LeftStickDown,
-            InputControlType.LeftStickX,
-            InputControlType.LeftStickY,
-            InputControlType.DPadLeft,
-            InputControlType.DPadRight,
-            InputControlType.DPadUp,
-            InputControlType.DPadDown,
-            InputControlType.DPadX,
-            InputControlType.DPadY,
-            InputControlType.RightStickLeft,
-            InputControlType.RightStickRight,
-            InputControlType.RightStickUp,
-            InputControlType.RightStickDown,
-            InputControlType.RightStickX,
-            InputControlType.RightStickY,
-            InputControlType.Action1,
-            InputControlType.Action2,
-            InputControlType.Action3,
-            InputControlType.Action4,
-            InputControlType.Action5,
-            InputControlType.Action6,
-            InputControlType.LeftTrigger,
-            InputControlType.RightTrigger,
-            InputControlType.LeftBumper,
-            InputControlType.RightBumper,
-            InputControlType.LeftStickButton,
-            InputControlType.RightStickButton
+            "Pause",
+            "openInventory",
+            "openInventoryMap",
+            "openInventoryJournal",
+            "openInventoryTools",
+            "openInventoryQuests",
+            "QuickMap"
         };
 
-        private static void UpdateDeviceState(InputDevice device, bool restrict)
+        private static void SetDeviceRestricted(InputDevice device, bool restrict)
         {
             if (device == null || device == InputDevice.Null)
                 return;
 
-            try
+            if (restrict)
             {
-                if (restrict)
-                {
-                    if (restrictedDeviceControls.ContainsKey(device))
-                        return;
-
-                    var originalStates = new Dictionary<InputControlType, bool>();
-                    foreach (var controlType in ControlsToDisable)
-                    {
-                        var control = device.GetControl(controlType);
-                        if (control == null || control == InputControl.Null)
-                            continue;
-                        originalStates[controlType] = control.Enabled;
-                        control.Enabled = false;
-                        try { control.ClearInputState(); } catch { }
-                    }
-
-                    try
-                    {
-                        device.LeftStick?.ClearInputState();
-                        device.RightStick?.ClearInputState();
-                        device.DPad?.ClearInputState();
-                    }
-                    catch
-                    {
-                    }
-
-                    restrictedDeviceControls[device] = originalStates;
-                }
-                else if (restrictedDeviceControls.TryGetValue(device, out var originalStates))
-                {
-                    foreach (var kvp in originalStates)
-                    {
-                        var control = device.GetControl(kvp.Key);
-                        if (control == null || control == InputControl.Null)
-                            continue;
-                        control.Enabled = kvp.Value;
-                        try { control.ClearInputState(); } catch { }
-                    }
-
-                    try
-                    {
-                        device.LeftStick?.ClearInputState();
-                        device.RightStick?.ClearInputState();
-                        device.DPad?.ClearInputState();
-                    }
-                    catch
-                    {
-                    }
-
-                    restrictedDeviceControls.Remove(device);
-                }
+                restrictedShadeDevices.Add(device);
             }
-            catch
+            else
             {
+                restrictedShadeDevices.Remove(device);
             }
         }
 
         private static void ReleaseTrackedDevices(InputHandler handler)
         {
-            if (restrictedDeviceControls.Count == 0)
+            if (restrictedShadeDevices.Count == 0)
                 return;
 
             cleanupList.Clear();
-            cleanupList.AddRange(restrictedDeviceControls.Keys);
+            cleanupList.AddRange(restrictedShadeDevices);
             foreach (var device in cleanupList)
             {
-                UpdateDeviceState(device, false);
+                SetDeviceRestricted(device, false);
             }
             cleanupList.Clear();
         }
 
         private static void CleanupDetachedDevices(InputHandler handler, IList<InputDevice> devices)
         {
-            if (restrictedDeviceControls.Count == 0)
+            if (restrictedShadeDevices.Count == 0)
                 return;
 
             cleanupList.Clear();
-            cleanupList.AddRange(restrictedDeviceControls.Keys);
+            cleanupList.AddRange(restrictedShadeDevices);
             foreach (var device in cleanupList)
             {
                 if (device == null || device == InputDevice.Null)
                 {
-                    UpdateDeviceState(device, false);
+                    SetDeviceRestricted(device, false);
                     continue;
                 }
 
                 if (devices == null || !ContainsDevice(devices, device))
                 {
-                    UpdateDeviceState(device, false);
+                    SetDeviceRestricted(device, false);
                 }
             }
 
@@ -622,7 +550,7 @@ public partial class LegacyHelper
             return false;
         }
 
-        private static bool ShouldBlockShadeDeviceInput()
+        internal static bool ShouldBlockShadeDeviceInput()
         {
             try
             {
@@ -731,14 +659,35 @@ public partial class LegacyHelper
                 restrict = false;
             }
 
-            bool block = restrict && ShouldBlockShadeDeviceInput();
-            UpdateDeviceState(device, block);
-            return block;
+            SetDeviceRestricted(device, restrict);
+            return restrict && ShouldBlockShadeDeviceInput();
         }
 
         internal static void ReleaseDevice(InputHandler handler, InputDevice device)
         {
-            UpdateDeviceState(device, false);
+            SetDeviceRestricted(device, false);
+        }
+
+        internal static bool IsRestrictedDevice(InputDevice device)
+        {
+            return device != null && device != InputDevice.Null && restrictedShadeDevices.Contains(device);
+        }
+
+        internal static bool AllowsHeroAction(PlayerAction action)
+        {
+            try
+            {
+                if (action == null)
+                    return false;
+                string name = action.Name;
+                if (string.IsNullOrEmpty(name))
+                    return false;
+                return AllowedHeroActions.Contains(name);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         internal static void EnsureLastActiveController(InputHandler handler)
@@ -754,6 +703,31 @@ public partial class LegacyHelper
                 {
                     handler.lastActiveController = actions.LastInputType;
                     handler.lastInputDeviceStyle = actions.LastDeviceStyle;
+                }
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(PlayerAction), nameof(PlayerAction.Update))]
+    private class PlayerAction_Update_BlockShadeGameplay
+    {
+        private static void Prefix(PlayerAction __instance, ref InputDevice device)
+        {
+            try
+            {
+                if (device == null || device == InputDevice.Null)
+                    return;
+                if (__instance == null)
+                    return;
+                if (__instance.Owner is HeroActions && InputDeviceBlocker.IsRestrictedDevice(device) && InputDeviceBlocker.ShouldBlockShadeDeviceInput())
+                {
+                    if (!InputDeviceBlocker.AllowsHeroAction(__instance))
+                    {
+                        device = InputDevice.Null;
+                    }
                 }
             }
             catch
