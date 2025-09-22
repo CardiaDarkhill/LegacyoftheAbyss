@@ -856,11 +856,14 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 {
                     string lower = name.ToLowerInvariant();
 
-                    int candidateScore = ScoreTemplateRootCandidate(template, candidate, lower);
-                    if (candidateScore > scoredCandidateValue)
+                    if (candidate != null)
                     {
-                        scoredCandidate = candidate;
-                        scoredCandidateValue = candidateScore;
+                        int candidateScore = ScoreTemplateRootCandidate(template, candidate, lower);
+                        if (candidateScore > scoredCandidateValue)
+                        {
+                            scoredCandidate = candidate;
+                            scoredCandidateValue = candidateScore;
+                        }
                     }
 
                     if (matchByName == null)
@@ -4990,13 +4993,13 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         try
         {
-            return Object.FindFirstObjectByType<InputHandler>();
+            return UnityEngine.Object.FindFirstObjectByType<InputHandler>();
         }
         catch
         {
             try
             {
-                return Object.FindAnyObjectByType<InputHandler>();
+                return UnityEngine.Object.FindAnyObjectByType<InputHandler>();
             }
             catch
             {
