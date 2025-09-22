@@ -41,6 +41,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     internal const float MinRootSizeThreshold = 0.1f;
     internal const float MinTemplateCopyDimension = 4f;
     internal const float MinTemplateCopyArea = 16f;
+    private const float ShadeInputInitialRepeatDelay = 0.25f;
+    private const float ShadeInputRepeatInterval = 0.15f;
 
     private static readonly Color DefaultPanelColor = new Color(0.05f, 0.05f, 0.08f, 0.92f);
     private static readonly Color DefaultHighlightColor = new Color(0.9f, 0.97f, 1f, 0.78f);
@@ -48,8 +50,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private static readonly Vector2 DefaultStandaloneRootSize = new Vector2(1920f, 1080f);
     private const string LockedCharmSpriteName = "shade_charm_charmui0001charmcost02unlit";
     private const string NotchLitSpriteName = "shade_charm_charmui0000charmcost02lit";
-    private const int MaxNotchIcons = 20;
-    private const int MaxEquippedIcons = 20;
+    private const int MaxNotchIcons = 11;
+    private const int MaxEquippedIcons = 11;
 
     private static readonly Color LockedIconColor = new Color(1f, 1f, 1f, 0.72f);
     private static readonly Color InactiveIconColor = new Color(1f, 1f, 1f, 0.3f);
@@ -62,6 +64,16 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private static Font? cachedTrajanSourceFont;
     private static bool searchedTrajanFont;
     private static ShadeInventoryPane? activePane;
+    private static InputHandler? cachedInputHandler;
+    private static bool loggedMissingInputHandler;
+    private static bool loggedMissingHeroActions;
+
+    private enum DirectionalInputSource
+    {
+        None,
+        ShadeBindings,
+        HeroActions
+    }
 
     private struct RectSnapshot
     {
@@ -245,6 +257,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private int selectedIndex;
     private bool isBuilt;
     private bool isActive;
+    private readonly HashSet<InventoryPaneInput> boundInputs = new HashSet<InventoryPaneInput>();
+    private bool hasCapturedInputFocus;
     private float labelPulseTimer;
     private Sprite? fallbackSprite;
     private string displayLabel = "Charms";
@@ -252,6 +266,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private int lastPaneInputFrame = -1;
     private InventoryPaneBase.InputEventType lastPaneInputDirection = InventoryPaneBase.InputEventType.Left;
     private bool lastPaneInputCameFromEvent;
+    private InventoryPaneBase.InputEventType? shadeHeldDirection;
+    private DirectionalInputSource shadeHeldDirectionSource;
+    private float shadeDirectionRepeatTimer;
+    private int lastShadeInputFrame = -1;
+    private bool loggedInactiveHierarchyProcessing;
 
     private RectSnapshot? panelRectTemplate;
     private RectSnapshot? contentRectTemplate;
@@ -843,11 +862,14 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 {
                     string lower = name.ToLowerInvariant();
 
-                    int candidateScore = ScoreTemplateRootCandidate(template, candidate, lower);
-                    if (candidateScore > scoredCandidateValue)
+                    if (candidate != null)
                     {
-                        scoredCandidate = candidate;
-                        scoredCandidateValue = candidateScore;
+                        int candidateScore = ScoreTemplateRootCandidate(template, candidate, lower);
+                        if (candidateScore > scoredCandidateValue)
+                        {
+                            scoredCandidate = candidate;
+                            scoredCandidateValue = candidateScore;
+                        }
                     }
 
                     if (matchByName == null)
@@ -1278,6 +1300,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         RegisterInputHandlers();
         EnsureBuilt();
         labelPulseTimer = 0f;
+        loggedInactiveHierarchyProcessing = false;
 
         if (IsPaneActive)
         {
@@ -1292,26 +1315,35 @@ internal sealed class ShadeInventoryPane : InventoryPane
             ApplyOverlayVisibility(false);
         }
 
+        if (attachedPaneList != null)
+        {
+            ShadeInventoryPaneIntegration.BindInput(this, attachedPaneList, captureFocus: IsPaneActive);
+        }
+
         LogMenuEvent(FormattableString.Invariant(
             $"OnEnable: active={isActive} entries={entries.Count} inventoryNull={inventory == null}"));
     }
 
     private void OnDisable()
     {
+        ShadeInventoryPaneIntegration.RestoreInputBindings(this);
         UnregisterInputHandlers();
         UpdateInventoryBinding(false);
         isActive = false;
         labelPulseTimer = 0f;
+        ResetShadeInputState("OnDisable");
         ApplyOverlayVisibility(false);
         if (ReferenceEquals(activePane, this))
         {
             activePane = null;
         }
+        loggedInactiveHierarchyProcessing = false;
         LogMenuEvent("OnDisable");
     }
 
     private void OnDestroy()
     {
+        ShadeInventoryPaneIntegration.RestoreInputBindings(this);
         UnregisterInputHandlers();
         UpdateInventoryBinding(false);
         DetachPaneList();
@@ -1391,6 +1423,72 @@ internal sealed class ShadeInventoryPane : InventoryPane
         LogMenuEvent("Unregistered directional input handlers");
     }
 
+    private void UpdateCapturedInputFocus()
+    {
+        boundInputs.RemoveWhere(input => input == null);
+        bool focused = boundInputs.Count > 0;
+        if (focused != hasCapturedInputFocus)
+        {
+            hasCapturedInputFocus = focused;
+            LogMenuEvent(FormattableString.Invariant(
+                $"Shade input focus {(focused ? "acquired" : "lost")} -> count={boundInputs.Count}"));
+        }
+    }
+
+    private bool HasBoundInputs
+    {
+        get
+        {
+            UpdateCapturedInputFocus();
+            return hasCapturedInputFocus;
+        }
+    }
+
+    internal void RegisterBoundInput(InventoryPaneInput input)
+    {
+        if (input == null)
+        {
+            return;
+        }
+
+        boundInputs.RemoveWhere(candidate => candidate == null);
+        bool added = boundInputs.Add(input);
+        UpdateCapturedInputFocus();
+        if (added)
+        {
+            LogMenuEvent(FormattableString.Invariant(
+                $"RegisterBoundInput -> count={boundInputs.Count}"));
+        }
+    }
+
+    internal void UnregisterBoundInput(InventoryPaneInput input)
+    {
+        if (input == null)
+        {
+            return;
+        }
+
+        boundInputs.RemoveWhere(candidate => candidate == null);
+        bool removed = boundInputs.Remove(input);
+        UpdateCapturedInputFocus();
+        if (removed)
+        {
+            LogMenuEvent(FormattableString.Invariant(
+                $"UnregisterBoundInput -> count={boundInputs.Count}"));
+        }
+    }
+
+    internal void ClearBoundInputs()
+    {
+        bool hadInputs = boundInputs.Count > 0;
+        boundInputs.Clear();
+        if (hadInputs)
+        {
+            LogMenuEvent("ClearBoundInputs");
+        }
+        UpdateCapturedInputFocus();
+    }
+
     private void HandleInputLeft()
     {
         lastPaneInputFrame = Time.frameCount;
@@ -1430,10 +1528,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
         activePane = this;
         labelPulseTimer = 0f;
         isActive = true;
+        ResetShadeInputState("PaneStart");
         UpdateInventoryBinding(true);
         if (attachedPaneList != null)
         {
-            ShadeInventoryPaneIntegration.BindInput(this, attachedPaneList);
+            ShadeInventoryPaneIntegration.BindInput(this, attachedPaneList, captureFocus: true);
         }
         ApplyOverlayVisibility(true);
         RefreshAll();
@@ -1444,9 +1543,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     public override void PaneEnd()
     {
+        ShadeInventoryPaneIntegration.RestoreInputBindings(this);
         UpdateInventoryBinding(false);
         isActive = false;
         labelPulseTimer = 0f;
+        ResetShadeInputState("PaneEnd");
         ApplyOverlayVisibility(false);
         if (ReferenceEquals(activePane, this))
         {
@@ -1476,8 +1577,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
     internal void HandleSubmit()
     {
         EnsureBuilt();
+        LogMenuEvent(FormattableString.Invariant(
+            $"HandleSubmit invoked: active={isActive} inventoryNull={inventory == null} entryCount={entries.Count} selectedIndex={selectedIndex}"));
         if (!isActive || inventory == null || entries.Count == 0)
         {
+            LogMenuEvent("HandleSubmit aborted: pane inactive or missing data");
             return;
         }
 
@@ -1485,14 +1589,19 @@ internal sealed class ShadeInventoryPane : InventoryPane
         var id = entry.Id;
         if (!inventory.IsOwned(id))
         {
+            LogMenuEvent(FormattableString.Invariant(
+                $"HandleSubmit blocked: charm '{id}' not owned"));
             SetTextValue(statusText, statusTextTMP, "This charm has not been unlocked yet.");
             return;
         }
 
         string message;
-        bool success = inventory.IsEquipped(id)
+        bool currentlyEquipped = inventory.IsEquipped(id);
+        bool success = currentlyEquipped
             ? inventory.TryUnequip(id, out message)
             : inventory.TryEquip(id, out message);
+        LogMenuEvent(FormattableString.Invariant(
+            $"HandleSubmit {(currentlyEquipped ? "unequip" : "equip")} -> success={success} message='{message}'"));
 
         SetTextValue(statusText, statusTextTMP, message);
         if (success)
@@ -2965,7 +3074,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         if (attachedPaneList != null)
         {
-            ShadeInventoryPaneIntegration.BindInput(this, attachedPaneList);
+            ShadeInventoryPaneIntegration.BindInput(this, attachedPaneList, captureFocus: IsPaneActive);
         }
     }
 
@@ -2995,9 +3104,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void HandleInventoryClosed()
     {
+        ShadeInventoryPaneIntegration.RestoreInputBindings(this);
         ApplyOverlayVisibility(false);
         isActive = false;
         labelPulseTimer = 0f;
+        ResetShadeInputState("InventoryClosed");
         UpdateInventoryBinding(false);
     }
 
@@ -4759,6 +4870,383 @@ internal sealed class ShadeInventoryPane : InventoryPane
         RenderNotchMeter(notchMeterIcons, assignments, capacity, highlightCost, selectedDefinition, selectedId, highlightEquippedSlots);
     }
 
+    internal void ProcessShadeInputTick()
+    {
+        if (!CanProcessShadeInput())
+        {
+            LogMenuEvent(FormattableString.Invariant(
+                $"ProcessShadeInputTick skipped: active={isActive} enabled={isActiveAndEnabled} inHierarchy={gameObject.activeInHierarchy} focus={hasCapturedInputFocus} cheatOpen={CheatManager.IsOpen} boundCount={boundInputs.Count}"));
+            ResetShadeInputState("CannotProcessShadeInput");
+            return;
+        }
+
+        if (lastShadeInputFrame == Time.frameCount)
+        {
+            LogMenuEvent(FormattableString.Invariant(
+                $"ProcessShadeInputTick duplicate frame ignored: frame={Time.frameCount}"));
+            return;
+        }
+
+        lastShadeInputFrame = Time.frameCount;
+
+        string heldDirection = shadeHeldDirection.HasValue ? shadeHeldDirection.Value.ToString() : "<none>";
+        LogMenuEvent(FormattableString.Invariant(
+            $"ProcessShadeInputTick processing frame={lastShadeInputFrame} heldDirection={heldDirection} heldSource={shadeHeldDirectionSource} repeatTimer={shadeDirectionRepeatTimer:0.###}"));
+        ProcessShadeDirectionalInput();
+        ProcessShadeSubmitInput();
+    }
+
+    private bool CanProcessShadeInput()
+    {
+        if (!isActive)
+        {
+            return false;
+        }
+
+        if (!HasBoundInputs)
+        {
+            return false;
+        }
+
+        if (CheatManager.IsOpen)
+        {
+            return false;
+        }
+
+        if (!isActiveAndEnabled || !gameObject.activeInHierarchy)
+        {
+            if (!loggedInactiveHierarchyProcessing)
+            {
+                LogMenuEvent(FormattableString.Invariant(
+                    $"CanProcessShadeInput proceeding despite inactive hierarchy: enabled={isActiveAndEnabled} inHierarchy={gameObject.activeInHierarchy}"));
+                loggedInactiveHierarchyProcessing = true;
+            }
+        }
+        else if (loggedInactiveHierarchyProcessing)
+        {
+            loggedInactiveHierarchyProcessing = false;
+        }
+
+        return true;
+    }
+
+    private void ProcessShadeDirectionalInput()
+    {
+        var pressed = TryGetShadeDirectionalPress(out var source);
+        if (pressed.HasValue)
+        {
+            LogMenuEvent(FormattableString.Invariant(
+                $"ProcessShadeDirectionalInput press detected: direction={pressed.Value} source={source}"));
+            shadeHeldDirection = pressed;
+            shadeHeldDirectionSource = source;
+            shadeDirectionRepeatTimer = ShadeInputInitialRepeatDelay;
+            HandleDirectionalInput(pressed.Value, fromInputComponent: false);
+            return;
+        }
+
+        if (!shadeHeldDirection.HasValue)
+        {
+            return;
+        }
+
+        var direction = shadeHeldDirection.Value;
+        if (!IsShadeDirectionHeld(direction))
+        {
+            LogMenuEvent(FormattableString.Invariant(
+                $"ProcessShadeDirectionalInput releasing direction={direction} heldSource={shadeHeldDirectionSource}"));
+            ResetShadeInputState("DirectionReleased");
+            return;
+        }
+
+        shadeDirectionRepeatTimer -= Time.unscaledDeltaTime;
+        if (shadeDirectionRepeatTimer > 0f)
+        {
+            return;
+        }
+
+        shadeDirectionRepeatTimer = ShadeInputRepeatInterval;
+        LogMenuEvent(FormattableString.Invariant(
+            $"ProcessShadeDirectionalInput repeat fired: direction={direction} source={shadeHeldDirectionSource} nextRepeat={ShadeInputRepeatInterval:0.###}"));
+        HandleDirectionalInput(direction, fromInputComponent: false);
+    }
+
+    private InventoryPaneBase.InputEventType? TryGetShadeDirectionalPress(out DirectionalInputSource source)
+    {
+        if (ShadeInput.WasActionPressed(ShadeAction.MoveLeft))
+        {
+            LogMenuEvent("TryGetShadeDirectionalPress -> Shade MoveLeft pressed");
+            source = DirectionalInputSource.ShadeBindings;
+            return InventoryPaneBase.InputEventType.Left;
+        }
+
+        if (ShadeInput.WasActionPressed(ShadeAction.MoveRight))
+        {
+            LogMenuEvent("TryGetShadeDirectionalPress -> Shade MoveRight pressed");
+            source = DirectionalInputSource.ShadeBindings;
+            return InventoryPaneBase.InputEventType.Right;
+        }
+
+        if (ShadeInput.WasActionPressed(ShadeAction.MoveUp))
+        {
+            LogMenuEvent("TryGetShadeDirectionalPress -> Shade MoveUp pressed");
+            source = DirectionalInputSource.ShadeBindings;
+            return InventoryPaneBase.InputEventType.Up;
+        }
+
+        if (ShadeInput.WasActionPressed(ShadeAction.MoveDown))
+        {
+            LogMenuEvent("TryGetShadeDirectionalPress -> Shade MoveDown pressed");
+            source = DirectionalInputSource.ShadeBindings;
+            return InventoryPaneBase.InputEventType.Down;
+        }
+
+        var heroPress = TryGetHeroDirectionalPress();
+        if (heroPress.HasValue)
+        {
+            source = DirectionalInputSource.HeroActions;
+            return heroPress;
+        }
+
+        source = DirectionalInputSource.None;
+        return null;
+    }
+
+    private bool IsShadeDirectionHeld(InventoryPaneBase.InputEventType direction)
+    {
+        bool shadeHeld = shadeHeldDirectionSource != DirectionalInputSource.HeroActions && direction switch
+        {
+            InventoryPaneBase.InputEventType.Left => ShadeInput.IsActionHeld(ShadeAction.MoveLeft),
+            InventoryPaneBase.InputEventType.Right => ShadeInput.IsActionHeld(ShadeAction.MoveRight),
+            InventoryPaneBase.InputEventType.Up => ShadeInput.IsActionHeld(ShadeAction.MoveUp),
+            InventoryPaneBase.InputEventType.Down => ShadeInput.IsActionHeld(ShadeAction.MoveDown),
+            _ => false
+        };
+
+        if (shadeHeld)
+        {
+            return true;
+        }
+
+        if (shadeHeldDirectionSource == DirectionalInputSource.ShadeBindings)
+        {
+            return false;
+        }
+
+        return IsHeroDirectionHeld(direction);
+    }
+
+    private static InventoryPaneBase.InputEventType? TryGetHeroDirectionalPress()
+    {
+        var actions = ResolveHeroActions();
+        if (actions == null)
+        {
+            return null;
+        }
+
+        if (actions.Left != null && actions.Left.WasPressed)
+        {
+            LogMenuEvent("TryGetHeroDirectionalPress -> Hero Left pressed");
+            return InventoryPaneBase.InputEventType.Left;
+        }
+
+        if (actions.Right != null && actions.Right.WasPressed)
+        {
+            LogMenuEvent("TryGetHeroDirectionalPress -> Hero Right pressed");
+            return InventoryPaneBase.InputEventType.Right;
+        }
+
+        if (actions.Up != null && actions.Up.WasPressed)
+        {
+            LogMenuEvent("TryGetHeroDirectionalPress -> Hero Up pressed");
+            return InventoryPaneBase.InputEventType.Up;
+        }
+
+        if (actions.Down != null && actions.Down.WasPressed)
+        {
+            LogMenuEvent("TryGetHeroDirectionalPress -> Hero Down pressed");
+            return InventoryPaneBase.InputEventType.Down;
+        }
+
+        return null;
+    }
+
+    private static bool IsHeroDirectionHeld(InventoryPaneBase.InputEventType direction)
+    {
+        var actions = ResolveHeroActions();
+        if (actions == null)
+        {
+            return false;
+        }
+
+        return direction switch
+        {
+            InventoryPaneBase.InputEventType.Left => actions.Left != null && actions.Left.IsPressed,
+            InventoryPaneBase.InputEventType.Right => actions.Right != null && actions.Right.IsPressed,
+            InventoryPaneBase.InputEventType.Up => actions.Up != null && actions.Up.IsPressed,
+            InventoryPaneBase.InputEventType.Down => actions.Down != null && actions.Down.IsPressed,
+            _ => false
+        };
+    }
+
+    private static HeroActions? ResolveHeroActions()
+    {
+        var handler = ResolveInputHandler();
+        if (handler == null)
+        {
+            if (!loggedMissingHeroActions)
+            {
+                LogMenuEvent("ResolveHeroActions -> InputHandler unavailable");
+                loggedMissingHeroActions = true;
+            }
+            return null;
+        }
+
+        try
+        {
+            var actions = handler.inputActions;
+            if (actions == null)
+            {
+                if (!loggedMissingHeroActions)
+                {
+                    LogMenuEvent("ResolveHeroActions -> inputActions null");
+                    loggedMissingHeroActions = true;
+                }
+            }
+            else if (loggedMissingHeroActions)
+            {
+                LogMenuEvent("ResolveHeroActions -> hero actions restored");
+                loggedMissingHeroActions = false;
+            }
+
+            return actions;
+        }
+        catch (Exception ex)
+        {
+            if (!loggedMissingHeroActions)
+            {
+                LogMenuEvent(FormattableString.Invariant(
+                    $"ResolveHeroActions -> exception {ex.GetType().Name}: {ex.Message}"));
+                loggedMissingHeroActions = true;
+            }
+            return null;
+        }
+    }
+
+    private static InputHandler? ResolveInputHandler()
+    {
+        var handler = cachedInputHandler;
+        if (handler != null)
+        {
+            if (loggedMissingInputHandler)
+            {
+                LogMenuEvent("ResolveInputHandler -> reusing cached handler");
+                loggedMissingInputHandler = false;
+            }
+            return handler;
+        }
+
+        cachedInputHandler = FindInputHandler();
+        handler = cachedInputHandler;
+        if (handler == null)
+        {
+            if (!loggedMissingInputHandler)
+            {
+                LogMenuEvent("ResolveInputHandler -> unable to locate InputHandler");
+                loggedMissingInputHandler = true;
+            }
+        }
+        else
+        {
+            LogMenuEvent("ResolveInputHandler -> located InputHandler");
+            loggedMissingInputHandler = false;
+        }
+
+        return handler;
+    }
+
+    private static InputHandler? FindInputHandler()
+    {
+        try
+        {
+            var singleton = ManagerSingleton<InputHandler>.UnsafeInstance;
+            if (singleton != null)
+            {
+                return singleton;
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            var gm = GameManager.instance;
+            if (gm != null && gm.inputHandler != null)
+            {
+                return gm.inputHandler;
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            return UnityEngine.Object.FindFirstObjectByType<InputHandler>();
+        }
+        catch
+        {
+            try
+            {
+                return UnityEngine.Object.FindAnyObjectByType<InputHandler>();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+
+    private void ProcessShadeSubmitInput()
+    {
+        if (ShadeInput.WasActionPressed(ShadeAction.Nail))
+        {
+            LogMenuEvent("ProcessShadeSubmitInput -> Shade slash pressed");
+            HandleSubmit();
+            return;
+        }
+
+        var actions = ResolveHeroActions();
+        if (actions == null)
+        {
+            if (!loggedMissingHeroActions)
+            {
+                LogMenuEvent("ProcessShadeSubmitInput -> Hero actions unavailable");
+            }
+            return;
+        }
+
+        bool attackPressed = actions.Attack != null && actions.Attack.WasPressed;
+        bool jumpPressed = actions.Jump != null && actions.Jump.WasPressed;
+        if (attackPressed || jumpPressed)
+        {
+            LogMenuEvent(FormattableString.Invariant(
+                $"ProcessShadeSubmitInput -> Hero submit pressed (attack={attackPressed} jump={jumpPressed})"));
+            HandleSubmit();
+        }
+    }
+
+    private void ResetShadeInputState(string? reason = null)
+    {
+        string heldDirection = shadeHeldDirection.HasValue ? shadeHeldDirection.Value.ToString() : "<none>";
+        LogMenuEvent(FormattableString.Invariant(
+            $"ResetShadeInputState -> reason={reason ?? "<unspecified>"} previousDirection={heldDirection} previousSource={shadeHeldDirectionSource} repeatTimer={shadeDirectionRepeatTimer:0.###} lastFrame={lastShadeInputFrame}"));
+        shadeHeldDirection = null;
+        shadeHeldDirectionSource = DirectionalInputSource.None;
+        shadeDirectionRepeatTimer = 0f;
+        lastShadeInputFrame = -1;
+    }
+
     private void LateUpdate()
     {
         if (!isActive)
@@ -5074,6 +5562,78 @@ internal static class ShadeInventoryPaneIntegration
     private static readonly FieldInfo AllowRightStickField = AccessTools.Field(typeof(InventoryPaneInput), "allowRightStickSpeed");
     private static readonly FieldInfo PaneField = AccessTools.Field(typeof(InventoryPaneInput), "pane");
     private static readonly FieldInfo PaneListField = AccessTools.Field(typeof(InventoryPaneInput), "paneList");
+    private static ShadeInventoryInputDriver? inputDriver;
+
+    private static void EnsureInputDriver()
+    {
+        if (inputDriver != null)
+        {
+            return;
+        }
+
+        try
+        {
+            var host = new GameObject("ShadeInventoryInputDriver");
+            host.hideFlags = HideFlags.HideAndDontSave;
+            UnityEngine.Object.DontDestroyOnLoad(host);
+            inputDriver = host.AddComponent<ShadeInventoryInputDriver>();
+            ShadeInventoryPane.LogMenuEvent("Created shade inventory input driver");
+        }
+        catch (Exception ex)
+        {
+            ShadeInventoryPane.LogMenuEvent(FormattableString.Invariant(
+                $"Failed to create shade inventory input driver: {ex.GetType().Name} {ex.Message}"));
+        }
+    }
+
+    private sealed class InputBindingSnapshot
+    {
+        public InputBindingSnapshot(
+            InventoryPaneBase? pane,
+            InventoryPaneList? paneList,
+            bool allowHorizontal,
+            bool allowVertical,
+            bool allowRepeat,
+            bool allowRepeatSubmit,
+            bool allowRightStick,
+            InventoryPaneList.PaneTypes paneControl,
+            bool enabled)
+        {
+            Pane = pane;
+            PaneList = paneList;
+            AllowHorizontal = allowHorizontal;
+            AllowVertical = allowVertical;
+            AllowRepeat = allowRepeat;
+            AllowRepeatSubmit = allowRepeatSubmit;
+            AllowRightStick = allowRightStick;
+            PaneControl = paneControl;
+            Enabled = enabled;
+        }
+
+        public InventoryPaneBase? Pane { get; }
+
+        public InventoryPaneList? PaneList { get; }
+
+        public bool AllowHorizontal { get; }
+
+        public bool AllowVertical { get; }
+
+        public bool AllowRepeat { get; }
+
+        public bool AllowRepeatSubmit { get; }
+
+        public bool AllowRightStick { get; }
+
+        public InventoryPaneList.PaneTypes PaneControl { get; }
+
+        public bool Enabled { get; }
+    }
+
+    private static readonly Dictionary<InventoryPaneInput, InputBindingSnapshot> OriginalInputBindings =
+        new Dictionary<InventoryPaneInput, InputBindingSnapshot>();
+
+    private static readonly Dictionary<ShadeInventoryPane, HashSet<InventoryPaneInput>> CapturedInputs =
+        new Dictionary<ShadeInventoryPane, HashSet<InventoryPaneInput>>();
 
     private const float ListIconScaleFactor = 0.5625f;
 
@@ -5622,6 +6182,8 @@ internal static class ShadeInventoryPaneIntegration
             return;
         }
 
+        EnsureInputDriver();
+
         var panes = PanesField(paneList);
         ShadeInventoryPane? existingShade = null;
         if (panes != null)
@@ -5682,7 +6244,7 @@ internal static class ShadeInventoryPaneIntegration
         {
             existingShade.AttachToPaneList(paneList);
             existingShade.ConfigureFromTemplate(templatePane);
-            BindInput(existingShade, paneList);
+            BindInput(existingShade, paneList, captureFocus: existingShade.IsPaneActive);
             existingShade.SetDisplayLabel("Charms");
             existingShade.ForceImmediateRefresh();
             existingShade.ForceLayoutRebuild();
@@ -5723,8 +6285,8 @@ internal static class ShadeInventoryPaneIntegration
         shadePane.AttachToPaneList(paneList);
 
         var input = go.AddComponent<InventoryPaneInput>();
-        ConfigureInput(input, paneList, shadePane);
-        BindInput(shadePane, paneList);
+        ConfigureInput(input, paneList, shadePane, captureFocus: false, isLocal: true);
+        BindInput(shadePane, paneList, captureFocus: false);
 
         PlayerDataTestField(shadePane) = new PlayerDataTest();
         HasNewPdField(shadePane) = string.Empty;
@@ -5797,11 +6359,235 @@ internal static class ShadeInventoryPaneIntegration
         ShadeInventoryPane.LogMenuEvent($"Shade pane inserted at index {insertIndex}; total panes={newList.Count}");
     }
 
-    internal static void BindInput(ShadeInventoryPane shadePane, InventoryPaneList paneList)
+    private static bool TryGetBool(FieldInfo? field, InventoryPaneInput input, bool defaultValue)
+    {
+        if (field == null)
+        {
+            return defaultValue;
+        }
+
+        try
+        {
+            object? value = field.GetValue(input);
+            if (value is bool flag)
+            {
+                return flag;
+            }
+        }
+        catch
+        {
+        }
+
+        return defaultValue;
+    }
+
+    private static InputBindingSnapshot CreateSnapshot(InventoryPaneInput input)
+    {
+        InventoryPaneBase? pane = null;
+        if (PaneField != null)
+        {
+            try { pane = PaneField.GetValue(input) as InventoryPaneBase; }
+            catch { pane = null; }
+        }
+
+        InventoryPaneList? paneList = null;
+        if (PaneListField != null)
+        {
+            try { paneList = PaneListField.GetValue(input) as InventoryPaneList; }
+            catch { paneList = null; }
+        }
+
+        bool allowHorizontal = TryGetBool(AllowHorizontalField, input, true);
+        bool allowVertical = TryGetBool(AllowVerticalField, input, true);
+        bool allowRepeat = TryGetBool(AllowRepeatField, input, false);
+        bool allowRepeatSubmit = TryGetBool(AllowRepeatSubmitField, input, false);
+        bool allowRightStick = TryGetBool(AllowRightStickField, input, false);
+
+        InventoryPaneList.PaneTypes paneControl = InventoryPaneList.PaneTypes.None;
+        if (PaneControlField != null)
+        {
+            try { paneControl = PaneControlField(input); }
+            catch { paneControl = InventoryPaneList.PaneTypes.None; }
+        }
+
+        bool enabled = false;
+        try { enabled = input.enabled; }
+        catch { enabled = false; }
+
+        return new InputBindingSnapshot(
+            pane,
+            paneList,
+            allowHorizontal,
+            allowVertical,
+            allowRepeat,
+            allowRepeatSubmit,
+            allowRightStick,
+            paneControl,
+            enabled);
+    }
+
+    private static void StoreOriginalBinding(InventoryPaneInput input)
+    {
+        if (input == null || OriginalInputBindings.ContainsKey(input))
+        {
+            return;
+        }
+
+        try
+        {
+            OriginalInputBindings[input] = CreateSnapshot(input);
+        }
+        catch
+        {
+        }
+    }
+
+    private static void ApplyShadeInputSettings(InventoryPaneInput input)
+    {
+        if (input == null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!input.enabled)
+            {
+                input.enabled = true;
+            }
+        }
+        catch
+        {
+        }
+
+        if (PaneControlField != null)
+        {
+            try { PaneControlField(input) = InventoryPaneList.PaneTypes.None; }
+            catch { }
+        }
+
+        AllowHorizontalField?.SetValue(input, true);
+        AllowVerticalField?.SetValue(input, true);
+        AllowRepeatField?.SetValue(input, true);
+        AllowRepeatSubmitField?.SetValue(input, false);
+        AllowRightStickField?.SetValue(input, false);
+    }
+
+    private static void TrackCapturedInput(ShadeInventoryPane shadePane, InventoryPaneInput input)
+    {
+        if (shadePane == null || input == null)
+        {
+            return;
+        }
+
+        if (!CapturedInputs.TryGetValue(shadePane, out var inputs))
+        {
+            inputs = new HashSet<InventoryPaneInput>();
+            CapturedInputs[shadePane] = inputs;
+        }
+
+        inputs.RemoveWhere(candidate => candidate == null);
+        if (inputs.Add(input))
+        {
+            shadePane.RegisterBoundInput(input);
+        }
+    }
+
+    private static void RestoreSingleInput(ShadeInventoryPane shadePane, InventoryPaneInput input)
+    {
+        if (input == null)
+        {
+            shadePane.UnregisterBoundInput(input);
+            return;
+        }
+
+        try
+        {
+            if (OriginalInputBindings.TryGetValue(input, out var snapshot))
+            {
+                if (PaneField != null)
+                {
+                    try { PaneField.SetValue(input, snapshot.Pane); }
+                    catch { }
+                }
+
+                if (PaneListField != null)
+                {
+                    try { PaneListField.SetValue(input, snapshot.PaneList); }
+                    catch { }
+                }
+
+                AllowHorizontalField?.SetValue(input, snapshot.AllowHorizontal);
+                AllowVerticalField?.SetValue(input, snapshot.AllowVertical);
+                AllowRepeatField?.SetValue(input, snapshot.AllowRepeat);
+                AllowRepeatSubmitField?.SetValue(input, snapshot.AllowRepeatSubmit);
+                AllowRightStickField?.SetValue(input, snapshot.AllowRightStick);
+
+                if (PaneControlField != null)
+                {
+                    try { PaneControlField(input) = snapshot.PaneControl; }
+                    catch { }
+                }
+
+                try { input.enabled = snapshot.Enabled; }
+                catch { }
+
+                OriginalInputBindings.Remove(input);
+            }
+            else if (PaneField != null)
+            {
+                try { PaneField.SetValue(input, null); }
+                catch { }
+            }
+        }
+        catch
+        {
+        }
+
+        shadePane.UnregisterBoundInput(input);
+    }
+
+    internal static void RestoreInputBindings(ShadeInventoryPane shadePane)
+    {
+        if (shadePane == null)
+        {
+            return;
+        }
+
+        if (!CapturedInputs.TryGetValue(shadePane, out var inputs) || inputs.Count == 0)
+        {
+            shadePane.ClearBoundInputs();
+            return;
+        }
+
+        var toRestore = new List<InventoryPaneInput>(inputs);
+        foreach (var input in toRestore)
+        {
+            RestoreSingleInput(shadePane, input);
+            inputs.Remove(input);
+        }
+
+        if (inputs.Count == 0)
+        {
+            CapturedInputs.Remove(shadePane);
+        }
+
+        shadePane.ClearBoundInputs();
+    }
+
+    internal static void BindInput(ShadeInventoryPane shadePane, InventoryPaneList paneList, bool captureFocus)
     {
         if (shadePane == null || paneList == null)
         {
             return;
+        }
+
+        EnsureInputDriver();
+
+        if (captureFocus)
+        {
+            CapturedInputs.Remove(shadePane);
+            shadePane.ClearBoundInputs();
         }
 
         try
@@ -5816,7 +6602,7 @@ internal static class ShadeInventoryPaneIntegration
                         continue;
                     }
 
-                    ConfigureInput(input, paneList, shadePane);
+                    ConfigureInput(input, paneList, shadePane, captureFocus, isLocal: true);
                 }
             }
         }
@@ -5852,15 +6638,22 @@ internal static class ShadeInventoryPaneIntegration
                     }
                 }
 
+                bool currentlyShade = ReferenceEquals(currentPane, shadePane);
+                if (!captureFocus)
+                {
+                    if (currentlyShade)
+                    {
+                        ConfigureInput(input, paneList, shadePane, captureFocus: false, isLocal: false);
+                    }
+                    continue;
+                }
+
                 if (currentPane is ShadeInventoryPane existingShade && !ReferenceEquals(existingShade, shadePane))
                 {
                     continue;
                 }
 
-                if (currentPane == null || ReferenceEquals(currentPane, shadePane) || shadePane.IsPaneActive)
-                {
-                    ConfigureInput(input, paneList, shadePane);
-                }
+                ConfigureInput(input, paneList, shadePane, captureFocus: true, isLocal: false);
             }
         }
         catch
@@ -5868,7 +6661,12 @@ internal static class ShadeInventoryPaneIntegration
         }
     }
 
-    private static void ConfigureInput(InventoryPaneInput input, InventoryPaneList paneList, ShadeInventoryPane shadePane)
+    private static void ConfigureInput(
+        InventoryPaneInput input,
+        InventoryPaneList paneList,
+        ShadeInventoryPane shadePane,
+        bool captureFocus,
+        bool isLocal)
     {
         if (input == null)
         {
@@ -5876,30 +6674,48 @@ internal static class ShadeInventoryPaneIntegration
             return;
         }
 
-        if (!input.enabled)
+        InventoryPaneBase? currentPane = null;
+        if (PaneField != null)
         {
-            input.enabled = true;
+            try
+            {
+                currentPane = PaneField.GetValue(input) as InventoryPaneBase;
+            }
+            catch
+            {
+                currentPane = null;
+            }
         }
 
-        PaneControlField(input) = InventoryPaneList.PaneTypes.None;
-        AllowHorizontalField?.SetValue(input, true);
-        AllowVerticalField?.SetValue(input, true);
-        AllowRepeatField?.SetValue(input, true);
-        AllowRepeatSubmitField?.SetValue(input, false);
-        AllowRightStickField?.SetValue(input, false);
+        bool alreadyShade = ReferenceEquals(currentPane, shadePane);
+        if (!isLocal && !captureFocus && !alreadyShade)
+        {
+            return;
+        }
+
+        if (captureFocus)
+        {
+            StoreOriginalBinding(input);
+        }
+
+        if (captureFocus || isLocal)
+        {
+            ApplyShadeInputSettings(input);
+        }
 
         if (shadePane != null && PaneField != null)
         {
             try
             {
-                var currentPane = PaneField.GetValue(input) as InventoryPaneBase;
                 if (!ReferenceEquals(currentPane, shadePane))
                 {
                     PaneField.SetValue(input, shadePane);
                     ShadeInventoryPane.LogMenuEvent("Bound InventoryPaneInput to shade pane");
                 }
             }
-            catch { }
+            catch
+            {
+            }
         }
 
         if (paneList != null && PaneListField != null)
@@ -5908,7 +6724,14 @@ internal static class ShadeInventoryPaneIntegration
             {
                 PaneListField.SetValue(input, paneList);
             }
-            catch { }
+            catch
+            {
+            }
+        }
+
+        if (captureFocus)
+        {
+            TrackCapturedInput(shadePane, input);
         }
     }
 
@@ -5926,6 +6749,38 @@ internal static class ShadeInventoryPaneIntegration
         catch
         {
             return null;
+        }
+    }
+
+    private sealed class ShadeInventoryInputDriver : MonoBehaviour
+    {
+        private void Awake()
+        {
+            hideFlags |= HideFlags.HideAndDontSave;
+        }
+
+        private void Update()
+        {
+            var pane = ShadeInventoryPane.ActivePane;
+            if (pane == null)
+            {
+                return;
+            }
+
+            try
+            {
+                pane.ProcessShadeInputTick();
+            }
+            catch (Exception ex)
+            {
+                ShadeInventoryPane.LogMenuEvent(FormattableString.Invariant(
+                    $"ShadeInventoryInputDriver exception {ex.GetType().Name}: {ex.Message}"));
+            }
+        }
+
+        private void OnDestroy()
+        {
+            ShadeInventoryPaneIntegration.inputDriver = null;
         }
     }
 }

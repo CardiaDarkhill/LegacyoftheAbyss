@@ -8,7 +8,7 @@ namespace LegacyoftheAbyss.Shade
 {
     internal sealed class ShadeCharmInventory
     {
-        private const int DefaultNotchCapacity = 6;
+        private const int DefaultNotchCapacity = 3;
 
         private readonly List<ShadeCharmDefinition> _definitions;
         private readonly Dictionary<ShadeCharmId, ShadeCharmDefinition> _definitionMap;
@@ -450,6 +450,8 @@ namespace LegacyoftheAbyss.Shade
         public IReadOnlyCollection<ShadeCharmId> GetOwnedCharms() => _owned.ToArray();
 
         public IReadOnlyCollection<ShadeCharmId> GetBrokenCharms() => _broken.ToArray();
+
+        public IReadOnlyCollection<ShadeCharmId> GetNewlyDiscovered() => _newlyDiscovered.ToArray();
 
         public bool TryEquip(ShadeCharmId id, out string message)
         {

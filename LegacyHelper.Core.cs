@@ -99,27 +99,15 @@ public partial class LegacyHelper : BaseUnityPlugin
                 return;
             }
 
-            var inventory = ShadeRuntime.Charms;
-            if (inventory == null)
+            bool unlocked = ShadeRuntime.ToggleDebugUnlockAllCharms();
+            if (unlocked)
             {
-                return;
-            }
-
-            var owned = inventory.GetOwnedCharms();
-            bool allOwned = owned.Count >= inventory.AllCharms.Count;
-            if (allOwned)
-            {
-                inventory.RevokeAllCharms();
-                Logger?.LogInfo("Shade debug: revoked all shade charms.");
+                Logger?.LogInfo("Shade debug: temporarily unlocked all shade charms.");
             }
             else
             {
-                inventory.GrantAllCharms();
-                ShadeRuntime.SetNotchCapacity(20);
-                Logger?.LogInfo("Shade debug: unlocked all shade charms.");
+                Logger?.LogInfo("Shade debug: restored shade charm unlock state.");
             }
-
-            RequestShadeLoadoutRecompute();
         }
         catch (Exception ex)
         {
