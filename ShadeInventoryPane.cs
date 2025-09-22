@@ -270,6 +270,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private DirectionalInputSource shadeHeldDirectionSource;
     private float shadeDirectionRepeatTimer;
     private int lastShadeInputFrame = -1;
+    private bool loggedInactiveHierarchyProcessing;
 
     private RectSnapshot? panelRectTemplate;
     private RectSnapshot? contentRectTemplate;
@@ -1299,6 +1300,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         RegisterInputHandlers();
         EnsureBuilt();
         labelPulseTimer = 0f;
+        loggedInactiveHierarchyProcessing = false;
 
         if (IsPaneActive)
         {
@@ -1335,6 +1337,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             activePane = null;
         }
+        loggedInactiveHierarchyProcessing = false;
         LogMenuEvent("OnDisable");
     }
 
@@ -4895,7 +4898,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private bool CanProcessShadeInput()
     {
-        if (!isActive || !isActiveAndEnabled || !gameObject.activeInHierarchy)
+        if (!isActive)
         {
             return false;
         }
@@ -4905,7 +4908,26 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return false;
         }
 
-        return !CheatManager.IsOpen;
+        if (CheatManager.IsOpen)
+        {
+            return false;
+        }
+
+        if (!isActiveAndEnabled || !gameObject.activeInHierarchy)
+        {
+            if (!loggedInactiveHierarchyProcessing)
+            {
+                LogMenuEvent(FormattableString.Invariant(
+                    $"CanProcessShadeInput proceeding despite inactive hierarchy: enabled={isActiveAndEnabled} inHierarchy={gameObject.activeInHierarchy}"));
+                loggedInactiveHierarchyProcessing = true;
+            }
+        }
+        else if (loggedInactiveHierarchyProcessing)
+        {
+            loggedInactiveHierarchyProcessing = false;
+        }
+
+        return true;
     }
 
     private void ProcessShadeDirectionalInput()
