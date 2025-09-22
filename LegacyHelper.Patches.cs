@@ -9,6 +9,7 @@ using LegacyoftheAbyss.Shade;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using GlobalEnums;
 
 public partial class LegacyHelper
 {
@@ -471,63 +472,99 @@ public partial class LegacyHelper
 
     private static class InputDeviceBlocker
     {
-        private static readonly HashSet<InputDevice> trackedShadeDevices = new();
+        private static readonly Dictionary<InputDevice, Dictionary<InputControlType, bool>> restrictedDeviceControls = new();
         private static readonly List<InputDevice> cleanupList = new();
+        private static readonly InputControlType[] ControlsToDisable =
+        {
+            InputControlType.LeftStickLeft,
+            InputControlType.LeftStickRight,
+            InputControlType.LeftStickUp,
+            InputControlType.LeftStickDown,
+            InputControlType.LeftStickX,
+            InputControlType.LeftStickY,
+            InputControlType.DPadLeft,
+            InputControlType.DPadRight,
+            InputControlType.DPadUp,
+            InputControlType.DPadDown,
+            InputControlType.DPadX,
+            InputControlType.DPadY,
+            InputControlType.RightStickLeft,
+            InputControlType.RightStickRight,
+            InputControlType.RightStickUp,
+            InputControlType.RightStickDown,
+            InputControlType.RightStickX,
+            InputControlType.RightStickY,
+            InputControlType.Action1,
+            InputControlType.Action2,
+            InputControlType.Action3,
+            InputControlType.Action4,
+            InputControlType.Action5,
+            InputControlType.Action6,
+            InputControlType.LeftTrigger,
+            InputControlType.RightTrigger,
+            InputControlType.LeftBumper,
+            InputControlType.RightBumper,
+            InputControlType.LeftStickButton,
+            InputControlType.RightStickButton
+        };
 
-        private static void UpdateDeviceState(InputHandler handler, InputDevice device, bool exclude)
+        private static void UpdateDeviceState(InputDevice device, bool restrict)
         {
             if (device == null || device == InputDevice.Null)
                 return;
 
             try
             {
-                var actions = handler != null ? handler.inputActions : null;
-                if (actions != null)
+                if (restrict)
                 {
-                    var list = actions.ExcludeDevices;
-                    if (list != null)
+                    if (restrictedDeviceControls.ContainsKey(device))
+                        return;
+
+                    var originalStates = new Dictionary<InputControlType, bool>();
+                    foreach (var controlType in ControlsToDisable)
                     {
-                        bool contains = list.Contains(device);
-                        if (exclude)
-                        {
-                            if (!contains)
-                                list.Add(device);
-                            if (actions.Device == device)
-                                actions.Device = null;
-                        }
-                        else if (contains)
-                        {
-                            list.Remove(device);
-                        }
+                        var control = device.GetControl(controlType);
+                        if (control == null || control == InputControl.Null)
+                            continue;
+                        originalStates[controlType] = control.Enabled;
+                        control.Enabled = false;
+                        try { control.ClearInputState(); } catch { }
                     }
-                }
-            }
-            catch
-            {
-            }
 
-            ApplyPassive(device, exclude);
-        }
-
-        private static void ApplyPassive(InputDevice device, bool passive)
-        {
-            if (device == null || device == InputDevice.Null)
-                return;
-
-            try
-            {
-                if (passive)
-                {
-                    bool added = trackedShadeDevices.Add(device);
-                    if (added || !device.Passive)
+                    try
                     {
-                        device.Passive = true;
+                        device.LeftStick?.ClearInputState();
+                        device.RightStick?.ClearInputState();
+                        device.DPad?.ClearInputState();
                     }
+                    catch
+                    {
+                    }
+
+                    restrictedDeviceControls[device] = originalStates;
                 }
-                else if (trackedShadeDevices.Remove(device))
+                else if (restrictedDeviceControls.TryGetValue(device, out var originalStates))
                 {
-                    if (device.Passive)
-                        device.Passive = false;
+                    foreach (var kvp in originalStates)
+                    {
+                        var control = device.GetControl(kvp.Key);
+                        if (control == null || control == InputControl.Null)
+                            continue;
+                        control.Enabled = kvp.Value;
+                        try { control.ClearInputState(); } catch { }
+                    }
+
+                    try
+                    {
+                        device.LeftStick?.ClearInputState();
+                        device.RightStick?.ClearInputState();
+                        device.DPad?.ClearInputState();
+                    }
+                    catch
+                    {
+                    }
+
+                    restrictedDeviceControls.Remove(device);
                 }
             }
             catch
@@ -537,46 +574,40 @@ public partial class LegacyHelper
 
         private static void ReleaseTrackedDevices(InputHandler handler)
         {
-            if (trackedShadeDevices.Count == 0)
+            if (restrictedDeviceControls.Count == 0)
                 return;
 
             cleanupList.Clear();
-            cleanupList.AddRange(trackedShadeDevices);
+            cleanupList.AddRange(restrictedDeviceControls.Keys);
             foreach (var device in cleanupList)
             {
-                UpdateDeviceState(handler, device, false);
+                UpdateDeviceState(device, false);
             }
             cleanupList.Clear();
         }
 
         private static void CleanupDetachedDevices(InputHandler handler, IList<InputDevice> devices)
         {
-            if (trackedShadeDevices.Count == 0)
+            if (restrictedDeviceControls.Count == 0)
                 return;
 
             cleanupList.Clear();
-            foreach (var device in trackedShadeDevices)
+            cleanupList.AddRange(restrictedDeviceControls.Keys);
+            foreach (var device in cleanupList)
             {
                 if (device == null || device == InputDevice.Null)
                 {
-                    cleanupList.Add(device);
+                    UpdateDeviceState(device, false);
                     continue;
                 }
 
                 if (devices == null || !ContainsDevice(devices, device))
                 {
-                    cleanupList.Add(device);
+                    UpdateDeviceState(device, false);
                 }
             }
 
-            if (cleanupList.Count > 0)
-            {
-                foreach (var device in cleanupList)
-                {
-                    UpdateDeviceState(handler, device, false);
-                }
-                cleanupList.Clear();
-            }
+            cleanupList.Clear();
         }
 
         private static bool ContainsDevice(IList<InputDevice> list, InputDevice device)
@@ -589,6 +620,21 @@ public partial class LegacyHelper
                     return true;
             }
             return false;
+        }
+
+        private static bool ShouldBlockShadeDeviceInput()
+        {
+            try
+            {
+                var gm = GameManager.instance;
+                if (gm == null)
+                    return false;
+                return gm.GameState == GameState.PLAYING;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static bool ShadeUsesAllControllers(ShadeInputConfig config, int targetIndex, int deviceCount)
@@ -615,14 +661,8 @@ public partial class LegacyHelper
 
             try
             {
-                if (handler == null)
-                {
-                    ReleaseTrackedDevices(null);
-                    return;
-                }
-
                 var cfg = ModConfig.Instance;
-                if (cfg == null || !cfg.hornetControllerEnabled)
+                if (cfg == null)
                 {
                     ReleaseTrackedDevices(handler);
                     return;
@@ -656,25 +696,30 @@ public partial class LegacyHelper
 
         internal static bool ShouldIgnoreDevice(InputHandler handler, InputDevice device)
         {
-            bool ignore = false;
+            bool restrict = false;
 
             try
             {
                 if (device != null && device != InputDevice.Null && !device.IsUnknown)
                 {
                     var cfg = ModConfig.Instance;
-                    if (cfg != null && cfg.hornetControllerEnabled)
+                    if (cfg != null)
                     {
                         var shadeConfig = cfg.shadeInput;
                         if (shadeConfig != null && shadeConfig.UsesControllerBindings())
                         {
                             var devices = InputManager.Devices;
-                            if (devices != null && devices.Count > 1)
+                            if (devices != null && devices.Count > 0)
                             {
                                 int index = devices.IndexOf(device);
                                 if (index >= 0 && shadeConfig.IsControllerIndexInUse(index))
                                 {
-                                    ignore = !ShadeUsesAllControllers(shadeConfig, index, devices.Count);
+                                    bool hornetWantsController = cfg.hornetControllerEnabled;
+                                    bool shadeUsesAll = ShadeUsesAllControllers(shadeConfig, index, devices.Count);
+                                    if (!shadeUsesAll || !hornetWantsController)
+                                    {
+                                        restrict = true;
+                                    }
                                 }
                             }
                         }
@@ -683,16 +728,17 @@ public partial class LegacyHelper
             }
             catch
             {
-                ignore = false;
+                restrict = false;
             }
 
-            UpdateDeviceState(handler, device, ignore);
-            return ignore;
+            bool block = restrict && ShouldBlockShadeDeviceInput();
+            UpdateDeviceState(device, block);
+            return block;
         }
 
         internal static void ReleaseDevice(InputHandler handler, InputDevice device)
         {
-            UpdateDeviceState(handler, device, false);
+            UpdateDeviceState(device, false);
         }
 
         internal static void EnsureLastActiveController(InputHandler handler)
