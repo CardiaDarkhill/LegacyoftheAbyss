@@ -3,6 +3,7 @@ using System;
 using System.Reflection;
 using GlobalEnums;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 internal static class MenuStateUtility
 {
@@ -183,6 +184,26 @@ internal static class MenuStateUtility
         if (IsMenuStateName(stateName))
         {
             return true;
+        }
+
+        try
+        {
+            var eventSystem = EventSystem.current;
+            if (eventSystem != null)
+            {
+                var selected = eventSystem.currentSelectedGameObject;
+                if (selected != null && selected.activeInHierarchy)
+                {
+                    var canvas = selected.GetComponentInParent<Canvas>();
+                    if (canvas != null && canvas.isActiveAndEnabled)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        catch
+        {
         }
 
         return false;

@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.Serialization;
 using GlobalEnums;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using Xunit;
 
 public class InputDeviceBlockerTests
@@ -41,6 +42,39 @@ public class InputDeviceBlockerTests
 
             environment.SetUiState("MapScreen");
             Assert.False(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
+
+            environment.SetPaused(false);
+            environment.SetInventoryOpen(false);
+            environment.ClearMenuState();
+            environment.SetUiState(UIState.PLAYING);
+
+            var eventSystemObject = new GameObject("EventSystem", typeof(EventSystem));
+            try
+            {
+                var canvasObject = new GameObject("Canvas", typeof(Canvas));
+                try
+                {
+                    var selection = new GameObject("Selection");
+                    selection.transform.SetParent(canvasObject.transform, false);
+                    EventSystem.current?.SetSelectedGameObject(selection);
+
+                    Assert.False(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
+
+                    UnityEngine.Object.DestroyImmediate(selection);
+                }
+                finally
+                {
+                    UnityEngine.Object.DestroyImmediate(canvasObject);
+                }
+            }
+            finally
+            {
+                if (EventSystem.current != null)
+                {
+                    EventSystem.current.SetSelectedGameObject(null);
+                }
+                UnityEngine.Object.DestroyImmediate(eventSystemObject);
+            }
         }
     }
 
