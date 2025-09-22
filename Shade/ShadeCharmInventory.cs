@@ -8,7 +8,7 @@ namespace LegacyoftheAbyss.Shade
 {
     internal sealed class ShadeCharmInventory
     {
-        private const int DefaultNotchCapacity = 6;
+        private const int DefaultNotchCapacity = 3;
 
         private readonly List<ShadeCharmDefinition> _definitions;
         private readonly Dictionary<ShadeCharmId, ShadeCharmDefinition> _definitionMap;

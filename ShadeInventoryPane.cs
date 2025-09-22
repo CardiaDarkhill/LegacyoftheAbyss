@@ -50,8 +50,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private static readonly Vector2 DefaultStandaloneRootSize = new Vector2(1920f, 1080f);
     private const string LockedCharmSpriteName = "shade_charm_charmui0001charmcost02unlit";
     private const string NotchLitSpriteName = "shade_charm_charmui0000charmcost02lit";
-    private const int MaxNotchIcons = 20;
-    private const int MaxEquippedIcons = 20;
+    private const int MaxNotchIcons = 11;
+    private const int MaxEquippedIcons = 11;
 
     private static readonly Color LockedIconColor = new Color(1f, 1f, 1f, 0.72f);
     private static readonly Color InactiveIconColor = new Color(1f, 1f, 1f, 0.3f);
