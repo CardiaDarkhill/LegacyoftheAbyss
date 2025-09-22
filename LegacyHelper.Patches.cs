@@ -280,22 +280,6 @@ public partial class LegacyHelper
         }
     }
 
-    [HarmonyPatch(typeof(InventoryPaneInput), "Update")]
-    private class InventoryPaneInput_Update_ShadeInput
-    {
-        private static void Postfix(InventoryPaneInput __instance)
-        {
-            try
-            {
-                var shadePane = ShadeInventoryPaneIntegration.TryGetShadePane(__instance) ?? ShadeInventoryPane.ActivePane;
-                shadePane?.ProcessShadeInputTick();
-            }
-            catch
-            {
-            }
-        }
-    }
-
     [HarmonyPatch(typeof(InventoryPaneList), nameof(InventoryPaneList.BeginPane))]
     private class InventoryPaneList_BeginPane_BindShadeInput
     {
