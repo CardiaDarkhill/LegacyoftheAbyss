@@ -3241,7 +3241,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 var entry = entries[index];
                 RectTransform? rect = entry.Root;
                 float centerX = offset + horizontalPadding + column * strideX + charmCellSize.x * 0.5f;
-                float centerY = charmCellSize.y * 0.5f + row * strideY;
+                float centerY = totalHeight - (charmCellSize.y * 0.5f + row * strideY);
 
                 if (rect != null)
                 {
