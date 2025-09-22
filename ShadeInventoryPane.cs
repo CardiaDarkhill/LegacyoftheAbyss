@@ -824,7 +824,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
                 try
                 {
-                    var paneComponent = candidate.GetComponent<InventoryPane>();
+                    var paneComponent = candidate != null ? candidate.GetComponent<InventoryPane>() : null;
                     if (paneComponent != null && paneComponent == template)
                     {
                         rect = candidate;
@@ -835,7 +835,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 {
                 }
 
-                string name = candidate.gameObject.name;
+                string name = candidate != null ? candidate.gameObject.name : string.Empty;
                 if (!string.IsNullOrEmpty(name))
                 {
                     string lower = name.ToLowerInvariant();
@@ -1428,7 +1428,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
         labelPulseTimer = 0f;
         isActive = true;
         UpdateInventoryBinding(true);
-        ShadeInventoryPaneIntegration.BindInput(this, attachedPaneList);
+        if (attachedPaneList != null)
+        {
+            ShadeInventoryPaneIntegration.BindInput(this, attachedPaneList);
+        }
         ApplyOverlayVisibility(true);
         RefreshAll();
         UpdateParentListLabel();
@@ -2526,20 +2529,24 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
             if (cachedTrajanFont == null)
             {
-                var settings = TMP_Settings.instance;
-                if (settings != null)
+                if (TMP_Settings.instance != null)
                 {
-                    if (settings.defaultFontAsset != null &&
-                        settings.defaultFontAsset.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0)
+                    var defaultFontAsset = TMP_Settings.defaultFontAsset;
+                    if (defaultFontAsset != null &&
+                        defaultFontAsset.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
-                        cachedTrajanFont = settings.defaultFontAsset;
+                        cachedTrajanFont = defaultFontAsset;
                     }
 
-                    if (cachedTrajanFont == null && settings.fallbackFontAssets != null)
+                    if (cachedTrajanFont == null)
                     {
-                        cachedTrajanFont = settings.fallbackFontAssets
-                            .FirstOrDefault(asset => asset != null &&
-                                asset.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0);
+                        var fallbackAssets = TMP_Settings.fallbackFontAssets;
+                        if (fallbackAssets != null)
+                        {
+                            cachedTrajanFont = fallbackAssets
+                                .FirstOrDefault(asset => asset != null &&
+                                    asset.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0);
+                        }
                     }
                 }
             }
@@ -2953,7 +2960,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
         try { attachedPaneList.ClosingInventory += HandleInventoryClosed; }
         catch { }
 
-        ShadeInventoryPaneIntegration.BindInput(this, attachedPaneList);
+        if (attachedPaneList != null)
+        {
+            ShadeInventoryPaneIntegration.BindInput(this, attachedPaneList);
+        }
     }
 
     private void DetachPaneList()
@@ -3862,7 +3872,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             descriptionTextTMP.lineSpacing = 1.1f;
             descriptionTextTMP.textWrappingMode = TextWrappingModes.Normal;
-            descriptionTextTMP.enableWordWrapping = true;
             descriptionTextTMP.fontSize = 20f;
             descriptionTextTMP.margin = new Vector4(0f, 0f, 0f, 0f);
         }
