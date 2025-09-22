@@ -265,6 +265,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private InventoryPaneBase.InputEventType? shadeHeldDirection;
     private DirectionalInputSource shadeHeldDirectionSource;
     private float shadeDirectionRepeatTimer;
+    private int lastShadeInputFrame = -1;
 
     private RectSnapshot? panelRectTemplate;
     private RectSnapshot? contentRectTemplate;
@@ -4779,13 +4780,20 @@ internal sealed class ShadeInventoryPane : InventoryPane
         RenderNotchMeter(notchMeterIcons, assignments, capacity, highlightCost, selectedDefinition, selectedId, highlightEquippedSlots);
     }
 
-    private void Update()
+    internal void ProcessShadeInputTick()
     {
-        if (!isActive)
+        if (!isActive || !isActiveAndEnabled || !gameObject.activeInHierarchy || InventoryPaneInput.IsInputBlocked || CheatManager.IsOpen)
         {
             ResetShadeInputState();
             return;
         }
+
+        if (lastShadeInputFrame == Time.frameCount)
+        {
+            return;
+        }
+
+        lastShadeInputFrame = Time.frameCount;
 
         ProcessShadeDirectionalInput();
         ProcessShadeSubmitInput();
@@ -5013,6 +5021,19 @@ internal sealed class ShadeInventoryPane : InventoryPane
         if (ShadeInput.WasActionPressed(ShadeAction.Nail))
         {
             HandleSubmit();
+            return;
+        }
+
+        var actions = ResolveHeroActions();
+        if (actions == null)
+        {
+            return;
+        }
+
+        if ((actions.Attack != null && actions.Attack.WasPressed) ||
+            (actions.Jump != null && actions.Jump.WasPressed))
+        {
+            HandleSubmit();
         }
     }
 
@@ -5021,6 +5042,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         shadeHeldDirection = null;
         shadeHeldDirectionSource = DirectionalInputSource.None;
         shadeDirectionRepeatTimer = 0f;
+        lastShadeInputFrame = -1;
     }
 
     private void LateUpdate()
