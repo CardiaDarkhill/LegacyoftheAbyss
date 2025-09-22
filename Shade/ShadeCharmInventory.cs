@@ -451,6 +451,8 @@ namespace LegacyoftheAbyss.Shade
 
         public IReadOnlyCollection<ShadeCharmId> GetBrokenCharms() => _broken.ToArray();
 
+        public IReadOnlyCollection<ShadeCharmId> GetNewlyDiscovered() => _newlyDiscovered.ToArray();
+
         public bool TryEquip(ShadeCharmId id, out string message)
         {
             if (!_definitionMap.TryGetValue(id, out var definition))

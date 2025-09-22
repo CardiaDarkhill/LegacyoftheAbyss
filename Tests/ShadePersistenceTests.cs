@@ -1,5 +1,5 @@
 using System;
-
+using System.Collections.Generic;
 using System.Linq;
 using LegacyoftheAbyss.Shade;
 using Xunit;
@@ -228,5 +228,65 @@ public class ShadeSaveSlotRepositoryTests
 
         repository.SetCollectedCharms(0, Array.Empty<ShadeCharmId>());
         Assert.Empty(repository.GetCollectedCharms(0));
+    }
+}
+
+public class ShadeRuntimeDebugTests
+{
+    [Fact]
+    public void ToggleDebugUnlockAllCharmsTemporarilyOverridesState()
+    {
+        ShadeRuntime.SaveSlots.ResetAll();
+        ShadeRuntime.Clear();
+
+        try
+        {
+            var inventory = ShadeRuntime.Charms;
+            inventory.RevokeAllCharms();
+            inventory.NotchCapacity = 6;
+
+            inventory.GrantCharm(ShadeCharmId.WaywardCompass);
+            inventory.GrantCharm(ShadeCharmId.Sprintmaster);
+            Assert.True(inventory.TryEquip(ShadeCharmId.WaywardCompass, out _));
+
+            var baselineOwned = inventory.GetOwnedCharms().ToHashSet();
+            var baselineEquipped = inventory.GetEquipped().ToHashSet();
+            var baselineBroken = inventory.GetBrokenCharms().ToHashSet();
+            var baselineNew = inventory.GetNewlyDiscovered().ToHashSet();
+            int baselineCapacity = inventory.NotchCapacity;
+
+            var slotOwned = ShadeRuntime.SaveSlots.GetCollectedCharms(0).ToHashSet();
+            var slotEquipped = ShadeRuntime.SaveSlots.GetEquippedCharms(0, 0).ToHashSet();
+
+            Assert.True(ShadeRuntime.ToggleDebugUnlockAllCharms());
+            Assert.Equal(20, inventory.NotchCapacity);
+            Assert.True(inventory.IsOwned(ShadeCharmId.QuickSlash));
+            Assert.True(inventory.IsEquipped(ShadeCharmId.WaywardCompass));
+
+            Assert.True(slotOwned.SetEquals(ShadeRuntime.SaveSlots.GetCollectedCharms(0).ToHashSet()));
+            Assert.True(slotEquipped.SetEquals(ShadeRuntime.SaveSlots.GetEquippedCharms(0, 0).ToHashSet()));
+
+            Assert.True(inventory.TryEquip(ShadeCharmId.QuickSlash, out _));
+            Assert.True(inventory.IsEquipped(ShadeCharmId.QuickSlash));
+            Assert.True(slotEquipped.SetEquals(ShadeRuntime.SaveSlots.GetEquippedCharms(0, 0).ToHashSet()));
+
+            Assert.False(ShadeRuntime.ToggleDebugUnlockAllCharms());
+
+            Assert.Equal(baselineCapacity, inventory.NotchCapacity);
+            Assert.True(baselineOwned.SetEquals(inventory.GetOwnedCharms()));
+            Assert.True(baselineEquipped.SetEquals(inventory.GetEquipped()));
+            Assert.True(baselineBroken.SetEquals(inventory.GetBrokenCharms()));
+            Assert.True(baselineNew.SetEquals(inventory.GetNewlyDiscovered()));
+            Assert.False(inventory.IsOwned(ShadeCharmId.QuickSlash));
+            Assert.False(inventory.IsEquipped(ShadeCharmId.QuickSlash));
+
+            Assert.True(slotOwned.SetEquals(ShadeRuntime.SaveSlots.GetCollectedCharms(0).ToHashSet()));
+            Assert.True(slotEquipped.SetEquals(ShadeRuntime.SaveSlots.GetEquippedCharms(0, 0).ToHashSet()));
+        }
+        finally
+        {
+            ShadeRuntime.SaveSlots.ResetAll();
+            ShadeRuntime.Clear();
+        }
     }
 }

@@ -30,6 +30,8 @@ namespace LegacyoftheAbyss.Shade
         private static readonly HashSet<string> s_seenNotificationKeys = new(StringComparer.OrdinalIgnoreCase);
         private static int s_activeSlot;
         private static bool s_hasActiveSlot;
+        private static CharmInventorySnapshot? s_debugCharmSnapshot;
+        private static bool s_debugUnlockAllCharmsActive;
 
         private static readonly (int Progress, string Key, string Message)[] s_spellMilestones = new[]
         {
@@ -97,6 +99,7 @@ namespace LegacyoftheAbyss.Shade
 
         public static void Clear()
         {
+            DisableDebugUnlockIfActive();
             s_persistentState.Reset();
             s_charmInventory.ResetLoadout();
             ResetNotificationState();
@@ -292,6 +295,8 @@ namespace LegacyoftheAbyss.Shade
 
         internal static void SetActiveSlot(int slot)
         {
+            DisableDebugUnlockIfActive();
+
             int clamped = s_saveSlots.MaxSlots > 0
                 ? Mathf.Clamp(slot, 0, s_saveSlots.MaxSlots - 1)
                 : 0;
@@ -301,6 +306,40 @@ namespace LegacyoftheAbyss.Shade
             s_saveSlots.GetOrCreateSlot(s_activeSlot);
             SyncInventoryFromActiveSlot();
             LegacyHelper.RequestShadeLoadoutRecompute();
+        }
+
+        internal static bool ToggleDebugUnlockAllCharms()
+        {
+            EnsureActiveSlot();
+
+            if (s_debugUnlockAllCharmsActive)
+            {
+                DisableDebugUnlockIfActive();
+                return false;
+            }
+
+            var snapshot = CaptureCharmInventorySnapshot();
+            var allOwned = s_charmInventory.AllCharms
+                .Select(def => def.EnumId)
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)
+                .ToArray();
+
+            s_debugUnlockAllCharmsActive = true;
+            try
+            {
+                s_charmInventory.LoadState(allOwned, snapshot.Equipped, snapshot.Broken, 20, snapshot.NewlyDiscovered);
+                s_debugCharmSnapshot = snapshot;
+            }
+            catch
+            {
+                s_debugUnlockAllCharmsActive = false;
+                s_debugCharmSnapshot = null;
+                throw;
+            }
+
+            LegacyHelper.RequestShadeLoadoutRecompute();
+            return true;
         }
 
         internal static IReadOnlyCollection<ShadeCharmId> GetCollectedCharms()
@@ -422,20 +461,24 @@ namespace LegacyoftheAbyss.Shade
         {
             EnsureActiveSlot();
 
-            var owned = s_charmInventory.GetOwnedCharms();
-            var broken = s_charmInventory.GetBrokenCharms();
-            var equipped = s_charmInventory.GetEquipped().Select(id => (int)id);
+            if (!s_debugUnlockAllCharmsActive)
+            {
+                var owned = s_charmInventory.GetOwnedCharms();
+                var broken = s_charmInventory.GetBrokenCharms();
+                var equipped = s_charmInventory.GetEquipped().Select(id => (int)id);
 
-            s_saveSlots.SetCollectedCharms(s_activeSlot, owned);
-            s_saveSlots.SetBrokenCharms(s_activeSlot, broken);
-            s_saveSlots.SetNotchCapacity(s_activeSlot, s_charmInventory.NotchCapacity);
-            s_saveSlots.SetEquippedCharms(s_activeSlot, 0, equipped);
+                s_saveSlots.SetCollectedCharms(s_activeSlot, owned);
+                s_saveSlots.SetBrokenCharms(s_activeSlot, broken);
+                s_saveSlots.SetNotchCapacity(s_activeSlot, s_charmInventory.NotchCapacity);
+                s_saveSlots.SetEquippedCharms(s_activeSlot, 0, equipped);
+            }
 
             ShadeSettingsMenu.NotifyCharmLoadoutChanged();
         }
 
         private static void SyncInventoryFromActiveSlot()
         {
+            DisableDebugUnlockIfActive();
             EnsureActiveSlot();
 
             var owned = s_saveSlots.GetCollectedCharms(s_activeSlot);
@@ -454,6 +497,35 @@ namespace LegacyoftheAbyss.Shade
                 {
                     yield return (ShadeCharmId)value;
                 }
+            }
+        }
+
+        private static CharmInventorySnapshot CaptureCharmInventorySnapshot()
+        {
+            return new CharmInventorySnapshot(
+                s_charmInventory.GetOwnedCharms().ToArray(),
+                s_charmInventory.GetEquipped().ToArray(),
+                s_charmInventory.GetBrokenCharms().ToArray(),
+                s_charmInventory.GetNewlyDiscovered().ToArray(),
+                s_charmInventory.NotchCapacity);
+        }
+
+        private static void DisableDebugUnlockIfActive()
+        {
+            if (!s_debugUnlockAllCharmsActive)
+            {
+                s_debugCharmSnapshot = null;
+                return;
+            }
+
+            var snapshot = s_debugCharmSnapshot;
+            s_debugUnlockAllCharmsActive = false;
+            s_debugCharmSnapshot = null;
+
+            if (snapshot.HasValue)
+            {
+                s_charmInventory.LoadState(snapshot.Value.Owned, snapshot.Value.Equipped, snapshot.Value.Broken, snapshot.Value.NotchCapacity, snapshot.Value.NewlyDiscovered);
+                LegacyHelper.RequestShadeLoadoutRecompute();
             }
         }
 
@@ -498,6 +570,33 @@ namespace LegacyoftheAbyss.Shade
             }
 
             return 0;
+        }
+
+        private readonly struct CharmInventorySnapshot
+        {
+            public CharmInventorySnapshot(
+                ShadeCharmId[] owned,
+                ShadeCharmId[] equipped,
+                ShadeCharmId[] broken,
+                ShadeCharmId[] newlyDiscovered,
+                int notchCapacity)
+            {
+                Owned = owned ?? Array.Empty<ShadeCharmId>();
+                Equipped = equipped ?? Array.Empty<ShadeCharmId>();
+                Broken = broken ?? Array.Empty<ShadeCharmId>();
+                NewlyDiscovered = newlyDiscovered ?? Array.Empty<ShadeCharmId>();
+                NotchCapacity = Mathf.Clamp(notchCapacity, 0, 20);
+            }
+
+            public ShadeCharmId[] Owned { get; }
+
+            public ShadeCharmId[] Equipped { get; }
+
+            public ShadeCharmId[] Broken { get; }
+
+            public ShadeCharmId[] NewlyDiscovered { get; }
+
+            public int NotchCapacity { get; }
         }
 
         internal sealed class ShadeUnlockNotification
