@@ -2949,6 +2949,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         overlayRoot.pivot = new Vector2(0.5f, 0.5f);
         overlayRoot.offsetMin = Vector2.zero;
         overlayRoot.offsetMax = Vector2.zero;
+        overlayRoot.localScale = Vector3.one;
+        overlayRoot.localPosition = Vector3.zero;
 
         overlayCanvas = overlayObject.AddComponent<Canvas>();
         overlayCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -2973,6 +2975,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
         canvasGroup.alpha = 0f;
         canvasGroup.interactable = false;
         canvasGroup.blocksRaycasts = false;
+
+        UpdateOverlayCanvasScaler();
+
+        bool shouldShow = isActive && gameObject.activeInHierarchy;
+        ApplyOverlayVisibility(shouldShow);
 
         return overlayRoot;
     }
@@ -4534,6 +4541,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return;
         }
 
+        if (isActive)
+        {
+            ApplyOverlayVisibility(true);
+        }
+
         var sourceRect = entry.Icon.rectTransform;
         if (sourceRect == null)
         {
@@ -4856,6 +4868,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return;
         }
 
+        if (isActive)
+        {
+            ApplyOverlayVisibility(true);
+        }
+
         if (entry.Icon == null || destinationIcon == null)
         {
             return;
@@ -5062,6 +5079,26 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return false;
         }
 
+        Camera? camera = null;
+        if (overlayCanvas != null && overlayCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
+        {
+            camera = overlayCanvas.worldCamera;
+        }
+
+        try
+        {
+            Vector3 world = rect.TransformPoint(rect.rect.center);
+            Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(camera, world);
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(root, screenPoint, camera, out var localPoint))
+            {
+                overlayPoint = localPoint;
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
         try
         {
             Vector3 world = rect.TransformPoint(rect.rect.center);
@@ -5077,23 +5114,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
         }
 
-        Camera? camera = null;
-        if (overlayCanvas != null && overlayCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
-        {
-            camera = overlayCanvas.worldCamera;
-        }
-
-        try
-        {
-            Vector3 world = rect.TransformPoint(rect.rect.center);
-            Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(camera, world);
-            return RectTransformUtility.ScreenPointToLocalPointInRectangle(root, screenPoint, camera, out overlayPoint);
-        }
-        catch
-        {
-            overlayPoint = Vector2.zero;
-            return false;
-        }
+        overlayPoint = Vector2.zero;
+        return false;
     }
 
     private static float EaseInCubic(float t)

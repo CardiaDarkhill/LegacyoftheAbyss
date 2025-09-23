@@ -278,10 +278,12 @@ public partial class SimpleHUD
 
         float width = Mathf.Max(0f, maxBounds.x - minBounds.x);
         float height = Mathf.Max(0f, maxBounds.y - minBounds.y);
+        float rightEdge = Mathf.Min(0f, maxBounds.x);
+        float topEdge = maxBounds.y;
         var rect = overcharmBackdrop.rectTransform;
         rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
         rect.pivot = new Vector2(1f, 1f);
-        rect.anchoredPosition = new Vector2(maxBounds.x, maxBounds.y);
+        rect.anchoredPosition = new Vector2(rightEdge, topEdge);
         rect.sizeDelta = new Vector2(width, height);
         rect.localScale = new Vector3(OvercharmBackdropScale, OvercharmBackdropScale, 1f);
         rect.localRotation = Quaternion.Euler(0f, 0f, OvercharmBackdropRotation);
@@ -310,13 +312,7 @@ public partial class SimpleHUD
         min = Vector2.zero;
         max = Vector2.zero;
 
-        if (healthContainer == null || maskImages == null)
-        {
-            return false;
-        }
-
-        var containerRect = healthContainer.GetComponent<RectTransform>();
-        if (containerRect == null)
+        if (maskImages == null || maskImages.Length == 0)
         {
             return false;
         }
@@ -329,15 +325,24 @@ public partial class SimpleHUD
                 continue;
             }
 
-            var maskRect = image.rectTransform;
-            if (maskRect == null)
+            var rect = image.rectTransform;
+            if (rect == null)
             {
                 continue;
             }
 
-            var bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(containerRect, maskRect);
-            Vector2 currentMin = new Vector2(bounds.min.x, bounds.min.y);
-            Vector2 currentMax = new Vector2(bounds.max.x, bounds.max.y);
+            Vector2 anchored = rect.anchoredPosition;
+            Vector2 size = rect.rect.size;
+            Vector2 pivot = rect.pivot;
+
+            float left = anchored.x - size.x * pivot.x;
+            float right = anchored.x + size.x * (1f - pivot.x);
+            float bottom = anchored.y - size.y * pivot.y;
+            float top = anchored.y + size.y * (1f - pivot.y);
+
+            var currentMin = new Vector2(left, bottom);
+            var currentMax = new Vector2(right, top);
+
             if (!hasMask)
             {
                 min = currentMin;
@@ -346,12 +351,17 @@ public partial class SimpleHUD
             }
             else
             {
-                min = Vector2.Min(min, currentMin);
-                max = Vector2.Max(max, currentMax);
+                min = new Vector2(Mathf.Min(min.x, currentMin.x), Mathf.Min(min.y, currentMin.y));
+                max = new Vector2(Mathf.Max(max.x, currentMax.x), Mathf.Max(max.y, currentMax.y));
             }
         }
 
-        return hasMask;
+        if (!hasMask)
+        {
+            return false;
+        }
+
+        return true;
     }
 }
 
