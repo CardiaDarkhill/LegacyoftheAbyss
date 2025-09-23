@@ -5079,17 +5079,44 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return false;
         }
 
-        Camera? camera = null;
-        if (overlayCanvas != null && overlayCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
+        Canvas? rectCanvas = null;
+        try
         {
-            camera = overlayCanvas.worldCamera;
+            rectCanvas = rect.GetComponentInParent<Canvas>();
+        }
+        catch
+        {
+            rectCanvas = null;
+        }
+
+        Camera? rectCamera = null;
+        if (rectCanvas != null && rectCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
+        {
+            rectCamera = rectCanvas.worldCamera;
+            if (rectCamera == null && rectCanvas.renderMode == RenderMode.WorldSpace)
+            {
+                rectCamera = Camera.main;
+            }
+        }
+
+        Camera? overlayCamera = overlayCanvas != null && overlayCanvas.renderMode != RenderMode.ScreenSpaceOverlay
+            ? overlayCanvas.worldCamera
+            : null;
+
+        Vector3 worldCenter;
+        try
+        {
+            worldCenter = rect.TransformPoint(rect.rect.center);
+        }
+        catch
+        {
+            worldCenter = rect.position;
         }
 
         try
         {
-            Vector3 world = rect.TransformPoint(rect.rect.center);
-            Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(camera, world);
-            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(root, screenPoint, camera, out var localPoint))
+            Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(rectCamera, worldCenter);
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(root, screenPoint, overlayCamera, out var localPoint))
             {
                 overlayPoint = localPoint;
                 return true;
@@ -5101,8 +5128,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         try
         {
-            Vector3 world = rect.TransformPoint(rect.rect.center);
-            Vector3 local = root.InverseTransformPoint(world);
+            Vector3 local = root.InverseTransformPoint(worldCenter);
             if (!float.IsNaN(local.x) && !float.IsNaN(local.y) &&
                 !float.IsInfinity(local.x) && !float.IsInfinity(local.y))
             {

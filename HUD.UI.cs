@@ -283,10 +283,55 @@ public partial class SimpleHUD
         var rect = overcharmBackdrop.rectTransform;
         rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
         rect.pivot = new Vector2(1f, 1f);
-        rect.anchoredPosition = new Vector2(rightEdge, topEdge);
         rect.sizeDelta = new Vector2(width, height);
-        rect.localScale = new Vector3(OvercharmBackdropScale, OvercharmBackdropScale, 1f);
+
+        float scale = OvercharmBackdropScale;
+        rect.localScale = new Vector3(scale, scale, 1f);
         rect.localRotation = Quaternion.Euler(0f, 0f, OvercharmBackdropRotation);
+
+        Vector2 anchored = new Vector2(rightEdge, topEdge);
+        if (width > 0f || height > 0f)
+        {
+            float rotation = Mathf.Repeat(OvercharmBackdropRotation, 360f) * Mathf.Deg2Rad;
+            float cos = Mathf.Cos(rotation);
+            float sin = Mathf.Sin(rotation);
+            float scaledWidth = width * Mathf.Abs(scale);
+            float scaledHeight = height * Mathf.Abs(scale);
+
+            float maxX = float.NegativeInfinity;
+            float maxY = float.NegativeInfinity;
+
+            Vector2[] corners =
+            {
+                Vector2.zero,
+                new Vector2(-scaledWidth, 0f),
+                new Vector2(0f, -scaledHeight),
+                new Vector2(-scaledWidth, -scaledHeight)
+            };
+
+            for (int i = 0; i < corners.Length; i++)
+            {
+                float x = corners[i].x;
+                float y = corners[i].y;
+                float rotatedX = x * cos - y * sin;
+                float rotatedY = x * sin + y * cos;
+                if (rotatedX > maxX)
+                {
+                    maxX = rotatedX;
+                }
+                if (rotatedY > maxY)
+                {
+                    maxY = rotatedY;
+                }
+            }
+
+            if (!float.IsInfinity(maxX) && !float.IsInfinity(maxY))
+            {
+                anchored -= new Vector2(maxX, maxY);
+            }
+        }
+
+        rect.anchoredPosition = anchored;
         if (overcharmBackdropSprite != null)
         {
             overcharmBackdrop.sprite = overcharmBackdropSprite;
