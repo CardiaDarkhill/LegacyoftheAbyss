@@ -63,6 +63,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private static readonly Color OvercharmedNotchFillColor = new Color(1f, 0.55f, 0.55f, 1f);
     private static readonly Color OvercharmedNotchHighlightColor = new Color(1f, 0.67f, 0.67f, 1f);
     private static readonly Color OvercharmedNotchEmptyColor = new Color(1f, 0.45f, 0.45f, 0.45f);
+    private static readonly Color OvercharmedBackdropFallbackColor = new Color(1f, 0.45f, 0.45f, 0.32f);
 
     private static Sprite? lockedCharmSprite;
     private static bool lockedCharmSpriteSearched;
@@ -296,6 +297,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private RectTransform? detailCostRow;
     private RectTransform? detailCostIconContainer;
     private RectTransform? equippedIconsRoot;
+    private Image? equippedOvercharmBackdrop;
+    private HorizontalLayoutGroup? equippedIconsLayout;
     private readonly List<Image> notchMeterIcons = new List<Image>(MaxNotchIcons);
     private readonly List<Image> detailCostIcons = new List<Image>(MaxNotchIcons);
     private readonly List<Image> equippedIcons = new List<Image>(MaxEquippedIcons);
@@ -309,6 +312,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private static Sprite? notchLitSprite;
     private static Sprite? notchUnlitSprite;
     private static bool notchSpritesSearched;
+    private static Sprite? overcharmBackdropSprite;
+    private static bool overcharmBackdropSpriteSearched;
 
     private struct CharmEntry
     {
@@ -2085,6 +2090,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
         detailCostRow = null;
         detailCostIconContainer = null;
         equippedIconsRoot = null;
+        equippedOvercharmBackdrop = null;
+        equippedIconsLayout = null;
+        equippedOvercharmBackdrop = null;
+        equippedIconsLayout = null;
         entries.Clear();
         entryGridPositions.Clear();
         entryCenterXs.Clear();
@@ -3817,6 +3826,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         equippedLayout.childForceExpandWidth = false;
         equippedLayout.childForceExpandHeight = false;
         equippedLayout.padding = new RectOffset();
+        equippedIconsLayout = equippedLayout;
 
         notchText = CreateText("Notches", leftContentRoot, FontStyle.Normal, 32, TextAnchor.UpperLeft, out notchTextTMP);
         var notchLabelRect = ResolveRectTransform(notchText, notchTextTMP);
@@ -3848,6 +3858,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         notchLayout.padding = new RectOffset();
 
         BuildIconPool(equippedIconsRoot, equippedIcons, MaxEquippedIcons, "EquippedCharm", new Vector2(96f, 96f));
+        EnsureEquippedOvercharmBackdrop();
         ResetEquippedDisplayState();
         BuildIconPool(notchIconContainer, notchMeterIcons, MaxNotchIcons, "NotchIcon", new Vector2(32f, 32f));
 
@@ -4213,6 +4224,154 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         notchSpritesSearched = true;
+    }
+
+    private Image? EnsureEquippedOvercharmBackdrop()
+    {
+        if (equippedIconsRoot == null)
+        {
+            return null;
+        }
+
+        if (equippedOvercharmBackdrop != null)
+        {
+            return equippedOvercharmBackdrop;
+        }
+
+        var go = new GameObject("EquippedOvercharmBackdrop", typeof(RectTransform));
+        go.layer = equippedIconsRoot.gameObject.layer;
+        var rect = go.GetComponent<RectTransform>();
+        rect.SetParent(equippedIconsRoot, false);
+        rect.anchorMin = new Vector2(0f, 0.5f);
+        rect.anchorMax = new Vector2(0f, 0.5f);
+        rect.pivot = new Vector2(0f, 0.5f);
+        rect.anchoredPosition = Vector2.zero;
+        rect.sizeDelta = Vector2.zero;
+        rect.SetAsFirstSibling();
+
+        var layoutElement = go.AddComponent<LayoutElement>();
+        layoutElement.ignoreLayout = true;
+
+        var image = go.AddComponent<Image>();
+        image.raycastTarget = false;
+        image.preserveAspect = false;
+
+        var sprite = ResolveOvercharmBackdropSprite();
+        if (sprite != null)
+        {
+            image.sprite = sprite;
+            image.color = Color.white;
+        }
+        else
+        {
+            image.sprite = GetFallbackSprite();
+            image.color = OvercharmedBackdropFallbackColor;
+        }
+
+        image.enabled = false;
+        go.SetActive(false);
+        equippedOvercharmBackdrop = image;
+        return image;
+    }
+
+    private void UpdateEquippedOvercharmBackdrop(bool overcharmed, int equippedCount)
+    {
+        var image = EnsureEquippedOvercharmBackdrop();
+        if (image == null)
+        {
+            return;
+        }
+
+        if (!overcharmed || equippedCount <= 0)
+        {
+            image.enabled = false;
+            image.gameObject.SetActive(false);
+            return;
+        }
+
+        if (equippedIconsRoot != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(equippedIconsRoot);
+        }
+
+        var sprite = ResolveOvercharmBackdropSprite();
+        if (sprite != null && image.sprite != sprite)
+        {
+            image.sprite = sprite;
+        }
+
+        image.color = sprite != null ? Color.white : OvercharmedBackdropFallbackColor;
+
+        float spacing = equippedIconsLayout != null ? equippedIconsLayout.spacing : 0f;
+        float width = 0f;
+        float height = 0f;
+        int activeIcons = 0;
+
+        foreach (var icon in equippedIcons)
+        {
+            if (icon == null || !icon.enabled || !icon.gameObject.activeSelf)
+            {
+                continue;
+            }
+
+            var iconRect = icon.rectTransform;
+            float iconWidth = iconRect.rect.width;
+            if (iconWidth <= 0f)
+            {
+                iconWidth = iconRect.sizeDelta.x;
+            }
+
+            float iconHeight = iconRect.rect.height;
+            if (iconHeight <= 0f)
+            {
+                iconHeight = iconRect.sizeDelta.y;
+            }
+
+            if (iconWidth > 0f)
+            {
+                width += iconWidth;
+            }
+
+            if (iconHeight > height)
+            {
+                height = iconHeight;
+            }
+
+            activeIcons++;
+        }
+
+        if (activeIcons <= 0)
+        {
+            image.enabled = false;
+            image.gameObject.SetActive(false);
+            return;
+        }
+
+        if (activeIcons > 1)
+        {
+            width += spacing * (activeIcons - 1);
+        }
+
+        if (width <= 0f)
+        {
+            width = activeIcons * 96f + Mathf.Max(0, activeIcons - 1) * spacing;
+        }
+
+        if (height <= 0f)
+        {
+            height = 96f;
+        }
+
+        const float paddingX = 24f;
+        const float paddingY = 24f;
+
+        var rect = image.rectTransform;
+        rect.sizeDelta = new Vector2(width + paddingX * 2f, height + paddingY * 2f);
+        rect.anchoredPosition = new Vector2(-paddingX, 0f);
+
+        image.gameObject.SetActive(true);
+        image.enabled = true;
+        image.transform.SetAsFirstSibling();
     }
 
     private void EnsureEquippedDisplayCapacity()
@@ -4639,6 +4798,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         EnsureBuilt();
         if (equippedIcons.Count == 0)
         {
+            UpdateEquippedOvercharmBackdrop(false, 0);
             return;
         }
 
@@ -4667,6 +4827,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
             previousEquippedOrder.Clear();
             hasRenderedEquippedRow = false;
+            UpdateEquippedOvercharmBackdrop(false, 0);
             return;
         }
 
@@ -4714,6 +4875,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 image.gameObject.SetActive(false);
             }
         }
+
+        UpdateEquippedOvercharmBackdrop(overcharmed, count);
 
         if (hasRenderedEquippedRow)
         {
@@ -5775,6 +5938,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
         else if (equipped)
         {
             status = FormattableString.Invariant($"Equipped. {unequipPrompt}");
+            if (overcharmed)
+            {
+                status += " Shade is overcharmed and suffers double damage.";
+            }
         }
         else if (inventory.UsedNotches + notchCost > inventory.NotchCapacity)
         {
@@ -5816,7 +5983,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         SetTextValue(statusText, statusTextTMP, status);
-        if (string.IsNullOrEmpty(hint) && overcharmed && !equipped)
+        if (string.IsNullOrEmpty(hint) && overcharmed)
         {
             hint = "Shade is overcharmed and currently takes double damage.";
         }
@@ -5848,6 +6015,18 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         lockedCharmSpriteSearched = true;
         return lockedCharmSprite;
+    }
+
+    private static Sprite? ResolveOvercharmBackdropSprite()
+    {
+        if (overcharmBackdropSpriteSearched)
+        {
+            return overcharmBackdropSprite;
+        }
+
+        overcharmBackdropSprite = ShadeCharmIconLoader.TryLoadIcon("overcharm_backboard", "overcharm_backboard.png");
+        overcharmBackdropSpriteSearched = true;
+        return overcharmBackdropSprite;
     }
 
     private Sprite GetFallbackSprite()

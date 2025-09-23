@@ -21,6 +21,7 @@ public partial class SimpleHUD : MonoBehaviour
     private RectTransform soulRevealMask;
     private Image soulImage;
     private Image soulBgImage;
+    private Sprite overcharmBackdropSprite;
 
     // Fallback/legacy assets
     private Sprite frameSprite;

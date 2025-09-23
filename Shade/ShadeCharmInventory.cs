@@ -739,6 +739,17 @@ namespace LegacyoftheAbyss.Shade
             int prospectiveNotches = UsedNotches + notchCost;
             bool fits = notchCost <= 0 || prospectiveNotches <= _notchCapacity;
 
+            if (!fits && _isOvercharmed)
+            {
+                if (removedKingsoul)
+                {
+                    RestoreEquippedAtIndex(ShadeCharmId.Kingsoul, removedKingsoulIndex);
+                }
+
+                message = "Shade is already overcharmed. Unequip a charm first.";
+                return false;
+            }
+
             if (!fits && !_isOvercharmed)
             {
                 _overcharmAttemptCounter++;

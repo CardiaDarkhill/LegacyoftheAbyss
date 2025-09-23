@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.UI;
+using LegacyoftheAbyss.Shade;
 
 public partial class SimpleHUD
 {
@@ -27,12 +28,18 @@ public partial class SimpleHUD
             var framePath = ModPaths.GetAssetPath("select_game_HUD_0002_health_frame.png");
             var slashPath = ModPaths.GetAssetPath("The Knight spells and items - atlas0 #00000309.png");
             var soulOrbPath = ModPaths.GetAssetPath("soul_orb_glow0000.png");
+            var overcharmBackdropPath = ModPaths.GetAssetPath("overcharm_backboard.png");
             maskSprite = LoadSprite(maskPath);
             if (maskSprite == null) maskSprite = FindSpriteInGame("select_game_HUD_0001_health");
             frameSprite = LoadSprite(framePath);
             if (frameSprite == null) frameSprite = FindSpriteInGame("select_game_HUD_0002_health_frame");
             slashFrames = LoadSpriteSheet(slashPath, 8, 8);
             soulOrbSprite = LoadSprite(soulOrbPath);
+            overcharmBackdropSprite = LoadSprite(overcharmBackdropPath);
+            if (overcharmBackdropSprite == null)
+            {
+                overcharmBackdropSprite = ShadeCharmIconLoader.TryLoadIcon("overcharm_backboard", "overcharm_backboard.png");
+            }
         }
         catch { }
     }

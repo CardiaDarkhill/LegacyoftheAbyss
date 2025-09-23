@@ -223,10 +223,25 @@ public partial class SimpleHUD
             go.transform.SetParent(container, false);
             overcharmBackdrop = go.AddComponent<Image>();
             overcharmBackdrop.raycastTarget = false;
+        }
+
+        if (overcharmBackdropSprite != null)
+        {
+            overcharmBackdrop.sprite = overcharmBackdropSprite;
+            overcharmBackdrop.color = Color.white;
+        }
+        else if (overcharmBackdrop.sprite == null)
+        {
             overcharmBackdrop.sprite = BuildMaskSprite();
             overcharmBackdrop.color = overcharmBackdropColor;
         }
+        else
+        {
+            overcharmBackdrop.color = overcharmBackdropColor;
+        }
 
+        var rect = overcharmBackdrop.rectTransform;
+        rect.localScale = new Vector3(-1f, 1f, 1f);
         overcharmBackdrop.transform.SetAsFirstSibling();
     }
 
@@ -242,6 +257,7 @@ public partial class SimpleHUD
         if (shadeMax <= 0)
         {
             overcharmBackdrop.enabled = false;
+            overcharmBackdrop.gameObject.SetActive(false);
             return;
         }
 
@@ -252,8 +268,25 @@ public partial class SimpleHUD
         rect.pivot = new Vector2(1f, 1f);
         rect.anchoredPosition = Vector2.zero;
         rect.sizeDelta = new Vector2(width, height);
-        overcharmBackdrop.color = overcharmBackdropColor;
+        if (overcharmBackdropSprite != null)
+        {
+            overcharmBackdrop.sprite = overcharmBackdropSprite;
+            overcharmBackdrop.color = Color.white;
+        }
+        else if (overcharmBackdrop.sprite == null)
+        {
+            overcharmBackdrop.sprite = BuildMaskSprite();
+            overcharmBackdrop.color = overcharmBackdropColor;
+        }
+        else
+        {
+            overcharmBackdrop.color = overcharmBackdropColor;
+        }
+
+        var rect = overcharmBackdrop.rectTransform;
+        rect.localScale = new Vector3(-1f, 1f, 1f);
         overcharmBackdrop.enabled = shadeOvercharmed;
+        overcharmBackdrop.gameObject.SetActive(shadeOvercharmed);
         overcharmBackdrop.transform.SetAsFirstSibling();
     }
 }
