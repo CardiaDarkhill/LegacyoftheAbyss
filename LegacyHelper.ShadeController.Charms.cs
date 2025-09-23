@@ -45,6 +45,7 @@ public partial class LegacyHelper
             snapLeashRadius = Mathf.Max(hardLeashRadius, snapLeashRadius);
 
             PushSoulToHud();
+            PushShadeStatsToHud();
         }
 
         internal void MultiplyNailDamage(float factor)

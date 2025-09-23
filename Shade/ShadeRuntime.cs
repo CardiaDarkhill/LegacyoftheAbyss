@@ -330,11 +330,16 @@ namespace LegacyoftheAbyss.Shade
             {
                 s_charmInventory.LoadState(allOwned, snapshot.Equipped, snapshot.Broken, 20, snapshot.NewlyDiscovered);
                 s_debugCharmSnapshot = snapshot;
+                s_saveSlots.SetDebugUnlockState(
+                    s_activeSlot,
+                    true,
+                    new ShadeDebugCharmSnapshot(snapshot.Owned, snapshot.Equipped, snapshot.Broken, snapshot.NewlyDiscovered, snapshot.NotchCapacity));
             }
             catch
             {
                 s_debugUnlockAllCharmsActive = false;
                 s_debugCharmSnapshot = null;
+                s_saveSlots.SetDebugUnlockState(s_activeSlot, false, null);
                 throw;
             }
 
@@ -468,11 +473,13 @@ namespace LegacyoftheAbyss.Shade
                 var owned = s_charmInventory.GetOwnedCharms();
                 var broken = s_charmInventory.GetBrokenCharms();
                 var equipped = s_charmInventory.GetEquipped().Select(id => (int)id);
+                var newlyDiscovered = s_charmInventory.GetNewlyDiscovered();
 
                 s_saveSlots.SetCollectedCharms(s_activeSlot, owned);
                 s_saveSlots.SetBrokenCharms(s_activeSlot, broken);
                 s_saveSlots.SetNotchCapacity(s_activeSlot, s_charmInventory.NotchCapacity);
                 s_saveSlots.SetEquippedCharms(s_activeSlot, 0, equipped);
+                s_saveSlots.SetNewlyDiscoveredCharms(s_activeSlot, newlyDiscovered);
             }
 
             LegacyHelper.RequestShadeLoadoutRecompute();
@@ -486,9 +493,51 @@ namespace LegacyoftheAbyss.Shade
             var owned = s_saveSlots.GetCollectedCharms(s_activeSlot);
             var broken = s_saveSlots.GetBrokenCharms(s_activeSlot);
             var equipped = ConvertToCharmIds(s_saveSlots.GetEquippedCharms(s_activeSlot, 0));
+            var newlyDiscovered = s_saveSlots.GetNewlyDiscoveredCharms(s_activeSlot);
             int notchCapacity = s_saveSlots.GetNotchCapacity(s_activeSlot);
 
-            s_charmInventory.LoadState(owned, equipped, broken, notchCapacity);
+            s_charmInventory.LoadState(owned, equipped, broken, notchCapacity, newlyDiscovered);
+            ApplySavedDebugUnlockState();
+        }
+
+        private static void ApplySavedDebugUnlockState()
+        {
+            if (!s_saveSlots.IsDebugUnlockActive(s_activeSlot))
+            {
+                s_debugUnlockAllCharmsActive = false;
+                s_debugCharmSnapshot = null;
+                return;
+            }
+
+            var debugSnapshot = s_saveSlots.GetDebugUnlockSnapshot(s_activeSlot);
+            if (!debugSnapshot.HasValue)
+            {
+                s_debugUnlockAllCharmsActive = false;
+                s_debugCharmSnapshot = null;
+                return;
+            }
+
+            var data = debugSnapshot.Value;
+            s_debugUnlockAllCharmsActive = true;
+            s_debugCharmSnapshot = new CharmInventorySnapshot(
+                data.Owned,
+                data.Equipped,
+                data.Broken,
+                data.NewlyDiscovered,
+                data.NotchCapacity);
+
+            var allOwned = s_charmInventory.AllCharms
+                .Select(def => def.EnumId)
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)
+                .ToArray();
+
+            s_charmInventory.LoadState(
+                allOwned,
+                s_debugCharmSnapshot.Value.Equipped,
+                s_debugCharmSnapshot.Value.Broken,
+                20,
+                s_debugCharmSnapshot.Value.NewlyDiscovered);
         }
 
         private static IEnumerable<ShadeCharmId> ConvertToCharmIds(IEnumerable<int> values)
@@ -523,6 +572,16 @@ namespace LegacyoftheAbyss.Shade
             var snapshot = s_debugCharmSnapshot;
             s_debugUnlockAllCharmsActive = false;
             s_debugCharmSnapshot = null;
+
+            ShadeDebugCharmSnapshot? persistenceSnapshot = snapshot.HasValue
+                ? new ShadeDebugCharmSnapshot(
+                    snapshot.Value.Owned,
+                    snapshot.Value.Equipped,
+                    snapshot.Value.Broken,
+                    snapshot.Value.NewlyDiscovered,
+                    snapshot.Value.NotchCapacity)
+                : (ShadeDebugCharmSnapshot?)null;
+            s_saveSlots.SetDebugUnlockState(s_activeSlot, false, persistenceSnapshot);
 
             if (snapshot.HasValue)
             {

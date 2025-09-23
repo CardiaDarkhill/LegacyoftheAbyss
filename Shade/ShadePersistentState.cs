@@ -108,6 +108,104 @@ namespace LegacyoftheAbyss.Shade
             _equippedCharmLoadouts.Clear();
         }
 
+        internal ShadePersistentStateData ToData()
+        {
+            var equipped = new Dictionary<int, int[]>();
+            foreach (var (loadoutId, charms) in _equippedCharmLoadouts)
+            {
+                equipped[loadoutId] = charms.ToArray();
+            }
+
+            return new ShadePersistentStateData
+            {
+                CurrentHP = CurrentHP,
+                MaxHP = MaxHP,
+                Soul = Soul,
+                CanTakeDamage = CanTakeDamage,
+                SpellProgress = SpellProgress,
+                NotchCapacity = NotchCapacity,
+                DiscoveredCharmIds = _discoveredCharmIds.ToArray(),
+                EquippedCharmLoadouts = equipped
+            };
+        }
+
+        internal void LoadFromData(ShadePersistentStateData? data)
+        {
+            Reset();
+            if (!data.HasValue)
+            {
+                return;
+            }
+
+            var snapshot = data.Value;
+            if (snapshot.MaxHP > 0)
+            {
+                Capture(snapshot.CurrentHP, snapshot.MaxHP, snapshot.Soul, snapshot.CanTakeDamage);
+            }
+            else
+            {
+                Soul = Mathf.Max(0, snapshot.Soul);
+                CanTakeDamage = snapshot.CanTakeDamage;
+            }
+
+            SetSpellProgress(snapshot.SpellProgress);
+            SetNotchCapacity(snapshot.NotchCapacity);
+
+            if (snapshot.DiscoveredCharmIds != null)
+            {
+                foreach (var charmId in snapshot.DiscoveredCharmIds)
+                {
+                    if (charmId >= 0)
+                    {
+                        UnlockCharm(charmId);
+                    }
+                }
+            }
+
+            if (snapshot.EquippedCharmLoadouts != null)
+            {
+                foreach (var kvp in snapshot.EquippedCharmLoadouts)
+                {
+                    int loadoutId = kvp.Key;
+                    var charms = kvp.Value;
+                    if (charms == null)
+                    {
+                        continue;
+                    }
+
+                    foreach (var charmId in charms)
+                    {
+                        if (charmId < 0)
+                        {
+                            continue;
+                        }
+
+                        UnlockCharm(charmId);
+                        EquipCharm(loadoutId, charmId);
+                    }
+                }
+            }
+        }
+
+        internal struct ShadePersistentStateData
+        {
+            public int CurrentHP { get; set; }
+
+            public int MaxHP { get; set; }
+
+            public int Soul { get; set; }
+
+            public bool CanTakeDamage { get; set; }
+
+            public int SpellProgress { get; set; }
+
+            public int NotchCapacity { get; set; }
+
+            public int[]? DiscoveredCharmIds { get; set; }
+
+            public Dictionary<int, int[]>? EquippedCharmLoadouts { get; set; }
+        }
+
         public void ForceMinimumHealth(int minimum)
         {
             if (!HasData)

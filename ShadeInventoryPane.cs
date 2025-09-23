@@ -309,6 +309,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private Color notchLabelDefaultColor = Color.white;
     private Color notchLabelDefaultTmpColor = Color.white;
     private readonly List<GameObject> activeCharmFlights = new List<GameObject>();
+    private readonly HashSet<Image> animatingEquippedIcons = new HashSet<Image>();
     private static Sprite? notchLitSprite;
     private static Sprite? notchUnlitSprite;
     private static bool notchSpritesSearched;
@@ -4254,7 +4255,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         var image = go.AddComponent<Image>();
         image.raycastTarget = false;
-        image.preserveAspect = false;
+        image.preserveAspect = true;
 
         var sprite = ResolveOvercharmBackdropSprite();
         if (sprite != null)
@@ -4302,10 +4303,43 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         image.color = sprite != null ? Color.white : OvercharmedBackdropFallbackColor;
 
-        float spacing = equippedIconsLayout != null ? equippedIconsLayout.spacing : 0f;
-        float width = 0f;
-        float height = 0f;
-        int activeIcons = 0;
+        Vector2 boundsCenter;
+        Vector2 boundsSize;
+        bool hasBounds = TryCalculateEquippedIconBounds(out boundsCenter, out boundsSize);
+        if (!hasBounds)
+        {
+            boundsCenter = Vector2.zero;
+            boundsSize = new Vector2(96f * Mathf.Max(1, equippedCount), 96f);
+        }
+
+        const float paddingX = 24f;
+        const float paddingY = 24f;
+
+        var rect = image.rectTransform;
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = boundsCenter;
+        rect.sizeDelta = new Vector2(boundsSize.x + paddingX * 2f, boundsSize.y + paddingY * 2f);
+
+        image.gameObject.SetActive(true);
+        image.enabled = true;
+        image.transform.SetAsFirstSibling();
+    }
+
+    private bool TryCalculateEquippedIconBounds(out Vector2 center, out Vector2 size)
+    {
+        center = Vector2.zero;
+        size = Vector2.zero;
+
+        if (equippedIconsRoot == null)
+        {
+            return false;
+        }
+
+        bool hasIcon = false;
+        Vector3 min = Vector3.zero;
+        Vector3 max = Vector3.zero;
 
         foreach (var icon in equippedIcons)
         {
@@ -4314,64 +4348,34 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 continue;
             }
 
-            var iconRect = icon.rectTransform;
-            float iconWidth = iconRect.rect.width;
-            if (iconWidth <= 0f)
+            var rect = icon.rectTransform;
+            if (rect == null)
             {
-                iconWidth = iconRect.sizeDelta.x;
+                continue;
             }
 
-            float iconHeight = iconRect.rect.height;
-            if (iconHeight <= 0f)
+            var bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(equippedIconsRoot, rect);
+            if (!hasIcon)
             {
-                iconHeight = iconRect.sizeDelta.y;
+                min = bounds.min;
+                max = bounds.max;
+                hasIcon = true;
             }
-
-            if (iconWidth > 0f)
+            else
             {
-                width += iconWidth;
+                min = Vector3.Min(min, bounds.min);
+                max = Vector3.Max(max, bounds.max);
             }
-
-            if (iconHeight > height)
-            {
-                height = iconHeight;
-            }
-
-            activeIcons++;
         }
 
-        if (activeIcons <= 0)
+        if (!hasIcon)
         {
-            image.enabled = false;
-            image.gameObject.SetActive(false);
-            return;
+            return false;
         }
 
-        if (activeIcons > 1)
-        {
-            width += spacing * (activeIcons - 1);
-        }
-
-        if (width <= 0f)
-        {
-            width = activeIcons * 96f + Mathf.Max(0, activeIcons - 1) * spacing;
-        }
-
-        if (height <= 0f)
-        {
-            height = 96f;
-        }
-
-        const float paddingX = 24f;
-        const float paddingY = 24f;
-
-        var rect = image.rectTransform;
-        rect.sizeDelta = new Vector2(width + paddingX * 2f, height + paddingY * 2f);
-        rect.anchoredPosition = new Vector2(-paddingX, 0f);
-
-        image.gameObject.SetActive(true);
-        image.enabled = true;
-        image.transform.SetAsFirstSibling();
+        size = new Vector2(Mathf.Max(0f, max.x - min.x), Mathf.Max(0f, max.y - min.y));
+        center = new Vector2((min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f);
+        return true;
     }
 
     private void EnsureEquippedDisplayCapacity()
@@ -4503,6 +4507,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return;
         }
 
+        BeginEquippedIconAnimation(destinationIcon);
+
         var flight = new GameObject($"CharmFlight_{entry.Id}", typeof(RectTransform));
         flight.layer = root.gameObject.layer;
         var rect = flight.GetComponent<RectTransform>();
@@ -4526,44 +4532,52 @@ internal sealed class ShadeInventoryPane : InventoryPane
         image.color = overcharmed ? OvercharmedEquippedIconColor : Color.white;
 
         activeCharmFlights.Add(flight);
-        StartCoroutine(AnimateCharmFlight(rect, start, end, flight));
+        StartCoroutine(AnimateCharmFlight(rect, start, end, flight, destinationIcon));
     }
 
-    private IEnumerator AnimateCharmFlight(RectTransform rect, Vector2 start, Vector2 end, GameObject flightObject)
+    private IEnumerator AnimateCharmFlight(RectTransform rect, Vector2 start, Vector2 end, GameObject flightObject, Image destinationIcon)
     {
         float duration = 0.35f;
         float elapsed = 0f;
-        while (elapsed < duration)
+        try
         {
-            if (rect == null)
+            while (elapsed < duration)
             {
-                yield break;
+                if (rect == null)
+                {
+                    yield break;
+                }
+
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+                float eased = EaseOutCubic(t);
+                rect.anchoredPosition = Vector2.LerpUnclamped(start, end, eased);
+                float scale = Mathf.Lerp(1f, 0.8f, t);
+                rect.localScale = new Vector3(scale, scale, 1f);
+                yield return null;
             }
 
-            elapsed += Time.unscaledDeltaTime;
-            float t = Mathf.Clamp01(elapsed / duration);
-            float eased = EaseOutCubic(t);
-            rect.anchoredPosition = Vector2.LerpUnclamped(start, end, eased);
-            float scale = Mathf.Lerp(1f, 0.8f, t);
-            rect.localScale = new Vector3(scale, scale, 1f);
-            yield return null;
+            if (rect != null)
+            {
+                rect.anchoredPosition = end;
+                rect.localScale = new Vector3(0.8f, 0.8f, 1f);
+            }
         }
-
-        if (rect != null)
+        finally
         {
-            rect.anchoredPosition = end;
-            rect.localScale = new Vector3(0.8f, 0.8f, 1f);
-        }
+            CompleteEquippedIconAnimation(destinationIcon);
 
-        if (flightObject != null)
-        {
-            activeCharmFlights.Remove(flightObject);
-            Destroy(flightObject);
+            if (flightObject != null)
+            {
+                activeCharmFlights.Remove(flightObject);
+                Destroy(flightObject);
+            }
         }
     }
 
     private void ClearActiveCharmFlights()
     {
+        ResetAnimatingEquippedIcons();
         for (int i = activeCharmFlights.Count - 1; i >= 0; i--)
         {
             var flight = activeCharmFlights[i];
@@ -4573,6 +4587,50 @@ internal sealed class ShadeInventoryPane : InventoryPane
             }
         }
         activeCharmFlights.Clear();
+    }
+
+    private void BeginEquippedIconAnimation(Image destinationIcon)
+    {
+        if (destinationIcon == null)
+        {
+            return;
+        }
+
+        if (animatingEquippedIcons.Add(destinationIcon))
+        {
+            destinationIcon.enabled = false;
+        }
+    }
+
+    private void CompleteEquippedIconAnimation(Image destinationIcon)
+    {
+        if (destinationIcon == null)
+        {
+            return;
+        }
+
+        if (animatingEquippedIcons.Remove(destinationIcon))
+        {
+            destinationIcon.enabled = true;
+        }
+    }
+
+    private void ResetAnimatingEquippedIcons()
+    {
+        if (animatingEquippedIcons.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var icon in animatingEquippedIcons.ToArray())
+        {
+            if (icon != null)
+            {
+                icon.enabled = true;
+            }
+        }
+
+        animatingEquippedIcons.Clear();
     }
 
     private bool TryGetOverlayPosition(RectTransform rect, out Vector2 overlayPoint)
@@ -4856,10 +4914,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 Sprite sprite = def?.Icon ?? GetFallbackSprite();
                 if (sprite != null)
                 {
+                    bool animating = animatingEquippedIcons.Contains(image);
                     image.sprite = sprite;
-                    image.enabled = true;
                     image.color = equippedTint;
                     image.gameObject.SetActive(true);
+                    image.enabled = !animating;
                 }
                 else
                 {

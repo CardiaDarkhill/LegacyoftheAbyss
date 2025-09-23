@@ -223,6 +223,7 @@ public partial class SimpleHUD
             go.transform.SetParent(container, false);
             overcharmBackdrop = go.AddComponent<Image>();
             overcharmBackdrop.raycastTarget = false;
+            overcharmBackdrop.preserveAspect = true;
         }
 
         if (overcharmBackdropSprite != null)

@@ -48,4 +48,17 @@ public class ShadeCharmInventoryTests
         Assert.False(inventory.IsOvercharmed);
         Assert.Equal(inventory.OvercharmAttemptThreshold, inventory.RemainingOvercharmAttempts);
     }
+
+    [Fact]
+    public void CannotEquipWhenNoNotchesRemain()
+    {
+        var inventory = new ShadeCharmInventory();
+        inventory.NotchCapacity = 0;
+        inventory.GrantCharm(ShadeCharmId.WaywardCompass);
+
+        Assert.False(inventory.TryEquip(ShadeCharmId.WaywardCompass, out var message));
+        Assert.Contains("notch", message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(inventory.IsEquipped(ShadeCharmId.WaywardCompass));
+        Assert.Equal(0, inventory.UsedNotches);
+    }
 }
