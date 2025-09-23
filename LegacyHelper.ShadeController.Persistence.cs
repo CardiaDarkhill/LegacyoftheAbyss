@@ -69,7 +69,14 @@ public partial class LegacyHelper
         {
             if (cachedHud)
             {
-                try { cachedHud.SetShadeStats(shadeHP, shadeMaxHP); } catch { }
+                try
+                {
+                    cachedHud.SetShadeStats(shadeHP, shadeMaxHP);
+                    cachedHud.SetShadeOvercharmed(ShadeRuntime.Charms?.IsOvercharmed ?? false);
+                }
+                catch
+                {
+                }
             }
         }
     }

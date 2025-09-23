@@ -475,7 +475,7 @@ namespace LegacyoftheAbyss.Shade
                 s_saveSlots.SetEquippedCharms(s_activeSlot, 0, equipped);
             }
 
-            ShadeSettingsMenu.NotifyCharmLoadoutChanged();
+            LegacyHelper.RequestShadeLoadoutRecompute();
         }
 
         private static void SyncInventoryFromActiveSlot()

@@ -725,6 +725,17 @@ namespace LegacyoftheAbyss.Shade
             }
 
             int notchCost = definition.NotchCost;
+            if (notchCost > 0 && _notchCapacity <= 0)
+            {
+                if (removedKingsoul)
+                {
+                    RestoreEquippedAtIndex(ShadeCharmId.Kingsoul, removedKingsoulIndex);
+                }
+
+                message = "Shade lacks any notches to equip this charm.";
+                return false;
+            }
+
             int prospectiveNotches = UsedNotches + notchCost;
             bool fits = notchCost <= 0 || prospectiveNotches <= _notchCapacity;
 

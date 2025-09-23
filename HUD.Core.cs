@@ -12,6 +12,8 @@ public partial class SimpleHUD : MonoBehaviour
     private Image[] maskImages;
     private Sprite maskSprite;
     private readonly Color missingMaskColor = new Color(0.2f, 0.2f, 0.2f, 0.45f);
+    private readonly Color overcharmMaskColor = new Color(1f, 0.5f, 0.5f, 1f);
+    private readonly Color overcharmBackdropColor = new Color(0.85f, 0.25f, 0.25f, 0.28f);
 
     // Soul orb state
     private Sprite soulOrbSprite;
@@ -31,10 +33,12 @@ public partial class SimpleHUD : MonoBehaviour
     private int prevHornetHealth;
     private int prevHornetMax;
     private bool hasExplicitShadeStats;
+    private bool shadeOvercharmed;
     private bool suppressNextDamageSound;
 
     // UI containers
     private GameObject healthContainer;
+    private Image overcharmBackdrop;
     private Canvas canvas;
     private CanvasScaler scaler;
     private CanvasGroup canvasGroup;
@@ -61,6 +65,8 @@ public partial class SimpleHUD : MonoBehaviour
     private float shadeSoulMax;
 
     private const float MaskScale = 0.88f; // slightly shrink masks
+    private Vector2 overcharmMaskSize = Vector2.zero;
+    private float overcharmMaskSpacing;
 
     public void Init(PlayerData pd)
     {
@@ -265,6 +271,16 @@ public partial class SimpleHUD : MonoBehaviour
             suppressNextDamageSound = false;
         }
         if (maxChanged) RebuildMasks();
+        RefreshHealth();
+    }
+
+    public void SetShadeOvercharmed(bool overcharmed)
+    {
+        if (shadeOvercharmed == overcharmed)
+            return;
+
+        shadeOvercharmed = overcharmed;
+        RefreshOvercharmBackdrop();
         RefreshHealth();
     }
 

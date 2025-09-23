@@ -138,10 +138,12 @@ public partial class SimpleHUD
         {
             suppressNextDamageSound = false;
         }
+
+        Color filledColor = shadeOvercharmed ? overcharmMaskColor : Color.white;
         for (int i = 0; i < cur && i < maskImages.Length; i++)
         {
             maskImages[i].sprite = maskSprite != null ? maskSprite : maskImages[i].sprite;
-            maskImages[i].color = Color.white;
+            maskImages[i].color = filledColor;
         }
         for (int i = cur; i < maskImages.Length; i++)
             if (i >= previousShadeHealth) maskImages[i].color = missingMaskColor;
@@ -151,9 +153,10 @@ public partial class SimpleHUD
     private IEnumerator LoseHealth(Image img)
     {
         if (img == null) yield break;
+        Color filledColor = shadeOvercharmed ? overcharmMaskColor : Color.white;
         for (int i = 0; i < 2; i++)
         {
-            img.color = Color.white; yield return new WaitForSeconds(0.05f);
+            img.color = filledColor; yield return new WaitForSeconds(0.05f);
             img.color = Color.red; yield return new WaitForSeconds(0.05f);
         }
         img.color = missingMaskColor;
@@ -184,6 +187,9 @@ public partial class SimpleHUD
         Vector2 maskSize = maskPixels * uiScale * MaskScale;
 
         float spacing = 6f * uiScale;
+        overcharmMaskSize = maskSize;
+        overcharmMaskSpacing = spacing;
+        EnsureOvercharmBackdrop(container);
         float x = 0f;
         for (int i = 0; i < shadeMax; i++)
         {
@@ -202,6 +208,53 @@ public partial class SimpleHUD
             img.color = Color.white;
             maskImages[i] = img;
         }
+
+        RefreshOvercharmBackdrop();
+    }
+
+    private void EnsureOvercharmBackdrop(RectTransform container)
+    {
+        if (container == null)
+            return;
+
+        if (overcharmBackdrop == null)
+        {
+            var go = new GameObject("OvercharmBackdrop");
+            go.transform.SetParent(container, false);
+            overcharmBackdrop = go.AddComponent<Image>();
+            overcharmBackdrop.raycastTarget = false;
+            overcharmBackdrop.sprite = BuildMaskSprite();
+            overcharmBackdrop.color = overcharmBackdropColor;
+        }
+
+        overcharmBackdrop.transform.SetAsFirstSibling();
+    }
+
+    private void RefreshOvercharmBackdrop()
+    {
+        if (healthContainer == null)
+            return;
+
+        EnsureOvercharmBackdrop(healthContainer.GetComponent<RectTransform>());
+        if (overcharmBackdrop == null)
+            return;
+
+        if (shadeMax <= 0)
+        {
+            overcharmBackdrop.enabled = false;
+            return;
+        }
+
+        float width = overcharmMaskSize.x * shadeMax + Mathf.Max(0, shadeMax - 1) * overcharmMaskSpacing;
+        float height = overcharmMaskSize.y + Mathf.Max(0f, overcharmMaskSpacing * 0.5f);
+        var rect = overcharmBackdrop.rectTransform;
+        rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
+        rect.pivot = new Vector2(1f, 1f);
+        rect.anchoredPosition = Vector2.zero;
+        rect.sizeDelta = new Vector2(width, height);
+        overcharmBackdrop.color = overcharmBackdropColor;
+        overcharmBackdrop.enabled = shadeOvercharmed;
+        overcharmBackdrop.transform.SetAsFirstSibling();
     }
 }
 

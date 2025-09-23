@@ -58,6 +58,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private static readonly Color InactiveIconColor = new Color(1f, 1f, 1f, 0.3f);
     private static readonly Color EquippedIconColor = new Color(0.82f, 0.95f, 1f, 1f);
     private static readonly Color BrokenIconColor = new Color(1f, 0.64f, 0.64f, 1f);
+    private static readonly Color OvercharmedTextColor = new Color(1f, 0.45f, 0.45f, 1f);
+    private static readonly Color OvercharmedEquippedIconColor = new Color(1f, 0.62f, 0.62f, 1f);
+    private static readonly Color OvercharmedNotchFillColor = new Color(1f, 0.55f, 0.55f, 1f);
+    private static readonly Color OvercharmedNotchHighlightColor = new Color(1f, 0.67f, 0.67f, 1f);
+    private static readonly Color OvercharmedNotchEmptyColor = new Color(1f, 0.45f, 0.45f, 0.45f);
 
     private static Sprite? lockedCharmSprite;
     private static bool lockedCharmSpriteSearched;
@@ -296,6 +301,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private readonly List<Image> equippedIcons = new List<Image>(MaxEquippedIcons);
     private readonly List<ShadeCharmId> previousEquippedOrder = new List<ShadeCharmId>();
     private readonly List<ShadeCharmId?> equippedDisplayIds = new List<ShadeCharmId?>(MaxEquippedIcons);
+    private bool hasRenderedEquippedRow;
+    private bool notchLabelDefaultsCaptured;
+    private Color notchLabelDefaultColor = Color.white;
+    private Color notchLabelDefaultTmpColor = Color.white;
     private readonly List<GameObject> activeCharmFlights = new List<GameObject>();
     private static Sprite? notchLitSprite;
     private static Sprite? notchUnlitSprite;
@@ -4228,6 +4237,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
             equippedDisplayIds[i] = null;
         }
         ClearActiveCharmFlights();
+        hasRenderedEquippedRow = false;
     }
 
     private void CaptureEquippedIconState()
@@ -4246,14 +4256,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void AnimateEquippedChanges(
         IReadOnlyList<ShadeCharmId> previousOrder,
-        IReadOnlyList<(ShadeCharmId Id, ShadeCharmDefinition Definition)> currentOrder)
+        IReadOnlyList<(ShadeCharmId Id, ShadeCharmDefinition Definition)> currentOrder,
+        bool overcharmed)
     {
         if (previousOrder == null || currentOrder == null)
-        {
-            return;
-        }
-
-        if (previousOrder.Count == 0)
         {
             return;
         }
@@ -4303,11 +4309,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 continue;
             }
 
-            StartCharmFlightAnimation(entry, pair.Definition, destination);
+            StartCharmFlightAnimation(entry, pair.Definition, destination, overcharmed);
         }
     }
 
-    private void StartCharmFlightAnimation(CharmEntry entry, ShadeCharmDefinition definition, Image destinationIcon)
+    private void StartCharmFlightAnimation(CharmEntry entry, ShadeCharmDefinition definition, Image destinationIcon, bool overcharmed)
     {
         var root = EnsureOverlayCanvas();
         if (root == null)
@@ -4358,7 +4364,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         image.raycastTarget = false;
         image.preserveAspect = true;
         image.sprite = sprite;
-        image.color = Color.white;
+        image.color = overcharmed ? OvercharmedEquippedIconColor : Color.white;
 
         activeCharmFlights.Add(flight);
         StartCoroutine(AnimateCharmFlight(rect, start, end, flight));
@@ -4442,6 +4448,34 @@ internal sealed class ShadeInventoryPane : InventoryPane
         return 1f - inv * inv * inv;
     }
 
+    private void ApplyNotchLabelColor(bool overcharmed)
+    {
+        if (!notchLabelDefaultsCaptured)
+        {
+            if (notchText != null)
+            {
+                notchLabelDefaultColor = notchText.color;
+            }
+
+            if (notchTextTMP != null)
+            {
+                notchLabelDefaultTmpColor = notchTextTMP.color;
+            }
+
+            notchLabelDefaultsCaptured = true;
+        }
+
+        if (notchText != null)
+        {
+            notchText.color = overcharmed ? OvercharmedTextColor : notchLabelDefaultColor;
+        }
+
+        if (notchTextTMP != null)
+        {
+            notchTextTMP.color = overcharmed ? OvercharmedTextColor : notchLabelDefaultTmpColor;
+        }
+    }
+
     private void RenderNotchStrip(List<Image> icons, int litCount, int totalCount, bool showEmpty)
     {
         EnsureNotchSprites();
@@ -4492,12 +4526,18 @@ internal sealed class ShadeInventoryPane : InventoryPane
         int highlightCost,
         ShadeCharmDefinition? selectedDefinition,
         ShadeCharmId? selectedId,
-        bool highlightEquippedSlots)
+        bool highlightEquippedSlots,
+        bool overcharmed)
     {
         EnsureNotchSprites();
 
         Sprite lit = notchLitSprite ?? ResolveLockedCharmSprite() ?? GetFallbackSprite();
         Sprite empty = notchUnlitSprite ?? ResolveLockedCharmSprite() ?? lit;
+
+        Color filledColor = overcharmed ? OvercharmedNotchFillColor : Color.white;
+        Color highlightedFilledColor = overcharmed ? OvercharmedNotchHighlightColor : Color.white;
+        Color emptyColor = overcharmed ? OvercharmedNotchEmptyColor : new Color(1f, 1f, 1f, 0.55f);
+        Color highlightEmptyColor = overcharmed ? OvercharmedNotchHighlightColor : Color.white;
 
         int usedCount = Mathf.Clamp(assignments?.Count ?? 0, 0, capacity);
         int highlightStart = usedCount;
@@ -4534,7 +4574,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 {
                     image.sprite = sprite;
                     image.enabled = true;
-                    image.color = Color.white;
+                    image.color = filledColor;
                     image.gameObject.SetActive(true);
 
                     bool highlight = false;
@@ -4563,6 +4603,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
                     if (highlight && rect != null)
                     {
                         rect.localScale = new Vector3(1.1f, 1.1f, 1f);
+                        image.color = highlightedFilledColor;
                     }
                 }
                 else
@@ -4581,7 +4622,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
             {
                 image.sprite = slotSprite;
                 image.enabled = true;
-                image.color = highlightEmpty ? Color.white : new Color(1f, 1f, 1f, 0.55f);
+                image.color = highlightEmpty ? highlightEmptyColor : emptyColor;
                 image.gameObject.SetActive(true);
             }
             else
@@ -4625,12 +4666,15 @@ internal sealed class ShadeInventoryPane : InventoryPane
             }
 
             previousEquippedOrder.Clear();
+            hasRenderedEquippedRow = false;
             return;
         }
 
         var equippedDefs = inv.GetEquippedDefinitions()?.Where(def => def != null).ToList() ?? new List<ShadeCharmDefinition>();
         int count = Mathf.Clamp(equippedDefs.Count, 0, equippedIcons.Count);
         var orderedPairs = new List<(ShadeCharmId Id, ShadeCharmDefinition Definition)>();
+        bool overcharmed = inv.IsOvercharmed;
+        Color equippedTint = overcharmed ? OvercharmedEquippedIconColor : Color.white;
 
         for (int i = 0; i < equippedIcons.Count; i++)
         {
@@ -4653,7 +4697,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 {
                     image.sprite = sprite;
                     image.enabled = true;
-                    image.color = Color.white;
+                    image.color = equippedTint;
                     image.gameObject.SetActive(true);
                 }
                 else
@@ -4671,7 +4715,12 @@ internal sealed class ShadeInventoryPane : InventoryPane
             }
         }
 
-        AnimateEquippedChanges(previousEquippedOrder, orderedPairs);
+        if (hasRenderedEquippedRow)
+        {
+            AnimateEquippedChanges(previousEquippedOrder, orderedPairs, overcharmed);
+        }
+
+        hasRenderedEquippedRow = true;
 
         EnsureEquippedDisplayCapacity();
         for (int i = 0; i < equippedDisplayIds.Count; i++)
@@ -5109,10 +5158,12 @@ internal sealed class ShadeInventoryPane : InventoryPane
     {
         EnsureBuilt();
         var inv = inventory ?? ShadeRuntime.Charms;
-        SetTextValue(notchText, notchTextTMP, inv != null && inv.IsOvercharmed ? "Notches – Overcharmed" : "Notches");
+        bool overcharmed = inv != null && inv.IsOvercharmed;
+        SetTextValue(notchText, notchTextTMP, overcharmed ? "Notches – Overcharmed" : "Notches");
+        ApplyNotchLabelColor(overcharmed);
         if (inv == null)
         {
-            RenderNotchMeter(notchMeterIcons, Array.Empty<NotchAssignment>(), 0, 0, null, null, false);
+            RenderNotchMeter(notchMeterIcons, Array.Empty<NotchAssignment>(), 0, 0, null, null, false, false);
             return;
         }
 
@@ -5161,7 +5212,15 @@ internal sealed class ShadeInventoryPane : InventoryPane
             highlightEquippedSlots = inv.IsEquipped(selectedEntry.Id);
         }
 
-        RenderNotchMeter(notchMeterIcons, assignments, capacity, highlightCost, selectedDefinition, selectedId, highlightEquippedSlots);
+        RenderNotchMeter(
+            notchMeterIcons,
+            assignments,
+            capacity,
+            highlightCost,
+            selectedDefinition,
+            selectedId,
+            highlightEquippedSlots,
+            overcharmed);
     }
 
     internal void ProcessShadeInputTick()
