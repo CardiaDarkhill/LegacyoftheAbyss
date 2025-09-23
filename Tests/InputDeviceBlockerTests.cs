@@ -86,6 +86,7 @@ public class InputDeviceBlockerTests
             var config = ModConfig.Instance;
             var initialShadeConfig = config.shadeInput.Clone();
             bool initialHornetControllerEnabled = config.hornetControllerEnabled;
+            bool initialHornetKeyboardEnabled = config.hornetKeyboardEnabled;
 
             try
             {
@@ -100,6 +101,7 @@ public class InputDeviceBlockerTests
                 Assert.False(config.shadeInput.UsesControllerBindings());
                 Assert.Equal(ShadeBindingOptionType.Key, config.shadeInput.moveLeft.primary.type);
                 Assert.Equal(ShadeBindingOptionType.Key, config.shadeInput.moveRight.primary.type);
+                Assert.True(config.hornetKeyboardEnabled);
 
                 environment.SetPaused(false);
                 Assert.True(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
@@ -109,6 +111,7 @@ public class InputDeviceBlockerTests
                 AssertShadeBindingEqual(controllerBindings.moveRight, config.shadeInput.moveRight);
                 AssertShadeBindingEqual(controllerBindings.nail, config.shadeInput.nail);
                 Assert.Equal(initialHornetControllerEnabled, config.hornetControllerEnabled);
+                Assert.Equal(initialHornetKeyboardEnabled, config.hornetKeyboardEnabled);
             }
             finally
             {
@@ -117,6 +120,7 @@ public class InputDeviceBlockerTests
                     config.shadeInput.CopyBindingsFrom(initialShadeConfig);
                 }
                 config.hornetControllerEnabled = initialHornetControllerEnabled;
+                config.hornetKeyboardEnabled = initialHornetKeyboardEnabled;
             }
         }
     }

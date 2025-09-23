@@ -498,7 +498,91 @@ public partial class LegacyHelper
         private static bool menuTransferActive;
         private static bool menuTransferShadeUsesController;
         private static bool menuTransferHornetControllerEnabled = true;
+        private static bool menuTransferHornetKeyboardEnabled;
         private static ShadeInputConfig menuTransferSavedBindings;
+        private static byte[] menuTransferSavedHeroBindings;
+        private static GameSettingsSnapshot menuTransferSavedGameSettings;
+        private static GamepadType menuTransferSavedActiveGamepadType = GamepadType.NONE;
+        private static bool menuTransferHasActiveGamepadType;
+
+        private struct GameSettingsSnapshot
+        {
+            internal bool hasData;
+            internal string jumpKey;
+            internal string attackKey;
+            internal string dashKey;
+            internal string castKey;
+            internal string superDashKey;
+            internal string dreamNailKey;
+            internal string quickMapKey;
+            internal string quickCastKey;
+            internal string tauntKey;
+            internal string inventoryKey;
+            internal string inventoryMapKey;
+            internal string inventoryJournalKey;
+            internal string inventoryToolsKey;
+            internal string inventoryQuestsKey;
+            internal string upKey;
+            internal string downKey;
+            internal string leftKey;
+            internal string rightKey;
+            internal ControllerMapping controllerMapping;
+
+            internal static GameSettingsSnapshot Capture(GameSettings settings)
+            {
+                var snapshot = new GameSettingsSnapshot();
+                if (settings == null)
+                    return snapshot;
+
+                snapshot.hasData = true;
+                snapshot.jumpKey = settings.jumpKey;
+                snapshot.attackKey = settings.attackKey;
+                snapshot.dashKey = settings.dashKey;
+                snapshot.castKey = settings.castKey;
+                snapshot.superDashKey = settings.superDashKey;
+                snapshot.dreamNailKey = settings.dreamNailKey;
+                snapshot.quickMapKey = settings.quickMapKey;
+                snapshot.quickCastKey = settings.quickCastKey;
+                snapshot.tauntKey = settings.tauntKey;
+                snapshot.inventoryKey = settings.inventoryKey;
+                snapshot.inventoryMapKey = settings.inventoryMapKey;
+                snapshot.inventoryJournalKey = settings.inventoryJournalKey;
+                snapshot.inventoryToolsKey = settings.inventoryToolsKey;
+                snapshot.inventoryQuestsKey = settings.inventoryQuestsKey;
+                snapshot.upKey = settings.upKey;
+                snapshot.downKey = settings.downKey;
+                snapshot.leftKey = settings.leftKey;
+                snapshot.rightKey = settings.rightKey;
+                snapshot.controllerMapping = CloneControllerMapping(settings.controllerMapping);
+                return snapshot;
+            }
+
+            internal void Restore(GameSettings settings)
+            {
+                if (!hasData || settings == null)
+                    return;
+
+                settings.jumpKey = jumpKey;
+                settings.attackKey = attackKey;
+                settings.dashKey = dashKey;
+                settings.castKey = castKey;
+                settings.superDashKey = superDashKey;
+                settings.dreamNailKey = dreamNailKey;
+                settings.quickMapKey = quickMapKey;
+                settings.quickCastKey = quickCastKey;
+                settings.tauntKey = tauntKey;
+                settings.inventoryKey = inventoryKey;
+                settings.inventoryMapKey = inventoryMapKey;
+                settings.inventoryJournalKey = inventoryJournalKey;
+                settings.inventoryToolsKey = inventoryToolsKey;
+                settings.inventoryQuestsKey = inventoryQuestsKey;
+                settings.upKey = upKey;
+                settings.downKey = downKey;
+                settings.leftKey = leftKey;
+                settings.rightKey = rightKey;
+                settings.controllerMapping = CloneControllerMapping(controllerMapping);
+            }
+        }
 
         private static void SetDeviceRestricted(InputDevice device, bool restrict)
         {
@@ -595,6 +679,9 @@ public partial class LegacyHelper
             menuTransferActive = true;
             menuTransferShadeUsesController = false;
             menuTransferSavedBindings = null;
+            menuTransferSavedHeroBindings = null;
+            menuTransferSavedGameSettings = default;
+            menuTransferHasActiveGamepadType = false;
 
             ReleaseTrackedDevices(null);
 
@@ -604,9 +691,16 @@ public partial class LegacyHelper
                 if (cfg != null)
                 {
                     menuTransferHornetControllerEnabled = cfg.hornetControllerEnabled;
+                    menuTransferHornetKeyboardEnabled = cfg.hornetKeyboardEnabled;
+
                     if (!menuTransferHornetControllerEnabled)
                     {
                         cfg.hornetControllerEnabled = true;
+                    }
+
+                    if (!cfg.hornetKeyboardEnabled)
+                    {
+                        cfg.hornetKeyboardEnabled = true;
                     }
 
                     var shadeConfig = cfg.shadeInput;
@@ -650,6 +744,39 @@ public partial class LegacyHelper
                 menuTransferShadeUsesController = false;
                 menuTransferSavedBindings = null;
             }
+
+            try
+            {
+                var handler = TryGetInputHandler();
+                var settings = TryGetGameSettings();
+                menuTransferSavedGameSettings = GameSettingsSnapshot.Capture(settings);
+
+                if (handler != null)
+                {
+                    var actions = handler.inputActions;
+                    if (actions != null)
+                    {
+                        try
+                        {
+                            menuTransferSavedHeroBindings = actions.SaveData();
+                        }
+                        catch
+                        {
+                            menuTransferSavedHeroBindings = null;
+                        }
+                    }
+
+                    menuTransferSavedActiveGamepadType = handler.activeGamepadType;
+                    menuTransferHasActiveGamepadType = true;
+
+                    ApplyVanillaHornetBindings(handler, settings);
+                }
+            }
+            catch
+            {
+                menuTransferSavedHeroBindings = null;
+                menuTransferHasActiveGamepadType = false;
+            }
         }
 
         private static void DeactivateMenuTransfer()
@@ -660,6 +787,7 @@ public partial class LegacyHelper
                 if (cfg != null)
                 {
                     cfg.hornetControllerEnabled = menuTransferHornetControllerEnabled;
+                    cfg.hornetKeyboardEnabled = menuTransferHornetKeyboardEnabled;
                     if (menuTransferShadeUsesController && menuTransferSavedBindings != null)
                     {
                         var shadeConfig = cfg.shadeInput;
@@ -674,9 +802,311 @@ public partial class LegacyHelper
             {
             }
 
+            try
+            {
+                var handler = TryGetInputHandler();
+                var settings = TryGetGameSettings();
+
+                if (settings != null && menuTransferSavedGameSettings.hasData)
+                {
+                    menuTransferSavedGameSettings.Restore(settings);
+                }
+
+                if (handler != null)
+                {
+                    if (menuTransferHasActiveGamepadType)
+                    {
+                        handler.activeGamepadType = menuTransferSavedActiveGamepadType;
+                    }
+
+                    if (menuTransferSavedHeroBindings != null)
+                    {
+                        try
+                        {
+                            handler.inputActions?.LoadData(menuTransferSavedHeroBindings);
+                        }
+                        catch
+                        {
+                        }
+                    }
+
+                    if (settings != null && menuTransferSavedGameSettings.hasData)
+                    {
+                        try
+                        {
+                            settings.SaveKeyboardSettings();
+                        }
+                        catch
+                        {
+                        }
+
+                        try
+                        {
+                            var gamepadType = menuTransferSavedGameSettings.controllerMapping != null
+                                ? menuTransferSavedGameSettings.controllerMapping.gamepadType
+                                : handler.activeGamepadType;
+                            settings.SaveGamepadSettings(gamepadType);
+                        }
+                        catch
+                        {
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
             menuTransferActive = false;
             menuTransferShadeUsesController = false;
             menuTransferSavedBindings = null;
+            menuTransferSavedHeroBindings = null;
+            menuTransferSavedGameSettings = default;
+            menuTransferHasActiveGamepadType = false;
+        }
+
+        private static InputHandler TryGetInputHandler()
+        {
+            try
+            {
+                var handler = InputHandler.UnsafeInstance;
+                if (handler != null)
+                    return handler;
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                var gm = MenuStateUtility.TryGetGameManager();
+                if (gm != null)
+                    return gm.inputHandler;
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                return GameManager.instance?.inputHandler;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static GameSettings TryGetGameSettings()
+        {
+            try
+            {
+                var gm = MenuStateUtility.TryGetGameManager();
+                if (gm != null)
+                    return gm.gameSettings;
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                return GameManager.instance?.gameSettings;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static void ApplyVanillaHornetBindings(InputHandler handler, GameSettings settings)
+        {
+            if (handler == null)
+                return;
+
+            bool keyboardReset = false;
+            bool controllerReset = false;
+
+            try
+            {
+                handler.ResetDefaultKeyBindings();
+                keyboardReset = true;
+            }
+            catch
+            {
+                keyboardReset = false;
+            }
+
+            var actions = handler.inputActions as HeroActions;
+            if (!keyboardReset)
+            {
+                ApplyFallbackHornetKeyboardBindings(actions, settings);
+            }
+
+            try
+            {
+                handler.ResetDefaultControllerButtonBindings();
+                controllerReset = true;
+            }
+            catch
+            {
+                controllerReset = false;
+            }
+
+            if (!controllerReset)
+            {
+                ApplyFallbackHornetControllerBindings(actions, settings);
+            }
+
+            if (settings != null)
+            {
+                try
+                {
+                    settings.SaveKeyboardSettings();
+                }
+                catch
+                {
+                }
+
+                try
+                {
+                    if (settings.controllerMapping != null)
+                    {
+                        settings.controllerMapping.gamepadType = handler.activeGamepadType;
+                    }
+                    settings.SaveGamepadSettings(handler.activeGamepadType);
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        private static void ApplyFallbackHornetKeyboardBindings(HeroActions actions, GameSettings settings)
+        {
+            if (actions == null)
+                return;
+
+            BindKey(actions.Jump, Key.Z);
+            BindKey(actions.Attack, Key.X);
+            BindKey(actions.Dash, Key.C);
+            BindKey(actions.Cast, Key.A);
+            BindKey(actions.SuperDash, Key.S);
+            BindKey(actions.DreamNail, Key.D);
+            BindKey(actions.QuickMap, Key.Tab);
+            BindKey(actions.OpenInventory, Key.I);
+            BindKey(actions.OpenInventoryMap, Key.M);
+            BindKey(actions.OpenInventoryJournal, Key.J);
+            BindKey(actions.OpenInventoryTools, Key.Q);
+            BindKey(actions.OpenInventoryQuests, Key.T);
+            BindKey(actions.QuickCast, Key.F);
+            BindKey(actions.Taunt, Key.V);
+            BindKey(actions.Up, Key.UpArrow);
+            BindKey(actions.Down, Key.DownArrow);
+            BindKey(actions.Left, Key.LeftArrow);
+            BindKey(actions.Right, Key.RightArrow);
+
+            if (settings == null)
+                return;
+
+            settings.jumpKey = Key.Z.ToString();
+            settings.attackKey = Key.X.ToString();
+            settings.dashKey = Key.C.ToString();
+            settings.castKey = Key.A.ToString();
+            settings.superDashKey = Key.S.ToString();
+            settings.dreamNailKey = Key.D.ToString();
+            settings.quickMapKey = Key.Tab.ToString();
+            settings.inventoryKey = Key.I.ToString();
+            settings.inventoryMapKey = Key.M.ToString();
+            settings.inventoryJournalKey = Key.J.ToString();
+            settings.inventoryToolsKey = Key.Q.ToString();
+            settings.inventoryQuestsKey = Key.T.ToString();
+            settings.quickCastKey = Key.F.ToString();
+            settings.tauntKey = Key.V.ToString();
+            settings.upKey = Key.UpArrow.ToString();
+            settings.downKey = Key.DownArrow.ToString();
+            settings.leftKey = Key.LeftArrow.ToString();
+            settings.rightKey = Key.RightArrow.ToString();
+        }
+
+        private static void ApplyFallbackHornetControllerBindings(HeroActions actions, GameSettings settings)
+        {
+            if (actions == null)
+                return;
+
+            AddControllerBinding(actions.Jump, InputControlType.Action1);
+            AddControllerBinding(actions.Attack, InputControlType.Action3);
+            AddControllerBinding(actions.Dash, InputControlType.RightTrigger);
+            AddControllerBinding(actions.Cast, InputControlType.Action2);
+            AddControllerBinding(actions.SuperDash, InputControlType.LeftTrigger);
+            AddControllerBinding(actions.DreamNail, InputControlType.Action4);
+            AddControllerBinding(actions.QuickMap, InputControlType.LeftBumper);
+            AddControllerBinding(actions.QuickCast, InputControlType.RightBumper);
+            AddControllerBinding(actions.Taunt, InputControlType.RightStickButton);
+            AddControllerBinding(actions.OpenInventory, InputControlType.Back);
+            AddControllerBinding(actions.Up, InputControlType.DPadUp);
+            AddControllerBinding(actions.Up, InputControlType.LeftStickUp);
+            AddControllerBinding(actions.Down, InputControlType.DPadDown);
+            AddControllerBinding(actions.Down, InputControlType.LeftStickDown);
+            AddControllerBinding(actions.Left, InputControlType.DPadLeft);
+            AddControllerBinding(actions.Left, InputControlType.LeftStickLeft);
+            AddControllerBinding(actions.Right, InputControlType.DPadRight);
+            AddControllerBinding(actions.Right, InputControlType.LeftStickRight);
+
+            if (settings == null)
+                return;
+
+            if (settings.controllerMapping == null)
+            {
+                settings.controllerMapping = new ControllerMapping();
+            }
+
+            settings.controllerMapping.jump = InputControlType.Action1;
+            settings.controllerMapping.attack = InputControlType.Action3;
+            settings.controllerMapping.dash = InputControlType.RightTrigger;
+            settings.controllerMapping.cast = InputControlType.Action2;
+            settings.controllerMapping.superDash = InputControlType.LeftTrigger;
+            settings.controllerMapping.dreamNail = InputControlType.Action4;
+            settings.controllerMapping.quickMap = InputControlType.LeftBumper;
+            settings.controllerMapping.quickCast = InputControlType.RightBumper;
+            settings.controllerMapping.taunt = InputControlType.RightStickButton;
+        }
+
+        private static void BindKey(PlayerAction action, Key key)
+        {
+            if (action == null)
+                return;
+
+            action.ClearBindings();
+            action.AddBinding(new KeyBindingSource(new[] { key }));
+        }
+
+        private static void AddControllerBinding(PlayerAction action, InputControlType control)
+        {
+            if (action == null)
+                return;
+
+            action.AddBinding(new DeviceBindingSource(control));
+        }
+
+        private static ControllerMapping CloneControllerMapping(ControllerMapping mapping)
+        {
+            if (mapping == null)
+                return null;
+
+            return new ControllerMapping
+            {
+                gamepadType = mapping.gamepadType,
+                jump = mapping.jump,
+                attack = mapping.attack,
+                dash = mapping.dash,
+                cast = mapping.cast,
+                superDash = mapping.superDash,
+                dreamNail = mapping.dreamNail,
+                quickMap = mapping.quickMap,
+                quickCast = mapping.quickCast,
+                taunt = mapping.taunt
+            };
         }
 
         internal static bool ShouldBlockShadeDeviceInput()
@@ -905,6 +1335,7 @@ public partial class LegacyHelper
                         if (cfg != null)
                         {
                             cfg.hornetControllerEnabled = menuTransferHornetControllerEnabled;
+                            cfg.hornetKeyboardEnabled = menuTransferHornetKeyboardEnabled;
                         }
                     }
                     catch
@@ -924,6 +1355,7 @@ public partial class LegacyHelper
                     if (cfg != null)
                     {
                         cfg.hornetControllerEnabled = true;
+                        cfg.hornetKeyboardEnabled = true;
                     }
                 }
                 catch
