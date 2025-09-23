@@ -377,6 +377,7 @@ namespace LegacyoftheAbyss.Shade
             bool brokeCharm = false;
             brokeCharm |= TryBreakFragileCharm(ShadeCharmId.FragileStrength, "Fragile Strength shattered. Rest at a bench to repair it.");
             brokeCharm |= TryBreakFragileCharm(ShadeCharmId.FragileHeart, "Fragile Heart shattered. Rest at a bench to repair it.");
+            brokeCharm |= TryBreakFragileCharm(ShadeCharmId.FragileGreed, "Fragile Greed shattered. Rest at a bench to repair it.");
             return brokeCharm;
         }
 
@@ -390,6 +391,7 @@ namespace LegacyoftheAbyss.Shade
             bool repaired = false;
             repaired |= TryRepairFragileCharm(ShadeCharmId.FragileStrength, "Fragile Strength repaired.");
             repaired |= TryRepairFragileCharm(ShadeCharmId.FragileHeart, "Fragile Heart repaired.");
+            repaired |= TryRepairFragileCharm(ShadeCharmId.FragileGreed, "Fragile Greed repaired.");
             return repaired;
         }
 

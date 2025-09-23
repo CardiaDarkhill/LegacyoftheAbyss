@@ -2165,21 +2165,35 @@ public partial class LegacyHelper
         {
             if (hazardCooldown > 0f) return;
             TeleportToHornet();
-            int attempted = 1;
-            int actual = 0;
-            bool prevented = !canTakeDamage;
-            if (canTakeDamage)
-            {
-                int before = shadeHP;
-                shadeHP = Mathf.Max(0, shadeHP - attempted);
-                actual = Mathf.Max(0, before - shadeHP);
-                if (shadeHP <= 0) StartDeathAnimation();
-            }
-            PushShadeStatsToHud();
             hazardCooldown = 0.25f;
+            int attempted = ApplyOvercharmPenalty(1);
+
+            if (!canTakeDamage)
+            {
+                DispatchCharmDamageEvent(attempted, 0, true, true, false);
+                return;
+            }
+
+            if (TryPreventFocusDamage(attempted, true))
+            {
+                return;
+            }
+
+            if (TryPreventCarefreeMelody(attempted, true))
+            {
+                CancelFocus();
+                return;
+            }
+
+            int before = shadeHP;
+            shadeHP = Mathf.Max(0, shadeHP - attempted);
+            int actual = Mathf.Max(0, before - shadeHP);
+            bool lethal = shadeHP <= 0;
+            if (lethal) StartDeathAnimation();
+            PushShadeStatsToHud();
             CancelFocus();
             PersistIfChanged();
-            DispatchCharmDamageEvent(attempted, actual, true, prevented || actual <= 0, shadeHP <= 0);
+            DispatchCharmDamageEvent(attempted, actual, true, actual <= 0, lethal);
         }
 
         private void OnShadeHitEnemy(DamageHero dh)
@@ -2187,6 +2201,7 @@ public partial class LegacyHelper
             if (hurtCooldown > 0f) return;
             int dmg = 0;
             try { if (dh != null) dmg = dh.damageDealt; } catch { }
+            dmg = ApplyOvercharmPenalty(dmg);
             if (dmg <= 0)
             {
                 DispatchCharmDamageEvent(0, 0, false, true, false);
@@ -2199,9 +2214,24 @@ public partial class LegacyHelper
                 DispatchCharmDamageEvent(dmg, 0, false, true, false);
                 return;
             }
+
+            if (TryPreventFocusDamage(dmg, false))
+            {
+                hurtCooldown = currentHurtIFrameDuration;
+                return;
+            }
+
+            if (TryPreventCarefreeMelody(dmg, false))
+            {
+                hurtCooldown = currentHurtIFrameDuration;
+                CancelFocus();
+                return;
+            }
+
             int beforeHp = shadeHP;
             shadeHP = Mathf.Max(0, shadeHP - dmg);
             int actual = Mathf.Max(0, beforeHp - shadeHP);
+            bool lethal = shadeHP <= 0;
             if (shadeHP > 0)
             {
                 ApplyKnockback(srcPos);
@@ -2214,7 +2244,7 @@ public partial class LegacyHelper
             hurtCooldown = currentHurtIFrameDuration;
             CancelFocus();
             PersistIfChanged();
-            DispatchCharmDamageEvent(dmg, actual, false, actual <= 0, shadeHP <= 0);
+            DispatchCharmDamageEvent(dmg, actual, false, actual <= 0, lethal);
         }
 
         private void DispatchCharmDamageEvent(int attemptedDamage, int actualDamage, bool wasHazard, bool prevented, bool lethal)
@@ -2231,6 +2261,50 @@ public partial class LegacyHelper
                 try { callback(context, evt); }
                 catch { }
             }
+        }
+
+        private bool TryPreventFocusDamage(int attemptedDamage, bool wasHazard)
+        {
+            if (!focusDamageShieldEnabled || !isFocusing || focusDamageShieldAbsorbedThisChannel)
+            {
+                return false;
+            }
+
+            focusDamageShieldAbsorbedThisChannel = true;
+            DispatchCharmDamageEvent(attemptedDamage, 0, wasHazard, true, false);
+            return true;
+        }
+
+        private bool TryPreventCarefreeMelody(int attemptedDamage, bool wasHazard)
+        {
+            if (carefreeMelodyChance <= 0f)
+            {
+                return false;
+            }
+
+            if (UnityEngine.Random.value > Mathf.Clamp01(carefreeMelodyChance))
+            {
+                return false;
+            }
+
+            DispatchCharmDamageEvent(attemptedDamage, 0, wasHazard, true, false);
+            return true;
+        }
+
+        private int ApplyOvercharmPenalty(int baseDamage)
+        {
+            if (baseDamage <= 0)
+            {
+                return 0;
+            }
+
+            var charms = ShadeRuntime.Charms;
+            if (charms != null && charms.IsOvercharmed)
+            {
+                return Mathf.Max(1, Mathf.CeilToInt(baseDamage * 2f));
+            }
+
+            return baseDamage;
         }
 
         private void StartDeathAnimation()
@@ -2396,6 +2470,7 @@ public partial class LegacyHelper
                 // End channel regardless of success
                 isFocusing = false;
                 isCastingSpell = false;
+                focusDamageShieldAbsorbedThisChannel = false;
                 try { if (sr) { var c = sr.color; c.a = 0.9f; sr.color = c; } } catch { }
                 try { if (focusAuraRenderer) focusAuraRenderer.enabled = false; } catch { }
                 StopFocusChargeSfx();
@@ -2409,9 +2484,11 @@ public partial class LegacyHelper
             if (isCastingSpell || isChannelingTeleport || inHardLeash || isInactive) return;
             if (shadeHP >= shadeMaxHP) return; // already full
             if (shadeSoul < focusSoulCost) return; // not enough soul
+            if (focusHealingDisabled) return;
 
             isFocusing = true;
             isCastingSpell = true;
+            focusDamageShieldAbsorbedThisChannel = false;
             focusTimer = Mathf.Max(0.05f, focusChannelTime);
             try { if (sr) { var c = sr.color; c.a = focusAlphaWhileChannel; sr.color = c; } } catch { }
             focusSoulAccumulator = 0f;
@@ -2429,6 +2506,7 @@ public partial class LegacyHelper
             try { if (focusAuraRenderer) focusAuraRenderer.enabled = false; } catch { }
             StopFocusChargeSfx();
             focusSoulAccumulator = 0f;
+            focusDamageShieldAbsorbedThisChannel = false;
         }
 
         private void EnsureFocusAura()

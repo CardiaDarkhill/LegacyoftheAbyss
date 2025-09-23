@@ -18,7 +18,12 @@ namespace LegacyoftheAbyss.Shade
             new Placement(ShadeCharmId.QuickFocus, new Vector2(3.0f, -0.4f)),
             new Placement(ShadeCharmId.DeepFocus, new Vector2(0.3f, 2.2f)),
             new Placement(ShadeCharmId.SteadyBody, new Vector2(-2.6f, -0.7f)),
-            new Placement(ShadeCharmId.StalwartShell, new Vector2(1.7f, -1.1f))
+            new Placement(ShadeCharmId.StalwartShell, new Vector2(1.7f, -1.1f)),
+            new Placement(ShadeCharmId.GrubberflysElegy, new Vector2(-0.4f, 1.8f)),
+            new Placement(ShadeCharmId.FragileGreed, new Vector2(2.9f, 1.4f)),
+            new Placement(ShadeCharmId.HeavyBlow, new Vector2(-3.0f, -1.2f)),
+            new Placement(ShadeCharmId.BaldurShell, new Vector2(3.2f, 0.9f)),
+            new Placement(ShadeCharmId.LifebloodHeart, new Vector2(-2.8f, 0.1f))
         };
 
         private static readonly Placement[] MossGrottoPlacements =
@@ -27,7 +32,13 @@ namespace LegacyoftheAbyss.Shade
             new Placement(ShadeCharmId.FuryOfTheFallen, new Vector2(-1.9f, 1.4f)),
             new Placement(ShadeCharmId.NailmastersGlory, new Vector2(2.4f, -0.6f)),
             new Placement(ShadeCharmId.FragileHeart, new Vector2(-2.3f, -0.9f)),
-            new Placement(ShadeCharmId.SharpShadow, new Vector2(0.8f, 2.0f))
+            new Placement(ShadeCharmId.SharpShadow, new Vector2(0.8f, 2.0f)),
+            new Placement(ShadeCharmId.LifebloodCore, new Vector2(-3.2f, 1.8f)),
+            new Placement(ShadeCharmId.JonisBlessing, new Vector2(3.0f, -1.5f)),
+            new Placement(ShadeCharmId.CarefreeMelody, new Vector2(-1.9f, -2.4f)),
+            new Placement(ShadeCharmId.Hiveblood, new Vector2(-1.2f, 2.5f)),
+            new Placement(ShadeCharmId.Kingsoul, new Vector2(1.5f, -2.0f)),
+            new Placement(ShadeCharmId.VoidHeart, new Vector2(0.2f, 2.7f))
         };
 
         public static void PopulateScene(string? sceneName, Transform? heroTransform)

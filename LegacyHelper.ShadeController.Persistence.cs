@@ -43,6 +43,7 @@ public partial class LegacyHelper
         public int GetCurrentHP() => shadeHP;
         public int GetMaxHP() => shadeMaxHP;
         public int GetShadeSoul() => shadeSoul;
+        public int GetShadeSoulMax() => shadeSoulMax;
         public bool GetCanTakeDamage() => canTakeDamage;
 
         public void Init(Transform hornet) { hornetTransform = hornet; }

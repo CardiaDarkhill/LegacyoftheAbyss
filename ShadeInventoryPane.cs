@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -293,6 +294,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private readonly List<Image> notchMeterIcons = new List<Image>(MaxNotchIcons);
     private readonly List<Image> detailCostIcons = new List<Image>(MaxNotchIcons);
     private readonly List<Image> equippedIcons = new List<Image>(MaxEquippedIcons);
+    private readonly List<ShadeCharmId> previousEquippedOrder = new List<ShadeCharmId>();
+    private readonly List<ShadeCharmId?> equippedDisplayIds = new List<ShadeCharmId?>(MaxEquippedIcons);
+    private readonly List<GameObject> activeCharmFlights = new List<GameObject>();
     private static Sprite? notchLitSprite;
     private static Sprite? notchUnlitSprite;
     private static bool notchSpritesSearched;
@@ -388,6 +392,21 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         return string.Empty;
+    }
+
+    private void SetHintMessage(string? message)
+    {
+        string text = string.IsNullOrWhiteSpace(message) ? string.Empty : message!;
+        SetTextValue(hintText, hintTextTMP, text);
+        bool active = !string.IsNullOrWhiteSpace(text);
+        if (hintText != null)
+        {
+            hintText.gameObject.SetActive(active);
+        }
+        if (hintTextTMP != null)
+        {
+            hintTextTMP.gameObject.SetActive(active);
+        }
     }
 
     private static List<ShadowStyle> CaptureShadowStyles(Graphic graphic)
@@ -1332,6 +1351,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         isActive = false;
         labelPulseTimer = 0f;
         ResetShadeInputState("OnDisable");
+        StopAllCoroutines();
+        ClearActiveCharmFlights();
         ApplyOverlayVisibility(false);
         if (ReferenceEquals(activePane, this))
         {
@@ -1351,6 +1372,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             activePane = null;
         }
+
+        StopAllCoroutines();
+        ClearActiveCharmFlights();
 
         if (fallbackSprite != null)
         {
@@ -3815,6 +3839,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         notchLayout.padding = new RectOffset();
 
         BuildIconPool(equippedIconsRoot, equippedIcons, MaxEquippedIcons, "EquippedCharm", new Vector2(96f, 96f));
+        ResetEquippedDisplayState();
         BuildIconPool(notchIconContainer, notchMeterIcons, MaxNotchIcons, "NotchIcon", new Vector2(32f, 32f));
 
         gridRoot = new GameObject("CharmGrid", typeof(RectTransform)).GetComponent<RectTransform>();
@@ -4181,6 +4206,242 @@ internal sealed class ShadeInventoryPane : InventoryPane
         notchSpritesSearched = true;
     }
 
+    private void EnsureEquippedDisplayCapacity()
+    {
+        int target = equippedIcons.Count;
+        if (equippedDisplayIds.Count != target)
+        {
+            equippedDisplayIds.Clear();
+            for (int i = 0; i < target; i++)
+            {
+                equippedDisplayIds.Add(null);
+            }
+        }
+    }
+
+    private void ResetEquippedDisplayState()
+    {
+        previousEquippedOrder.Clear();
+        EnsureEquippedDisplayCapacity();
+        for (int i = 0; i < equippedDisplayIds.Count; i++)
+        {
+            equippedDisplayIds[i] = null;
+        }
+        ClearActiveCharmFlights();
+    }
+
+    private void CaptureEquippedIconState()
+    {
+        EnsureEquippedDisplayCapacity();
+        previousEquippedOrder.Clear();
+        for (int i = 0; i < equippedDisplayIds.Count; i++)
+        {
+            var id = equippedDisplayIds[i];
+            if (id.HasValue && !previousEquippedOrder.Contains(id.Value))
+            {
+                previousEquippedOrder.Add(id.Value);
+            }
+        }
+    }
+
+    private void AnimateEquippedChanges(
+        IReadOnlyList<ShadeCharmId> previousOrder,
+        IReadOnlyList<(ShadeCharmId Id, ShadeCharmDefinition Definition)> currentOrder)
+    {
+        if (previousOrder == null || currentOrder == null)
+        {
+            return;
+        }
+
+        if (previousOrder.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var pair in currentOrder)
+        {
+            if (previousOrder.Contains(pair.Id))
+            {
+                continue;
+            }
+
+            int targetIndex = -1;
+            for (int i = 0; i < currentOrder.Count; i++)
+            {
+                if (currentOrder[i].Id.Equals(pair.Id))
+                {
+                    targetIndex = i;
+                    break;
+                }
+            }
+
+            if (targetIndex < 0 || targetIndex >= equippedIcons.Count)
+            {
+                continue;
+            }
+
+            var destination = equippedIcons[targetIndex];
+            if (destination == null)
+            {
+                continue;
+            }
+
+            CharmEntry entry = default;
+            bool found = false;
+            for (int i = 0; i < entries.Count; i++)
+            {
+                if (entries[i].Id.Equals(pair.Id))
+                {
+                    entry = entries[i];
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+            {
+                continue;
+            }
+
+            StartCharmFlightAnimation(entry, pair.Definition, destination);
+        }
+    }
+
+    private void StartCharmFlightAnimation(CharmEntry entry, ShadeCharmDefinition definition, Image destinationIcon)
+    {
+        var root = EnsureOverlayCanvas();
+        if (root == null)
+        {
+            return;
+        }
+
+        if (entry.Icon == null || destinationIcon == null)
+        {
+            return;
+        }
+
+        var sourceRect = entry.Icon.rectTransform;
+        var destRect = destinationIcon.rectTransform;
+        if (sourceRect == null || destRect == null)
+        {
+            return;
+        }
+
+        if (!TryGetOverlayPosition(sourceRect, out var start) || !TryGetOverlayPosition(destRect, out var end))
+        {
+            return;
+        }
+
+        Sprite? sprite = definition?.Icon ?? entry.Icon.sprite ?? destinationIcon.sprite ?? GetFallbackSprite();
+        if (sprite == null)
+        {
+            return;
+        }
+
+        var flight = new GameObject($"CharmFlight_{entry.Id}", typeof(RectTransform));
+        flight.layer = root.gameObject.layer;
+        var rect = flight.GetComponent<RectTransform>();
+        rect.SetParent(root, false);
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        Vector2 size = destinationIcon.rectTransform != null ? destinationIcon.rectTransform.rect.size : Vector2.zero;
+        if (size.sqrMagnitude <= 0.01f)
+        {
+            size = sourceRect.rect.size.sqrMagnitude > 0.01f ? sourceRect.rect.size : new Vector2(96f, 96f);
+        }
+        rect.sizeDelta = size;
+        rect.anchoredPosition = start;
+        rect.localScale = Vector3.one;
+
+        var image = flight.AddComponent<Image>();
+        image.raycastTarget = false;
+        image.preserveAspect = true;
+        image.sprite = sprite;
+        image.color = Color.white;
+
+        activeCharmFlights.Add(flight);
+        StartCoroutine(AnimateCharmFlight(rect, start, end, flight));
+    }
+
+    private IEnumerator AnimateCharmFlight(RectTransform rect, Vector2 start, Vector2 end, GameObject flightObject)
+    {
+        float duration = 0.35f;
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            if (rect == null)
+            {
+                yield break;
+            }
+
+            elapsed += Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float eased = EaseOutCubic(t);
+            rect.anchoredPosition = Vector2.LerpUnclamped(start, end, eased);
+            float scale = Mathf.Lerp(1f, 0.8f, t);
+            rect.localScale = new Vector3(scale, scale, 1f);
+            yield return null;
+        }
+
+        if (rect != null)
+        {
+            rect.anchoredPosition = end;
+            rect.localScale = new Vector3(0.8f, 0.8f, 1f);
+        }
+
+        if (flightObject != null)
+        {
+            activeCharmFlights.Remove(flightObject);
+            Destroy(flightObject);
+        }
+    }
+
+    private void ClearActiveCharmFlights()
+    {
+        for (int i = activeCharmFlights.Count - 1; i >= 0; i--)
+        {
+            var flight = activeCharmFlights[i];
+            if (flight != null)
+            {
+                Destroy(flight);
+            }
+        }
+        activeCharmFlights.Clear();
+    }
+
+    private bool TryGetOverlayPosition(RectTransform rect, out Vector2 overlayPoint)
+    {
+        overlayPoint = Vector2.zero;
+        if (rect == null)
+        {
+            return false;
+        }
+
+        var root = overlayRoot ?? EnsureOverlayCanvas();
+        if (root == null)
+        {
+            return false;
+        }
+
+        Camera? camera = null;
+        if (overlayCanvas != null && overlayCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
+        {
+            camera = overlayCanvas.worldCamera;
+        }
+
+        Vector3 world = rect.TransformPoint(rect.rect.center);
+        Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(camera, world);
+        return RectTransformUtility.ScreenPointToLocalPointInRectangle(root, screenPoint, camera, out overlayPoint);
+    }
+
+    private static float EaseOutCubic(float t)
+    {
+        float clamped = Mathf.Clamp01(t);
+        float inv = 1f - clamped;
+        return 1f - inv * inv * inv;
+    }
+
     private void RenderNotchStrip(List<Image> icons, int litCount, int totalCount, bool showEmpty)
     {
         EnsureNotchSprites();
@@ -4340,6 +4601,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return;
         }
 
+        EnsureEquippedDisplayCapacity();
+        CaptureEquippedIconState();
+
         var inv = inventory ?? ShadeRuntime.Charms;
         if (inv == null)
         {
@@ -4354,11 +4618,19 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 image.enabled = false;
                 image.gameObject.SetActive(false);
             }
+
+            for (int i = 0; i < equippedDisplayIds.Count; i++)
+            {
+                equippedDisplayIds[i] = null;
+            }
+
+            previousEquippedOrder.Clear();
             return;
         }
 
         var equippedDefs = inv.GetEquippedDefinitions()?.Where(def => def != null).ToList() ?? new List<ShadeCharmDefinition>();
         int count = Mathf.Clamp(equippedDefs.Count, 0, equippedIcons.Count);
+        var orderedPairs = new List<(ShadeCharmId Id, ShadeCharmDefinition Definition)>();
 
         for (int i = 0; i < equippedIcons.Count; i++)
         {
@@ -4371,6 +4643,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
             if (i < count)
             {
                 var def = equippedDefs[i];
+                if (def?.EnumId.HasValue == true)
+                {
+                    orderedPairs.Add((def.EnumId.Value, def));
+                }
+
                 Sprite sprite = def?.Icon ?? GetFallbackSprite();
                 if (sprite != null)
                 {
@@ -4391,6 +4668,21 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 image.sprite = null;
                 image.enabled = false;
                 image.gameObject.SetActive(false);
+            }
+        }
+
+        AnimateEquippedChanges(previousEquippedOrder, orderedPairs);
+
+        EnsureEquippedDisplayCapacity();
+        for (int i = 0; i < equippedDisplayIds.Count; i++)
+        {
+            if (i < orderedPairs.Count)
+            {
+                equippedDisplayIds[i] = orderedPairs[i].Id;
+            }
+            else
+            {
+                equippedDisplayIds[i] = null;
             }
         }
     }
@@ -4598,6 +4890,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         var definitions = inv != null ? inv.AllCharms : Array.Empty<ShadeCharmDefinition>();
         LogMenuEvent($"RefreshAll: definitions={definitions.Count}, inventoryNull={inv == null}");
         EnsureEntryCount(definitions.Count);
+        ResetEquippedDisplayState();
         for (int i = 0; i < definitions.Count; i++)
         {
             var entry = entries[i];
@@ -4721,6 +5014,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private void RefreshEntryStates()
     {
         EnsureBuilt();
+        EnsureEquippedDisplayCapacity();
         var inv = inventory ?? ShadeRuntime.Charms;
         inventory = inv;
 
@@ -4751,6 +5045,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
                     entry.NewMarker.SetActive(false);
                 }
             }
+            ResetEquippedDisplayState();
             UpdateEquippedRow();
             return;
         }
@@ -4813,9 +5108,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private void UpdateNotchMeter()
     {
         EnsureBuilt();
-        SetTextValue(notchText, notchTextTMP, "Notches");
-
         var inv = inventory ?? ShadeRuntime.Charms;
+        SetTextValue(notchText, notchTextTMP, inv != null && inv.IsOvercharmed ? "Notches – Overcharmed" : "Notches");
         if (inv == null)
         {
             RenderNotchMeter(notchMeterIcons, Array.Empty<NotchAssignment>(), 0, 0, null, null, false);
@@ -5383,6 +5677,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
             SetTextValue(detailTitleText, detailTitleTextTMP, displayLabel);
             SetTextValue(descriptionText, descriptionTextTMP, "Collect shade charms to unlock new abilities for your companion.");
             SetTextValue(statusText, statusTextTMP, string.Empty);
+            SetHintMessage(string.Empty);
             if (detailCostRow != null)
             {
                 detailCostRow.gameObject.SetActive(false);
@@ -5406,6 +5701,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
         string equipPrompt = BuildEquipPrompt(bindingLabel);
         string unequipPrompt = BuildUnequipPrompt(bindingLabel);
         string status;
+        string hint = string.Empty;
+        bool overcharmed = inventory.IsOvercharmed;
+        int remainingAttempts = inventory.RemainingOvercharmAttempts;
+        int attemptThreshold = inventory.OvercharmAttemptThreshold;
         if (!owned)
         {
             status = "This charm has not been discovered.";
@@ -5420,11 +5719,26 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
         else if (inventory.UsedNotches + notchCost > inventory.NotchCapacity)
         {
-            status = "Not enough notches available.";
+            if (overcharmed)
+            {
+                status = FormattableString.Invariant($"Shade is overcharmed and suffers double damage. {equipPrompt}");
+            }
+            else
+            {
+                int remaining = remainingAttempts > 0 ? remainingAttempts : attemptThreshold;
+                remaining = Mathf.Max(1, remaining);
+                string attemptText = remaining == 1 ? "time" : "times";
+                status = FormattableString.Invariant($"Not enough notches remain. Force equip {remaining} more {attemptText} to overcharm.");
+                hint = "Overcharmed shades take double damage.";
+            }
         }
         else
         {
             status = equipPrompt;
+            if (overcharmed)
+            {
+                hint = "Shade is overcharmed and currently takes double damage.";
+            }
         }
         int displayCost = Mathf.Clamp(notchCost, 0, MaxNotchIcons);
         if (detailCostRow != null)
@@ -5443,6 +5757,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         SetTextValue(statusText, statusTextTMP, status);
+        if (string.IsNullOrEmpty(hint) && overcharmed && !equipped)
+        {
+            hint = "Shade is overcharmed and currently takes double damage.";
+        }
+        SetHintMessage(hint);
     }
 
     private static Sprite? ResolveLockedCharmSprite()

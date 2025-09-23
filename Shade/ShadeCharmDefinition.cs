@@ -29,8 +29,19 @@ namespace LegacyoftheAbyss.Shade
         StalwartShell,
         FuryOfTheFallen,
         NailmastersGlory,
+        CarefreeMelody,
         FragileHeart,
-        SharpShadow
+        SharpShadow,
+        GrubberflysElegy,
+        FragileGreed,
+        HeavyBlow,
+        BaldurShell,
+        LifebloodHeart,
+        LifebloodCore,
+        JonisBlessing,
+        Hiveblood,
+        Kingsoul,
+        VoidHeart
     }
 
     internal sealed class ShadeCharmDefinition

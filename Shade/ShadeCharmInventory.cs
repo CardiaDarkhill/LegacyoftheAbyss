@@ -9,15 +9,19 @@ namespace LegacyoftheAbyss.Shade
     internal sealed class ShadeCharmInventory
     {
         private const int DefaultNotchCapacity = 3;
+        private const int OvercharmAttemptsRequired = 3;
 
         private readonly List<ShadeCharmDefinition> _definitions;
         private readonly Dictionary<ShadeCharmId, ShadeCharmDefinition> _definitionMap;
         private readonly HashSet<ShadeCharmId> _owned;
         private readonly HashSet<ShadeCharmId> _equipped;
+        private readonly List<ShadeCharmId> _equippedOrder;
         private readonly HashSet<ShadeCharmId> _broken;
         private readonly HashSet<ShadeCharmId> _newlyDiscovered;
         private bool _suppressStateChanged;
         private int _notchCapacity;
+        private bool _isOvercharmed;
+        private int _overcharmAttemptCounter;
 
         public event Action? StateChanged;
 
@@ -26,6 +30,9 @@ namespace LegacyoftheAbyss.Shade
             _definitions = new List<ShadeCharmDefinition>();
 
             bool furyActive = false;
+            bool elegyDamageBoostActive = false;
+            float hivebloodTimer = 0f;
+            float kingsoulTimer = 0f;
 
             // TODO: Surface the shade's map position while Wayward Compass is equipped.
             _definitions.Add(new ShadeCharmDefinition(
@@ -329,6 +336,20 @@ namespace LegacyoftheAbyss.Shade
                 iconName: "shade_charm_nailmasters_glory"));
 
             _definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.CarefreeMelody),
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx => ctx.Controller?.SetCarefreeMelodyChance(0.25f),
+                    OnRemoved = ctx => ctx.Controller?.SetCarefreeMelodyChance(0f)
+                },
+                displayName: "Carefree Melody",
+                description: "A soothing anthem that sometimes lets blows simply glance away from the shade.",
+                notchCost: 3,
+                fallbackTint: new Color(0.86f, 0.78f, 0.56f),
+                enumId: ShadeCharmId.CarefreeMelody,
+                iconName: "shade_charm_carefree_melody"));
+
+            _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.FragileHeart),
                 hooks: new ShadeCharmHooks
                 {
@@ -352,14 +373,235 @@ namespace LegacyoftheAbyss.Shade
                 enumId: ShadeCharmId.SharpShadow,
                 iconName: "shade_charm_sharp_shadow"));
 
+            _definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.GrubberflysElegy),
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx =>
+                    {
+                        elegyDamageBoostActive = false;
+                        ctx.Controller?.SetConditionalNailDamageMultiplier(nameof(ShadeCharmId.GrubberflysElegy), 1f);
+                    },
+                    OnRemoved = ctx =>
+                    {
+                        elegyDamageBoostActive = false;
+                        ctx.Controller?.ClearConditionalNailDamageMultiplier(nameof(ShadeCharmId.GrubberflysElegy));
+                    },
+                    OnUpdate = (ctx, _) =>
+                    {
+                        var controller = ctx.Controller;
+                        if (controller == null)
+                        {
+                            return;
+                        }
+
+                        bool atFull = controller.GetCurrentHP() >= controller.GetMaxHP();
+                        if (atFull != elegyDamageBoostActive)
+                        {
+                            elegyDamageBoostActive = atFull;
+                            controller.SetConditionalNailDamageMultiplier(nameof(ShadeCharmId.GrubberflysElegy), atFull ? 1.4f : 1f);
+                        }
+                    }
+                },
+                displayName: "Grubberfly's Elegy",
+                description: "Calls upon the gratitude of every rescued grub. While at full health the shade's nail strikes with brilliant, searing force.",
+                notchCost: 3,
+                fallbackTint: new Color(0.50f, 0.68f, 0.94f),
+                enumId: ShadeCharmId.GrubberflysElegy,
+                iconName: "shade_charm_grubberflys_elegy"));
+
+            _definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.FragileGreed),
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx => ctx.Controller?.AddSoulGainBonus(8),
+                    OnRemoved = ctx => ctx.Controller?.AddSoulGainBonus(-8)
+                },
+                displayName: "Fragile Greed",
+                description: "Fills the bearer with a desire to reap every scrap of SOUL. Increases SOUL gained from attacks, but will shatter if the shade is defeated.",
+                notchCost: 2,
+                fallbackTint: new Color(0.90f, 0.78f, 0.32f),
+                enumId: ShadeCharmId.FragileGreed,
+                iconName: "shade_charm_fragile_greed"));
+
+            _definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.HeavyBlow),
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx => ctx.Controller?.MultiplyKnockbackForce(1.4f),
+                    OnRemoved = ctx => ctx.Controller?.MultiplyKnockbackForce(1f / 1.4f)
+                },
+                displayName: "Heavy Blow",
+                description: "Embues the shade's nail with tremendous force, sending foes staggering further with every strike.",
+                notchCost: 2,
+                fallbackTint: new Color(0.56f, 0.39f, 0.23f),
+                enumId: ShadeCharmId.HeavyBlow,
+                iconName: "shade_charm_heavy_blow"));
+
+            _definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.BaldurShell),
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx => ctx.Controller?.SetFocusDamageShield(true),
+                    OnRemoved = ctx => ctx.Controller?.SetFocusDamageShield(false)
+                },
+                displayName: "Baldur Shell",
+                description: "A living protective shell that curls around the shade while focusing, helping it shrug off stray blows.",
+                notchCost: 2,
+                fallbackTint: new Color(0.58f, 0.74f, 0.80f),
+                enumId: ShadeCharmId.BaldurShell,
+                iconName: "shade_charm_baldur_shell"));
+
+            _definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.LifebloodHeart),
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx => ctx.Controller?.AddMaxHpBonus(2, true),
+                    OnRemoved = ctx => ctx.Controller?.AddMaxHpBonus(-2, false)
+                },
+                displayName: "Lifeblood Heart",
+                description: "The shade grows new lifeblood nodes, granting extra vitality that must be renewed at benches.",
+                notchCost: 2,
+                fallbackTint: new Color(0.35f, 0.73f, 0.88f),
+                enumId: ShadeCharmId.LifebloodHeart,
+                iconName: "shade_charm_lifeblood_heart"));
+
+            _definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.LifebloodCore),
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx => ctx.Controller?.AddMaxHpBonus(4, true),
+                    OnRemoved = ctx => ctx.Controller?.AddMaxHpBonus(-4, false)
+                },
+                displayName: "Lifeblood Core",
+                description: "A massive core of lifeblood that courses through the shade, dramatically increasing temporary vitality.",
+                notchCost: 4,
+                fallbackTint: new Color(0.26f, 0.62f, 0.84f),
+                enumId: ShadeCharmId.LifebloodCore,
+                iconName: "shade_charm_lifeblood_core"));
+
+            _definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.JonisBlessing),
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx =>
+                    {
+                        ctx.Controller?.SetFocusHealingDisabled(true);
+                        ctx.Controller?.AddMaxHpBonus(6, true);
+                    },
+                    OnRemoved = ctx =>
+                    {
+                        ctx.Controller?.SetFocusHealingDisabled(false);
+                        ctx.Controller?.AddMaxHpBonus(-6, false);
+                    }
+                },
+                displayName: "Joni's Blessing",
+                description: "Blesses the shade with vast lifeblood reserves. Focus can no longer heal, but the companion's vitality surges.",
+                notchCost: 4,
+                fallbackTint: new Color(0.58f, 0.38f, 0.72f),
+                enumId: ShadeCharmId.JonisBlessing,
+                iconName: "shade_charm_jonis_blessing"));
+
+            _definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.Hiveblood),
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx => hivebloodTimer = 0f,
+                    OnRemoved = ctx => hivebloodTimer = 0f,
+                    OnShadeDamaged = (ctx, evt) =>
+                    {
+                        if (evt.ActualDamage > 0 && !evt.WasPrevented)
+                        {
+                            hivebloodTimer = 0f;
+                        }
+                    },
+                    OnUpdate = (ctx, delta) =>
+                    {
+                        var controller = ctx.Controller;
+                        if (controller == null)
+                        {
+                            return;
+                        }
+
+                        if (controller.GetCurrentHP() >= controller.GetMaxHP())
+                        {
+                            hivebloodTimer = 0f;
+                            return;
+                        }
+
+                        hivebloodTimer += Mathf.Max(0f, delta);
+                        if (hivebloodTimer >= 10f)
+                        {
+                            hivebloodTimer = 0f;
+                            controller.ReviveToAtLeast(controller.GetCurrentHP() + 1);
+                        }
+                    }
+                },
+                displayName: "Hiveblood",
+                description: "Honeyed lifeblood seeps through the shade, knitting wounds back together if it can avoid harm for a short while.",
+                notchCost: 4,
+                fallbackTint: new Color(0.96f, 0.76f, 0.32f),
+                enumId: ShadeCharmId.Hiveblood,
+                iconName: "shade_charm_hiveblood"));
+
+            _definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.Kingsoul),
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx => kingsoulTimer = 0f,
+                    OnRemoved = ctx => kingsoulTimer = 0f,
+                    OnUpdate = (ctx, delta) =>
+                    {
+                        var controller = ctx.Controller;
+                        if (controller == null)
+                        {
+                            return;
+                        }
+
+                        kingsoulTimer += Mathf.Max(0f, delta);
+                        if (kingsoulTimer >= 1.5f)
+                        {
+                            kingsoulTimer -= 1.5f;
+                            if (controller.GetShadeSoul() < controller.GetShadeSoulMax())
+                            {
+                                controller.GainShadeSoul(4);
+                            }
+                        }
+                    }
+                },
+                displayName: "Kingsoul",
+                description: "A revered talisman of Hallownest. Gradually draws SOUL into the shade, empowering every spell and ability.",
+                notchCost: 5,
+                fallbackTint: new Color(0.92f, 0.91f, 0.75f),
+                enumId: ShadeCharmId.Kingsoul,
+                iconName: "shade_charm_kingsoul"));
+
+            _definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.VoidHeart),
+                statModifiers: new ShadeCharmStatModifiers
+                {
+                    SprintSpeedMultiplier = 1.05f,
+                    FocusSoulCostMultiplier = 0.85f,
+                    ShadeSoulCapacityFlatBonus = 15
+                },
+                displayName: "Void Heart",
+                description: "The culmination of the Abyss. Harmonises Hornet and shade, reducing SOUL costs and granting unmatched stamina.",
+                notchCost: 0,
+                fallbackTint: new Color(0.32f, 0.32f, 0.42f),
+                enumId: ShadeCharmId.VoidHeart,
+                iconName: "shade_charm_void_heart"));
+
             _definitionMap = _definitions
                 .Where(def => def.EnumId.HasValue)
                 .ToDictionary(def => def.EnumId!.Value);
             _owned = new HashSet<ShadeCharmId>();
             _equipped = new HashSet<ShadeCharmId>();
+            _equippedOrder = new List<ShadeCharmId>();
             _broken = new HashSet<ShadeCharmId>();
             _newlyDiscovered = new HashSet<ShadeCharmId>();
             _notchCapacity = DefaultNotchCapacity;
+            _isOvercharmed = false;
+            _overcharmAttemptCounter = 0;
         }
 
         public IReadOnlyList<ShadeCharmDefinition> AllCharms => _definitions;
@@ -377,6 +619,7 @@ namespace LegacyoftheAbyss.Shade
 
                 _notchCapacity = clamped;
                 TrimToCapacity();
+                RecalculateOvercharmed();
                 RaiseStateChanged();
             }
         }
@@ -386,7 +629,7 @@ namespace LegacyoftheAbyss.Shade
             get
             {
                 int total = 0;
-                foreach (var id in _equipped)
+                foreach (var id in _equippedOrder)
                 {
                     if (_definitionMap.TryGetValue(id, out var definition))
                     {
@@ -416,11 +659,19 @@ namespace LegacyoftheAbyss.Shade
             throw new KeyNotFoundException($"No charm definition registered for {id}.");
         }
 
-        public IReadOnlyCollection<ShadeCharmId> GetEquipped() => _equipped.ToArray();
+        public bool IsOvercharmed => _isOvercharmed;
+
+        public int OvercharmAttemptThreshold => OvercharmAttemptsRequired;
+
+        public int RemainingOvercharmAttempts => _isOvercharmed
+            ? 0
+            : Math.Max(0, OvercharmAttemptsRequired - _overcharmAttemptCounter);
+
+        public IReadOnlyCollection<ShadeCharmId> GetEquipped() => _equippedOrder.ToArray();
 
         public IReadOnlyCollection<ShadeCharmDefinition> GetEquippedDefinitions()
         {
-            return _equipped
+            return _equippedOrder
                 .Where(id => _definitionMap.TryGetValue(id, out _))
                 .Select(id => _definitionMap[id])
                 .ToArray();
@@ -458,14 +709,71 @@ namespace LegacyoftheAbyss.Shade
                 return false;
             }
 
-            if (UsedNotches + definition.NotchCost > _notchCapacity)
+            if (id == ShadeCharmId.Kingsoul && _equipped.Contains(ShadeCharmId.VoidHeart))
             {
-                message = "Not enough notches available.";
+                message = "Void Heart refuses to share power with Kingsoul.";
                 return false;
             }
 
-            _equipped.Add(id);
-            message = $"{definition.DisplayName} equipped.";
+            bool removedKingsoul = false;
+            int removedKingsoulIndex = -1;
+            if (id == ShadeCharmId.VoidHeart && _equipped.Contains(ShadeCharmId.Kingsoul))
+            {
+                removedKingsoulIndex = _equippedOrder.IndexOf(ShadeCharmId.Kingsoul);
+                RemoveEquippedInternal(ShadeCharmId.Kingsoul);
+                removedKingsoul = true;
+            }
+
+            int notchCost = definition.NotchCost;
+            int prospectiveNotches = UsedNotches + notchCost;
+            bool fits = notchCost <= 0 || prospectiveNotches <= _notchCapacity;
+
+            if (!fits && !_isOvercharmed)
+            {
+                _overcharmAttemptCounter++;
+                int remaining = Math.Max(0, OvercharmAttemptsRequired - _overcharmAttemptCounter);
+                if (_overcharmAttemptCounter < OvercharmAttemptsRequired)
+                {
+                    if (removedKingsoul)
+                    {
+                        RestoreEquippedAtIndex(ShadeCharmId.Kingsoul, removedKingsoulIndex);
+                    }
+
+                    message = remaining > 0
+                        ? $"Not enough notches. Force equip {remaining} more times to overcharm."
+                        : "Not enough notches available.";
+                    return false;
+                }
+
+                _overcharmAttemptCounter = 0;
+            }
+            else
+            {
+                _overcharmAttemptCounter = 0;
+            }
+
+            bool wasOvercharmed = _isOvercharmed;
+            AddEquippedInternal(id);
+            bool overcharmChanged = RecalculateOvercharmed();
+
+            if (_isOvercharmed && (!wasOvercharmed || overcharmChanged))
+            {
+                message = $"{definition.DisplayName} equipped. Shade is overcharmed.";
+            }
+            else if (_isOvercharmed)
+            {
+                message = $"{definition.DisplayName} equipped. Shade remains overcharmed.";
+            }
+            else
+            {
+                message = $"{definition.DisplayName} equipped.";
+            }
+
+            if (removedKingsoul)
+            {
+                message += " Kingsoul withdrew to make room.";
+            }
+
             RaiseStateChanged();
             return true;
         }
@@ -478,7 +786,7 @@ namespace LegacyoftheAbyss.Shade
                 return false;
             }
 
-            _equipped.Remove(id);
+            RemoveEquippedInternal(id);
             if (_definitionMap.TryGetValue(id, out var definition))
             {
                 message = $"{definition.DisplayName} removed.";
@@ -488,6 +796,8 @@ namespace LegacyoftheAbyss.Shade
                 message = "Charm removed.";
             }
 
+            _overcharmAttemptCounter = 0;
+            RecalculateOvercharmed();
             RaiseStateChanged();
             return true;
         }
@@ -504,12 +814,20 @@ namespace LegacyoftheAbyss.Shade
 
         public void ResetLoadout()
         {
-            if (_equipped.Count == 0)
+            if (_equipped.Count == 0 && _equippedOrder.Count == 0)
             {
+                _overcharmAttemptCounter = 0;
+                if (RecalculateOvercharmed())
+                {
+                    RaiseStateChanged();
+                }
                 return;
             }
 
             _equipped.Clear();
+            _equippedOrder.Clear();
+            _isOvercharmed = false;
+            _overcharmAttemptCounter = 0;
             RaiseStateChanged();
         }
 
@@ -556,9 +874,10 @@ namespace LegacyoftheAbyss.Shade
                 changed = true;
             }
 
-            if (_equipped.Count > 0)
+            if (_equipped.Count > 0 || _equippedOrder.Count > 0)
             {
                 _equipped.Clear();
+                _equippedOrder.Clear();
                 changed = true;
             }
 
@@ -573,6 +892,14 @@ namespace LegacyoftheAbyss.Shade
                 _newlyDiscovered.Clear();
                 changed = true;
             }
+
+            if (_isOvercharmed)
+            {
+                _isOvercharmed = false;
+                changed = true;
+            }
+
+            _overcharmAttemptCounter = 0;
 
             if (resetNotchCapacity && _notchCapacity != DefaultNotchCapacity)
             {
@@ -594,7 +921,12 @@ namespace LegacyoftheAbyss.Shade
             }
 
             bool newlyBroken = _broken.Add(id);
-            bool removed = _equipped.Remove(id);
+            bool removed = RemoveEquippedInternal(id);
+            if (removed)
+            {
+                _overcharmAttemptCounter = 0;
+                RecalculateOvercharmed();
+            }
             if (newlyBroken || removed)
             {
                 RaiseStateChanged();
@@ -630,6 +962,7 @@ namespace LegacyoftheAbyss.Shade
 
             _owned.Clear();
             _equipped.Clear();
+            _equippedOrder.Clear();
             _broken.Clear();
             _newlyDiscovered.Clear();
 
@@ -658,7 +991,7 @@ namespace LegacyoftheAbyss.Shade
                 {
                     if (_owned.Contains(id) && !_broken.Contains(id))
                     {
-                        _equipped.Add(id);
+                        AddEquippedInternal(id);
                     }
                 }
             }
@@ -675,7 +1008,10 @@ namespace LegacyoftheAbyss.Shade
             }
 
             _notchCapacity = Mathf.Clamp(notchCapacity > 0 ? notchCapacity : DefaultNotchCapacity, 0, 20);
+            _isOvercharmed = UsedNotches > _notchCapacity;
             TrimToCapacity();
+            RecalculateOvercharmed();
+            _overcharmAttemptCounter = 0;
 
             _suppressStateChanged = false;
             RaiseStateChanged();
@@ -692,6 +1028,63 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
+        private bool AddEquippedInternal(ShadeCharmId id)
+        {
+            if (!_equipped.Add(id))
+            {
+                return false;
+            }
+
+            _equippedOrder.Add(id);
+            return true;
+        }
+
+        private bool RemoveEquippedInternal(ShadeCharmId id)
+        {
+            bool removed = _equipped.Remove(id);
+            if (_equippedOrder.Remove(id))
+            {
+                removed = true;
+            }
+
+            return removed;
+        }
+
+        private void RestoreEquippedAtIndex(ShadeCharmId id, int index)
+        {
+            if (_equipped.Contains(id) || _equippedOrder.Contains(id))
+            {
+                return;
+            }
+
+            if (!_definitionMap.ContainsKey(id))
+            {
+                return;
+            }
+
+            _equipped.Add(id);
+            if (index >= 0 && index <= _equippedOrder.Count)
+            {
+                _equippedOrder.Insert(index, id);
+            }
+            else
+            {
+                _equippedOrder.Add(id);
+            }
+        }
+
+        private bool RecalculateOvercharmed()
+        {
+            bool newValue = UsedNotches > _notchCapacity;
+            if (_isOvercharmed != newValue)
+            {
+                _isOvercharmed = newValue;
+                return true;
+            }
+
+            return false;
+        }
+
         private void RaiseStateChanged()
         {
             if (_suppressStateChanged)
@@ -699,38 +1092,39 @@ namespace LegacyoftheAbyss.Shade
                 return;
             }
 
+            RecalculateOvercharmed();
             StateChanged?.Invoke();
         }
 
         private void TrimToCapacity()
         {
-            if (UsedNotches <= _notchCapacity)
+            if (_isOvercharmed)
             {
+                RecalculateOvercharmed();
                 return;
             }
 
-            var ordered = _equipped
+            if (UsedNotches <= _notchCapacity)
+            {
+                RecalculateOvercharmed();
+                return;
+            }
+
+            var ordered = _equippedOrder
                 .Select(id => (_definitionMap.TryGetValue(id, out var def) ? def.NotchCost : 0, id))
                 .OrderByDescending(tuple => tuple.Item1)
+                .ThenBy(tuple => tuple.id)
                 .ToList();
 
-            bool changed = false;
             foreach (var (_, id) in ordered)
             {
-                if (_equipped.Remove(id))
-                {
-                    changed = true;
-                }
-                if (UsedNotches <= _notchCapacity)
+                if (RemoveEquippedInternal(id) && UsedNotches <= _notchCapacity)
                 {
                     break;
                 }
             }
 
-            if (changed)
-            {
-                RaiseStateChanged();
-            }
+            RecalculateOvercharmed();
         }
     }
 }

@@ -98,6 +98,10 @@ public partial class LegacyHelper
             charmMaxHpBonus = 0;
             allowFocusMovement = false;
             knockbackSuppressionCount = 0;
+            focusDamageShieldEnabled = false;
+            focusDamageShieldAbsorbedThisChannel = false;
+            focusHealingDisabled = false;
+            carefreeMelodyChance = 0f;
             conditionalNailDamageMultipliers.Clear();
             conditionalNailDamageProduct = 1f;
             UpdateFocusDerivedValues();
@@ -162,9 +166,47 @@ public partial class LegacyHelper
             knockbackSuppressionCount = Mathf.Clamp(knockbackSuppressionCount + delta, 0, 10);
         }
 
+        internal void MultiplyKnockbackForce(float factor)
+        {
+            if (factor <= 0f)
+            {
+                return;
+            }
+
+            hitKnockbackForce = Mathf.Clamp(hitKnockbackForce * factor, 0.1f, Mathf.Max(0.1f, baseHitKnockbackForce * 5f));
+        }
+
         internal void SetFocusMovementAllowed(bool allowed)
         {
             allowFocusMovement = allowed;
+        }
+
+        internal void SetFocusDamageShield(bool enabled)
+        {
+            focusDamageShieldEnabled = enabled;
+            if (!enabled)
+            {
+                focusDamageShieldAbsorbedThisChannel = false;
+            }
+        }
+
+        internal void SetFocusHealingDisabled(bool disabled)
+        {
+            if (focusHealingDisabled == disabled)
+            {
+                return;
+            }
+
+            focusHealingDisabled = disabled;
+            if (disabled)
+            {
+                CancelFocus();
+            }
+        }
+
+        internal void SetCarefreeMelodyChance(float chance)
+        {
+            carefreeMelodyChance = Mathf.Clamp01(chance);
         }
 
         internal void AddMaxHpBonus(int amount, bool fillNew)
@@ -228,12 +270,22 @@ public partial class LegacyHelper
 
         private int GetFocusHealAmount()
         {
+            if (focusHealingDisabled)
+            {
+                return 0;
+            }
+
             int baseAmount = ModConfig.Instance.focusShadeHeal + charmFocusHealBonus;
             return Mathf.Clamp(baseAmount, 0, 12);
         }
 
         private int GetHornetFocusHealAmount()
         {
+            if (focusHealingDisabled)
+            {
+                return 0;
+            }
+
             int baseAmount = ModConfig.Instance.focusHornetHeal + charmHornetFocusHealBonus;
             return Mathf.Clamp(baseAmount, 0, 12);
         }

@@ -553,7 +553,13 @@ public static class ShadeSettingsMenu
                 return;
             }
 
-            notchMeter.text = $"Notches Used: {inventory.UsedNotches}/{inventory.NotchCapacity}";
+            string status = $"Notches Used: {inventory.UsedNotches}/{inventory.NotchCapacity}";
+            if (inventory.IsOvercharmed)
+            {
+                status = $"Overcharmed! {status}";
+            }
+
+            notchMeter.text = status;
         }
 
         private void UpdateDetailPanel()
@@ -590,12 +596,30 @@ public static class ShadeSettingsMenu
                     fallbackStatus = "This charm is broken. Rest at a bench to repair it before equipping.";
                 else if (inventory.IsEquipped(selectedCharm.Value))
                     fallbackStatus = "Charm equipped. Unequip to free notches for other charms.";
+                else if (def.NotchCost > 0 && inventory.UsedNotches + def.NotchCost > inventory.NotchCapacity)
+                {
+                    if (inventory.IsOvercharmed)
+                    {
+                        fallbackStatus = "Shade is overcharmed and suffers double damage. Equip with caution.";
+                    }
+                    else
+                    {
+                        int remaining = Math.Max(1, inventory.RemainingOvercharmAttempts > 0 ? inventory.RemainingOvercharmAttempts : inventory.OvercharmAttemptThreshold);
+                        string attemptText = remaining == 1 ? "time" : "times";
+                        fallbackStatus = FormattableString.Invariant($"Not enough notches remain. Force equip {remaining} more {attemptText} to overcharm (double damage).");
+                    }
+                }
                 else
                     fallbackStatus = "Equip to add this charm to your shade's loadout.";
             }
             else
             {
                 SetDetailTexts("Charms", "Select a charm to view its description and equip requirements.");
+            }
+
+            if (inventory.IsOvercharmed && (fallbackStatus == null || fallbackStatus.IndexOf("overcharm", StringComparison.OrdinalIgnoreCase) < 0))
+            {
+                fallbackStatus = "Shade is overcharmed and suffers double damage. " + fallbackStatus;
             }
 
             UpdateStatusText(fallbackStatus);
@@ -622,7 +646,7 @@ public static class ShadeSettingsMenu
                 bool equipped = inventory.IsEquipped(selectedCharm.Value);
                 bool broken = inventory.IsBroken(selectedCharm.Value);
                 canUnequip = equipped;
-                canEquip = owned && !equipped && !broken && inventory.UsedNotches + def.NotchCost <= inventory.NotchCapacity;
+                canEquip = owned && !equipped && !broken;
             }
 
             if (equipButton != null)

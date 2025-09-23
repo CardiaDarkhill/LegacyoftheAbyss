@@ -194,6 +194,10 @@ public partial class LegacyHelper
         private float focusSoulAccumulator;
         private Renderer focusAuraRenderer;
         private float focusAuraBaseSize = 12f;
+        private bool focusDamageShieldEnabled;
+        private bool focusDamageShieldAbsorbedThisChannel;
+        private bool focusHealingDisabled;
+        private float carefreeMelodyChance;
         private AudioSource focusSfx;
         private AudioClip sfxFocusCharge;
         private AudioClip sfxFocusComplete;
