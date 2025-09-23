@@ -798,6 +798,9 @@ public partial class LegacyHelper
 
         private static InputHandler handler;
         private static bool subscribed;
+        private static BindingSourceType lastKnownHornetBinding = BindingSourceType.None;
+        private static BindingSourceType? pendingSimulatedBindingSource;
+        private static int pendingSimulatedBindingFrame = -1;
 
         internal static void Initialize(InputHandler instance)
         {
@@ -920,42 +923,47 @@ public partial class LegacyHelper
             var current = TryGetHandler();
             if (current != null)
             {
-                switch (current.lastActiveController)
+                BindingSourceType active = current.lastActiveController;
+                if (active != BindingSourceType.None)
                 {
-                    case BindingSourceType.DeviceBindingSource:
-                        return true;
-                    case BindingSourceType.KeyBindingSource:
-                    case BindingSourceType.MouseBindingSource:
-                        return false;
+                    lastKnownHornetBinding = active;
+                    return active == BindingSourceType.DeviceBindingSource;
                 }
+            }
+
+            if (lastKnownHornetBinding != BindingSourceType.None)
+            {
+                return lastKnownHornetBinding == BindingSourceType.DeviceBindingSource;
             }
 
             var cfg = ModConfig.Instance;
             if (cfg != null)
             {
                 if (cfg.hornetControllerEnabled && !cfg.hornetKeyboardEnabled)
+                {
+                    lastKnownHornetBinding = BindingSourceType.DeviceBindingSource;
                     return true;
+                }
+
                 if (!cfg.hornetControllerEnabled && cfg.hornetKeyboardEnabled)
+                {
+                    lastKnownHornetBinding = BindingSourceType.KeyBindingSource;
                     return false;
+                }
+
                 if (!cfg.hornetControllerEnabled && !cfg.hornetKeyboardEnabled)
+                {
+                    lastKnownHornetBinding = BindingSourceType.None;
                     return false;
+                }
+
                 if (cfg.hornetControllerEnabled && cfg.hornetKeyboardEnabled)
                 {
-                    if (current != null)
+                    var preferred = TryResolveFromActiveDevice();
+                    if (preferred.HasValue)
                     {
-                        if (current.gameController != null && current.gameController != InputDevice.Null)
-                            return true;
-                        if (current.lastActiveController == BindingSourceType.DeviceBindingSource)
-                            return true;
-                    }
-
-                    var activeDevice = TryGetActiveDevice();
-                    if (activeDevice != null)
-                    {
-                        if (activeDevice.DeviceClass == InputDeviceClass.Controller)
-                            return true;
-                        if (activeDevice.DeviceClass == InputDeviceClass.Keyboard || activeDevice.DeviceClass == InputDeviceClass.Mouse)
-                            return false;
+                        lastKnownHornetBinding = preferred.Value;
+                        return preferred.Value == BindingSourceType.DeviceBindingSource;
                     }
 
                     return cfg.hornetControllerEnabled;
@@ -970,42 +978,47 @@ public partial class LegacyHelper
             var current = TryGetHandler();
             if (current != null)
             {
-                switch (current.lastActiveController)
+                BindingSourceType active = current.lastActiveController;
+                if (active != BindingSourceType.None)
                 {
-                    case BindingSourceType.KeyBindingSource:
-                    case BindingSourceType.MouseBindingSource:
-                        return true;
-                    case BindingSourceType.DeviceBindingSource:
-                        return false;
+                    lastKnownHornetBinding = active;
+                    return active == BindingSourceType.KeyBindingSource || active == BindingSourceType.MouseBindingSource;
                 }
+            }
+
+            if (lastKnownHornetBinding != BindingSourceType.None)
+            {
+                return lastKnownHornetBinding == BindingSourceType.KeyBindingSource || lastKnownHornetBinding == BindingSourceType.MouseBindingSource;
             }
 
             var cfg = ModConfig.Instance;
             if (cfg != null)
             {
                 if (cfg.hornetKeyboardEnabled && !cfg.hornetControllerEnabled)
+                {
+                    lastKnownHornetBinding = BindingSourceType.KeyBindingSource;
                     return true;
+                }
+
                 if (!cfg.hornetKeyboardEnabled && cfg.hornetControllerEnabled)
+                {
+                    lastKnownHornetBinding = BindingSourceType.DeviceBindingSource;
                     return false;
+                }
+
                 if (!cfg.hornetKeyboardEnabled && !cfg.hornetControllerEnabled)
+                {
+                    lastKnownHornetBinding = BindingSourceType.None;
                     return false;
+                }
+
                 if (cfg.hornetKeyboardEnabled && cfg.hornetControllerEnabled)
                 {
-                    if (current != null)
+                    var preferred = TryResolveFromActiveDevice();
+                    if (preferred.HasValue)
                     {
-                        if (current.gameController == null || current.gameController == InputDevice.Null)
-                            return true;
-                        if (current.lastActiveController == BindingSourceType.KeyBindingSource || current.lastActiveController == BindingSourceType.MouseBindingSource)
-                            return true;
-                    }
-
-                    var activeDevice = TryGetActiveDevice();
-                    if (activeDevice != null)
-                    {
-                        if (activeDevice.DeviceClass == InputDeviceClass.Controller)
-                            return false;
-                        if (activeDevice.DeviceClass == InputDeviceClass.Keyboard || activeDevice.DeviceClass == InputDeviceClass.Mouse)
-                            return true;
+                        lastKnownHornetBinding = preferred.Value;
+                        return preferred.Value == BindingSourceType.KeyBindingSource || preferred.Value == BindingSourceType.MouseBindingSource;
                     }
 
                     return cfg.hornetKeyboardEnabled;
@@ -1013,6 +1026,41 @@ public partial class LegacyHelper
             }
 
             return cfg?.hornetKeyboardEnabled ?? false;
+        }
+
+        private static BindingSourceType? TryResolveFromActiveDevice()
+        {
+            var activeDevice = TryGetActiveDevice();
+            if (activeDevice == null || activeDevice == InputDevice.Null)
+                return null;
+            if (IsShadeDevice(activeDevice))
+                return null;
+
+            switch (activeDevice.DeviceClass)
+            {
+                case InputDeviceClass.Controller:
+                    return BindingSourceType.DeviceBindingSource;
+                case InputDeviceClass.Keyboard:
+                case InputDeviceClass.Mouse:
+                    return BindingSourceType.KeyBindingSource;
+                default:
+                    return null;
+            }
+        }
+
+        private static bool IsShadeDevice(InputDevice device)
+        {
+            if (device == null || device == InputDevice.Null)
+                return false;
+
+            var shadeController = TryGetShadeController();
+            return shadeController != null && shadeController == device;
+        }
+
+        private static void RegisterSimulatedBinding(BindingSourceType sourceType)
+        {
+            pendingSimulatedBindingSource = sourceType;
+            pendingSimulatedBindingFrame = Time.frameCount;
         }
 
         private static bool ShadeInventoryKeyPressed()
@@ -1190,6 +1238,40 @@ public partial class LegacyHelper
             }
         }
 
+        internal static bool ShouldBypassActiveControllerUpdate(InputHandler instance)
+        {
+            if (!pendingSimulatedBindingSource.HasValue)
+                return false;
+
+            if (Time.frameCount != pendingSimulatedBindingFrame)
+            {
+                pendingSimulatedBindingSource = null;
+                return false;
+            }
+
+            try
+            {
+                var actions = instance?.inputActions;
+                if (actions == null)
+                {
+                    pendingSimulatedBindingSource = null;
+                    return false;
+                }
+
+                if (actions.LastInputType == pendingSimulatedBindingSource.Value)
+                {
+                    pendingSimulatedBindingSource = null;
+                    return true;
+                }
+            }
+            catch
+            {
+                pendingSimulatedBindingSource = null;
+            }
+
+            return false;
+        }
+
         private abstract class ShadeMenuBindingSourceBase : BindingSource
         {
             private readonly int id;
@@ -1211,6 +1293,8 @@ public partial class LegacyHelper
                 if (!ShouldActivate())
                     return 0f;
                 float value = Mathf.Clamp01(ComputeValue());
+                if (value > 0f)
+                    RegisterSimulatedBinding(SourceType);
                 return value;
             }
 
@@ -1397,6 +1481,9 @@ public partial class LegacyHelper
         {
             try
             {
+                if (MenuInputBridge.ShouldBypassActiveControllerUpdate(__instance))
+                    return false;
+
                 if (!InputDeviceBlocker.ShouldIgnoreDevice(__instance, InputManager.ActiveDevice))
                     return true;
                 InputDeviceBlocker.EnsureLastActiveController(__instance);
