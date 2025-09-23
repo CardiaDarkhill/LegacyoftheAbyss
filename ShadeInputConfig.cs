@@ -550,7 +550,7 @@ public static class ShadeInput
         }
     }
 
-    private static InputDevice? GetDeviceForOption(ShadeBindingOption option)
+    private static InputDevice GetDeviceForOption(ShadeBindingOption option)
     {
         int index = GetEffectiveControllerIndex(option);
         if (index < 0)

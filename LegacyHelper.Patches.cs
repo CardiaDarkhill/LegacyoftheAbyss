@@ -796,7 +796,7 @@ public partial class LegacyHelper
         private const int KeyboardCancelBindingId = 9;
         private const int ControllerInventoryBindingId = 10;
 
-        private static InputHandler? handler;
+        private static InputHandler handler;
         private static bool subscribed;
 
         internal static void Initialize(InputHandler instance)
@@ -835,7 +835,7 @@ public partial class LegacyHelper
             }
         }
 
-        private static void EnsureBindings(HeroActions? actions)
+        private static void EnsureBindings(HeroActions actions)
         {
             if (actions == null)
             {
@@ -886,7 +886,7 @@ public partial class LegacyHelper
             }
         }
 
-        private static InputHandler? TryGetHandler()
+        private static InputHandler TryGetHandler()
         {
             if (handler != null)
                 return handler;
@@ -1047,7 +1047,7 @@ public partial class LegacyHelper
             }
         }
 
-        private static InputDevice? TryGetShadeController()
+        private static InputDevice TryGetShadeController()
         {
             try
             {
@@ -1106,7 +1106,7 @@ public partial class LegacyHelper
 
             public override InputDeviceStyle DeviceStyle => InputDeviceStyle.Unknown;
 
-            internal override bool IsValid => false;
+            public override bool IsValid => true;
 
             public override bool Equals(BindingSource other)
             {
