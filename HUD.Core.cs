@@ -218,12 +218,113 @@ public partial class SimpleHUD : MonoBehaviour
     {
         try
         {
-            return MenuStateUtility.IsMenuActive();
+            if (ShadeSettingsMenu.IsShowing)
+            {
+                return true;
+            }
         }
         catch
         {
-            return false;
         }
+
+        GameManager gm = null;
+        try
+        {
+            gm = MenuStateUtility.TryGetGameManager();
+        }
+        catch
+        {
+        }
+
+        if (!ReferenceEquals(gm, null))
+        {
+            try
+            {
+                if (gm.isPaused)
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                if (gm.IsGamePaused())
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                var inventoryState = MenuStateUtility.TryGetInventoryStateName(gm);
+                if (MenuStateUtility.IsMenuStateName(inventoryState))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        try
+        {
+            var playerData = MenuStateUtility.TryGetPlayerData();
+            if (!ReferenceEquals(playerData, null))
+            {
+                if (playerData.isInventoryOpen)
+                {
+                    return true;
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        UIManager ui = null;
+        try
+        {
+            ui = MenuStateUtility.TryGetUiManager(gm);
+        }
+        catch
+        {
+        }
+
+        if (!ReferenceEquals(ui, null))
+        {
+            try
+            {
+                var menuState = MenuStateUtility.TryGetMenuStateName(ui);
+                if (MenuStateUtility.IsMenuStateName(menuState))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                var stateName = MenuStateUtility.TryGetUiStateName(ui);
+                if (MenuStateUtility.IsMenuStateName(stateName))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        return false;
     }
 
     private void UpdateMenuOrientation(bool menuActive)

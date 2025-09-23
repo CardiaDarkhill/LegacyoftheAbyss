@@ -798,7 +798,6 @@ public partial class LegacyHelper
 
         private static InputHandler handler;
         private static bool subscribed;
-        private static BindingSourceType lastKnownHornetBinding = BindingSourceType.None;
         private static BindingSourceType? pendingSimulatedBindingSource;
         private static int pendingSimulatedBindingFrame = -1;
 
@@ -903,158 +902,30 @@ public partial class LegacyHelper
             }
         }
 
-        private static InputDevice TryGetActiveDevice()
+        private static bool HornetControllerBindingsEnabled()
         {
             try
             {
-                var active = InputManager.ActiveDevice;
-                if (active == null || active == InputDevice.Null)
-                    return null;
-                return active;
+                var cfg = ModConfig.Instance;
+                return cfg == null || cfg.hornetControllerEnabled;
             }
             catch
             {
-                return null;
+                return true;
             }
         }
 
-        private static bool HornetUsesController()
+        private static bool HornetKeyboardBindingsEnabled()
         {
-            var current = TryGetHandler();
-            if (current != null)
+            try
             {
-                BindingSourceType active = current.lastActiveController;
-                if (active != BindingSourceType.None)
-                {
-                    lastKnownHornetBinding = active;
-                    return active == BindingSourceType.DeviceBindingSource;
-                }
+                var cfg = ModConfig.Instance;
+                return cfg != null && cfg.hornetKeyboardEnabled;
             }
-
-            if (lastKnownHornetBinding != BindingSourceType.None)
+            catch
             {
-                return lastKnownHornetBinding == BindingSourceType.DeviceBindingSource;
-            }
-
-            var cfg = ModConfig.Instance;
-            if (cfg != null)
-            {
-                if (cfg.hornetControllerEnabled && !cfg.hornetKeyboardEnabled)
-                {
-                    lastKnownHornetBinding = BindingSourceType.DeviceBindingSource;
-                    return true;
-                }
-
-                if (!cfg.hornetControllerEnabled && cfg.hornetKeyboardEnabled)
-                {
-                    lastKnownHornetBinding = BindingSourceType.KeyBindingSource;
-                    return false;
-                }
-
-                if (!cfg.hornetControllerEnabled && !cfg.hornetKeyboardEnabled)
-                {
-                    lastKnownHornetBinding = BindingSourceType.None;
-                    return false;
-                }
-
-                if (cfg.hornetControllerEnabled && cfg.hornetKeyboardEnabled)
-                {
-                    var preferred = TryResolveFromActiveDevice();
-                    if (preferred.HasValue)
-                    {
-                        lastKnownHornetBinding = preferred.Value;
-                        return preferred.Value == BindingSourceType.DeviceBindingSource;
-                    }
-
-                    return cfg.hornetControllerEnabled;
-                }
-            }
-
-            return cfg?.hornetControllerEnabled ?? false;
-        }
-
-        private static bool HornetUsesKeyboard()
-        {
-            var current = TryGetHandler();
-            if (current != null)
-            {
-                BindingSourceType active = current.lastActiveController;
-                if (active != BindingSourceType.None)
-                {
-                    lastKnownHornetBinding = active;
-                    return active == BindingSourceType.KeyBindingSource || active == BindingSourceType.MouseBindingSource;
-                }
-            }
-
-            if (lastKnownHornetBinding != BindingSourceType.None)
-            {
-                return lastKnownHornetBinding == BindingSourceType.KeyBindingSource || lastKnownHornetBinding == BindingSourceType.MouseBindingSource;
-            }
-
-            var cfg = ModConfig.Instance;
-            if (cfg != null)
-            {
-                if (cfg.hornetKeyboardEnabled && !cfg.hornetControllerEnabled)
-                {
-                    lastKnownHornetBinding = BindingSourceType.KeyBindingSource;
-                    return true;
-                }
-
-                if (!cfg.hornetKeyboardEnabled && cfg.hornetControllerEnabled)
-                {
-                    lastKnownHornetBinding = BindingSourceType.DeviceBindingSource;
-                    return false;
-                }
-
-                if (!cfg.hornetKeyboardEnabled && !cfg.hornetControllerEnabled)
-                {
-                    lastKnownHornetBinding = BindingSourceType.None;
-                    return false;
-                }
-
-                if (cfg.hornetKeyboardEnabled && cfg.hornetControllerEnabled)
-                {
-                    var preferred = TryResolveFromActiveDevice();
-                    if (preferred.HasValue)
-                    {
-                        lastKnownHornetBinding = preferred.Value;
-                        return preferred.Value == BindingSourceType.KeyBindingSource || preferred.Value == BindingSourceType.MouseBindingSource;
-                    }
-
-                    return cfg.hornetKeyboardEnabled;
-                }
-            }
-
-            return cfg?.hornetKeyboardEnabled ?? false;
-        }
-
-        private static BindingSourceType? TryResolveFromActiveDevice()
-        {
-            var activeDevice = TryGetActiveDevice();
-            if (activeDevice == null || activeDevice == InputDevice.Null)
-                return null;
-            if (IsShadeDevice(activeDevice))
-                return null;
-
-            switch (activeDevice.DeviceClass)
-            {
-                case InputDeviceClass.Controller:
-                    return BindingSourceType.DeviceBindingSource;
-                case InputDeviceClass.Keyboard:
-                case InputDeviceClass.Mouse:
-                    return BindingSourceType.KeyBindingSource;
-                default:
-                    return null;
-            }
-        }
-
-        private static bool IsShadeDevice(InputDevice device)
-        {
-            if (device == null || device == InputDevice.Null)
                 return false;
-
-            var shadeController = TryGetShadeController();
-            return shadeController != null && shadeController == device;
+            }
         }
 
         private static void RegisterSimulatedBinding(BindingSourceType sourceType)
@@ -1355,7 +1226,7 @@ public partial class LegacyHelper
 
             protected override bool ShouldActivate()
             {
-                return IsMenuActive() && HornetUsesController();
+                return IsMenuActive() && HornetControllerBindingsEnabled();
             }
 
             protected override BindingSourceType SourceType => BindingSourceType.DeviceBindingSource;
@@ -1380,7 +1251,7 @@ public partial class LegacyHelper
 
             protected override bool ShouldActivate()
             {
-                return IsMenuActive() && HornetUsesKeyboard();
+                return IsMenuActive() && HornetKeyboardBindingsEnabled();
             }
 
             protected override BindingSourceType SourceType => BindingSourceType.KeyBindingSource;
@@ -1402,7 +1273,7 @@ public partial class LegacyHelper
 
             protected override bool ShouldActivate()
             {
-                return IsMenuActive() && HornetUsesController();
+                return IsMenuActive() && HornetControllerBindingsEnabled();
             }
 
             protected override BindingSourceType SourceType => BindingSourceType.DeviceBindingSource;
@@ -1424,7 +1295,7 @@ public partial class LegacyHelper
 
             protected override bool ShouldActivate()
             {
-                return IsMenuActive() && HornetUsesKeyboard();
+                return IsMenuActive() && HornetKeyboardBindingsEnabled();
             }
 
             protected override BindingSourceType SourceType => BindingSourceType.KeyBindingSource;
