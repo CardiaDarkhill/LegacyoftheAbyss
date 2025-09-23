@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using LegacyoftheAbyss.Shade;
 using Xunit;
 

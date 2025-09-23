@@ -322,8 +322,8 @@ public class ShadeSaveSlotRepositoryTests
                 Assert.Equal(5, loaded.NotchCapacity);
 
                 Assert.True(second.IsCharmCollected(1, ShadeCharmId.WaywardCompass));
-                Assert.True(second.GetBrokenCharms(1).Contains(ShadeCharmId.FragileHeart));
-                Assert.True(second.GetNewlyDiscoveredCharms(1).Contains(ShadeCharmId.QuickSlash));
+                Assert.Contains(ShadeCharmId.FragileHeart, second.GetBrokenCharms(1));
+                Assert.Contains(ShadeCharmId.QuickSlash, second.GetNewlyDiscoveredCharms(1));
 
                 Assert.True(second.IsDebugUnlockActive(1));
                 var persistedSnapshot = second.GetDebugUnlockSnapshot(1);
