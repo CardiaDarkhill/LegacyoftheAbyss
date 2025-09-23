@@ -131,8 +131,11 @@ public partial class SimpleHUD
             {
                 TryPlayPinnedHurtSfx(lost);
             }
+
             for (int i = cur; i < previousShadeHealth && i < maskImages.Length; i++)
-                StartCoroutine(LoseHealth(maskImages[i]));
+            {
+                StartCoroutine(LoseHealth(maskImages[i], shadeOvercharmed));
+            }
         }
         else if (suppressNextDamageSound)
         {
@@ -150,14 +153,15 @@ public partial class SimpleHUD
         previousShadeHealth = cur;
     }
 
-    private IEnumerator LoseHealth(Image img)
+    private IEnumerator LoseHealth(Image img, bool wasOvercharmed)
     {
         if (img == null) yield break;
-        Color filledColor = shadeOvercharmed ? overcharmMaskColor : Color.white;
+        Color filledColor = wasOvercharmed ? overcharmMaskColor : Color.white;
+        Color flickerColor = wasOvercharmed ? filledColor : Color.red;
         for (int i = 0; i < 2; i++)
         {
             img.color = filledColor; yield return new WaitForSeconds(0.05f);
-            img.color = Color.red; yield return new WaitForSeconds(0.05f);
+            img.color = flickerColor; yield return new WaitForSeconds(0.05f);
         }
         img.color = missingMaskColor;
     }
@@ -229,7 +233,7 @@ public partial class SimpleHUD
         if (overcharmBackdropSprite != null)
         {
             overcharmBackdrop.sprite = overcharmBackdropSprite;
-            overcharmBackdrop.color = Color.white;
+            overcharmBackdrop.color = overcharmBackdropSpriteColor;
         }
         else if (overcharmBackdrop.sprite == null)
         {
@@ -242,7 +246,7 @@ public partial class SimpleHUD
         }
 
         var rect = overcharmBackdrop.rectTransform;
-        rect.localScale = new Vector3(-1f, 1f, 1f);
+        rect.localScale = new Vector3(-OvercharmBackdropScale, OvercharmBackdropScale, 1f);
         overcharmBackdrop.transform.SetAsFirstSibling();
     }
 
@@ -255,24 +259,34 @@ public partial class SimpleHUD
         if (overcharmBackdrop == null)
             return;
 
-        if (shadeMax <= 0)
+        if (shadeMax <= 0 || maskImages == null || maskImages.Length == 0)
         {
             overcharmBackdrop.enabled = false;
             overcharmBackdrop.gameObject.SetActive(false);
             return;
         }
 
-        float width = overcharmMaskSize.x * shadeMax + Mathf.Max(0, shadeMax - 1) * overcharmMaskSpacing;
-        float height = overcharmMaskSize.y + Mathf.Max(0f, overcharmMaskSpacing * 0.5f);
+        Vector2 minBounds;
+        Vector2 maxBounds;
+        if (!TryCalculateMaskBounds(out minBounds, out maxBounds))
+        {
+            overcharmBackdrop.enabled = false;
+            overcharmBackdrop.gameObject.SetActive(false);
+            return;
+        }
+
+        float width = Mathf.Max(0f, maxBounds.x - minBounds.x);
+        float height = Mathf.Max(0f, maxBounds.y - minBounds.y);
         var rect = overcharmBackdrop.rectTransform;
         rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
         rect.pivot = new Vector2(1f, 1f);
-        rect.anchoredPosition = Vector2.zero;
+        rect.anchoredPosition = new Vector2(maxBounds.x, maxBounds.y);
         rect.sizeDelta = new Vector2(width, height);
+        rect.localScale = new Vector3(-OvercharmBackdropScale, OvercharmBackdropScale, 1f);
         if (overcharmBackdropSprite != null)
         {
             overcharmBackdrop.sprite = overcharmBackdropSprite;
-            overcharmBackdrop.color = Color.white;
+            overcharmBackdrop.color = overcharmBackdropSpriteColor;
         }
         else if (overcharmBackdrop.sprite == null)
         {
@@ -284,10 +298,58 @@ public partial class SimpleHUD
             overcharmBackdrop.color = overcharmBackdropColor;
         }
 
-        rect.localScale = new Vector3(-1f, 1f, 1f);
         overcharmBackdrop.enabled = shadeOvercharmed;
         overcharmBackdrop.gameObject.SetActive(shadeOvercharmed);
         overcharmBackdrop.transform.SetAsFirstSibling();
+    }
+
+    private bool TryCalculateMaskBounds(out Vector2 min, out Vector2 max)
+    {
+        min = Vector2.zero;
+        max = Vector2.zero;
+
+        if (healthContainer == null || maskImages == null)
+        {
+            return false;
+        }
+
+        var containerRect = healthContainer.GetComponent<RectTransform>();
+        if (containerRect == null)
+        {
+            return false;
+        }
+
+        bool hasMask = false;
+        foreach (var image in maskImages)
+        {
+            if (image == null)
+            {
+                continue;
+            }
+
+            var maskRect = image.rectTransform;
+            if (maskRect == null)
+            {
+                continue;
+            }
+
+            var bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(containerRect, maskRect);
+            Vector2 currentMin = new Vector2(bounds.min.x, bounds.min.y);
+            Vector2 currentMax = new Vector2(bounds.max.x, bounds.max.y);
+            if (!hasMask)
+            {
+                min = currentMin;
+                max = currentMax;
+                hasMask = true;
+            }
+            else
+            {
+                min = Vector2.Min(min, currentMin);
+                max = Vector2.Max(max, currentMax);
+            }
+        }
+
+        return hasMask;
     }
 }
 

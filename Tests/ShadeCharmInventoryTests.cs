@@ -19,8 +19,11 @@ public class ShadeCharmInventoryTests
         Assert.Equal(inventory.OvercharmAttemptThreshold, inventory.RemainingOvercharmAttempts);
 
         Assert.False(inventory.TryEquip(ShadeCharmId.SoulCatcher, out var firstAttempt));
-        Assert.Contains("Not enough notches", firstAttempt);
+        Assert.Contains("resists", firstAttempt, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(inventory.OvercharmAttemptThreshold - 1, inventory.RemainingOvercharmAttempts);
+
+        Assert.False(inventory.TryEquip(ShadeCharmId.SoulCatcher, out _));
+        Assert.Equal(inventory.OvercharmAttemptThreshold - 2, inventory.RemainingOvercharmAttempts);
 
         Assert.False(inventory.TryEquip(ShadeCharmId.SoulCatcher, out _));
         Assert.Equal(1, inventory.RemainingOvercharmAttempts);
@@ -40,6 +43,7 @@ public class ShadeCharmInventoryTests
         inventory.GrantCharm(ShadeCharmId.SoulCatcher);
 
         inventory.TryEquip(ShadeCharmId.ShamanStone, out _);
+        inventory.TryEquip(ShadeCharmId.SoulCatcher, out _);
         inventory.TryEquip(ShadeCharmId.SoulCatcher, out _);
         inventory.TryEquip(ShadeCharmId.SoulCatcher, out _);
         inventory.TryEquip(ShadeCharmId.SoulCatcher, out _);

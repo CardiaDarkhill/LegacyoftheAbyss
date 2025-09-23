@@ -310,6 +310,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private Color notchLabelDefaultTmpColor = Color.white;
     private readonly List<GameObject> activeCharmFlights = new List<GameObject>();
     private readonly HashSet<Image> animatingEquippedIcons = new HashSet<Image>();
+    private Coroutine? activeOvercharmAttemptRoutine;
+    private Coroutine? activeCharmShakeRoutine;
+    private readonly Dictionary<RectTransform, Vector2> shakeBasePositions = new Dictionary<RectTransform, Vector2>();
+    private readonly HashSet<Image> animatingSourceIcons = new HashSet<Image>();
+    private GameObject? activeOvercharmFlight;
     private static Sprite? notchLitSprite;
     private static Sprite? notchUnlitSprite;
     private static bool notchSpritesSearched;
@@ -1642,7 +1647,26 @@ internal sealed class ShadeInventoryPane : InventoryPane
         LogMenuEvent(FormattableString.Invariant(
             $"HandleSubmit {(currentlyEquipped ? "unequip" : "equip")} -> success={success} message='{message}'"));
 
+        bool triggeredOvercharmAttempt = false;
+        int attemptIndex = 0;
+        int attemptThreshold = inventory.OvercharmAttemptThreshold;
+        var definition = entry.Definition;
+        if (!success && !currentlyEquipped && definition != null)
+        {
+            int notchCost = definition.NotchCost;
+            if (notchCost > 0 && inventory.UsedNotches + notchCost > inventory.NotchCapacity && !inventory.IsOvercharmed)
+            {
+                attemptIndex = Mathf.Clamp(attemptThreshold - inventory.RemainingOvercharmAttempts, 0, attemptThreshold);
+                triggeredOvercharmAttempt = attemptIndex > 0;
+            }
+        }
+
         SetTextValue(statusText, statusTextTMP, message);
+        if (triggeredOvercharmAttempt)
+        {
+            StartOvercharmAttemptAnimation(entry, definition, attemptIndex, attemptThreshold);
+        }
+
         if (success)
         {
             LegacyHelper.RequestShadeLoadoutRecompute();
@@ -3837,9 +3861,18 @@ internal sealed class ShadeInventoryPane : InventoryPane
             notchLabelRect.anchorMax = new Vector2(0f, 1f);
             notchLabelRect.pivot = new Vector2(0f, 1f);
             notchLabelRect.anchoredPosition = new Vector2(16f + sectionOffsetX, -(236f + sectionOffsetY));
-            notchLabelRect.sizeDelta = new Vector2(220f, 36f);
+            notchLabelRect.sizeDelta = new Vector2(360f, 36f);
         }
         SetTextValue(notchText, notchTextTMP, "Notches");
+        if (notchTextTMP != null)
+        {
+            notchTextTMP.enableWordWrapping = false;
+            notchTextTMP.overflowMode = TextOverflowModes.Overflow;
+        }
+        else if (notchText != null)
+        {
+            notchText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        }
 
         notchIconContainer = new GameObject("NotchIcons", typeof(RectTransform)).GetComponent<RectTransform>();
         notchIconContainer.gameObject.layer = leftContentRoot.gameObject.layer;
@@ -4261,7 +4294,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         if (sprite != null)
         {
             image.sprite = sprite;
-            image.color = Color.white;
+            image.color = new Color(1f, 1f, 1f, 0.85f);
         }
         else
         {
@@ -4301,36 +4334,49 @@ internal sealed class ShadeInventoryPane : InventoryPane
             image.sprite = sprite;
         }
 
-        image.color = sprite != null ? Color.white : OvercharmedBackdropFallbackColor;
+        image.color = sprite != null ? new Color(1f, 1f, 1f, 0.7f) : OvercharmedBackdropFallbackColor;
 
         Vector2 boundsCenter;
         Vector2 boundsSize;
-        bool hasBounds = TryCalculateEquippedIconBounds(out boundsCenter, out boundsSize);
+        Vector2 boundsMin;
+        Vector2 boundsMax;
+        bool hasBounds = TryCalculateEquippedIconBounds(out boundsCenter, out boundsSize, out boundsMin, out boundsMax);
         if (!hasBounds)
         {
-            boundsCenter = Vector2.zero;
-            boundsSize = new Vector2(96f * Mathf.Max(1, equippedCount), 96f);
+            float estimatedWidth = 96f * Mathf.Max(1, equippedCount);
+            boundsSize = new Vector2(estimatedWidth, 96f);
+            boundsCenter = new Vector2(boundsSize.x * 0.5f, 0f);
+            boundsMin = new Vector2(boundsCenter.x - boundsSize.x * 0.5f, boundsCenter.y - boundsSize.y * 0.5f);
+            boundsMax = new Vector2(boundsCenter.x + boundsSize.x * 0.5f, boundsCenter.y + boundsSize.y * 0.5f);
         }
 
-        const float paddingX = 24f;
+        const float paddingRight = 24f;
         const float paddingY = 24f;
 
+        float leftEdge = boundsMin.x;
+        float rightEdge = boundsMax.x + paddingRight;
+        float width = Mathf.Max(0f, rightEdge - leftEdge);
+        float centerY = (boundsMin.y + boundsMax.y) * 0.5f;
+        float height = Mathf.Max(0f, boundsMax.y - boundsMin.y);
+
         var rect = image.rectTransform;
-        rect.anchorMin = new Vector2(0.5f, 0.5f);
-        rect.anchorMax = new Vector2(0.5f, 0.5f);
-        rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.anchoredPosition = boundsCenter;
-        rect.sizeDelta = new Vector2(boundsSize.x + paddingX * 2f, boundsSize.y + paddingY * 2f);
+        rect.anchorMin = new Vector2(0f, 0.5f);
+        rect.anchorMax = new Vector2(0f, 0.5f);
+        rect.pivot = new Vector2(0f, 0.5f);
+        rect.anchoredPosition = new Vector2(leftEdge, centerY);
+        rect.sizeDelta = new Vector2(width, height + paddingY * 2f);
 
         image.gameObject.SetActive(true);
         image.enabled = true;
         image.transform.SetAsFirstSibling();
     }
 
-    private bool TryCalculateEquippedIconBounds(out Vector2 center, out Vector2 size)
+    private bool TryCalculateEquippedIconBounds(out Vector2 center, out Vector2 size, out Vector2 min, out Vector2 max)
     {
         center = Vector2.zero;
         size = Vector2.zero;
+        min = Vector2.zero;
+        max = Vector2.zero;
 
         if (equippedIconsRoot == null)
         {
@@ -4338,8 +4384,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         bool hasIcon = false;
-        Vector3 min = Vector3.zero;
-        Vector3 max = Vector3.zero;
+        Vector3 minBounds = Vector3.zero;
+        Vector3 maxBounds = Vector3.zero;
 
         foreach (var icon in equippedIcons)
         {
@@ -4357,14 +4403,14 @@ internal sealed class ShadeInventoryPane : InventoryPane
             var bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(equippedIconsRoot, rect);
             if (!hasIcon)
             {
-                min = bounds.min;
-                max = bounds.max;
+                minBounds = bounds.min;
+                maxBounds = bounds.max;
                 hasIcon = true;
             }
             else
             {
-                min = Vector3.Min(min, bounds.min);
-                max = Vector3.Max(max, bounds.max);
+                minBounds = Vector3.Min(minBounds, bounds.min);
+                maxBounds = Vector3.Max(maxBounds, bounds.max);
             }
         }
 
@@ -4373,8 +4419,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return false;
         }
 
-        size = new Vector2(Mathf.Max(0f, max.x - min.x), Mathf.Max(0f, max.y - min.y));
-        center = new Vector2((min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f);
+        size = new Vector2(Mathf.Max(0f, maxBounds.x - minBounds.x), Mathf.Max(0f, maxBounds.y - minBounds.y));
+        center = new Vector2((minBounds.x + maxBounds.x) * 0.5f, (minBounds.y + maxBounds.y) * 0.5f);
+        min = new Vector2(minBounds.x, minBounds.y);
+        max = new Vector2(maxBounds.x, maxBounds.y);
         return true;
     }
 
@@ -4474,6 +4522,328 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
             StartCharmFlightAnimation(entry, pair.Definition, destination, overcharmed);
         }
+    }
+
+    private void StartOvercharmAttemptAnimation(CharmEntry entry, ShadeCharmDefinition definition, int attemptIndex, int attemptThreshold)
+    {
+        var root = EnsureOverlayCanvas();
+        if (root == null || entry.Icon == null)
+        {
+            return;
+        }
+
+        var sourceRect = entry.Icon.rectTransform;
+        if (sourceRect == null)
+        {
+            return;
+        }
+
+        if (activeOvercharmAttemptRoutine != null)
+        {
+            StopCoroutine(activeOvercharmAttemptRoutine);
+            activeOvercharmAttemptRoutine = null;
+        }
+
+        if (activeCharmShakeRoutine != null)
+        {
+            StopCoroutine(activeCharmShakeRoutine);
+            activeCharmShakeRoutine = null;
+            RestoreShakeTargets();
+        }
+
+        if (activeOvercharmFlight != null)
+        {
+            activeCharmFlights.Remove(activeOvercharmFlight);
+            Destroy(activeOvercharmFlight);
+            activeOvercharmFlight = null;
+        }
+
+        foreach (var icon in animatingSourceIcons.ToArray())
+        {
+            if (icon != null)
+            {
+                icon.enabled = icon.sprite != null;
+            }
+        }
+
+        animatingSourceIcons.Clear();
+
+        if (!TryGetOverlayPosition(sourceRect, out var start))
+        {
+            return;
+        }
+
+        Vector2 end;
+        if (!TryGetOvercharmAttemptTarget(out end))
+        {
+            end = start + new Vector2(220f, 0f);
+        }
+
+        Sprite? sprite = definition?.Icon ?? entry.Icon.sprite ?? GetFallbackSprite();
+        if (sprite == null)
+        {
+            return;
+        }
+
+        Color tint = entry.Icon.color;
+
+        var flight = new GameObject($"CharmOvercharm_{entry.Id}", typeof(RectTransform));
+        flight.layer = root.gameObject.layer;
+        var rect = flight.GetComponent<RectTransform>();
+        rect.SetParent(root, false);
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        Vector2 size = sourceRect.rect.size;
+        if (size.sqrMagnitude <= 0.01f)
+        {
+            size = new Vector2(96f, 96f);
+        }
+        rect.sizeDelta = size;
+        rect.anchoredPosition = start;
+        rect.localScale = Vector3.one;
+
+        var image = flight.AddComponent<Image>();
+        image.raycastTarget = false;
+        image.preserveAspect = true;
+        image.sprite = sprite;
+        image.color = tint;
+
+        activeCharmFlights.Add(flight);
+        activeOvercharmFlight = flight;
+
+        if (animatingSourceIcons.Add(entry.Icon))
+        {
+            entry.Icon.enabled = false;
+        }
+
+        activeOvercharmAttemptRoutine = StartCoroutine(AnimateOvercharmAttempt(rect, start, end, entry.Icon, flight, attemptIndex, attemptThreshold));
+    }
+
+    private IEnumerator AnimateOvercharmAttempt(
+        RectTransform rect,
+        Vector2 start,
+        Vector2 end,
+        Image sourceIcon,
+        GameObject flightObject,
+        int attemptIndex,
+        int attemptThreshold)
+    {
+        try
+        {
+            yield return AnimateSimpleFlight(rect, start, end, 0.35f, 1f, 0.85f, true);
+
+            float normalized = attemptThreshold > 0 ? Mathf.Clamp01((float)attemptIndex / attemptThreshold) : 1f;
+            float amplitude = ComputeShakeAmplitude(attemptIndex, attemptThreshold);
+            float duration = Mathf.Lerp(0.25f, 0.5f, normalized);
+            if (amplitude > 0f && duration > 0f)
+            {
+                if (activeCharmShakeRoutine != null)
+                {
+                    StopCoroutine(activeCharmShakeRoutine);
+                    activeCharmShakeRoutine = null;
+                    RestoreShakeTargets();
+                }
+
+                activeCharmShakeRoutine = StartCoroutine(ShakeCharmIconsCoroutine(amplitude, duration));
+                if (activeCharmShakeRoutine != null)
+                {
+                    yield return activeCharmShakeRoutine;
+                }
+            }
+
+            yield return AnimateSimpleFlight(rect, end, start, 0.28f, 0.85f, 1.05f, false);
+
+            if (rect != null)
+            {
+                rect.anchoredPosition = start;
+                rect.localScale = Vector3.one;
+            }
+        }
+        finally
+        {
+            if (sourceIcon != null)
+            {
+                animatingSourceIcons.Remove(sourceIcon);
+                sourceIcon.enabled = sourceIcon.sprite != null;
+            }
+
+            if (flightObject != null)
+            {
+                if (ReferenceEquals(activeOvercharmFlight, flightObject))
+                {
+                    activeOvercharmFlight = null;
+                }
+                activeCharmFlights.Remove(flightObject);
+                Destroy(flightObject);
+            }
+
+            activeOvercharmAttemptRoutine = null;
+        }
+    }
+
+    private IEnumerator AnimateSimpleFlight(RectTransform rect, Vector2 start, Vector2 end, float duration, float startScale, float endScale, bool easeOut)
+    {
+        if (rect == null)
+        {
+            yield break;
+        }
+
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            if (rect == null)
+            {
+                yield break;
+            }
+
+            elapsed += Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float eased = easeOut ? EaseOutCubic(t) : EaseInCubic(t);
+            rect.anchoredPosition = Vector2.LerpUnclamped(start, end, eased);
+            float scale = Mathf.Lerp(startScale, endScale, eased);
+            rect.localScale = new Vector3(scale, scale, 1f);
+            yield return null;
+        }
+
+        if (rect != null)
+        {
+            rect.anchoredPosition = end;
+            rect.localScale = new Vector3(endScale, endScale, 1f);
+        }
+    }
+
+    private IEnumerator ShakeCharmIconsCoroutine(float amplitude, float duration)
+    {
+        if (amplitude <= 0f || duration <= 0f)
+        {
+            activeCharmShakeRoutine = null;
+            yield break;
+        }
+
+        CaptureShakeTargets();
+
+        try
+        {
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+                float damp = 1f - Mathf.Pow(t, 2f);
+
+                foreach (var kvp in shakeBasePositions)
+                {
+                    var shakeRect = kvp.Key;
+                    if (shakeRect == null)
+                    {
+                        continue;
+                    }
+
+                    Vector2 basePos = kvp.Value;
+                    Vector2 offset = UnityEngine.Random.insideUnitCircle * amplitude * damp;
+                    shakeRect.anchoredPosition = basePos + offset;
+                }
+
+                yield return null;
+            }
+        }
+        finally
+        {
+            RestoreShakeTargets();
+            activeCharmShakeRoutine = null;
+        }
+    }
+
+    private void CaptureShakeTargets()
+    {
+        shakeBasePositions.Clear();
+        foreach (var rect in EnumerateCharmIconRects())
+        {
+            if (rect != null && !shakeBasePositions.ContainsKey(rect))
+            {
+                shakeBasePositions[rect] = rect.anchoredPosition;
+            }
+        }
+    }
+
+    private IEnumerable<RectTransform> EnumerateCharmIconRects()
+    {
+        for (int i = 0; i < entries.Count; i++)
+        {
+            var icon = entries[i].Icon;
+            if (icon != null && icon.rectTransform != null)
+            {
+                yield return icon.rectTransform;
+            }
+        }
+
+        foreach (var icon in equippedIcons)
+        {
+            if (icon != null && icon.rectTransform != null)
+            {
+                yield return icon.rectTransform;
+            }
+        }
+    }
+
+    private static float ComputeShakeAmplitude(int attemptIndex, int attemptThreshold)
+    {
+        if (attemptIndex <= 0)
+        {
+            return 0f;
+        }
+
+        float normalized = attemptThreshold > 0 ? Mathf.Clamp01((float)attemptIndex / attemptThreshold) : 1f;
+        return Mathf.Lerp(10f, 28f, normalized);
+    }
+
+    private bool TryGetOvercharmAttemptTarget(out Vector2 overlayPoint)
+    {
+        overlayPoint = Vector2.zero;
+        if (equippedIconsRoot == null)
+        {
+            return false;
+        }
+
+        Vector2 center;
+        Vector2 size;
+        Vector2 min;
+        Vector2 max;
+        if (TryCalculateEquippedIconBounds(out center, out size, out min, out max))
+        {
+            if (TryConvertEquippedLocalToOverlay(center, out overlayPoint))
+            {
+                return true;
+            }
+        }
+
+        var rect = equippedIconsRoot.rect;
+        Vector2 fallback = rect.center;
+        return TryConvertEquippedLocalToOverlay(fallback, out overlayPoint);
+    }
+
+    private bool TryConvertEquippedLocalToOverlay(Vector2 localPoint, out Vector2 overlayPoint)
+    {
+        overlayPoint = Vector2.zero;
+        if (equippedIconsRoot == null)
+        {
+            return false;
+        }
+
+        var root = overlayRoot ?? EnsureOverlayCanvas();
+        if (root == null)
+        {
+            return false;
+        }
+
+        Camera? camera = overlayCanvas != null && overlayCanvas.renderMode != RenderMode.ScreenSpaceOverlay
+            ? overlayCanvas.worldCamera
+            : null;
+
+        Vector3 world = equippedIconsRoot.TransformPoint(localPoint);
+        Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(camera, world);
+        return RectTransformUtility.ScreenPointToLocalPointInRectangle(root, screenPoint, camera, out overlayPoint);
     }
 
     private void StartCharmFlightAnimation(CharmEntry entry, ShadeCharmDefinition definition, Image destinationIcon, bool overcharmed)
@@ -4578,6 +4948,20 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private void ClearActiveCharmFlights()
     {
         ResetAnimatingEquippedIcons();
+        if (activeOvercharmAttemptRoutine != null)
+        {
+            StopCoroutine(activeOvercharmAttemptRoutine);
+            activeOvercharmAttemptRoutine = null;
+        }
+
+        if (activeCharmShakeRoutine != null)
+        {
+            StopCoroutine(activeCharmShakeRoutine);
+            activeCharmShakeRoutine = null;
+        }
+
+        RestoreShakeTargets();
+
         for (int i = activeCharmFlights.Count - 1; i >= 0; i--)
         {
             var flight = activeCharmFlights[i];
@@ -4587,6 +4971,17 @@ internal sealed class ShadeInventoryPane : InventoryPane
             }
         }
         activeCharmFlights.Clear();
+
+        foreach (var icon in animatingSourceIcons.ToArray())
+        {
+            if (icon != null)
+            {
+                icon.enabled = icon.sprite != null;
+            }
+        }
+
+        animatingSourceIcons.Clear();
+        activeOvercharmFlight = null;
     }
 
     private void BeginEquippedIconAnimation(Image destinationIcon)
@@ -4633,6 +5028,24 @@ internal sealed class ShadeInventoryPane : InventoryPane
         animatingEquippedIcons.Clear();
     }
 
+    private void RestoreShakeTargets()
+    {
+        if (shakeBasePositions.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var kvp in shakeBasePositions)
+        {
+            if (kvp.Key != null)
+            {
+                kvp.Key.anchoredPosition = kvp.Value;
+            }
+        }
+
+        shakeBasePositions.Clear();
+    }
+
     private bool TryGetOverlayPosition(RectTransform rect, out Vector2 overlayPoint)
     {
         overlayPoint = Vector2.zero;
@@ -4656,6 +5069,12 @@ internal sealed class ShadeInventoryPane : InventoryPane
         Vector3 world = rect.TransformPoint(rect.rect.center);
         Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(camera, world);
         return RectTransformUtility.ScreenPointToLocalPointInRectangle(root, screenPoint, camera, out overlayPoint);
+    }
+
+    private static float EaseInCubic(float t)
+    {
+        float clamped = Mathf.Clamp01(t);
+        return clamped * clamped * clamped;
     }
 
     private static float EaseOutCubic(float t)
@@ -5334,13 +5753,13 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 if (!owned && lockedSprite != null)
                 {
                     entry.Icon.sprite = lockedSprite;
-                    entry.Icon.enabled = true;
+                    entry.Icon.enabled = !animatingSourceIcons.Contains(entry.Icon);
                     entry.Icon.color = LockedIconColor;
                 }
                 else
                 {
                     entry.Icon.sprite = entry.BaseSprite;
-                    entry.Icon.enabled = entry.Icon.sprite != null;
+                    entry.Icon.enabled = entry.Icon.sprite != null && !animatingSourceIcons.Contains(entry.Icon);
 
                     if (!owned)
                     {
@@ -5381,7 +5800,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         EnsureBuilt();
         var inv = inventory ?? ShadeRuntime.Charms;
         bool overcharmed = inv != null && inv.IsOvercharmed;
-        SetTextValue(notchText, notchTextTMP, overcharmed ? "Notches – Overcharmed" : "Notches");
+        SetTextValue(notchText, notchTextTMP, overcharmed ? "Notches - Overcharmed" : "Notches");
         ApplyNotchLabelColor(overcharmed);
         if (inv == null)
         {
@@ -6002,21 +6421,18 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 status += " Shade is overcharmed and suffers double damage.";
             }
         }
-        else if (inventory.UsedNotches + notchCost > inventory.NotchCapacity)
-        {
-            if (overcharmed)
+            else if (inventory.UsedNotches + notchCost > inventory.NotchCapacity)
             {
-                status = FormattableString.Invariant($"Shade is overcharmed and suffers double damage. {equipPrompt}");
+                if (overcharmed)
+                {
+                    status = FormattableString.Invariant($"Shade is overcharmed and suffers double damage. {equipPrompt}");
+                }
+                else
+                {
+                    status = "Shade resists overcharming.";
+                    hint = "Forcing the shade to overcharm will cause it to take double damage.";
+                }
             }
-            else
-            {
-                int remaining = remainingAttempts > 0 ? remainingAttempts : attemptThreshold;
-                remaining = Mathf.Max(1, remaining);
-                string attemptText = remaining == 1 ? "time" : "times";
-                status = FormattableString.Invariant($"Not enough notches remain. Force equip {remaining} more {attemptText} to overcharm.");
-                hint = "Overcharmed shades take double damage.";
-            }
-        }
         else
         {
             status = equipPrompt;

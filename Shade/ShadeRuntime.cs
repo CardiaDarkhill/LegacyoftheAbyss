@@ -328,12 +328,17 @@ namespace LegacyoftheAbyss.Shade
             s_debugUnlockAllCharmsActive = true;
             try
             {
-                s_charmInventory.LoadState(allOwned, snapshot.Equipped, snapshot.Broken, 20, snapshot.NewlyDiscovered);
+                int slotNotchCapacity = Mathf.Clamp(s_saveSlots.GetNotchCapacity(s_activeSlot), 0, 20);
+                int debugNotchCapacity = slotNotchCapacity > 0
+                    ? slotNotchCapacity
+                    : Mathf.Clamp(snapshot.NotchCapacity, 0, 20);
+
+                s_charmInventory.LoadState(allOwned, snapshot.Equipped, snapshot.Broken, debugNotchCapacity, snapshot.NewlyDiscovered);
                 s_debugCharmSnapshot = snapshot;
                 s_saveSlots.SetDebugUnlockState(
                     s_activeSlot,
                     true,
-                    new ShadeDebugCharmSnapshot(snapshot.Owned, snapshot.Equipped, snapshot.Broken, snapshot.NewlyDiscovered, snapshot.NotchCapacity));
+                    new ShadeDebugCharmSnapshot(snapshot.Owned, snapshot.Equipped, snapshot.Broken, snapshot.NewlyDiscovered, debugNotchCapacity));
             }
             catch
             {
@@ -532,11 +537,15 @@ namespace LegacyoftheAbyss.Shade
                 .Select(id => id!.Value)
                 .ToArray();
 
+            int slotNotchCapacity = Mathf.Clamp(s_saveSlots.GetNotchCapacity(s_activeSlot), 0, 20);
+            int debugNotchCapacity = slotNotchCapacity > 0
+                ? slotNotchCapacity
+                : Mathf.Clamp(s_debugCharmSnapshot.Value.NotchCapacity, 0, 20);
             s_charmInventory.LoadState(
                 allOwned,
                 s_debugCharmSnapshot.Value.Equipped,
                 s_debugCharmSnapshot.Value.Broken,
-                20,
+                debugNotchCapacity,
                 s_debugCharmSnapshot.Value.NewlyDiscovered);
         }
 

@@ -604,9 +604,7 @@ public static class ShadeSettingsMenu
                     }
                     else
                     {
-                        int remaining = Math.Max(1, inventory.RemainingOvercharmAttempts > 0 ? inventory.RemainingOvercharmAttempts : inventory.OvercharmAttemptThreshold);
-                        string attemptText = remaining == 1 ? "time" : "times";
-                        fallbackStatus = FormattableString.Invariant($"Not enough notches remain. Force equip {remaining} more {attemptText} to overcharm (double damage).");
+                        fallbackStatus = "Shade resists overcharming. Forcing it will cause double damage.";
                     }
                 }
                 else

@@ -374,7 +374,7 @@ public class ShadeRuntimeDebugTests
             var slotEquipped = ShadeRuntime.SaveSlots.GetEquippedCharms(0, 0).ToHashSet();
 
             Assert.True(ShadeRuntime.ToggleDebugUnlockAllCharms());
-            Assert.Equal(20, inventory.NotchCapacity);
+            Assert.Equal(baselineCapacity, inventory.NotchCapacity);
             Assert.True(inventory.IsOwned(ShadeCharmId.QuickSlash));
             Assert.True(inventory.IsEquipped(ShadeCharmId.WaywardCompass));
 
@@ -386,7 +386,9 @@ public class ShadeRuntimeDebugTests
             Assert.True(slotEquipped.SetEquals(ShadeRuntime.SaveSlots.GetEquippedCharms(0, 0).ToHashSet()));
 
             Assert.True(ShadeRuntime.SaveSlots.IsDebugUnlockActive(0));
-            Assert.True(ShadeRuntime.SaveSlots.GetDebugUnlockSnapshot(0).HasValue);
+            var debugSnapshot = ShadeRuntime.SaveSlots.GetDebugUnlockSnapshot(0);
+            Assert.True(debugSnapshot.HasValue);
+            Assert.Equal(baselineCapacity, debugSnapshot.Value.NotchCapacity);
 
             Assert.False(ShadeRuntime.ToggleDebugUnlockAllCharms());
 

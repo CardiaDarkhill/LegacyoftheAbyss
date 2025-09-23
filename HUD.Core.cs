@@ -12,8 +12,9 @@ public partial class SimpleHUD : MonoBehaviour
     private Image[] maskImages;
     private Sprite maskSprite;
     private readonly Color missingMaskColor = new Color(0.2f, 0.2f, 0.2f, 0.45f);
-    private readonly Color overcharmMaskColor = new Color(1f, 0.5f, 0.5f, 1f);
-    private readonly Color overcharmBackdropColor = new Color(0.85f, 0.25f, 0.25f, 0.28f);
+    private readonly Color overcharmMaskColor = Color.white;
+    private readonly Color overcharmBackdropColor = new Color(0.85f, 0.25f, 0.25f, 0.24f);
+    private readonly Color overcharmBackdropSpriteColor = new Color(1f, 1f, 1f, 0.7f);
 
     // Soul orb state
     private Sprite soulOrbSprite;
@@ -66,6 +67,7 @@ public partial class SimpleHUD : MonoBehaviour
     private float shadeSoulMax;
 
     private const float MaskScale = 0.88f; // slightly shrink masks
+    private const float OvercharmBackdropScale = 2f;
     private Vector2 overcharmMaskSize = Vector2.zero;
     private float overcharmMaskSpacing;
 
