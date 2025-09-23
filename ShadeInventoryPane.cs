@@ -5062,15 +5062,38 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return false;
         }
 
+        try
+        {
+            Vector3 world = rect.TransformPoint(rect.rect.center);
+            Vector3 local = root.InverseTransformPoint(world);
+            if (!float.IsNaN(local.x) && !float.IsNaN(local.y) &&
+                !float.IsInfinity(local.x) && !float.IsInfinity(local.y))
+            {
+                overlayPoint = new Vector2(local.x, local.y);
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
         Camera? camera = null;
         if (overlayCanvas != null && overlayCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
         {
             camera = overlayCanvas.worldCamera;
         }
 
-        Vector3 world = rect.TransformPoint(rect.rect.center);
-        Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(camera, world);
-        return RectTransformUtility.ScreenPointToLocalPointInRectangle(root, screenPoint, camera, out overlayPoint);
+        try
+        {
+            Vector3 world = rect.TransformPoint(rect.rect.center);
+            Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(camera, world);
+            return RectTransformUtility.ScreenPointToLocalPointInRectangle(root, screenPoint, camera, out overlayPoint);
+        }
+        catch
+        {
+            overlayPoint = Vector2.zero;
+            return false;
+        }
     }
 
     private static float EaseInCubic(float t)

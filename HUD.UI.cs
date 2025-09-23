@@ -247,6 +247,7 @@ public partial class SimpleHUD
 
         var rect = overcharmBackdrop.rectTransform;
         rect.localScale = new Vector3(OvercharmBackdropScale, OvercharmBackdropScale, 1f);
+        rect.localRotation = Quaternion.Euler(0f, 0f, OvercharmBackdropRotation);
         overcharmBackdrop.transform.SetAsFirstSibling();
     }
 
@@ -283,6 +284,7 @@ public partial class SimpleHUD
         rect.anchoredPosition = new Vector2(maxBounds.x, maxBounds.y);
         rect.sizeDelta = new Vector2(width, height);
         rect.localScale = new Vector3(OvercharmBackdropScale, OvercharmBackdropScale, 1f);
+        rect.localRotation = Quaternion.Euler(0f, 0f, OvercharmBackdropRotation);
         if (overcharmBackdropSprite != null)
         {
             overcharmBackdrop.sprite = overcharmBackdropSprite;
