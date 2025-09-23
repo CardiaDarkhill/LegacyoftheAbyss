@@ -95,14 +95,14 @@ public class InputDeviceBlockerTests
                 Assert.True(config.shadeInput.UsesControllerBindings());
 
                 environment.SetPaused(true);
-                LegacyHelper.InputDeviceBlocker.RefreshShadeDevices(null);
+                Assert.False(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
 
                 Assert.False(config.shadeInput.UsesControllerBindings());
                 Assert.Equal(ShadeBindingOptionType.Key, config.shadeInput.moveLeft.primary.type);
                 Assert.Equal(ShadeBindingOptionType.Key, config.shadeInput.moveRight.primary.type);
 
                 environment.SetPaused(false);
-                LegacyHelper.InputDeviceBlocker.RefreshShadeDevices(null);
+                Assert.True(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
 
                 Assert.True(config.shadeInput.UsesControllerBindings());
                 AssertShadeBindingEqual(controllerBindings.moveLeft, config.shadeInput.moveLeft);

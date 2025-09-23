@@ -596,6 +596,8 @@ public partial class LegacyHelper
             menuTransferShadeUsesController = false;
             menuTransferSavedBindings = null;
 
+            ReleaseTrackedDevices(null);
+
             try
             {
                 var cfg = ModConfig.Instance;
@@ -679,6 +681,8 @@ public partial class LegacyHelper
 
         internal static bool ShouldBlockShadeDeviceInput()
         {
+            UpdateMenuTransfer();
+
             try
             {
                 if (menuTransferActive)
@@ -778,6 +782,8 @@ public partial class LegacyHelper
 
         internal static bool ShouldIgnoreDevice(InputHandler handler, InputDevice device)
         {
+            UpdateMenuTransfer();
+
             if (menuTransferActive)
             {
                 SetDeviceRestricted(device, false);
