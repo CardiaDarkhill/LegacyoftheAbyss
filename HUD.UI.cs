@@ -283,7 +283,6 @@ public partial class SimpleHUD
             overcharmBackdrop.color = overcharmBackdropColor;
         }
 
-        var rect = overcharmBackdrop.rectTransform;
         rect.localScale = new Vector3(-1f, 1f, 1f);
         overcharmBackdrop.enabled = shadeOvercharmed;
         overcharmBackdrop.gameObject.SetActive(shadeOvercharmed);

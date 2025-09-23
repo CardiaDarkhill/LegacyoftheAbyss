@@ -7030,7 +7030,7 @@ internal static class ShadeInventoryPaneIntegration
         AllowRightStickField?.SetValue(input, false);
     }
 
-    private static void TrackCapturedInput(ShadeInventoryPane shadePane, InventoryPaneInput input)
+    private static void TrackCapturedInput(ShadeInventoryPane? shadePane, InventoryPaneInput? input)
     {
         if (shadePane == null || input == null)
         {
@@ -7050,11 +7050,15 @@ internal static class ShadeInventoryPaneIntegration
         }
     }
 
-    private static void RestoreSingleInput(ShadeInventoryPane shadePane, InventoryPaneInput input)
+    private static void RestoreSingleInput(ShadeInventoryPane? shadePane, InventoryPaneInput? input)
     {
+        if (shadePane == null)
+        {
+            return;
+        }
+
         if (input == null)
         {
-            shadePane.UnregisterBoundInput(input);
             return;
         }
 
