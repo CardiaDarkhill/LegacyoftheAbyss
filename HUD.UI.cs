@@ -246,7 +246,7 @@ public partial class SimpleHUD
         }
 
         var rect = overcharmBackdrop.rectTransform;
-        rect.localScale = new Vector3(-OvercharmBackdropScale, OvercharmBackdropScale, 1f);
+        rect.localScale = new Vector3(OvercharmBackdropScale, OvercharmBackdropScale, 1f);
         overcharmBackdrop.transform.SetAsFirstSibling();
     }
 
@@ -282,7 +282,7 @@ public partial class SimpleHUD
         rect.pivot = new Vector2(1f, 1f);
         rect.anchoredPosition = new Vector2(maxBounds.x, maxBounds.y);
         rect.sizeDelta = new Vector2(width, height);
-        rect.localScale = new Vector3(-OvercharmBackdropScale, OvercharmBackdropScale, 1f);
+        rect.localScale = new Vector3(OvercharmBackdropScale, OvercharmBackdropScale, 1f);
         if (overcharmBackdropSprite != null)
         {
             overcharmBackdrop.sprite = overcharmBackdropSprite;

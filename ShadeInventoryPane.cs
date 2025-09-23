@@ -1680,7 +1680,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void HandleInventoryChanged()
     {
-        RefreshAll();
+        RefreshEntryStates();
+        UpdateNotchMeter();
+        UpdateDetailPanel();
     }
 
     private void UpdateParentListLabel()
@@ -6401,10 +6403,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
         string equipPrompt = BuildEquipPrompt(bindingLabel);
         string unequipPrompt = BuildUnequipPrompt(bindingLabel);
         string status;
-        string hint = string.Empty;
         bool overcharmed = inventory.IsOvercharmed;
-        int remainingAttempts = inventory.RemainingOvercharmAttempts;
-        int attemptThreshold = inventory.OvercharmAttemptThreshold;
+        bool wouldOvercharm = inventory.UsedNotches + notchCost > inventory.NotchCapacity;
         if (!owned)
         {
             status = "This charm has not been discovered.";
@@ -6418,28 +6418,16 @@ internal sealed class ShadeInventoryPane : InventoryPane
             status = FormattableString.Invariant($"Equipped. {unequipPrompt}");
             if (overcharmed)
             {
-                status += " Shade is overcharmed and suffers double damage.";
+                status += " Shade is overcharmed.";
             }
         }
-            else if (inventory.UsedNotches + notchCost > inventory.NotchCapacity)
-            {
-                if (overcharmed)
-                {
-                    status = FormattableString.Invariant($"Shade is overcharmed and suffers double damage. {equipPrompt}");
-                }
-                else
-                {
-                    status = "Shade resists overcharming.";
-                    hint = "Forcing the shade to overcharm will cause it to take double damage.";
-                }
-            }
+        else if (wouldOvercharm && overcharmed)
+        {
+            status = "Shade is overcharmed. Unequip a charm first.";
+        }
         else
         {
             status = equipPrompt;
-            if (overcharmed)
-            {
-                hint = "Shade is overcharmed and currently takes double damage.";
-            }
         }
         int displayCost = Mathf.Clamp(notchCost, 0, MaxNotchIcons);
         if (detailCostRow != null)
@@ -6458,11 +6446,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         SetTextValue(statusText, statusTextTMP, status);
-        if (string.IsNullOrEmpty(hint) && overcharmed)
-        {
-            hint = "Shade is overcharmed and currently takes double damage.";
-        }
-        SetHintMessage(hint);
+        SetHintMessage(string.Empty);
     }
 
     private static Sprite? ResolveLockedCharmSprite()

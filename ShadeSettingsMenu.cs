@@ -598,14 +598,9 @@ public static class ShadeSettingsMenu
                     fallbackStatus = "Charm equipped. Unequip to free notches for other charms.";
                 else if (def.NotchCost > 0 && inventory.UsedNotches + def.NotchCost > inventory.NotchCapacity)
                 {
-                    if (inventory.IsOvercharmed)
-                    {
-                        fallbackStatus = "Shade is overcharmed and suffers double damage. Equip with caution.";
-                    }
-                    else
-                    {
-                        fallbackStatus = "Shade resists overcharming. Forcing it will cause double damage.";
-                    }
+                    fallbackStatus = inventory.IsOvercharmed
+                        ? "Shade is overcharmed. Unequip a charm first."
+                        : "Equip to add this charm to your shade's loadout.";
                 }
                 else
                     fallbackStatus = "Equip to add this charm to your shade's loadout.";
@@ -617,7 +612,7 @@ public static class ShadeSettingsMenu
 
             if (inventory.IsOvercharmed && (fallbackStatus == null || fallbackStatus.IndexOf("overcharm", StringComparison.OrdinalIgnoreCase) < 0))
             {
-                fallbackStatus = "Shade is overcharmed and suffers double damage. " + fallbackStatus;
+                fallbackStatus = "Shade is overcharmed. " + fallbackStatus;
             }
 
             UpdateStatusText(fallbackStatus);

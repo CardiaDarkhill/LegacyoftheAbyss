@@ -761,7 +761,7 @@ namespace LegacyoftheAbyss.Shade
                         RestoreEquippedAtIndex(ShadeCharmId.Kingsoul, removedKingsoulIndex);
                     }
 
-                    message = "Shade resists overcharming and refuses the charm.";
+                    message = "Not enough notches available.";
                     return false;
                 }
 
