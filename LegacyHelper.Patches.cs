@@ -844,6 +844,13 @@ public partial class LegacyHelper
                 return;
             }
 
+            PrunePlaceholderBindings(actions.Up);
+            PrunePlaceholderBindings(actions.Down);
+            PrunePlaceholderBindings(actions.Left);
+            PrunePlaceholderBindings(actions.Right);
+            PrunePlaceholderBindings(actions.MenuCancel);
+            PrunePlaceholderBindings(actions.OpenInventory);
+
             AddBinding(actions.Up, new ShadeKeyboardMovementBinding(KeyboardUpBindingId, ShadeAction.MoveUp));
             AddBinding(actions.Down, new ShadeKeyboardMovementBinding(KeyboardDownBindingId, ShadeAction.MoveDown));
             AddBinding(actions.Left, new ShadeKeyboardMovementBinding(KeyboardLeftBindingId, ShadeAction.MoveLeft));
@@ -874,6 +881,61 @@ public partial class LegacyHelper
             }
 
             action.AddBinding(binding);
+        }
+
+        private static void PrunePlaceholderBindings(PlayerAction action)
+        {
+            if (action == null)
+            {
+                return;
+            }
+
+            try
+            {
+                var unfiltered = action.UnfilteredBindings;
+                if (unfiltered == null || unfiltered.Count == 0)
+                    return;
+
+                for (int i = unfiltered.Count - 1; i >= 0; i--)
+                {
+                    var binding = unfiltered[i];
+                    if (binding == null)
+                        continue;
+
+                    if (IsPlaceholderBinding(binding))
+                    {
+                        action.RemoveBinding(binding);
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private static bool IsPlaceholderBinding(BindingSource binding)
+        {
+            if (binding == null)
+                return false;
+
+            try
+            {
+                if (binding is DeviceBindingSource deviceBinding)
+                {
+                    return deviceBinding.Control == InputControlType.None;
+                }
+
+                if (binding is KeyBindingSource keyBinding)
+                {
+                    var combo = keyBinding.Control;
+                    return combo.IncludeCount == 0 && combo.ExcludeCount == 0;
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
         }
 
         private static bool IsMenuActive()
@@ -1201,10 +1263,75 @@ public partial class LegacyHelper
 
             public override void Save(BinaryWriter writer)
             {
+                try
+                {
+                    WritePlaceholderData(writer);
+                }
+                catch
+                {
+                }
             }
 
             public override void Load(BinaryReader reader, ushort dataFormatVersion)
             {
+                try
+                {
+                    ReadPlaceholderData(reader);
+                }
+                catch
+                {
+                }
+            }
+
+            private void WritePlaceholderData(BinaryWriter writer)
+            {
+                if (writer == null)
+                    return;
+
+                switch (SourceType)
+                {
+                    case BindingSourceType.DeviceBindingSource:
+                    case BindingSourceType.UnknownDeviceBindingSource:
+                        writer.Write((int)InputControlType.None);
+                        break;
+                    case BindingSourceType.KeyBindingSource:
+                        writer.Write(0);
+                        writer.Write(0UL);
+                        writer.Write(0);
+                        writer.Write(0UL);
+                        break;
+                    case BindingSourceType.MouseBindingSource:
+                        writer.Write((int)Mouse.None);
+                        break;
+                    default:
+                        writer.Write(0);
+                        break;
+                }
+            }
+
+            private void ReadPlaceholderData(BinaryReader reader)
+            {
+                if (reader == null)
+                    return;
+
+                switch (SourceType)
+                {
+                    case BindingSourceType.DeviceBindingSource:
+                    case BindingSourceType.UnknownDeviceBindingSource:
+                        _ = reader.ReadInt32();
+                        break;
+                    case BindingSourceType.KeyBindingSource:
+                        _ = reader.ReadInt32();
+                        _ = reader.ReadUInt64();
+                        _ = reader.ReadInt32();
+                        _ = reader.ReadUInt64();
+                        break;
+                    case BindingSourceType.MouseBindingSource:
+                        _ = reader.ReadInt32();
+                        break;
+                    default:
+                        break;
+                }
             }
         }
 
