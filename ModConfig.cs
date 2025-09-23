@@ -153,11 +153,8 @@ public class ModConfig
                 Directory.CreateDirectory(directory);
             }
 
-            using (LegacyHelper.InputDeviceBlocker.CreateSaveScope())
-            {
-                string json = Serialize(Instance);
-                File.WriteAllText(ModPaths.Config, json);
-            }
+            string json = Serialize(Instance);
+            File.WriteAllText(ModPaths.Config, json);
         }
         catch
         {

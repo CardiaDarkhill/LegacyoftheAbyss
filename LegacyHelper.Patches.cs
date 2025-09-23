@@ -2,6 +2,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using HarmonyLib;
 using InControl;
@@ -495,11 +496,6 @@ public partial class LegacyHelper
             "QuickMap"
         };
 
-        private static bool menuTransferActive;
-        private static bool menuTransferShadeUsesController;
-        private static bool menuTransferHornetControllerEnabled = true;
-        private static ShadeInputConfig menuTransferSavedBindings;
-
         private static void SetDeviceRestricted(InputDevice device, bool restrict)
         {
             if (device == null || device == InputDevice.Null)
@@ -565,106 +561,10 @@ public partial class LegacyHelper
             return false;
         }
 
-        private static void UpdateMenuTransfer()
-        {
-            bool menuActive = false;
-            try
-            {
-                menuActive = MenuStateUtility.IsMenuActive();
-            }
-            catch
-            {
-                menuActive = false;
-            }
-
-            if (menuActive)
-            {
-                if (!menuTransferActive)
-                {
-                    ActivateMenuTransfer();
-                }
-            }
-            else if (menuTransferActive)
-            {
-                DeactivateMenuTransfer();
-            }
-        }
-
-        private static void ActivateMenuTransfer()
-        {
-            menuTransferActive = true;
-            menuTransferShadeUsesController = false;
-            menuTransferSavedBindings = null;
-
-            try
-            {
-                var cfg = ModConfig.Instance;
-                if (cfg != null)
-                {
-                    menuTransferHornetControllerEnabled = cfg.hornetControllerEnabled;
-                    if (!menuTransferHornetControllerEnabled)
-                    {
-                        cfg.hornetControllerEnabled = true;
-                    }
-
-                    var shadeConfig = cfg.shadeInput;
-                    if (shadeConfig != null && shadeConfig.UsesControllerBindings())
-                    {
-                        menuTransferShadeUsesController = true;
-                        try
-                        {
-                            menuTransferSavedBindings = shadeConfig.Clone();
-                        }
-                        catch
-                        {
-                            menuTransferSavedBindings = null;
-                        }
-                    }
-                }
-            }
-            catch
-            {
-                menuTransferShadeUsesController = false;
-                menuTransferSavedBindings = null;
-            }
-        }
-
-        private static void DeactivateMenuTransfer()
-        {
-            try
-            {
-                var cfg = ModConfig.Instance;
-                if (cfg != null)
-                {
-                    cfg.hornetControllerEnabled = menuTransferHornetControllerEnabled;
-                    if (menuTransferShadeUsesController && menuTransferSavedBindings != null)
-                    {
-                        var shadeConfig = cfg.shadeInput;
-                        if (shadeConfig != null)
-                        {
-                            shadeConfig.CopyBindingsFrom(menuTransferSavedBindings);
-                        }
-                    }
-                }
-            }
-            catch
-            {
-            }
-
-            menuTransferActive = false;
-            menuTransferShadeUsesController = false;
-            menuTransferSavedBindings = null;
-        }
-
         internal static bool ShouldBlockShadeDeviceInput()
         {
             try
             {
-                if (menuTransferActive)
-                {
-                    return false;
-                }
-
                 var gm = MenuStateUtility.TryGetGameManager();
                 if (ReferenceEquals(gm, null))
                 {
@@ -706,14 +606,6 @@ public partial class LegacyHelper
 
         internal static void RefreshShadeDevices(InputHandler handler)
         {
-            UpdateMenuTransfer();
-
-            if (menuTransferActive)
-            {
-                ReleaseTrackedDevices(handler);
-                return;
-            }
-
             if (!InputManager.IsSetup)
             {
                 ReleaseTrackedDevices(handler);
@@ -757,12 +649,6 @@ public partial class LegacyHelper
 
         internal static bool ShouldIgnoreDevice(InputHandler handler, InputDevice device)
         {
-            if (menuTransferActive)
-            {
-                SetDeviceRestricted(device, false);
-                return false;
-            }
-
             bool restrict = false;
 
             try
@@ -835,13 +721,7 @@ public partial class LegacyHelper
             }
         }
 
-        internal static bool ShouldSuppressShadeOption(ShadeBindingOption option)
-        {
-            if (!menuTransferActive || !menuTransferShadeUsesController)
-                return false;
-
-            return option.type == ShadeBindingOptionType.Controller;
-        }
+        internal static bool ShouldSuppressShadeOption(ShadeBindingOption option) => false;
 
         internal static void EnsureLastActiveController(InputHandler handler)
         {
@@ -865,49 +745,488 @@ public partial class LegacyHelper
 
         internal readonly struct MenuTransferSaveScope : IDisposable
         {
-            private readonly bool restore;
-
-            public MenuTransferSaveScope(bool isActive)
+            public void Dispose()
             {
-                restore = isActive;
-                if (restore)
+            }
+        }
+
+        internal static MenuTransferSaveScope CreateSaveScope() => default;
+    }
+
+    [HarmonyPatch(typeof(InputHandler), nameof(InputHandler.OnAwake))]
+    private class InputHandler_OnAwake_MenuInputBridge
+    {
+        private static void Postfix(InputHandler __instance)
+        {
+            try
+            {
+                MenuInputBridge.Initialize(__instance);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(InputHandler), nameof(InputHandler.OnDestroy))]
+    private class InputHandler_OnDestroy_MenuInputBridge
+    {
+        private static void Prefix(InputHandler __instance)
+        {
+            try
+            {
+                MenuInputBridge.OnDestroyed(__instance);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private static class MenuInputBridge
+    {
+        private const int KeyboardUpBindingId = 1;
+        private const int KeyboardDownBindingId = 2;
+        private const int KeyboardLeftBindingId = 3;
+        private const int KeyboardRightBindingId = 4;
+        private const int ControllerUpBindingId = 5;
+        private const int ControllerDownBindingId = 6;
+        private const int ControllerLeftBindingId = 7;
+        private const int ControllerRightBindingId = 8;
+        private const int KeyboardCancelBindingId = 9;
+        private const int ControllerInventoryBindingId = 10;
+
+        private static InputHandler? handler;
+        private static bool subscribed;
+
+        internal static void Initialize(InputHandler instance)
+        {
+            handler = instance;
+            EnsureBindings(instance?.inputActions);
+            if (!subscribed)
+            {
+                InputHandler.OnUpdateHeroActions += HandleActionsUpdated;
+                subscribed = true;
+            }
+        }
+
+        internal static void OnDestroyed(InputHandler instance)
+        {
+            if (ReferenceEquals(handler, instance))
+            {
+                handler = null;
+            }
+
+            if (subscribed)
+            {
+                InputHandler.OnUpdateHeroActions -= HandleActionsUpdated;
+                subscribed = false;
+            }
+        }
+
+        private static void HandleActionsUpdated(HeroActions actions)
+        {
+            try
+            {
+                EnsureBindings(actions);
+            }
+            catch
+            {
+            }
+        }
+
+        private static void EnsureBindings(HeroActions? actions)
+        {
+            if (actions == null)
+            {
+                return;
+            }
+
+            AddBinding(actions.Up, new ShadeKeyboardMovementBinding(KeyboardUpBindingId, ShadeAction.MoveUp));
+            AddBinding(actions.Down, new ShadeKeyboardMovementBinding(KeyboardDownBindingId, ShadeAction.MoveDown));
+            AddBinding(actions.Left, new ShadeKeyboardMovementBinding(KeyboardLeftBindingId, ShadeAction.MoveLeft));
+            AddBinding(actions.Right, new ShadeKeyboardMovementBinding(KeyboardRightBindingId, ShadeAction.MoveRight));
+
+            AddBinding(actions.Up, new ShadeControllerMovementBinding(ControllerUpBindingId, ShadeAction.MoveUp));
+            AddBinding(actions.Down, new ShadeControllerMovementBinding(ControllerDownBindingId, ShadeAction.MoveDown));
+            AddBinding(actions.Left, new ShadeControllerMovementBinding(ControllerLeftBindingId, ShadeAction.MoveLeft));
+            AddBinding(actions.Right, new ShadeControllerMovementBinding(ControllerRightBindingId, ShadeAction.MoveRight));
+
+            AddBinding(actions.MenuCancel, new ShadeKeyboardBackBinding(KeyboardCancelBindingId));
+            AddBinding(actions.OpenInventory, new ShadeControllerInventoryBinding(ControllerInventoryBindingId));
+        }
+
+        private static void AddBinding(PlayerAction action, ShadeMenuBindingSourceBase binding)
+        {
+            if (action == null)
+            {
+                return;
+            }
+
+            foreach (var existing in action.Bindings)
+            {
+                if (existing is ShadeMenuBindingSourceBase other && other.Equals(binding))
                 {
-                    try
+                    return;
+                }
+            }
+
+            action.AddBinding(binding);
+        }
+
+        private static bool IsMenuActive()
+        {
+            try
+            {
+                return MenuStateUtility.IsMenuActive();
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static InputHandler? TryGetHandler()
+        {
+            if (handler != null)
+                return handler;
+            try
+            {
+                return InputHandler.UnsafeInstance;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static bool HornetUsesController()
+        {
+            var current = TryGetHandler();
+            if (current != null)
+            {
+                switch (current.lastActiveController)
+                {
+                    case BindingSourceType.DeviceBindingSource:
+                        return true;
+                    case BindingSourceType.KeyBindingSource:
+                    case BindingSourceType.MouseBindingSource:
+                        return false;
+                }
+            }
+
+            var cfg = ModConfig.Instance;
+            if (cfg != null)
+            {
+                if (cfg.hornetControllerEnabled && !cfg.hornetKeyboardEnabled)
+                    return true;
+                if (!cfg.hornetControllerEnabled && cfg.hornetKeyboardEnabled)
+                    return false;
+                if (!cfg.hornetControllerEnabled && !cfg.hornetKeyboardEnabled)
+                    return false;
+                if (cfg.hornetControllerEnabled && cfg.hornetKeyboardEnabled)
+                {
+                    if (current != null)
                     {
-                        var cfg = ModConfig.Instance;
-                        if (cfg != null)
-                        {
-                            cfg.hornetControllerEnabled = menuTransferHornetControllerEnabled;
-                        }
-                    }
-                    catch
-                    {
+                        return current.gameController != null && current.gameController != InputDevice.Null;
                     }
                 }
             }
 
-            public void Dispose()
-            {
-                if (!restore || !menuTransferActive)
-                    return;
+            return cfg?.hornetControllerEnabled ?? false;
+        }
 
+        private static bool HornetUsesKeyboard()
+        {
+            var current = TryGetHandler();
+            if (current != null)
+            {
+                switch (current.lastActiveController)
+                {
+                    case BindingSourceType.KeyBindingSource:
+                    case BindingSourceType.MouseBindingSource:
+                        return true;
+                    case BindingSourceType.DeviceBindingSource:
+                        return false;
+                }
+            }
+
+            var cfg = ModConfig.Instance;
+            if (cfg != null)
+            {
+                if (cfg.hornetKeyboardEnabled && !cfg.hornetControllerEnabled)
+                    return true;
+                if (!cfg.hornetKeyboardEnabled && cfg.hornetControllerEnabled)
+                    return false;
+                if (!cfg.hornetKeyboardEnabled && !cfg.hornetControllerEnabled)
+                    return false;
+                if (cfg.hornetKeyboardEnabled && cfg.hornetControllerEnabled)
+                {
+                    if (current != null)
+                    {
+                        return current.gameController == null || current.gameController == InputDevice.Null;
+                    }
+                }
+            }
+
+            return cfg?.hornetKeyboardEnabled ?? false;
+        }
+
+        private static bool ShadeInventoryKeyPressed()
+        {
+            var current = TryGetHandler();
+            if (current == null)
+                return false;
+
+            var actions = current.inputActions;
+            if (actions == null)
+                return false;
+
+            return IsBindingPressed(current.GetKeyBindingForAction(actions.OpenInventory)) ||
+                   IsBindingPressed(current.GetKeyBindingForAction(actions.OpenInventoryMap)) ||
+                   IsBindingPressed(current.GetKeyBindingForAction(actions.OpenInventoryJournal)) ||
+                   IsBindingPressed(current.GetKeyBindingForAction(actions.OpenInventoryTools)) ||
+                   IsBindingPressed(current.GetKeyBindingForAction(actions.OpenInventoryQuests));
+        }
+
+        private static bool IsBindingPressed(InputHandler.KeyOrMouseBinding binding)
+        {
+            if (binding.Key != Key.None)
+            {
                 try
                 {
-                    var cfg = ModConfig.Instance;
-                    if (cfg != null)
+                    var mappings = UnityKeyboardProvider.KeyMappings;
+                    int index = (int)binding.Key;
+                    if (index >= 0 && index < mappings.Length)
                     {
-                        cfg.hornetControllerEnabled = true;
+                        return mappings[index].IsPressed;
                     }
                 }
                 catch
                 {
                 }
             }
+
+            return false;
         }
 
-        internal static MenuTransferSaveScope CreateSaveScope()
+        private static float GetShadeControllerBackValue()
         {
-            return new MenuTransferSaveScope(menuTransferActive);
+            var device = TryGetShadeController();
+            if (device == null)
+                return 0f;
+
+            try
+            {
+                if (IsControlPressed(device, InputControlType.Action6))
+                    return 1f;
+                if (IsControlPressed(device, InputControlType.Back))
+                    return 1f;
+                if (IsControlPressed(device, InputControlType.Select))
+                    return 1f;
+                if (IsControlPressed(device, InputControlType.Command))
+                    return 1f;
+            }
+            catch
+            {
+            }
+
+            return 0f;
+        }
+
+        private static bool IsControlPressed(InputDevice device, InputControlType controlType)
+        {
+            try
+            {
+                var control = device.GetControl(controlType);
+                return control != null && control != InputControl.Null && control.IsPressed;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static InputDevice? TryGetShadeController()
+        {
+            try
+            {
+                var cfg = ShadeInput.Config;
+                if (cfg == null)
+                    return null;
+                int index = Mathf.Max(-1, cfg.controllerDeviceIndex);
+                if (index < 0)
+                    return null;
+                var devices = InputManager.Devices;
+                if (devices == null || devices.Count == 0)
+                    return null;
+                if (index >= devices.Count)
+                    index = devices.Count - 1;
+                return devices[index];
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private abstract class ShadeMenuBindingSourceBase : BindingSource
+        {
+            private readonly int id;
+
+            protected ShadeMenuBindingSourceBase(int id)
+            {
+                this.id = id;
+            }
+
+            protected abstract float ComputeValue();
+            protected virtual bool ShouldActivate() => true;
+            protected abstract BindingSourceType SourceType { get; }
+            protected abstract InputDeviceClass SourceClass { get; }
+            protected abstract string SourceName { get; }
+            protected abstract string SourceDeviceName { get; }
+
+            public override float GetValue(InputDevice inputDevice)
+            {
+                if (!ShouldActivate())
+                    return 0f;
+                float value = Mathf.Clamp01(ComputeValue());
+                return value;
+            }
+
+            public override bool GetState(InputDevice inputDevice) => GetValue(inputDevice) >= 0.5f;
+
+            public override BindingSourceType BindingSourceType => SourceType;
+
+            public override string Name => SourceName;
+
+            public override string DeviceName => SourceDeviceName;
+
+            public override InputDeviceClass DeviceClass => SourceClass;
+
+            public override InputDeviceStyle DeviceStyle => InputDeviceStyle.Unknown;
+
+            internal override bool IsValid => false;
+
+            public override bool Equals(BindingSource other)
+            {
+                return other is ShadeMenuBindingSourceBase binding && binding.id == id && binding.GetType() == GetType();
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is ShadeMenuBindingSourceBase binding && binding.id == id && binding.GetType() == GetType();
+            }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    return (GetType().GetHashCode() * 397) ^ id;
+                }
+            }
+
+            public override void Save(BinaryWriter writer)
+            {
+            }
+
+            public override void Load(BinaryReader reader, ushort dataFormatVersion)
+            {
+            }
+        }
+
+        private sealed class ShadeKeyboardMovementBinding : ShadeMenuBindingSourceBase
+        {
+            private readonly ShadeAction action;
+
+            public ShadeKeyboardMovementBinding(int id, ShadeAction action) : base(id)
+            {
+                this.action = action;
+            }
+
+            protected override float ComputeValue()
+            {
+                return ShadeInput.GetActionValue(action, ShadeBindingOptionType.Key);
+            }
+
+            protected override bool ShouldActivate()
+            {
+                return IsMenuActive() && HornetUsesController();
+            }
+
+            protected override BindingSourceType SourceType => BindingSourceType.DeviceBindingSource;
+            protected override InputDeviceClass SourceClass => InputDeviceClass.Controller;
+            protected override string SourceName => $"Shade {action} Keyboard";
+            protected override string SourceDeviceName => "Shade Keyboard";
+        }
+
+        private sealed class ShadeControllerMovementBinding : ShadeMenuBindingSourceBase
+        {
+            private readonly ShadeAction action;
+
+            public ShadeControllerMovementBinding(int id, ShadeAction action) : base(id)
+            {
+                this.action = action;
+            }
+
+            protected override float ComputeValue()
+            {
+                return ShadeInput.GetActionValue(action, ShadeBindingOptionType.Controller);
+            }
+
+            protected override bool ShouldActivate()
+            {
+                return IsMenuActive() && HornetUsesKeyboard();
+            }
+
+            protected override BindingSourceType SourceType => BindingSourceType.KeyBindingSource;
+            protected override InputDeviceClass SourceClass => InputDeviceClass.Keyboard;
+            protected override string SourceName => $"Shade {action} Controller";
+            protected override string SourceDeviceName => "Shade Controller";
+        }
+
+        private sealed class ShadeKeyboardBackBinding : ShadeMenuBindingSourceBase
+        {
+            public ShadeKeyboardBackBinding(int id) : base(id)
+            {
+            }
+
+            protected override float ComputeValue()
+            {
+                return ShadeInventoryKeyPressed() ? 1f : 0f;
+            }
+
+            protected override bool ShouldActivate()
+            {
+                return IsMenuActive() && HornetUsesController();
+            }
+
+            protected override BindingSourceType SourceType => BindingSourceType.DeviceBindingSource;
+            protected override InputDeviceClass SourceClass => InputDeviceClass.Controller;
+            protected override string SourceName => "Shade Inventory Shortcut";
+            protected override string SourceDeviceName => "Shade Keyboard";
+        }
+
+        private sealed class ShadeControllerInventoryBinding : ShadeMenuBindingSourceBase
+        {
+            public ShadeControllerInventoryBinding(int id) : base(id)
+            {
+            }
+
+            protected override float ComputeValue()
+            {
+                return GetShadeControllerBackValue();
+            }
+
+            protected override bool ShouldActivate()
+            {
+                return IsMenuActive() && HornetUsesKeyboard();
+            }
+
+            protected override BindingSourceType SourceType => BindingSourceType.KeyBindingSource;
+            protected override InputDeviceClass SourceClass => InputDeviceClass.Keyboard;
+            protected override string SourceName => "Shade Controller Back";
+            protected override string SourceDeviceName => "Shade Controller";
         }
     }
 

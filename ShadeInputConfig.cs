@@ -425,28 +425,34 @@ public static class ShadeInput
         ConfigInstance.SetBindingOption(action, secondary, option);
     }
 
-    public static float GetActionValue(ShadeAction action)
+    public static float GetActionValue(ShadeAction action) => GetActionValue(action, null);
+
+    internal static float GetActionValue(ShadeAction action, ShadeBindingOptionType? requiredType)
     {
         var binding = ConfigInstance.GetBinding(action);
         if (binding == null)
             return 0f;
-        return Mathf.Max(GetOptionValue(binding.primary), GetOptionValue(binding.secondary));
+        return Mathf.Max(GetOptionValue(binding.primary, requiredType), GetOptionValue(binding.secondary, requiredType));
     }
 
-    public static bool IsActionHeld(ShadeAction action)
+    public static bool IsActionHeld(ShadeAction action) => IsActionHeld(action, null);
+
+    internal static bool IsActionHeld(ShadeAction action, ShadeBindingOptionType? requiredType)
     {
         var binding = ConfigInstance.GetBinding(action);
         if (binding == null)
             return false;
-        return IsOptionHeld(binding.primary) || IsOptionHeld(binding.secondary);
+        return IsOptionHeld(binding.primary, requiredType) || IsOptionHeld(binding.secondary, requiredType);
     }
 
-    public static bool WasActionPressed(ShadeAction action)
+    public static bool WasActionPressed(ShadeAction action) => WasActionPressed(action, null);
+
+    internal static bool WasActionPressed(ShadeAction action, ShadeBindingOptionType? requiredType)
     {
         var binding = ConfigInstance.GetBinding(action);
         if (binding == null)
             return false;
-        return WasOptionPressed(binding.primary) || WasOptionPressed(binding.secondary);
+        return WasOptionPressed(binding.primary, requiredType) || WasOptionPressed(binding.secondary, requiredType);
     }
 
     public static string DescribeBindingOption(ShadeBindingOption option)
@@ -476,8 +482,10 @@ public static class ShadeInput
         }
     }
 
-    private static bool IsOptionHeld(ShadeBindingOption option)
+    private static bool IsOptionHeld(ShadeBindingOption option, ShadeBindingOptionType? requiredType = null)
     {
+        if (requiredType.HasValue && option.type != requiredType.Value)
+            return false;
         if (ShouldSuppressOption(option))
             return false;
 
@@ -489,8 +497,10 @@ public static class ShadeInput
         };
     }
 
-    private static bool WasOptionPressed(ShadeBindingOption option)
+    private static bool WasOptionPressed(ShadeBindingOption option, ShadeBindingOptionType? requiredType = null)
     {
+        if (requiredType.HasValue && option.type != requiredType.Value)
+            return false;
         if (ShouldSuppressOption(option))
             return false;
 
@@ -503,7 +513,12 @@ public static class ShadeInput
     }
 
     private static float GetOptionValue(ShadeBindingOption option)
+        => GetOptionValue(option, null);
+
+    private static float GetOptionValue(ShadeBindingOption option, ShadeBindingOptionType? requiredType)
     {
+        if (requiredType.HasValue && option.type != requiredType.Value)
+            return 0f;
         if (ShouldSuppressOption(option))
             return 0f;
 
