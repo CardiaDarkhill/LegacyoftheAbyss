@@ -900,6 +900,21 @@ public partial class LegacyHelper
             }
         }
 
+        private static InputDevice TryGetActiveDevice()
+        {
+            try
+            {
+                var active = InputManager.ActiveDevice;
+                if (active == null || active == InputDevice.Null)
+                    return null;
+                return active;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private static bool HornetUsesController()
         {
             var current = TryGetHandler();
@@ -928,8 +943,22 @@ public partial class LegacyHelper
                 {
                     if (current != null)
                     {
-                        return current.gameController != null && current.gameController != InputDevice.Null;
+                        if (current.gameController != null && current.gameController != InputDevice.Null)
+                            return true;
+                        if (current.lastActiveController == BindingSourceType.DeviceBindingSource)
+                            return true;
                     }
+
+                    var activeDevice = TryGetActiveDevice();
+                    if (activeDevice != null)
+                    {
+                        if (activeDevice.DeviceClass == InputDeviceClass.Controller)
+                            return true;
+                        if (activeDevice.DeviceClass == InputDeviceClass.Keyboard || activeDevice.DeviceClass == InputDeviceClass.Mouse)
+                            return false;
+                    }
+
+                    return cfg.hornetControllerEnabled;
                 }
             }
 
@@ -964,8 +993,22 @@ public partial class LegacyHelper
                 {
                     if (current != null)
                     {
-                        return current.gameController == null || current.gameController == InputDevice.Null;
+                        if (current.gameController == null || current.gameController == InputDevice.Null)
+                            return true;
+                        if (current.lastActiveController == BindingSourceType.KeyBindingSource || current.lastActiveController == BindingSourceType.MouseBindingSource)
+                            return true;
                     }
+
+                    var activeDevice = TryGetActiveDevice();
+                    if (activeDevice != null)
+                    {
+                        if (activeDevice.DeviceClass == InputDeviceClass.Controller)
+                            return false;
+                        if (activeDevice.DeviceClass == InputDeviceClass.Keyboard || activeDevice.DeviceClass == InputDeviceClass.Mouse)
+                            return true;
+                    }
+
+                    return cfg.hornetKeyboardEnabled;
                 }
             }
 
@@ -1008,6 +1051,83 @@ public partial class LegacyHelper
             }
 
             return false;
+        }
+
+        private static float GetShadeControllerDirectionalValue(ShadeAction action)
+        {
+            float value = ShadeInput.GetActionValue(action, ShadeBindingOptionType.Controller);
+            float dpad = GetShadeControllerDPadValue(action);
+            return Mathf.Max(value, dpad);
+        }
+
+        private static float GetShadeControllerDPadValue(ShadeAction action)
+        {
+            var device = TryGetShadeController();
+            if (device == null)
+                return 0f;
+
+            try
+            {
+                return action switch
+                {
+                    ShadeAction.MoveUp => GetDpadDirectionValue(device, InputControlType.DPadUp, InputControlType.DPadY, true),
+                    ShadeAction.MoveDown => GetDpadDirectionValue(device, InputControlType.DPadDown, InputControlType.DPadY, false),
+                    ShadeAction.MoveLeft => GetDpadDirectionValue(device, InputControlType.DPadLeft, InputControlType.DPadX, false),
+                    ShadeAction.MoveRight => GetDpadDirectionValue(device, InputControlType.DPadRight, InputControlType.DPadX, true),
+                    _ => 0f
+                };
+            }
+            catch
+            {
+                return 0f;
+            }
+        }
+
+        private static float GetDpadDirectionValue(InputDevice device, InputControlType buttonControl, InputControlType axisControl, bool positiveAxis)
+        {
+            if (device == null || device == InputDevice.Null)
+                return 0f;
+
+            if (IsControlPressed(device, buttonControl))
+                return 1f;
+
+            float axisContribution = 0f;
+            try
+            {
+                var axis = device.GetControl(axisControl);
+                if (axis != null && axis != InputControl.Null)
+                {
+                    float value = Mathf.Clamp(axis.Value, -1f, 1f);
+                    axisContribution = positiveAxis ? Mathf.Max(0f, value) : Mathf.Max(0f, -value);
+                }
+            }
+            catch
+            {
+            }
+
+            if (axisContribution > 0f)
+                return Mathf.Clamp01(axisContribution);
+
+            try
+            {
+                var dpad = device.DPad;
+                if (dpad != null && dpad != TwoAxisInputControl.Null)
+                {
+                    float composite = axisControl switch
+                    {
+                        InputControlType.DPadX => positiveAxis ? Mathf.Max(0f, dpad.X) : Mathf.Max(0f, -dpad.X),
+                        InputControlType.DPadY => positiveAxis ? Mathf.Max(0f, dpad.Y) : Mathf.Max(0f, -dpad.Y),
+                        _ => 0f
+                    };
+                    if (composite > 0f)
+                        return Mathf.Clamp01(composite);
+                }
+            }
+            catch
+            {
+            }
+
+            return 0f;
         }
 
         private static float GetShadeControllerBackValue()
@@ -1171,7 +1291,7 @@ public partial class LegacyHelper
 
             protected override float ComputeValue()
             {
-                return ShadeInput.GetActionValue(action, ShadeBindingOptionType.Controller);
+                return GetShadeControllerDirectionalValue(action);
             }
 
             protected override bool ShouldActivate()
