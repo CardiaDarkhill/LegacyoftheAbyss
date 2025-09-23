@@ -142,10 +142,16 @@ internal static class MenuStateUtility
             {
             }
 
-            var inventoryState = TryGetInventoryStateName(gm);
-            if (IsMenuStateName(inventoryState))
+            try
             {
-                return true;
+                var inventoryState = TryGetInventoryStateName(gm);
+                if (IsMenuStateName(inventoryState))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
             }
         }
 
@@ -164,46 +170,42 @@ internal static class MenuStateUtility
             }
         }
 
-        if (Time.timeScale <= 0.0001f)
-        {
-            return true;
-        }
-
         if (ReferenceEquals(ui, null))
         {
             ui = TryGetUiManager(gm);
         }
 
-        string menuStateName = TryGetMenuStateName(ui);
-        if (IsMenuStateName(menuStateName))
+        if (!ReferenceEquals(ui, null))
         {
-            return true;
-        }
+            string uiStateName = null;
+            bool hasUiState = false;
 
-        string stateName = TryGetUiStateName(ui);
-        if (IsMenuStateName(stateName))
-        {
-            return true;
-        }
-
-        try
-        {
-            var eventSystem = EventSystem.current;
-            if (eventSystem != null)
+            try
             {
-                var selected = eventSystem.currentSelectedGameObject;
-                if (selected != null && selected.activeInHierarchy)
+                uiStateName = TryGetUiStateName(ui);
+                hasUiState = !string.IsNullOrEmpty(uiStateName);
+                if (hasUiState && IsMenuStateName(uiStateName))
                 {
-                    var canvas = selected.GetComponentInParent<Canvas>();
-                    if (canvas != null && canvas.isActiveAndEnabled)
-                    {
-                        return true;
-                    }
+                    return true;
                 }
             }
-        }
-        catch
-        {
+            catch
+            {
+                hasUiState = false;
+                uiStateName = null;
+            }
+
+            try
+            {
+                var menuStateName = TryGetMenuStateName(ui);
+                if (IsMenuStateName(menuStateName) && !hasUiState)
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+            }
         }
 
         return false;

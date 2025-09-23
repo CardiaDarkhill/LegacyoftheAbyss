@@ -1063,8 +1063,6 @@ public partial class LegacyHelper
                     return 1f;
                 if (IsControlPressed(device, InputControlType.Select))
                     return 1f;
-                if (IsControlPressed(device, InputControlType.Command))
-                    return 1f;
             }
             catch
             {
