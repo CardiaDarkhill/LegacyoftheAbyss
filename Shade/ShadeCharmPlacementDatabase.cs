@@ -170,13 +170,12 @@ namespace LegacyoftheAbyss.Shade
             try
             {
                 var serializer = JsonSerializer.Create(JsonSettings);
-                using var reader = new JsonTextReader(new StringReader(json))
+                using var reader = new CommentSkippingJsonTextReader(new StringReader(json))
                 {
                     DateParseHandling = DateParseHandling.None,
                     FloatParseHandling = FloatParseHandling.Double,
                     CloseInput = true
                 };
-                reader.CommentHandling = CommentHandling.Ignore;
                 var file = serializer.Deserialize<ShadeCharmPlacementFile>(reader);
                 return file;
             }
@@ -194,6 +193,25 @@ namespace LegacyoftheAbyss.Shade
         {
             [JsonProperty("placements")]
             public List<ShadeCharmPlacementDefinition>? Placements { get; init; }
+        }
+
+        private sealed class CommentSkippingJsonTextReader : JsonTextReader
+        {
+            internal CommentSkippingJsonTextReader(TextReader reader)
+                : base(reader)
+            {
+            }
+
+            public override bool Read()
+            {
+                bool result = base.Read();
+                while (result && TokenType == JsonToken.Comment)
+                {
+                    result = base.Read();
+                }
+
+                return result;
+            }
         }
 
         private sealed class StringEnumIgnoreCaseConverter<TEnum> : JsonConverter where TEnum : struct, Enum

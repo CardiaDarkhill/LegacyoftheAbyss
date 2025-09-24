@@ -78,7 +78,7 @@ namespace LegacyoftheAbyss.Shade
             }
 
             int startIndex = stock.Count;
-            var added = new List<ShadeCharmShopItem>(matches.Count);
+            var added = new List<ShadeCharmShopItem?>(matches.Count);
             foreach (var definition in matches)
             {
                 var item = new ShadeCharmShopItem(definition);
@@ -119,7 +119,7 @@ namespace LegacyoftheAbyss.Shade
                 return false;
             }
 
-            var item = info.Items[localIndex];
+            ShadeCharmShopItem? item = info.Items[localIndex];
             if (item == null)
             {
                 return true;
@@ -133,7 +133,7 @@ namespace LegacyoftheAbyss.Shade
             info.Items[localIndex] = null;
 
             bool anyRemaining = false;
-            foreach (var remaining in info.Items)
+            foreach (ShadeCharmShopItem? remaining in info.Items)
             {
                 if (remaining != null)
                 {
@@ -186,7 +186,7 @@ namespace LegacyoftheAbyss.Shade
 
         private sealed class ShopStockInfo
         {
-            internal ShopStockInfo(int startIndex, List<ShadeCharmShopItem> items)
+            internal ShopStockInfo(int startIndex, List<ShadeCharmShopItem?> items)
             {
                 StartIndex = startIndex;
                 Items = items;
@@ -194,7 +194,7 @@ namespace LegacyoftheAbyss.Shade
 
             internal int StartIndex { get; }
 
-            internal List<ShadeCharmShopItem> Items { get; }
+            internal List<ShadeCharmShopItem?> Items { get; }
         }
 
         private sealed class ShadeCharmShopItem : ISimpleShopItem

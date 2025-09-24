@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using BepInEx.Logging;
 using UnityEngine;
 
 namespace LegacyoftheAbyss.Shade
@@ -10,6 +11,7 @@ namespace LegacyoftheAbyss.Shade
     {
         private static readonly Dictionary<ShadeCharmPlacementKind, IShadeCharmPlacementHandler> Handlers = new();
         private static readonly List<IShadeCharmPlacementHandler> UniqueHandlers = new();
+        private static readonly ManualLogSource PlacementLogger = Logger.CreateLogSource("ShadeCharmPlacement");
         private static bool s_initialized;
 
         internal static void RegisterHandler(IShadeCharmPlacementHandler handler, params ShadeCharmPlacementKind[] kinds)
@@ -85,7 +87,10 @@ namespace LegacyoftheAbyss.Shade
                 grouped.TryGetValue(handler, out var definitions);
                 try
                 {
-                    handler.Populate(context, definitions ?? Array.Empty<ShadeCharmPlacementDefinition>());
+                    IReadOnlyList<ShadeCharmPlacementDefinition> placementsForHandler = definitions != null
+                        ? definitions
+                        : Array.Empty<ShadeCharmPlacementDefinition>();
+                    handler.Populate(context, placementsForHandler);
                 }
                 catch (Exception ex)
                 {
@@ -145,7 +150,7 @@ namespace LegacyoftheAbyss.Shade
 
             try
             {
-                LegacyHelper.Instance?.Logger?.LogInfo($"[CharmPlacement] {message}");
+                PlacementLogger.LogInfo($"[CharmPlacement] {message}");
             }
             catch
             {
@@ -161,7 +166,7 @@ namespace LegacyoftheAbyss.Shade
 
             try
             {
-                LegacyHelper.Instance?.Logger?.LogWarning($"[CharmPlacement] {message}");
+                PlacementLogger.LogWarning($"[CharmPlacement] {message}");
             }
             catch
             {
