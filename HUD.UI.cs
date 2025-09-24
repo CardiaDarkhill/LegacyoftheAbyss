@@ -117,7 +117,25 @@ public partial class SimpleHUD
 
     private void RefreshHealth()
     {
-        if (maskImages == null) return;
+        HandleAssistVisibilityChange();
+
+        if (shadeAssistModeActive)
+        {
+            int total = Mathf.Max(0, shadeMax) + Mathf.Max(0, shadeLifebloodMax);
+            previousShadeTotalHealth = Mathf.Clamp(shadeHealth + shadeLifeblood, 0, total);
+            return;
+        }
+
+        if (pendingMaskRefresh && healthContainer != null)
+        {
+            RebuildMasks();
+        }
+
+        if (maskImages == null)
+        {
+            pendingMaskRefresh = true;
+            return;
+        }
 
         int normalMax = Mathf.Max(0, shadeMax);
         int lifebloodMax = Mathf.Max(0, shadeLifebloodMax);
@@ -271,12 +289,50 @@ public partial class SimpleHUD
         if (soulImage != null) soulImage.fillAmount = fill;
     }
 
+    private void HandleAssistVisibilityChange()
+    {
+        if (healthContainer == null)
+        {
+            return;
+        }
+
+        bool hasHealthToShow = (Mathf.Max(0, shadeMax) + Mathf.Max(0, shadeLifebloodMax)) > 0;
+        bool shouldShow = !shadeAssistModeActive && hasHealthToShow;
+        bool currentlyActive = healthContainer.activeSelf;
+        if (currentlyActive != shouldShow)
+        {
+            healthContainer.SetActive(shouldShow);
+            if (shouldShow)
+            {
+                pendingMaskRefresh = true;
+            }
+        }
+
+        if (overcharmBackdrop != null)
+        {
+            bool showOvercharm = shouldShow && shadeOvercharmed;
+            overcharmBackdrop.enabled = showOvercharm;
+            overcharmBackdrop.gameObject.SetActive(showOvercharm);
+        }
+    }
+
     private void RebuildMasks()
     {
-        if (healthContainer == null) return;
+        if (shadeAssistModeActive)
+        {
+            pendingMaskRefresh = true;
+            return;
+        }
+
+        if (healthContainer == null)
+        {
+            pendingMaskRefresh = true;
+            return;
+        }
         foreach (var img in maskImages ?? Array.Empty<Image>()) if (img != null) Destroy(img.gameObject);
         animatingMaskImages.Clear();
         BuildMasks(healthContainer.GetComponent<RectTransform>(), GetUIScale());
+        pendingMaskRefresh = false;
     }
 
     private void BuildMasks(RectTransform container, float uiScale)
@@ -351,6 +407,16 @@ public partial class SimpleHUD
 
     private void RefreshOvercharmBackdrop()
     {
+        if (shadeAssistModeActive)
+        {
+            if (overcharmBackdrop != null)
+            {
+                overcharmBackdrop.enabled = false;
+                overcharmBackdrop.gameObject.SetActive(false);
+            }
+            return;
+        }
+
         if (healthContainer == null)
             return;
 

@@ -282,11 +282,13 @@ namespace LegacyoftheAbyss.Shade
                     {
                         furyActive = false;
                         ctx.Controller?.SetConditionalNailDamageMultiplier(nameof(ShadeCharmId.FuryOfTheFallen), 1f);
+                        ctx.Controller?.SetFuryModeActive(false);
                     },
                     OnRemoved = ctx =>
                     {
                         furyActive = false;
                         ctx.Controller?.ClearConditionalNailDamageMultiplier(nameof(ShadeCharmId.FuryOfTheFallen));
+                        ctx.Controller?.SetFuryModeActive(false);
                     },
                     OnUpdate = (ctx, _) =>
                     {
@@ -301,6 +303,7 @@ namespace LegacyoftheAbyss.Shade
                         {
                             furyActive = shouldBoost;
                             controller.SetConditionalNailDamageMultiplier(nameof(ShadeCharmId.FuryOfTheFallen), shouldBoost ? 1.75f : 1f);
+                            controller.SetFuryModeActive(shouldBoost);
                         }
                     }
                 },

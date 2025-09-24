@@ -17,6 +17,7 @@ public partial class LegacyHelper
             shadeLifeblood = pendingRestoredLifeblood;
             shadeSoul = Mathf.Clamp(soul, 0, shadeSoulMax);
             canTakeDamage = canDamage;
+            assistModeEnabled = !canTakeDamage;
             lastSavedCanTakeDamage = canTakeDamage;
 
             if (baseShadeMaxHP <= 0)
@@ -148,6 +149,7 @@ public partial class LegacyHelper
                 }
 
                 hud.SetShadeStats(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax);
+                hud.SetShadeAssistMode(assistModeEnabled);
                 hud.SetShadeOvercharmed(ShadeRuntime.Charms?.IsOvercharmed ?? false);
             }
             catch

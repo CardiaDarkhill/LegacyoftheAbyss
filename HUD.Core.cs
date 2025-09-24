@@ -42,7 +42,9 @@ public partial class SimpleHUD : MonoBehaviour
     private int prevHornetMax;
     private bool hasExplicitShadeStats;
     private bool shadeOvercharmed;
+    private bool shadeAssistModeActive;
     private bool suppressNextDamageSound;
+    private bool pendingMaskRefresh;
 
     // UI containers
     private GameObject healthContainer;
@@ -294,9 +296,32 @@ public partial class SimpleHUD : MonoBehaviour
 
         if (maxChanged)
         {
-            RebuildMasks();
+            if (shadeAssistModeActive || healthContainer == null || maskImages == null)
+            {
+                pendingMaskRefresh = true;
+            }
+            else
+            {
+                RebuildMasks();
+                pendingMaskRefresh = false;
+            }
         }
 
+        HandleAssistVisibilityChange();
+        RefreshHealth();
+    }
+
+    public void SetShadeAssistMode(bool assistActive)
+    {
+        if (shadeAssistModeActive == assistActive)
+        {
+            return;
+        }
+
+        shadeAssistModeActive = assistActive;
+        pendingMaskRefresh |= !assistActive;
+        previousShadeTotalHealth = shadeHealth + shadeLifeblood;
+        HandleAssistVisibilityChange();
         RefreshHealth();
     }
 

@@ -140,6 +140,7 @@ public partial class LegacyHelper
         private const float SnapMinWhenNoRoom = 0.25f;
 
         private bool canTakeDamage = true;
+        private bool assistModeEnabled;
         private float sceneProtectionTimer;
         private bool sceneProtectionActive;
         private bool sceneProtectionDesiredDamageState = true;
@@ -165,6 +166,10 @@ public partial class LegacyHelper
         private float sprintDashCooldown = s_defaultCharmStats.SprintDashCooldown;
         private ParticleSystem activeDashPs;
         private Vector2 activeDashDir;
+
+        private GameObject furyAuraObject;
+        private ParticleSystem furyAuraPs;
+        private static Material s_furyAuraMat;
 
         // Inactive state (at 0 HP)
         private bool isInactive;

@@ -586,26 +586,34 @@ public partial class LegacyHelper
             if (hurtCooldown > 0f) hurtCooldown = Mathf.Max(0f, hurtCooldown - Time.deltaTime);
             if (ShadeInput.WasActionPressed(ShadeAction.AssistMode))
             {
+                assistModeEnabled = !assistModeEnabled;
+                bool desiredCanTakeDamage = !assistModeEnabled;
+
                 if (sceneProtectionActive)
                 {
-                    sceneProtectionDesiredDamageState = !sceneProtectionDesiredDamageState;
+                    sceneProtectionDesiredDamageState = desiredCanTakeDamage;
                     if (ModConfig.Instance.logShade)
                     {
-                        string assistState = sceneProtectionDesiredDamageState ? "disabled" : "enabled";
+                        string assistState = assistModeEnabled ? "enabled" : "disabled";
                         string suffix = sceneProtectionTimer > 0f ? " (will apply after spawn protection)" : string.Empty;
                         try { UnityEngine.Debug.Log($"[ShadeDebug] Assist Mode {assistState}{suffix}"); } catch { }
                     }
                 }
                 else
                 {
-                    canTakeDamage = !canTakeDamage;
+                    if (canTakeDamage != desiredCanTakeDamage)
+                    {
+                        canTakeDamage = desiredCanTakeDamage;
+                        PersistIfChanged();
+                    }
                     if (ModConfig.Instance.logShade)
                     {
-                        string assistState = canTakeDamage ? "disabled" : "enabled";
+                        string assistState = assistModeEnabled ? "enabled" : "disabled";
                         try { UnityEngine.Debug.Log($"[ShadeDebug] Assist Mode {assistState}"); } catch { }
                     }
-                    PersistIfChanged();
                 }
+
+                PushShadeStatsToHud(suppressDamageAudio: true);
             }
 
             if (sceneProtectionActive)
@@ -637,6 +645,7 @@ public partial class LegacyHelper
                         {
                             canTakeDamage = sceneProtectionDesiredDamageState;
                             PersistIfChanged();
+                            PushShadeStatsToHud(suppressDamageAudio: true);
                         }
                     }
                 }
@@ -1209,6 +1218,121 @@ public partial class LegacyHelper
                 Destroy(go, 1f);
             }
             catch { }
+        }
+
+        internal void SetFuryModeActive(bool active)
+        {
+            try
+            {
+                if (active)
+                {
+                    EnsureFuryAura();
+                    if (furyAuraPs)
+                    {
+                        if (!furyAuraPs.gameObject.activeSelf)
+                        {
+                            furyAuraPs.gameObject.SetActive(true);
+                        }
+
+                        var emission = furyAuraPs.emission;
+                        emission.enabled = true;
+                        if (!furyAuraPs.isPlaying)
+                        {
+                            furyAuraPs.Play();
+                        }
+                    }
+                }
+                else if (furyAuraPs)
+                {
+                    furyAuraPs.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                }
+            }
+            catch { }
+        }
+
+        private void EnsureFuryAura()
+        {
+            if (furyAuraPs)
+                return;
+
+            try
+            {
+                furyAuraObject = new GameObject("ShadeFuryAura");
+                furyAuraObject.transform.SetParent(transform, false);
+                furyAuraPs = furyAuraObject.AddComponent<ParticleSystem>();
+
+                var main = furyAuraPs.main;
+                main.loop = true;
+                main.playOnAwake = false;
+                main.startLifetime = new ParticleSystem.MinMaxCurve(0.45f, 0.7f);
+                main.startSpeed = new ParticleSystem.MinMaxCurve(0.1f, 0.4f);
+                main.startSize = new ParticleSystem.MinMaxCurve(0.18f, 0.32f);
+                main.startColor = new Color(0.55f, 0.05f, 0.08f, 0.85f);
+                main.simulationSpace = ParticleSystemSimulationSpace.Local;
+                main.maxParticles = 64;
+
+                var emission = furyAuraPs.emission;
+                emission.enabled = true;
+                emission.rateOverTime = new ParticleSystem.MinMaxCurve(12f, 16f);
+
+                var shape = furyAuraPs.shape;
+                shape.enabled = true;
+                shape.shapeType = ParticleSystemShapeType.Circle;
+                shape.radius = 0.45f;
+                shape.arcMode = ParticleSystemShapeMultiModeValue.Random;
+                shape.arcSpread = 1f;
+
+                var velocity = furyAuraPs.velocityOverLifetime;
+                velocity.enabled = true;
+                velocity.radial = 0.35f;
+                velocity.orbitalZ = 0.15f;
+
+                var color = furyAuraPs.colorOverLifetime;
+                color.enabled = true;
+                Gradient grad = new Gradient();
+                grad.SetKeys(
+                    new[]
+                    {
+                        new GradientColorKey(new Color(0.7f, 0.12f, 0.16f, 1f), 0f),
+                        new GradientColorKey(new Color(0.35f, 0f, 0f, 1f), 1f)
+                    },
+                    new[]
+                    {
+                        new GradientAlphaKey(0.85f, 0f),
+                        new GradientAlphaKey(0f, 1f)
+                    });
+                color.color = grad;
+
+                var size = furyAuraPs.sizeOverLifetime;
+                size.enabled = true;
+                size.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(
+                    new Keyframe(0f, 0.85f),
+                    new Keyframe(1f, 1.1f)));
+
+                var renderer = furyAuraPs.GetComponent<ParticleSystemRenderer>();
+                if (renderer)
+                {
+                    renderer.renderMode = ParticleSystemRenderMode.Billboard;
+                    if (s_furyAuraMat == null)
+                    {
+                        s_furyAuraMat = new Material(Shader.Find("Sprites/Default"));
+                        s_furyAuraMat.color = Color.white;
+                    }
+                    renderer.sharedMaterial = s_furyAuraMat;
+                    renderer.sharedMaterial.mainTexture = MakeDotSprite().texture;
+                    if (sr)
+                    {
+                        renderer.sortingLayerID = sr.sortingLayerID;
+                        renderer.sortingOrder = sr.sortingOrder - 1;
+                    }
+                }
+
+                furyAuraPs.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            }
+            catch
+            {
+                furyAuraPs = null;
+            }
         }
 
         private void TryPlayDashSfx()
@@ -2072,7 +2196,7 @@ public partial class LegacyHelper
             if (!sceneProtectionActive)
             {
                 sceneProtectionActive = true;
-                sceneProtectionDesiredDamageState = canTakeDamage;
+                sceneProtectionDesiredDamageState = !assistModeEnabled;
             }
 
             hazardCooldown = Mathf.Max(hazardCooldown, duration);
