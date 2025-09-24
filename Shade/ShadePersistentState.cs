@@ -64,6 +64,7 @@ namespace LegacyoftheAbyss.Shade
             int previousHp = CurrentHP;
             int previousLifebloodMax = LifebloodMax;
             int previousLifeblood = CurrentLifeblood;
+            int previousBaseMax = BaseMaxHP;
 
             int sanitizedMax = Mathf.Max(0, maxHp);
             int sanitizedBaseMax = Mathf.Max(0, baseMaxHp ?? sanitizedMax);
@@ -83,11 +84,15 @@ namespace LegacyoftheAbyss.Shade
                 invulnerableDrop = previousTotalHp >= 0 && sanitizedTotalHp < previousTotalHp;
             }
 
-            if (suspiciousDrop || invulnerableDrop)
+            bool baseChanged = baseMaxHp.HasValue && Mathf.Max(0, baseMaxHp.Value) != Mathf.Max(0, previousBaseMax);
+            bool lifebloodCapChanged = Mathf.Max(0, lifebloodMax) != Mathf.Max(0, previousLifebloodMax);
+            bool allowAuthoritativeDrop = baseChanged || lifebloodCapChanged;
+
+            if ((suspiciousDrop || invulnerableDrop) && !allowAuthoritativeDrop)
             {
                 sanitizedMax = previousMax;
                 sanitizedHp = Mathf.Clamp(Mathf.Max(previousHp, currentHp), 0, Mathf.Max(1, sanitizedMax));
-                sanitizedBaseMax = Mathf.Max(0, BaseMaxHP);
+                sanitizedBaseMax = Mathf.Max(0, previousBaseMax);
                 sanitizedLifebloodMax = previousLifebloodMax;
                 sanitizedLifeblood = Mathf.Clamp(Mathf.Max(previousLifeblood, lifebloodCurrent), 0, sanitizedLifebloodMax);
                 if (ModConfig.Instance.logShade)
@@ -97,7 +102,8 @@ namespace LegacyoftheAbyss.Shade
                         string reason = suspiciousDrop
                             ? "suspicious"
                             : "invulnerable";
-                        Debug.LogWarning($"[ShadePersistence] Ignored {reason} state capture (hp={currentHp}, max={maxHp}, lifeblood={lifebloodCurrent}, lifebloodMax={lifebloodMax}, prevHp={previousHp}, prevMax={previousMax}, prevLifeblood={previousLifeblood}, prevLifebloodMax={previousLifebloodMax}, invulnerable={!CanTakeDamage}).");
+                        string requestedBase = baseMaxHp.HasValue ? baseMaxHp.Value.ToString() : "null";
+                        Debug.LogWarning($"[ShadePersistence] Ignored {reason} state capture (hp={currentHp}, max={maxHp}, lifeblood={lifebloodCurrent}, lifebloodMax={lifebloodMax}, baseMax={requestedBase}, prevHp={previousHp}, prevMax={previousMax}, prevLifeblood={previousLifeblood}, prevLifebloodMax={previousLifebloodMax}, prevBaseMax={previousBaseMax}, invulnerable={!CanTakeDamage}).");
                     }
                     catch
                     {
