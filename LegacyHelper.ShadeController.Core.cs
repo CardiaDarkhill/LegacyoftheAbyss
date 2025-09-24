@@ -71,15 +71,17 @@ public partial class LegacyHelper
             // Add a dedicated pogo target with HitResponse so hero slashes can register even when OnlyDamageEnemies is true
             EnsurePogoTarget();
             bool hasSavedState = LegacyHelper.HasSavedShadeState;
+            int computedMax = -1;
             try
             {
                 var pd = GameManager.instance != null ? GameManager.instance.playerData : null;
                 if (pd != null)
                 {
-                    int computedMax = Mathf.Max(1, (pd.maxHealth + 1) / 2);
-                    if (!hasSavedState || computedMax > shadeMaxHP)
+                    int playerDerivedMax = Mathf.Max(1, (pd.maxHealth + 1) / 2);
+                    computedMax = playerDerivedMax;
+                    if (!hasSavedState || playerDerivedMax > shadeMaxHP)
                     {
-                        shadeMaxHP = computedMax;
+                        shadeMaxHP = playerDerivedMax;
                     }
                     if (!hasSavedState && shadeHP <= 0)
                     {

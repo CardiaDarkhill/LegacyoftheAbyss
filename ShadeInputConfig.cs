@@ -538,7 +538,7 @@ public static class ShadeInput
         try
         {
             var device = GetDeviceForOption(option);
-            if (device == null)
+            if (device == null || device == InputDevice.Null)
                 return false;
             control = device.GetControl(option.control);
             return control != null && control != InputControl.Null;
@@ -554,13 +554,14 @@ public static class ShadeInput
     {
         int index = GetEffectiveControllerIndex(option);
         if (index < 0)
-            return null;
+            return InputManager.ActiveDevice ?? InputDevice.Null;
         var devices = InputManager.Devices;
         if (devices == null || devices.Count == 0)
-            return null;
+            return InputManager.ActiveDevice ?? InputDevice.Null;
         if (index >= devices.Count)
             index = devices.Count - 1;
-        return devices[index];
+        var selected = devices[index];
+        return selected ?? InputDevice.Null;
     }
 
     private static int GetEffectiveControllerIndex(ShadeBindingOption option)
