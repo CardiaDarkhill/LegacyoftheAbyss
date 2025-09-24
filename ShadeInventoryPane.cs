@@ -5209,6 +5209,20 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 }
             }
 
+            try
+            {
+                Vector3 overlayLocal = root.InverseTransformPoint(worldPoint);
+                if (!float.IsNaN(overlayLocal.x) && !float.IsNaN(overlayLocal.y) &&
+                    !float.IsInfinity(overlayLocal.x) && !float.IsInfinity(overlayLocal.y))
+                {
+                    overlayPoint = new Vector2(overlayLocal.x, overlayLocal.y);
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
             if (TryProjectWorldPointToOverlay(root, worldPoint, rectCamera, overlayCamera, out var converted))
             {
                 overlayPoint = converted;
