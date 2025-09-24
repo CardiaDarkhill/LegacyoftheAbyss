@@ -151,7 +151,17 @@ public partial class LegacyHelper : BaseUnityPlugin
         try
         {
             var gm = GameManager.instance;
-            if (gm == null || gm.hero_ctrl == null) return;
+            if (gm == null)
+            {
+                return;
+            }
+
+            ShadeRuntime.SyncActiveSlot(gm);
+
+            if (gm.hero_ctrl == null)
+            {
+                return;
+            }
             Vector3 spawnPosAtControl = gm.hero_ctrl.transform.position;
             SpawnShadeAtPosition(spawnPosAtControl);
             ShadeCharmPlacer.PopulateScene(SceneManager.GetActiveScene().name, gm.hero_ctrl.transform);

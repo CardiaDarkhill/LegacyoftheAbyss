@@ -603,6 +603,19 @@ namespace LegacyoftheAbyss.Shade
         {
             try
             {
+                if (gameManager != null)
+                {
+                    if (gameManager.profileID > 0)
+                    {
+                        return NormalizeSlotIndex(gameManager.profileID);
+                    }
+
+                    if (gameManager.playerData != null && gameManager.playerData.profileID > 0)
+                    {
+                        return NormalizeSlotIndex(gameManager.playerData.profileID);
+                    }
+                }
+
                 const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
                 var type = gameManager.GetType();
 
@@ -616,7 +629,7 @@ namespace LegacyoftheAbyss.Shade
                     var value = field.GetValue(gameManager);
                     if (value is int intField)
                     {
-                        return Math.Max(0, intField);
+                        return NormalizeSlotIndex(intField);
                     }
                 }
 
@@ -630,7 +643,57 @@ namespace LegacyoftheAbyss.Shade
                     var propertyValue = property.GetValue(gameManager);
                     if (propertyValue is int intProperty)
                     {
-                        return Math.Max(0, intProperty);
+                        return NormalizeSlotIndex(intProperty);
+                    }
+                }
+
+                var playerDataMember = type.GetField("playerData", flags)
+                    ?? type.GetProperty("playerData", flags)
+                    ?? type.GetField("PlayerData", flags)
+                    ?? type.GetProperty("PlayerData", flags);
+
+                object playerData = null;
+                switch (playerDataMember)
+                {
+                    case FieldInfo playerDataField:
+                        playerData = playerDataField.GetValue(gameManager);
+                        break;
+                    case PropertyInfo playerDataProperty when playerDataProperty.GetIndexParameters().Length == 0:
+                        playerData = playerDataProperty.GetValue(gameManager);
+                        break;
+                }
+
+                if (playerData != null)
+                {
+                    var playerDataType = playerData.GetType();
+                    var profileField = playerDataType.GetField("profileID", flags)
+                        ?? playerDataType.GetField("profileId", flags)
+                        ?? playerDataType.GetField("ProfileID", flags)
+                        ?? playerDataType.GetField("ProfileId", flags);
+
+                    if (profileField != null && profileField.FieldType == typeof(int))
+                    {
+                        var profileValue = profileField.GetValue(playerData);
+                        if (profileValue is int playerDataFieldValue)
+                        {
+                            return NormalizeSlotIndex(playerDataFieldValue);
+                        }
+                    }
+
+                    var profileProperty = playerDataType.GetProperty("profileID", flags)
+                        ?? playerDataType.GetProperty("profileId", flags)
+                        ?? playerDataType.GetProperty("ProfileID", flags)
+                        ?? playerDataType.GetProperty("ProfileId", flags);
+
+                    if (profileProperty != null
+                        && profileProperty.PropertyType == typeof(int)
+                        && profileProperty.GetIndexParameters().Length == 0)
+                    {
+                        var profilePropertyValue = profileProperty.GetValue(playerData);
+                        if (profilePropertyValue is int playerDataPropertyValue)
+                        {
+                            return NormalizeSlotIndex(playerDataPropertyValue);
+                        }
                     }
                 }
             }
@@ -640,6 +703,16 @@ namespace LegacyoftheAbyss.Shade
             }
 
             return 0;
+        }
+
+        private static int NormalizeSlotIndex(int slot)
+        {
+            if (slot <= 0)
+            {
+                return 0;
+            }
+
+            return slot - 1;
         }
 
         private readonly struct CharmInventorySnapshot
