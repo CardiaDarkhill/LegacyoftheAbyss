@@ -296,15 +296,7 @@ public partial class SimpleHUD : MonoBehaviour
 
         if (maxChanged)
         {
-            if (shadeAssistModeActive || healthContainer == null || maskImages == null)
-            {
-                pendingMaskRefresh = true;
-            }
-            else
-            {
-                RebuildMasks();
-                pendingMaskRefresh = false;
-            }
+            pendingMaskRefresh = true;
         }
 
         HandleAssistVisibilityChange();

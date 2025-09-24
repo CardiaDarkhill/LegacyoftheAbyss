@@ -303,14 +303,23 @@ namespace LegacyoftheAbyss.Shade
 
         internal static void SetActiveSlot(int slot)
         {
-            DisableDebugUnlockIfActive();
-
             int clamped = s_saveSlots.MaxSlots > 0
                 ? Mathf.Clamp(slot, 0, s_saveSlots.MaxSlots - 1)
                 : 0;
 
-            s_activeSlot = clamped;
-            s_hasActiveSlot = true;
+            bool switching = !s_hasActiveSlot || s_activeSlot != clamped;
+            if (switching)
+            {
+                DisableDebugUnlockIfActive();
+                s_activeSlot = clamped;
+                s_hasActiveSlot = true;
+            }
+            else if (!s_hasActiveSlot)
+            {
+                s_activeSlot = clamped;
+                s_hasActiveSlot = true;
+            }
+
             s_saveSlots.GetOrCreateSlot(s_activeSlot);
             SyncInventoryFromActiveSlot();
             LegacyHelper.RequestShadeLoadoutRecompute();
@@ -524,7 +533,6 @@ namespace LegacyoftheAbyss.Shade
 
         private static void SyncInventoryFromActiveSlot()
         {
-            DisableDebugUnlockIfActive();
             EnsureActiveSlot();
 
             var owned = s_saveSlots.GetCollectedCharms(s_activeSlot);

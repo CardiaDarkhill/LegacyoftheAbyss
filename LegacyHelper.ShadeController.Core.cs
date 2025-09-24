@@ -1264,28 +1264,29 @@ public partial class LegacyHelper
                 var main = furyAuraPs.main;
                 main.loop = true;
                 main.playOnAwake = false;
-                main.startLifetime = new ParticleSystem.MinMaxCurve(0.45f, 0.7f);
-                main.startSpeed = new ParticleSystem.MinMaxCurve(0.1f, 0.4f);
-                main.startSize = new ParticleSystem.MinMaxCurve(0.18f, 0.32f);
-                main.startColor = new Color(0.55f, 0.05f, 0.08f, 0.85f);
+                main.startLifetime = new ParticleSystem.MinMaxCurve(0.55f, 0.95f);
+                main.startSpeed = new ParticleSystem.MinMaxCurve(0.45f, 1.35f);
+                main.startSize = new ParticleSystem.MinMaxCurve(0.22f, 0.38f);
+                main.startColor = new Color(0.95f, 0.12f, 0.16f, 0.95f);
                 main.simulationSpace = ParticleSystemSimulationSpace.Local;
-                main.maxParticles = 64;
+                main.maxParticles = 120;
 
                 var emission = furyAuraPs.emission;
                 emission.enabled = true;
-                emission.rateOverTime = new ParticleSystem.MinMaxCurve(12f, 16f);
+                emission.rateOverTime = new ParticleSystem.MinMaxCurve(28f, 36f);
 
                 var shape = furyAuraPs.shape;
                 shape.enabled = true;
                 shape.shapeType = ParticleSystemShapeType.Circle;
-                shape.radius = 0.45f;
+                shape.radius = 0.15f;
+                shape.radiusThickness = 0f;
                 shape.arcMode = ParticleSystemShapeMultiModeValue.Random;
                 shape.arcSpread = 1f;
 
                 var velocity = furyAuraPs.velocityOverLifetime;
                 velocity.enabled = true;
-                velocity.radial = 0.35f;
-                velocity.orbitalZ = 0.15f;
+                velocity.radial = new ParticleSystem.MinMaxCurve(1.1f, 1.8f);
+                velocity.orbitalZ = new ParticleSystem.MinMaxCurve(-0.35f, 0.35f);
 
                 var color = furyAuraPs.colorOverLifetime;
                 color.enabled = true;
@@ -1293,12 +1294,12 @@ public partial class LegacyHelper
                 grad.SetKeys(
                     new[]
                     {
-                        new GradientColorKey(new Color(0.7f, 0.12f, 0.16f, 1f), 0f),
-                        new GradientColorKey(new Color(0.35f, 0f, 0f, 1f), 1f)
+                        new GradientColorKey(new Color(1f, 0.2f, 0.22f, 1f), 0f),
+                        new GradientColorKey(new Color(0.36f, 0f, 0f, 1f), 1f)
                     },
                     new[]
                     {
-                        new GradientAlphaKey(0.85f, 0f),
+                        new GradientAlphaKey(0.95f, 0f),
                         new GradientAlphaKey(0f, 1f)
                     });
                 color.color = grad;
@@ -1306,8 +1307,9 @@ public partial class LegacyHelper
                 var size = furyAuraPs.sizeOverLifetime;
                 size.enabled = true;
                 size.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(
-                    new Keyframe(0f, 0.85f),
-                    new Keyframe(1f, 1.1f)));
+                    new Keyframe(0f, 0.75f),
+                    new Keyframe(0.5f, 1.05f),
+                    new Keyframe(1f, 1.25f)));
 
                 var renderer = furyAuraPs.GetComponent<ParticleSystemRenderer>();
                 if (renderer)
@@ -1315,7 +1317,15 @@ public partial class LegacyHelper
                     renderer.renderMode = ParticleSystemRenderMode.Billboard;
                     if (s_furyAuraMat == null)
                     {
-                        s_furyAuraMat = new Material(Shader.Find("Sprites/Default"));
+                        var shader = Shader.Find("Particles/Additive");
+                        if (!shader)
+                        {
+                            shader = Shader.Find("Sprites/Default");
+                        }
+
+                        s_furyAuraMat = shader != null
+                            ? new Material(shader)
+                            : new Material(Shader.Find("Sprites/Default"));
                         s_furyAuraMat.color = Color.white;
                     }
                     renderer.sharedMaterial = s_furyAuraMat;
