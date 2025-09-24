@@ -5115,7 +5115,25 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         if (relativeRoot != null && TryGetOverlayRelativePoint(relativeRoot, rect, out overlayPoint))
         {
-            return true;
+            if (relativeRoot == root)
+            {
+                return true;
+            }
+
+            try
+            {
+                Vector3 worldPoint = relativeRoot.TransformPoint(new Vector3(overlayPoint.x, overlayPoint.y, 0f));
+                Vector3 localPoint = root.InverseTransformPoint(worldPoint);
+                if (!float.IsNaN(localPoint.x) && !float.IsNaN(localPoint.y) &&
+                    !float.IsInfinity(localPoint.x) && !float.IsInfinity(localPoint.y))
+                {
+                    overlayPoint = new Vector2(localPoint.x, localPoint.y);
+                    return true;
+                }
+            }
+            catch
+            {
+            }
         }
 
         if (rect.transform.IsChildOf(root) && TryGetOverlayRelativePoint(root, rect, out overlayPoint))
