@@ -111,7 +111,7 @@ public partial class LegacyHelper
             UpdateFocusDerivedValues();
             UpdateTeleportChannelTime();
             UpdateHurtIFrameDuration();
-            ApplyCharmHealthModifiers();
+            ApplyCharmHealthModifiers(deferHudAndPersistence: true);
         }
 
         internal void GainShadeSoul(int amount)
@@ -351,7 +351,7 @@ public partial class LegacyHelper
             return Mathf.Clamp(baseAmount, 0, 12);
         }
 
-        private void ApplyCharmHealthModifiers(int fillAmount = 0, bool refillLifeblood = false)
+        private void ApplyCharmHealthModifiers(int fillAmount = 0, bool refillLifeblood = false, bool deferHudAndPersistence = false)
         {
             int normalMax = Mathf.Max(0, baseShadeMaxHP + charmMaxHpBonus);
             int lifebloodCapacity = Mathf.Clamp(charmLifebloodBonus, 0, 99);
@@ -389,8 +389,11 @@ public partial class LegacyHelper
                 && hivebloodPendingLifebloodRestore
                 && shadeLifeblood < shadeLifebloodMax;
 
-            PushShadeStatsToHud(suppressDamageAudio: true);
-            PersistIfChanged();
+            if (!deferHudAndPersistence)
+            {
+                PushShadeStatsToHud(suppressDamageAudio: true);
+                PersistIfChanged();
+            }
         }
 
         private bool ShouldRefillLifebloodImmediately()
