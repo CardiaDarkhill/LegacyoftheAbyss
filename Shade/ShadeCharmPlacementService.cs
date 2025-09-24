@@ -11,7 +11,7 @@ namespace LegacyoftheAbyss.Shade
     {
         private static readonly Dictionary<ShadeCharmPlacementKind, IShadeCharmPlacementHandler> Handlers = new();
         private static readonly List<IShadeCharmPlacementHandler> UniqueHandlers = new();
-        private static readonly ManualLogSource PlacementLogger = Logger.CreateLogSource("ShadeCharmPlacement");
+        private static readonly ManualLogSource PlacementLogger = BepInEx.Logging.Logger.CreateLogSource("ShadeCharmPlacement");
         private static bool s_initialized;
 
         internal static void RegisterHandler(IShadeCharmPlacementHandler handler, params ShadeCharmPlacementKind[] kinds)
