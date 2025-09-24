@@ -69,8 +69,8 @@ public partial class SimpleHUD : MonoBehaviour
     private const float MaskScale = 0.88f; // slightly shrink masks
     private const float OvercharmBackdropScale = 3.4f;
     private const float OvercharmBackdropRotation = 180f;
-    private const float OvercharmBackdropHorizontalOffsetFraction = 0.18f;
-    private const float OvercharmBackdropVerticalOffsetFraction = 0.55f;
+    private const float OvercharmBackdropHorizontalOffsetFraction = 3.2f;
+    private const float OvercharmBackdropVerticalOffsetFraction = 1.4f;
     private Vector2 overcharmMaskSize = Vector2.zero;
     private float overcharmMaskSpacing;
 
