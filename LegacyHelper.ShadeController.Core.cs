@@ -84,7 +84,7 @@ public partial class LegacyHelper
                     }
                     shadeHP = Mathf.Clamp(shadeHP, 0, shadeMaxHP);
                     shadeLifeblood = Mathf.Clamp(shadeLifeblood, 0, shadeLifebloodMax);
-                    PushShadeStatsToHud();
+                    PushShadeStatsToHud(suppressDamageAudio: true);
                 }
             }
             catch { }
@@ -204,7 +204,7 @@ public partial class LegacyHelper
                 if (shadeLifeblood != clamped)
                 {
                     shadeLifeblood = clamped;
-                    PushShadeStatsToHud();
+                    PushShadeStatsToHud(suppressDamageAudio: true);
                     PersistIfChanged();
                 }
                 pendingRestoredLifeblood = -1;
@@ -671,7 +671,7 @@ public partial class LegacyHelper
                             isInactive = false;
                             CancelDeathAnimation();
                         }
-                        PushShadeStatsToHud();
+                        PushShadeStatsToHud(suppressDamageAudio: true);
                         PersistIfChanged();
                     }
                 }
@@ -2491,7 +2491,7 @@ public partial class LegacyHelper
                             isInactive = false;
                             CancelDeathAnimation();
                         }
-                        PushShadeStatsToHud();
+                        PushShadeStatsToHud(suppressDamageAudio: true);
                     }
 
                     // Heal Hornet if close

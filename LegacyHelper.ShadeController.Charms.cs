@@ -45,7 +45,7 @@ public partial class LegacyHelper
             snapLeashRadius = Mathf.Max(hardLeashRadius, snapLeashRadius);
 
             PushSoulToHud();
-            PushShadeStatsToHud();
+            PushShadeStatsToHud(suppressDamageAudio: true);
         }
 
         internal void MultiplyNailDamage(float factor)
@@ -268,7 +268,7 @@ public partial class LegacyHelper
 
             shadeLifeblood += restored;
             hivebloodPendingLifebloodRestore = jonisBlessingEquipped && shadeLifeblood < shadeLifebloodMax && hivebloodPendingLifebloodRestore;
-            PushShadeStatsToHud();
+            PushShadeStatsToHud(suppressDamageAudio: true);
             PersistIfChanged();
             return true;
         }
@@ -389,7 +389,7 @@ public partial class LegacyHelper
                 && hivebloodPendingLifebloodRestore
                 && shadeLifeblood < shadeLifebloodMax;
 
-            PushShadeStatsToHud();
+            PushShadeStatsToHud(suppressDamageAudio: true);
             PersistIfChanged();
         }
 

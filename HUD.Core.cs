@@ -300,6 +300,11 @@ public partial class SimpleHUD : MonoBehaviour
         RefreshHealth();
     }
 
+    public void SuppressNextShadeDamageSfx()
+    {
+        suppressNextDamageSound = true;
+    }
+
     public void SetShadeOvercharmed(bool overcharmed)
     {
         if (shadeOvercharmed == overcharmed)

@@ -31,7 +31,7 @@ public partial class LegacyHelper
                 CancelDeathAnimation();
             }
             ShadeRuntime.HandleBenchRest();
-            PushShadeStatsToHud();
+            PushShadeStatsToHud(suppressDamageAudio: true);
         }
 
         public void ReviveToAtLeast(int hp, bool allowLifeblood = false)
@@ -51,7 +51,7 @@ public partial class LegacyHelper
                 isInactive = false;
                 CancelDeathAnimation();
             }
-            PushShadeStatsToHud();
+            PushShadeStatsToHud(suppressDamageAudio: true);
             PersistIfChanged();
         }
 
@@ -94,12 +94,16 @@ public partial class LegacyHelper
             }
         }
 
-        private void PushShadeStatsToHud()
+        private void PushShadeStatsToHud(bool suppressDamageAudio = false)
         {
             if (cachedHud)
             {
                 try
                 {
+                    if (suppressDamageAudio)
+                    {
+                        cachedHud.SuppressNextShadeDamageSfx();
+                    }
                     cachedHud.SetShadeStats(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax);
                     cachedHud.SetShadeOvercharmed(ShadeRuntime.Charms?.IsOvercharmed ?? false);
                 }
