@@ -22,7 +22,7 @@ public partial class SimpleHUD
                 var go = new GameObject("ShadeHUD_SFX");
                 go.transform.SetParent(this.transform, false);
                 sfxSource = go.AddComponent<AudioSource>();
-                sfxSource.playOnAwake = false; sfxSource.spatialBlend = 0f; sfxSource.volume = 1f;
+                sfxSource.playOnAwake = false; sfxSource.spatialBlend = 0f; sfxSource.volume = Mathf.Clamp01(LegacyHelper.GetEffectiveSfxVolume());
             }
             if (pinnedHurtSingle == null || pinnedHurtDouble == null)
             {
@@ -45,6 +45,8 @@ public partial class SimpleHUD
             AudioClip clip = (lost >= 2 && pinnedHurtDouble != null) ? pinnedHurtDouble : pinnedHurtSingle;
             if (clip != null)
             {
+                float volume = Mathf.Clamp01(LegacyHelper.GetEffectiveSfxVolume());
+                sfxSource.volume = volume;
                 sfxSource.PlayOneShot(clip);
                 return;
             }
@@ -62,7 +64,7 @@ public partial class SimpleHUD
                 var go = new GameObject("ShadeHUD_SFX");
                 go.transform.SetParent(this.transform, false);
                 sfxSource = go.AddComponent<AudioSource>();
-                sfxSource.playOnAwake = false; sfxSource.spatialBlend = 0f; sfxSource.volume = 1f;
+                sfxSource.playOnAwake = false; sfxSource.spatialBlend = 0f; sfxSource.volume = Mathf.Clamp01(LegacyHelper.GetEffectiveSfxVolume());
             }
             if (shadeHurtCandidates == null || shadeHurtCandidates.Count == 0)
             {
@@ -72,7 +74,12 @@ public partial class SimpleHUD
             if (shadeHurtCandidates != null && shadeHurtCandidates.Count > 0)
             {
                 var clip = shadeHurtCandidates[shadeHurtIdx % shadeHurtCandidates.Count]; shadeHurtIdx++;
-                if (clip != null) sfxSource.PlayOneShot(clip);
+                if (clip != null)
+                {
+                    float volume = Mathf.Clamp01(LegacyHelper.GetEffectiveSfxVolume());
+                    sfxSource.volume = volume;
+                    sfxSource.PlayOneShot(clip);
+                }
             }
         }
         catch { }

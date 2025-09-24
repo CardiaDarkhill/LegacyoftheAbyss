@@ -504,6 +504,27 @@ public partial class LegacyHelper
                 return;
             }
 
+            if (HornetIsDowned())
+            {
+                CancelFocus();
+                DestroyOtherSlashes(null);
+                isCastingSpell = false;
+                isChannelingTeleport = false;
+                teleportChannelTimer = 0f;
+                capturedMoveInput = Vector2.zero;
+                capturedHorizontalInput = 0f;
+                capturedSprintHeld = false;
+                if (rb) rb.linearVelocity = Vector2.zero;
+                lastMoveDelta = Vector2.zero;
+                knockbackVelocity = Vector2.zero;
+                knockbackTimer = 0f;
+                isSprinting = false;
+                sprintDashTimer = 0f;
+                inHardLeash = false;
+                hardLeashTimer = 0f;
+                return;
+            }
+
             if (hazardCooldown > 0f) hazardCooldown = Mathf.Max(0f, hazardCooldown - Time.deltaTime);
             if (hurtCooldown > 0f) hurtCooldown = Mathf.Max(0f, hurtCooldown - Time.deltaTime);
             if (ShadeInput.WasActionPressed(ShadeAction.AssistMode))
@@ -612,6 +633,7 @@ public partial class LegacyHelper
             SyncShadeLight();
             PersistIfChanged();
             CheckFocusReadySfx();
+            UpdateSfxVolumes();
             HandleAnimation();
 
             if (charmUpdateCallbacks.Count > 0)
@@ -630,6 +652,13 @@ public partial class LegacyHelper
         {
             if (hornetTransform == null) return;
             if (GameIsPaused())
+            {
+                if (rb)
+                    rb.linearVelocity = Vector2.zero;
+                lastMoveDelta = Vector2.zero;
+                return;
+            }
+            if (HornetIsDowned())
             {
                 if (rb)
                     rb.linearVelocity = Vector2.zero;
@@ -692,6 +721,25 @@ public partial class LegacyHelper
             {
                 return false;
             }
+        }
+
+        private static bool HornetIsDowned()
+        {
+            try
+            {
+                var hc = HeroController.instance;
+                if (hc != null)
+                {
+                    var state = hc.cState;
+                    if (state.dead || state.hazardDeath || state.hazardRespawning)
+                        return true;
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
         }
 
         private DynamicLeashLimits GetDynamicLeashLimits(Vector3 hornetWorld)
@@ -2310,6 +2358,12 @@ public partial class LegacyHelper
         private void StartDeathAnimation()
         {
             if (isDying) return;
+            CancelFocus();
+            StopFocusChargeSfx();
+            try { if (focusAuraRenderer) focusAuraRenderer.enabled = false; } catch { }
+            DestroyOtherSlashes(null);
+            isChannelingTeleport = false;
+            teleportChannelTimer = 0f;
             bool brokeCharm = ShadeRuntime.HandleShadeDeath();
             if (brokeCharm)
             {
@@ -2550,7 +2604,7 @@ public partial class LegacyHelper
                     focusSfx = go.AddComponent<AudioSource>();
                     focusSfx.playOnAwake = false;
                     focusSfx.spatialBlend = 0f; // 2D; set to small 3D if desired
-                    focusSfx.volume = 1f;
+                    focusSfx.volume = Mathf.Clamp01(GetEffectiveSfxVolume());
                 }
 
                 // Prefer HK1 SFX dropped into the mod Assets folder (wav)
@@ -2737,6 +2791,7 @@ public partial class LegacyHelper
                 {
                     focusSfx.loop = true;
                     focusSfx.clip = sfxFocusCharge;
+                    focusSfx.volume = Mathf.Clamp01(GetEffectiveSfxVolume());
                     focusSfx.Play();
                 }
             }
@@ -2763,7 +2818,7 @@ public partial class LegacyHelper
                 EnsureFocusSfx();
                 if (focusSfx != null && sfxFocusComplete != null)
                 {
-                    focusSfx.PlayOneShot(sfxFocusComplete);
+                    focusSfx.PlayOneShot(sfxFocusComplete, Mathf.Clamp01(GetEffectiveSfxVolume()));
                 }
             }
             catch { }
@@ -2778,11 +2833,18 @@ public partial class LegacyHelper
                 {
                     EnsureFocusSfx();
                     if (focusSfx != null && sfxFocusReady != null)
-                        focusSfx.PlayOneShot(sfxFocusReady);
+                        focusSfx.PlayOneShot(sfxFocusReady, Mathf.Clamp01(GetEffectiveSfxVolume()));
                 }
                 lastSoulForReady = shadeSoul;
             }
             catch { }
+        }
+
+        private void UpdateSfxVolumes()
+        {
+            float volume = Mathf.Clamp01(GetEffectiveSfxVolume());
+            try { if (focusSfx != null) focusSfx.volume = volume; } catch { }
+            try { if (spellSfx != null) spellSfx.volume = volume; } catch { }
         }
 
         // ========== Spell SFX (Projectile, Shriek, Quake) ==========
@@ -2806,7 +2868,7 @@ public partial class LegacyHelper
                     spellSfx = go.AddComponent<AudioSource>();
                     spellSfx.playOnAwake = false;
                     spellSfx.spatialBlend = 0f;
-                    spellSfx.volume = 1f;
+                    spellSfx.volume = Mathf.Clamp01(GetEffectiveSfxVolume());
                 }
                 if (sfxFireball == null) sfxFireball = TryLoadAudioFromAssets("hero_fireball.wav");
                 if (sfxQuakePrepare == null) sfxQuakePrepare = TryLoadAudioFromAssets("hero_quake_spell_prepare.wav");
@@ -2845,7 +2907,7 @@ public partial class LegacyHelper
             try
             {
                 EnsureSpellSfx();
-                if (spellSfx != null && sfxFireball != null) spellSfx.PlayOneShot(sfxFireball);
+                if (spellSfx != null && sfxFireball != null) spellSfx.PlayOneShot(sfxFireball, Mathf.Clamp01(GetEffectiveSfxVolume()));
             }
             catch { }
         }
@@ -2856,7 +2918,7 @@ public partial class LegacyHelper
             {
                 EnsureSpellSfx();
                 var clip = upgraded ? sfxVoidScream : sfxScream;
-                if (spellSfx != null && clip != null) spellSfx.PlayOneShot(clip);
+                if (spellSfx != null && clip != null) spellSfx.PlayOneShot(clip, Mathf.Clamp01(GetEffectiveSfxVolume()));
             }
             catch { }
         }
@@ -2866,7 +2928,7 @@ public partial class LegacyHelper
             try
             {
                 EnsureSpellSfx();
-                if (spellSfx != null && sfxQuakePrepare != null) spellSfx.PlayOneShot(sfxQuakePrepare);
+                if (spellSfx != null && sfxQuakePrepare != null) spellSfx.PlayOneShot(sfxQuakePrepare, Mathf.Clamp01(GetEffectiveSfxVolume()));
             }
             catch { }
         }
@@ -2877,7 +2939,7 @@ public partial class LegacyHelper
             {
                 EnsureSpellSfx();
                 var clip = upgraded ? sfxVoidQuakeImpact : sfxQuakeImpact;
-                if (spellSfx != null && clip != null) spellSfx.PlayOneShot(clip);
+                if (spellSfx != null && clip != null) spellSfx.PlayOneShot(clip, Mathf.Clamp01(GetEffectiveSfxVolume()));
             }
             catch { }
         }

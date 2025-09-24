@@ -336,7 +336,7 @@ public partial class LegacyHelper
                                 CheckHazardOverlap();
                                 if (prevSoul < focusSoulCost && shadeSoul >= focusSoulCost)
                                 {
-                                    try { EnsureFocusSfx(); if (focusSfx != null && sfxFocusReady != null) focusSfx.PlayOneShot(sfxFocusReady); } catch { }
+                                    try { EnsureFocusSfx(); if (focusSfx != null && sfxFocusReady != null) focusSfx.PlayOneShot(sfxFocusReady, Mathf.Clamp01(GetEffectiveSfxVolume())); } catch { }
                                 }
                             };
                             primaryDamager.DamagedEnemy += onDamaged;

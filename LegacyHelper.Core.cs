@@ -35,6 +35,29 @@ public partial class LegacyHelper : BaseUnityPlugin
         ShadeRuntime.NotifyHornetSpellUnlocked();
     }
 
+    internal static float GetEffectiveSfxVolume()
+    {
+        try
+        {
+            var gm = GameManager.instance;
+            if (gm != null)
+            {
+                var settings = gm.gameSettings;
+                if (settings != null)
+                {
+                    float master = Mathf.Clamp01(settings.masterVolume / 10f);
+                    float sound = Mathf.Clamp01(settings.soundVolume / 10f);
+                    return Mathf.Clamp01(master * sound);
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return 1f;
+    }
+
     private void Awake()
     {
         Instance = this;
