@@ -9,7 +9,7 @@ namespace LegacyoftheAbyss.Shade
     internal sealed class ShadeCharmInventory
     {
         private const int DefaultNotchCapacity = 3;
-        private const int OvercharmAttemptsRequired = 3;
+        private const int OvercharmAttemptsRequired = 4;
 
         private readonly List<ShadeCharmDefinition> _definitions;
         private readonly Dictionary<ShadeCharmId, ShadeCharmDefinition> _definitionMap;
@@ -761,9 +761,7 @@ namespace LegacyoftheAbyss.Shade
                         RestoreEquippedAtIndex(ShadeCharmId.Kingsoul, removedKingsoulIndex);
                     }
 
-                    message = remaining > 0
-                        ? $"Not enough notches. Force equip {remaining} more times to overcharm."
-                        : "Not enough notches available.";
+                    message = "Not enough notches available.";
                     return false;
                 }
 

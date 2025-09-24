@@ -131,8 +131,11 @@ public partial class SimpleHUD
             {
                 TryPlayPinnedHurtSfx(lost);
             }
+
             for (int i = cur; i < previousShadeHealth && i < maskImages.Length; i++)
-                StartCoroutine(LoseHealth(maskImages[i]));
+            {
+                StartCoroutine(LoseHealth(maskImages[i], shadeOvercharmed));
+            }
         }
         else if (suppressNextDamageSound)
         {
@@ -150,14 +153,15 @@ public partial class SimpleHUD
         previousShadeHealth = cur;
     }
 
-    private IEnumerator LoseHealth(Image img)
+    private IEnumerator LoseHealth(Image img, bool wasOvercharmed)
     {
         if (img == null) yield break;
-        Color filledColor = shadeOvercharmed ? overcharmMaskColor : Color.white;
+        Color filledColor = wasOvercharmed ? overcharmMaskColor : Color.white;
+        Color flickerColor = wasOvercharmed ? filledColor : Color.red;
         for (int i = 0; i < 2; i++)
         {
             img.color = filledColor; yield return new WaitForSeconds(0.05f);
-            img.color = Color.red; yield return new WaitForSeconds(0.05f);
+            img.color = flickerColor; yield return new WaitForSeconds(0.05f);
         }
         img.color = missingMaskColor;
     }
@@ -223,12 +227,13 @@ public partial class SimpleHUD
             go.transform.SetParent(container, false);
             overcharmBackdrop = go.AddComponent<Image>();
             overcharmBackdrop.raycastTarget = false;
+            overcharmBackdrop.preserveAspect = true;
         }
 
         if (overcharmBackdropSprite != null)
         {
             overcharmBackdrop.sprite = overcharmBackdropSprite;
-            overcharmBackdrop.color = Color.white;
+            overcharmBackdrop.color = overcharmBackdropSpriteColor;
         }
         else if (overcharmBackdrop.sprite == null)
         {
@@ -241,7 +246,8 @@ public partial class SimpleHUD
         }
 
         var rect = overcharmBackdrop.rectTransform;
-        rect.localScale = new Vector3(-1f, 1f, 1f);
+        rect.localScale = new Vector3(OvercharmBackdropScale, OvercharmBackdropScale, 1f);
+        rect.localRotation = Quaternion.Euler(0f, 0f, OvercharmBackdropRotation);
         overcharmBackdrop.transform.SetAsFirstSibling();
     }
 
@@ -254,24 +260,60 @@ public partial class SimpleHUD
         if (overcharmBackdrop == null)
             return;
 
-        if (shadeMax <= 0)
+        if (shadeMax <= 0 || maskImages == null || maskImages.Length == 0)
         {
             overcharmBackdrop.enabled = false;
             overcharmBackdrop.gameObject.SetActive(false);
             return;
         }
 
-        float width = overcharmMaskSize.x * shadeMax + Mathf.Max(0, shadeMax - 1) * overcharmMaskSpacing;
-        float height = overcharmMaskSize.y + Mathf.Max(0f, overcharmMaskSpacing * 0.5f);
+        Vector2 minBounds;
+        Vector2 maxBounds;
+        if (!TryCalculateMaskBounds(out minBounds, out maxBounds))
+        {
+            overcharmBackdrop.enabled = false;
+            overcharmBackdrop.gameObject.SetActive(false);
+            return;
+        }
+
+        float width = Mathf.Max(0f, maxBounds.x - minBounds.x);
+        float height = Mathf.Max(0f, maxBounds.y - minBounds.y);
+        if (width <= 0f || height <= 0f)
+        {
+            overcharmBackdrop.enabled = false;
+            overcharmBackdrop.gameObject.SetActive(false);
+            return;
+        }
+
         var rect = overcharmBackdrop.rectTransform;
         rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
         rect.pivot = new Vector2(1f, 1f);
-        rect.anchoredPosition = Vector2.zero;
         rect.sizeDelta = new Vector2(width, height);
+
+        float scale = OvercharmBackdropScale;
+        rect.localScale = new Vector3(scale, scale, 1f);
+        rect.localRotation = Quaternion.Euler(0f, 0f, OvercharmBackdropRotation);
+
+        float rightEdge = Mathf.Min(0f, maxBounds.x);
+        float topEdge = maxBounds.y;
+
+        float horizontalOffset = width * OvercharmBackdropHorizontalOffsetFraction;
+        if (horizontalOffset <= 0f && overcharmMaskSize.x > 0f)
+        {
+            horizontalOffset = overcharmMaskSize.x * 0.55f;
+        }
+
+        float verticalOffset = height * OvercharmBackdropVerticalOffsetFraction;
+        if (verticalOffset <= 0f && overcharmMaskSize.y > 0f)
+        {
+            verticalOffset = overcharmMaskSize.y * 0.65f;
+        }
+
+        rect.anchoredPosition = new Vector2(rightEdge - horizontalOffset, topEdge - verticalOffset);
         if (overcharmBackdropSprite != null)
         {
             overcharmBackdrop.sprite = overcharmBackdropSprite;
-            overcharmBackdrop.color = Color.white;
+            overcharmBackdrop.color = overcharmBackdropSpriteColor;
         }
         else if (overcharmBackdrop.sprite == null)
         {
@@ -283,10 +325,66 @@ public partial class SimpleHUD
             overcharmBackdrop.color = overcharmBackdropColor;
         }
 
-        rect.localScale = new Vector3(-1f, 1f, 1f);
         overcharmBackdrop.enabled = shadeOvercharmed;
         overcharmBackdrop.gameObject.SetActive(shadeOvercharmed);
         overcharmBackdrop.transform.SetAsFirstSibling();
+    }
+
+    private bool TryCalculateMaskBounds(out Vector2 min, out Vector2 max)
+    {
+        min = Vector2.zero;
+        max = Vector2.zero;
+
+        if (maskImages == null || maskImages.Length == 0)
+        {
+            return false;
+        }
+
+        bool hasMask = false;
+        foreach (var image in maskImages)
+        {
+            if (image == null)
+            {
+                continue;
+            }
+
+            var rect = image.rectTransform;
+            if (rect == null)
+            {
+                continue;
+            }
+
+            Vector2 anchored = rect.anchoredPosition;
+            Vector2 size = rect.rect.size;
+            Vector2 pivot = rect.pivot;
+
+            float left = anchored.x - size.x * pivot.x;
+            float right = anchored.x + size.x * (1f - pivot.x);
+            float bottom = anchored.y - size.y * pivot.y;
+            float top = anchored.y + size.y * (1f - pivot.y);
+
+            var currentMin = new Vector2(left, bottom);
+            var currentMax = new Vector2(right, top);
+
+            if (!hasMask)
+            {
+                min = currentMin;
+                max = currentMax;
+                hasMask = true;
+            }
+            else
+            {
+                min = new Vector2(Mathf.Min(min.x, currentMin.x), Mathf.Min(min.y, currentMin.y));
+                max = new Vector2(Mathf.Max(max.x, currentMax.x), Mathf.Max(max.y, currentMax.y));
+            }
+        }
+
+        if (!hasMask)
+        {
+            return false;
+        }
+
+        return true;
     }
 }
 

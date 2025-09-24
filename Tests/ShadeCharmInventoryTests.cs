@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using LegacyoftheAbyss.Shade;
 using Xunit;
 
@@ -18,8 +19,11 @@ public class ShadeCharmInventoryTests
         Assert.Equal(inventory.OvercharmAttemptThreshold, inventory.RemainingOvercharmAttempts);
 
         Assert.False(inventory.TryEquip(ShadeCharmId.SoulCatcher, out var firstAttempt));
-        Assert.Contains("Not enough notches", firstAttempt);
+        Assert.Contains("resists", firstAttempt, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(inventory.OvercharmAttemptThreshold - 1, inventory.RemainingOvercharmAttempts);
+
+        Assert.False(inventory.TryEquip(ShadeCharmId.SoulCatcher, out _));
+        Assert.Equal(inventory.OvercharmAttemptThreshold - 2, inventory.RemainingOvercharmAttempts);
 
         Assert.False(inventory.TryEquip(ShadeCharmId.SoulCatcher, out _));
         Assert.Equal(1, inventory.RemainingOvercharmAttempts);
@@ -42,10 +46,24 @@ public class ShadeCharmInventoryTests
         inventory.TryEquip(ShadeCharmId.SoulCatcher, out _);
         inventory.TryEquip(ShadeCharmId.SoulCatcher, out _);
         inventory.TryEquip(ShadeCharmId.SoulCatcher, out _);
+        inventory.TryEquip(ShadeCharmId.SoulCatcher, out _);
 
         Assert.True(inventory.IsOvercharmed);
         Assert.True(inventory.TryUnequip(ShadeCharmId.SoulCatcher, out _));
         Assert.False(inventory.IsOvercharmed);
         Assert.Equal(inventory.OvercharmAttemptThreshold, inventory.RemainingOvercharmAttempts);
+    }
+
+    [Fact]
+    public void CannotEquipWhenNoNotchesRemain()
+    {
+        var inventory = new ShadeCharmInventory();
+        inventory.NotchCapacity = 0;
+        inventory.GrantCharm(ShadeCharmId.WaywardCompass);
+
+        Assert.False(inventory.TryEquip(ShadeCharmId.WaywardCompass, out var message));
+        Assert.Contains("notch", message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(inventory.IsEquipped(ShadeCharmId.WaywardCompass));
+        Assert.Equal(0, inventory.UsedNotches);
     }
 }
