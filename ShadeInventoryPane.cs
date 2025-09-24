@@ -5093,6 +5093,48 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
     }
 
+    private bool TryProjectWorldPointToOverlay(
+        RectTransform root,
+        Vector3 worldPoint,
+        Camera? sourceCamera,
+        Camera? overlayCamera,
+        out Vector2 overlayPoint)
+    {
+        overlayPoint = Vector2.zero;
+
+        try
+        {
+            Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(sourceCamera, worldPoint);
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(root, screenPoint, overlayCamera, out var localPoint) &&
+                !float.IsNaN(localPoint.x) && !float.IsNaN(localPoint.y) &&
+                !float.IsInfinity(localPoint.x) && !float.IsInfinity(localPoint.y))
+            {
+                overlayPoint = localPoint;
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            Vector3 local = root.InverseTransformPoint(worldPoint);
+            if (!float.IsNaN(local.x) && !float.IsNaN(local.y) &&
+                !float.IsInfinity(local.x) && !float.IsInfinity(local.y))
+            {
+                overlayPoint = new Vector2(local.x, local.y);
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        overlayPoint = Vector2.zero;
+        return false;
+    }
+
     private bool TryGetOverlayPosition(RectTransform rect, out Vector2 overlayPoint)
     {
         overlayPoint = Vector2.zero;
@@ -5111,52 +5153,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
         if (IsUnityObjectAlive(panelRoot) && rect.transform.IsChildOf(panelRoot))
         {
             relativeRoot = panelRoot;
-        }
-
-        if (relativeRoot != null && TryGetOverlayRelativePoint(relativeRoot, rect, out overlayPoint))
-        {
-            if (relativeRoot == root)
-            {
-                return true;
-            }
-
-            try
-            {
-                Vector3 worldPoint = relativeRoot.TransformPoint(new Vector3(overlayPoint.x, overlayPoint.y, 0f));
-                Vector3 localPoint = root.InverseTransformPoint(worldPoint);
-                if (!float.IsNaN(localPoint.x) && !float.IsNaN(localPoint.y) &&
-                    !float.IsInfinity(localPoint.x) && !float.IsInfinity(localPoint.y))
-                {
-                    overlayPoint = new Vector2(localPoint.x, localPoint.y);
-                    return true;
-                }
-            }
-            catch
-            {
-            }
-        }
-
-        if (rect.transform.IsChildOf(root) && TryGetOverlayRelativePoint(root, rect, out overlayPoint))
-        {
-            return true;
-        }
-
-        Vector3 worldCenter;
-        try
-        {
-            rect.GetWorldCorners(overlayWorldCorners);
-            worldCenter = (overlayWorldCorners[0] + overlayWorldCorners[2]) * 0.5f;
-        }
-        catch
-        {
-            try
-            {
-                worldCenter = rect.TransformPoint(rect.rect.center);
-            }
-            catch
-            {
-                worldCenter = rect.position;
-            }
         }
 
         Canvas? rectCanvas = null;
@@ -5189,36 +5185,69 @@ internal sealed class ShadeInventoryPane : InventoryPane
             }
         }
 
-        try
+        if (relativeRoot != null && TryGetOverlayRelativePoint(relativeRoot, rect, out overlayPoint))
         {
-            Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(rectCamera, worldCenter);
-            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(root, screenPoint, overlayCamera, out var localPoint))
+            if (relativeRoot == root)
             {
-                overlayPoint = localPoint;
+                return true;
+            }
+
+            Vector3 worldPoint;
+            try
+            {
+                worldPoint = relativeRoot.TransformPoint(new Vector3(overlayPoint.x, overlayPoint.y, 0f));
+            }
+            catch
+            {
+                try
+                {
+                    worldPoint = rect.TransformPoint(rect.rect.center);
+                }
+                catch
+                {
+                    worldPoint = rect.position;
+                }
+            }
+
+            if (TryProjectWorldPointToOverlay(root, worldPoint, rectCamera, overlayCamera, out var converted))
+            {
+                overlayPoint = converted;
                 return true;
             }
         }
-        catch
+
+        if (rect.transform.IsChildOf(root) && TryGetOverlayRelativePoint(root, rect, out overlayPoint))
         {
+            return true;
         }
 
+        Vector3 worldCenter;
         try
         {
-            Vector3 local = root.InverseTransformPoint(worldCenter);
-            if (!float.IsNaN(local.x) && !float.IsNaN(local.y) &&
-                !float.IsInfinity(local.x) && !float.IsInfinity(local.y))
-            {
-                overlayPoint = new Vector2(local.x, local.y);
-                return true;
-            }
+            rect.GetWorldCorners(overlayWorldCorners);
+            worldCenter = (overlayWorldCorners[0] + overlayWorldCorners[2]) * 0.5f;
         }
         catch
-        {
-        }
-
-        if (rect.transform.IsChildOf(root))
         {
             try
+            {
+                worldCenter = rect.TransformPoint(rect.rect.center);
+            }
+            catch
+            {
+                worldCenter = rect.position;
+            }
+        }
+
+        if (TryProjectWorldPointToOverlay(root, worldCenter, rectCamera, overlayCamera, out var projected))
+        {
+            overlayPoint = projected;
+            return true;
+        }
+
+        try
+        {
+            if (rect.transform.IsChildOf(root))
             {
                 Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(root, rect);
                 Vector3 center = bounds.center;
@@ -5229,9 +5258,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
                     return true;
                 }
             }
-            catch
-            {
-            }
+        }
+        catch
+        {
         }
 
         overlayPoint = Vector2.zero;

@@ -13,8 +13,8 @@ public partial class SimpleHUD : MonoBehaviour
     private Sprite maskSprite;
     private readonly Color missingMaskColor = new Color(0.2f, 0.2f, 0.2f, 0.45f);
     private readonly Color overcharmMaskColor = Color.white;
-    private readonly Color overcharmBackdropColor = new Color(0.85f, 0.25f, 0.25f, 0.24f);
-    private readonly Color overcharmBackdropSpriteColor = new Color(1f, 1f, 1f, 0.7f);
+    private readonly Color overcharmBackdropColor = new Color(0.85f, 0.25f, 0.25f, 0.192f);
+    private readonly Color overcharmBackdropSpriteColor = new Color(1f, 1f, 1f, 0.56f);
 
     // Soul orb state
     private Sprite soulOrbSprite;
