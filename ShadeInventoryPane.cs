@@ -311,11 +311,14 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private Color notchLabelDefaultTmpColor = Color.white;
     private readonly List<GameObject> activeCharmFlights = new List<GameObject>();
     private readonly HashSet<Image> animatingEquippedIcons = new HashSet<Image>();
-    private Coroutine? activeOvercharmAttemptRoutine;
-    private Coroutine? activeCharmShakeRoutine;
+    private readonly List<OverlayAnimation> overlayAnimations = new List<OverlayAnimation>();
+    private readonly HashSet<OverlayAnimation> overcharmAnimations = new HashSet<OverlayAnimation>();
+    private ActiveShakeAnimation? activeShakeAnimation;
     private readonly Dictionary<RectTransform, Vector2> shakeBasePositions = new Dictionary<RectTransform, Vector2>();
     private readonly HashSet<Image> animatingSourceIcons = new HashSet<Image>();
     private GameObject? activeOvercharmFlight;
+    private bool overlayAnimationTimeInitialized;
+    private float lastOverlayAnimationTime;
     private static Sprite? notchLitSprite;
     private static Sprite? notchUnlitSprite;
     private static bool notchSpritesSearched;
@@ -385,6 +388,138 @@ internal sealed class ShadeInventoryPane : InventoryPane
         public Vector4 Margin;
         public bool RichText;
         public List<ShadowStyle>? Shadows;
+    }
+
+    private enum OverlayAnimationEase
+    {
+        Linear,
+        EaseIn,
+        EaseOut
+    }
+
+    private sealed class OverlayAnimation
+    {
+        public RectTransform? Rect;
+        public Vector2 Start;
+        public Vector2 End;
+        public float StartScale;
+        public float EndScale;
+        public float Duration;
+        public float Elapsed;
+        public OverlayAnimationEase Ease;
+        public Action? OnCompleted;
+        public Action? OnCancelled;
+
+        public bool Update(float deltaTime)
+        {
+            if (Rect == null)
+            {
+                Complete();
+                return true;
+            }
+
+            Elapsed += deltaTime;
+            float progress = Duration <= 0f ? 1f : Mathf.Clamp01(Elapsed / Mathf.Max(Duration, Mathf.Epsilon));
+            float eased = EvaluateEase(progress);
+            Rect.anchoredPosition = Vector2.LerpUnclamped(Start, End, eased);
+            float scale = Mathf.Lerp(StartScale, EndScale, eased);
+            Rect.localScale = new Vector3(scale, scale, 1f);
+
+            if (Elapsed >= Duration)
+            {
+                Complete();
+                return true;
+            }
+
+            return false;
+        }
+
+        public void Cancel()
+        {
+            if (Rect != null)
+            {
+                Rect.anchoredPosition = End;
+                Rect.localScale = new Vector3(EndScale, EndScale, 1f);
+            }
+
+            OnCancelled?.Invoke();
+            OnCancelled = null;
+            OnCompleted = null;
+        }
+
+        private void Complete()
+        {
+            if (Rect != null)
+            {
+                Rect.anchoredPosition = End;
+                Rect.localScale = new Vector3(EndScale, EndScale, 1f);
+            }
+
+            OnCompleted?.Invoke();
+            OnCompleted = null;
+            OnCancelled = null;
+        }
+
+        private float EvaluateEase(float t)
+        {
+            switch (Ease)
+            {
+                case OverlayAnimationEase.EaseIn:
+                    return ShadeInventoryPane.EaseInCubic(t);
+                case OverlayAnimationEase.EaseOut:
+                    return ShadeInventoryPane.EaseOutCubic(t);
+                default:
+                    return Mathf.Clamp01(t);
+            }
+        }
+    }
+
+    private sealed class ActiveShakeAnimation
+    {
+        public float Amplitude;
+        public float Duration;
+        public float Elapsed;
+        public Action? OnCompleted;
+        public Action? OnCancelled;
+
+        public bool Update(float deltaTime, ShadeInventoryPane owner)
+        {
+            Elapsed += deltaTime;
+            float normalized = Duration <= 0f ? 1f : Mathf.Clamp01(Elapsed / Mathf.Max(Duration, Mathf.Epsilon));
+            float damp = 1f - Mathf.Pow(normalized, 2f);
+
+            foreach (var kvp in owner.shakeBasePositions)
+            {
+                var rect = kvp.Key;
+                if (rect == null)
+                {
+                    continue;
+                }
+
+                Vector2 basePos = kvp.Value;
+                Vector2 offset = UnityEngine.Random.insideUnitCircle * Amplitude * damp;
+                rect.anchoredPosition = basePos + offset;
+            }
+
+            if (Elapsed >= Duration)
+            {
+                owner.RestoreShakeTargets();
+                OnCompleted?.Invoke();
+                OnCompleted = null;
+                OnCancelled = null;
+                return true;
+            }
+
+            return false;
+        }
+
+        public void Cancel(ShadeInventoryPane owner)
+        {
+            owner.RestoreShakeTargets();
+            OnCancelled?.Invoke();
+            OnCancelled = null;
+            OnCompleted = null;
+        }
     }
 
     private static void SetTextValue(Text? text, TMP_Text? tmp, string value)
@@ -4553,35 +4688,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return;
         }
 
-        if (activeOvercharmAttemptRoutine != null)
-        {
-            StopCoroutine(activeOvercharmAttemptRoutine);
-            activeOvercharmAttemptRoutine = null;
-        }
-
-        if (activeCharmShakeRoutine != null)
-        {
-            StopCoroutine(activeCharmShakeRoutine);
-            activeCharmShakeRoutine = null;
-            RestoreShakeTargets();
-        }
-
-        if (activeOvercharmFlight != null)
-        {
-            activeCharmFlights.Remove(activeOvercharmFlight);
-            Destroy(activeOvercharmFlight);
-            activeOvercharmFlight = null;
-        }
-
-        foreach (var icon in animatingSourceIcons.ToArray())
-        {
-            if (icon != null)
-            {
-                icon.enabled = icon.sprite != null;
-            }
-        }
-
-        animatingSourceIcons.Clear();
+        StopActiveOvercharmAttempt();
 
         if (!TryGetOverlayPosition(sourceRect, out var start))
         {
@@ -4609,6 +4716,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         rect.anchorMin = new Vector2(0.5f, 0.5f);
         rect.anchorMax = new Vector2(0.5f, 0.5f);
         rect.pivot = new Vector2(0.5f, 0.5f);
+
         Vector2 size = sourceRect.rect.size;
         if (size.sqrMagnitude <= 0.01f)
         {
@@ -4627,146 +4735,103 @@ internal sealed class ShadeInventoryPane : InventoryPane
         activeCharmFlights.Add(flight);
         activeOvercharmFlight = flight;
 
-        if (animatingSourceIcons.Add(entry.Icon))
+        var sourceIcon = entry.Icon;
+        if (sourceIcon != null && animatingSourceIcons.Add(sourceIcon))
         {
-            entry.Icon.enabled = false;
+            sourceIcon.enabled = false;
         }
 
-        activeOvercharmAttemptRoutine = StartCoroutine(AnimateOvercharmAttempt(rect, start, end, entry.Icon, flight, attemptIndex, attemptThreshold));
-    }
-
-    private IEnumerator AnimateOvercharmAttempt(
-        RectTransform rect,
-        Vector2 start,
-        Vector2 end,
-        Image sourceIcon,
-        GameObject flightObject,
-        int attemptIndex,
-        int attemptThreshold)
-    {
-        try
+        bool cleanupInvoked = false;
+        void Cleanup()
         {
-            yield return AnimateSimpleFlight(rect, start, end, 0.35f, 1f, 0.85f, true);
-
-            float normalized = attemptThreshold > 0 ? Mathf.Clamp01((float)attemptIndex / attemptThreshold) : 1f;
-            float amplitude = ComputeShakeAmplitude(attemptIndex, attemptThreshold);
-            float duration = Mathf.Lerp(0.25f, 0.5f, normalized);
-            if (amplitude > 0f && duration > 0f)
+            if (cleanupInvoked)
             {
-                if (activeCharmShakeRoutine != null)
-                {
-                    StopCoroutine(activeCharmShakeRoutine);
-                    activeCharmShakeRoutine = null;
-                    RestoreShakeTargets();
-                }
-
-                activeCharmShakeRoutine = StartCoroutine(ShakeCharmIconsCoroutine(amplitude, duration));
-                if (activeCharmShakeRoutine != null)
-                {
-                    yield return activeCharmShakeRoutine;
-                }
+                return;
             }
 
-            yield return AnimateSimpleFlight(rect, end, start, 0.28f, 0.85f, 1.05f, false);
+            cleanupInvoked = true;
 
-            if (rect != null)
-            {
-                rect.anchoredPosition = start;
-                rect.localScale = Vector3.one;
-            }
-        }
-        finally
-        {
             if (sourceIcon != null)
             {
                 animatingSourceIcons.Remove(sourceIcon);
                 sourceIcon.enabled = sourceIcon.sprite != null;
             }
 
-            if (flightObject != null)
+            if (ReferenceEquals(activeOvercharmFlight, flight))
             {
-                if (ReferenceEquals(activeOvercharmFlight, flightObject))
+                activeOvercharmFlight = null;
+            }
+
+            if (flight != null)
+            {
+                activeCharmFlights.Remove(flight);
+                Destroy(flight);
+            }
+        }
+
+        void StartReturnFlight()
+        {
+            OverlayAnimation? inbound = null;
+            inbound = RegisterOverlayAnimation(
+                rect,
+                end,
+                start,
+                0.28f,
+                0.85f,
+                1.05f,
+                OverlayAnimationEase.EaseIn,
+                () =>
                 {
-                    activeOvercharmFlight = null;
-                }
-                activeCharmFlights.Remove(flightObject);
-                Destroy(flightObject);
-            }
-
-            activeOvercharmAttemptRoutine = null;
-        }
-    }
-
-    private IEnumerator AnimateSimpleFlight(RectTransform rect, Vector2 start, Vector2 end, float duration, float startScale, float endScale, bool easeOut)
-    {
-        if (rect == null)
-        {
-            yield break;
-        }
-
-        float elapsed = 0f;
-        while (elapsed < duration)
-        {
-            if (rect == null)
-            {
-                yield break;
-            }
-
-            elapsed += Time.unscaledDeltaTime;
-            float t = Mathf.Clamp01(elapsed / duration);
-            float eased = easeOut ? EaseOutCubic(t) : EaseInCubic(t);
-            rect.anchoredPosition = Vector2.LerpUnclamped(start, end, eased);
-            float scale = Mathf.Lerp(startScale, endScale, eased);
-            rect.localScale = new Vector3(scale, scale, 1f);
-            yield return null;
-        }
-
-        if (rect != null)
-        {
-            rect.anchoredPosition = end;
-            rect.localScale = new Vector3(endScale, endScale, 1f);
-        }
-    }
-
-    private IEnumerator ShakeCharmIconsCoroutine(float amplitude, float duration)
-    {
-        if (amplitude <= 0f || duration <= 0f)
-        {
-            activeCharmShakeRoutine = null;
-            yield break;
-        }
-
-        CaptureShakeTargets();
-
-        try
-        {
-            float elapsed = 0f;
-            while (elapsed < duration)
-            {
-                elapsed += Time.unscaledDeltaTime;
-                float t = Mathf.Clamp01(elapsed / duration);
-                float damp = 1f - Mathf.Pow(t, 2f);
-
-                foreach (var kvp in shakeBasePositions)
+                    overcharmAnimations.Remove(inbound!);
+                    Cleanup();
+                },
+                () =>
                 {
-                    var shakeRect = kvp.Key;
-                    if (shakeRect == null)
-                    {
-                        continue;
-                    }
+                    overcharmAnimations.Remove(inbound!);
+                    Cleanup();
+                });
 
-                    Vector2 basePos = kvp.Value;
-                    Vector2 offset = UnityEngine.Random.insideUnitCircle * amplitude * damp;
-                    shakeRect.anchoredPosition = basePos + offset;
-                }
-
-                yield return null;
+            if (inbound != null)
+            {
+                overcharmAnimations.Add(inbound);
             }
         }
-        finally
+
+        OverlayAnimation? outbound = null;
+        outbound = RegisterOverlayAnimation(
+            rect,
+            start,
+            end,
+            0.35f,
+            1f,
+            0.85f,
+            OverlayAnimationEase.EaseOut,
+            () =>
+            {
+                overcharmAnimations.Remove(outbound!);
+
+                float normalized = attemptThreshold > 0 ? Mathf.Clamp01((float)attemptIndex / attemptThreshold) : 1f;
+                float amplitude = ComputeShakeAmplitude(attemptIndex, attemptThreshold);
+                float duration = Mathf.Lerp(0.25f, 0.5f, normalized);
+
+                if (amplitude > 0f && duration > 0f)
+                {
+                    StartShakeAnimation(amplitude, duration, StartReturnFlight);
+                }
+                else
+                {
+                    StartReturnFlight();
+                }
+            },
+            () =>
+            {
+                overcharmAnimations.Remove(outbound!);
+                Cleanup();
+            });
+
+        if (outbound != null)
         {
-            RestoreShakeTargets();
-            activeCharmShakeRoutine = null;
+            overcharmAnimations.Add(outbound);
         }
     }
 
@@ -4922,65 +4987,184 @@ internal sealed class ShadeInventoryPane : InventoryPane
         image.color = overcharmed ? OvercharmedEquippedIconColor : Color.white;
 
         activeCharmFlights.Add(flight);
-        StartCoroutine(AnimateCharmFlight(rect, start, end, flight, destinationIcon));
-    }
 
-    private IEnumerator AnimateCharmFlight(RectTransform rect, Vector2 start, Vector2 end, GameObject flightObject, Image destinationIcon)
-    {
-        float duration = 0.35f;
-        float elapsed = 0f;
-        try
+        bool cleanupInvoked = false;
+        void CleanupFlight()
         {
-            while (elapsed < duration)
+            if (cleanupInvoked)
             {
-                if (rect == null)
-                {
-                    yield break;
-                }
-
-                elapsed += Time.unscaledDeltaTime;
-                float t = Mathf.Clamp01(elapsed / duration);
-                float eased = EaseOutCubic(t);
-                rect.anchoredPosition = Vector2.LerpUnclamped(start, end, eased);
-                float scale = Mathf.Lerp(1f, 0.8f, t);
-                rect.localScale = new Vector3(scale, scale, 1f);
-                yield return null;
+                return;
             }
 
-            if (rect != null)
-            {
-                rect.anchoredPosition = end;
-                rect.localScale = new Vector3(0.8f, 0.8f, 1f);
-            }
-        }
-        finally
-        {
+            cleanupInvoked = true;
             CompleteEquippedIconAnimation(destinationIcon);
 
-            if (flightObject != null)
+            if (flight != null)
             {
-                activeCharmFlights.Remove(flightObject);
-                Destroy(flightObject);
+                activeCharmFlights.Remove(flight);
+                Destroy(flight);
             }
         }
+
+        RegisterOverlayAnimation(
+            rect,
+            start,
+            end,
+            0.35f,
+            1f,
+            0.8f,
+            OverlayAnimationEase.EaseOut,
+            () =>
+            {
+                CleanupFlight();
+            },
+            () =>
+            {
+                CleanupFlight();
+            });
+    }
+
+    private OverlayAnimation RegisterOverlayAnimation(
+        RectTransform rect,
+        Vector2 start,
+        Vector2 end,
+        float duration,
+        float startScale,
+        float endScale,
+        OverlayAnimationEase ease,
+        Action? onCompleted,
+        Action? onCancelled)
+    {
+        var animation = new OverlayAnimation
+        {
+            Rect = rect,
+            Start = start,
+            End = end,
+            StartScale = startScale,
+            EndScale = endScale,
+            Duration = Mathf.Max(0f, duration),
+            Ease = ease,
+            OnCompleted = onCompleted,
+            OnCancelled = onCancelled,
+            Elapsed = 0f
+        };
+
+        overlayAnimations.Add(animation);
+        overlayAnimationTimeInitialized = false;
+        return animation;
+    }
+
+    private void CancelOverlayAnimation(OverlayAnimation animation)
+    {
+        if (animation == null)
+        {
+            return;
+        }
+
+        animation.Cancel();
+        overlayAnimations.Remove(animation);
+        overcharmAnimations.Remove(animation);
+    }
+
+    private void CancelOvercharmAnimations()
+    {
+        if (overcharmAnimations.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var animation in overcharmAnimations.ToArray())
+        {
+            if (animation != null)
+            {
+                CancelOverlayAnimation(animation);
+            }
+        }
+
+        overcharmAnimations.Clear();
+    }
+
+    private void CancelActiveShake()
+    {
+        if (activeShakeAnimation == null)
+        {
+            return;
+        }
+
+        activeShakeAnimation.Cancel(this);
+        activeShakeAnimation = null;
+    }
+
+    private void StartShakeAnimation(float amplitude, float duration, Action? onCompleted)
+    {
+        CancelActiveShake();
+
+        if (amplitude <= 0f || duration <= 0f)
+        {
+            onCompleted?.Invoke();
+            return;
+        }
+
+        CaptureShakeTargets();
+
+        activeShakeAnimation = new ActiveShakeAnimation
+        {
+            Amplitude = amplitude,
+            Duration = Mathf.Max(0f, duration),
+            Elapsed = 0f,
+            OnCompleted = () =>
+            {
+                activeShakeAnimation = null;
+                onCompleted?.Invoke();
+            },
+            OnCancelled = () =>
+            {
+                activeShakeAnimation = null;
+            }
+        };
+
+        overlayAnimationTimeInitialized = false;
+    }
+
+    private void StopActiveOvercharmAttempt()
+    {
+        CancelOvercharmAnimations();
+        CancelActiveShake();
+
+        if (activeOvercharmFlight != null)
+        {
+            activeCharmFlights.Remove(activeOvercharmFlight);
+            Destroy(activeOvercharmFlight);
+            activeOvercharmFlight = null;
+        }
+
+        foreach (var icon in animatingSourceIcons.ToArray())
+        {
+            if (icon != null)
+            {
+                icon.enabled = icon.sprite != null;
+            }
+        }
+
+        animatingSourceIcons.Clear();
     }
 
     private void ClearActiveCharmFlights()
     {
         ResetAnimatingEquippedIcons();
-        if (activeOvercharmAttemptRoutine != null)
-        {
-            StopCoroutine(activeOvercharmAttemptRoutine);
-            activeOvercharmAttemptRoutine = null;
-        }
+        CancelOvercharmAnimations();
+        CancelActiveShake();
 
-        if (activeCharmShakeRoutine != null)
+        for (int i = overlayAnimations.Count - 1; i >= 0; i--)
         {
-            StopCoroutine(activeCharmShakeRoutine);
-            activeCharmShakeRoutine = null;
+            var animation = overlayAnimations[i];
+            if (animation != null)
+            {
+                animation.Cancel();
+            }
         }
-
-        RestoreShakeTargets();
+        overlayAnimations.Clear();
+        overcharmAnimations.Clear();
 
         for (int i = activeCharmFlights.Count - 1; i >= 0; i--)
         {
@@ -5002,6 +5186,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         animatingSourceIcons.Clear();
         activeOvercharmFlight = null;
+        overlayAnimationTimeInitialized = false;
+        RestoreShakeTargets();
     }
 
     private void BeginEquippedIconAnimation(Image destinationIcon)
@@ -6449,6 +6635,64 @@ internal sealed class ShadeInventoryPane : InventoryPane
         shadeHeldDirectionSource = DirectionalInputSource.None;
         shadeDirectionRepeatTimer = 0f;
         lastShadeInputFrame = -1;
+    }
+
+    private void Update()
+    {
+        bool hasAnimations = overlayAnimations.Count > 0 || activeShakeAnimation != null;
+        if (!hasAnimations)
+        {
+            overlayAnimationTimeInitialized = false;
+            return;
+        }
+
+        float currentTime = Time.realtimeSinceStartup;
+        float deltaTime;
+
+        if (!overlayAnimationTimeInitialized)
+        {
+            overlayAnimationTimeInitialized = true;
+            lastOverlayAnimationTime = currentTime;
+            deltaTime = Time.unscaledDeltaTime;
+        }
+        else
+        {
+            deltaTime = Mathf.Max(0f, currentTime - lastOverlayAnimationTime);
+            lastOverlayAnimationTime = currentTime;
+        }
+
+        if (deltaTime <= 0f)
+        {
+            float fallback = Time.unscaledDeltaTime;
+            deltaTime = fallback > 0f ? fallback : 0.016f;
+        }
+
+        if (overlayAnimations.Count > 0)
+        {
+            for (int i = overlayAnimations.Count - 1; i >= 0; i--)
+            {
+                var animation = overlayAnimations[i];
+                if (animation == null)
+                {
+                    overlayAnimations.RemoveAt(i);
+                    continue;
+                }
+
+                if (animation.Update(deltaTime))
+                {
+                    overlayAnimations.RemoveAt(i);
+                    overcharmAnimations.Remove(animation);
+                }
+            }
+        }
+
+        if (activeShakeAnimation != null)
+        {
+            if (activeShakeAnimation.Update(deltaTime, this))
+            {
+                activeShakeAnimation = null;
+            }
+        }
     }
 
     private void LateUpdate()
