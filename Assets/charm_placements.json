@@ -8,6 +8,20 @@
       "notes": "Hornet debug location drop"
     },
     {
+      "sceneName": "Tut_01",
+      "placementKind": "Ground",
+      "charmId": "FuryOfTheFallen",
+      "worldPosition": { "x": 82.005, "y": 9.568, "z": 0.004 },
+      "notes": "Requested Fury of the Fallen placement"
+    },
+    {
+      "sceneName": "Bonetown",
+      "placementKind": "Ground",
+      "charmId": "WaywardCompass",
+      "worldPosition": { "x": 301.342, "y": 24.568, "z": 0.004 },
+      "notes": "Requested Wayward Compass placement"
+    },
+    {
       "sceneContainsAll": ["bone", "bottom"],
       "placementKind": "GroundAnchor",
       "charmId": "Grubsong",
@@ -72,12 +86,6 @@
       "placementKind": "GroundAnchor",
       "charmId": "ShapeOfUnn",
       "anchorOffset": { "x": 1.5, "y": 0.9, "z": 0.0 }
-    },
-    {
-      "sceneContainsAll": ["moss", "grotto"],
-      "placementKind": "GroundAnchor",
-      "charmId": "FuryOfTheFallen",
-      "anchorOffset": { "x": -1.9, "y": 1.4, "z": 0.0 }
     },
     {
       "sceneContainsAll": ["moss", "grotto"],
