@@ -795,6 +795,7 @@ public partial class LegacyHelper
         private const int ControllerRightBindingId = 8;
         private const int KeyboardCancelBindingId = 9;
         private const int ControllerInventoryBindingId = 10;
+        private const int KeyboardConfirmBindingId = 11;
 
         private static InputHandler handler;
         private static bool subscribed;
@@ -844,12 +845,7 @@ public partial class LegacyHelper
                 return;
             }
 
-            PrunePlaceholderBindings(actions.Up);
-            PrunePlaceholderBindings(actions.Down);
-            PrunePlaceholderBindings(actions.Left);
-            PrunePlaceholderBindings(actions.Right);
-            PrunePlaceholderBindings(actions.MenuCancel);
-            PrunePlaceholderBindings(actions.OpenInventory);
+            RemoveSavedPlaceholders(actions);
 
             AddBinding(actions.Up, new ShadeKeyboardMovementBinding(KeyboardUpBindingId, ShadeAction.MoveUp));
             AddBinding(actions.Down, new ShadeKeyboardMovementBinding(KeyboardDownBindingId, ShadeAction.MoveDown));
@@ -863,6 +859,7 @@ public partial class LegacyHelper
 
             AddBinding(actions.MenuCancel, new ShadeKeyboardBackBinding(KeyboardCancelBindingId));
             AddBinding(actions.OpenInventory, new ShadeControllerInventoryBinding(ControllerInventoryBindingId));
+            AddBinding(actions.MenuSubmit, new ShadeKeyboardConfirmBinding(KeyboardConfirmBindingId));
         }
 
         private static void AddBinding(PlayerAction action, ShadeMenuBindingSourceBase binding)
@@ -911,6 +908,27 @@ public partial class LegacyHelper
             catch
             {
             }
+        }
+
+        internal static void RemoveSavedPlaceholders(HeroActions actions)
+        {
+            if (actions == null)
+            {
+                return;
+            }
+
+            PrunePlaceholderBindings(actions.Up);
+            PrunePlaceholderBindings(actions.Down);
+            PrunePlaceholderBindings(actions.Left);
+            PrunePlaceholderBindings(actions.Right);
+            PrunePlaceholderBindings(actions.MenuCancel);
+            PrunePlaceholderBindings(actions.OpenInventory);
+            PrunePlaceholderBindings(actions.MenuSubmit);
+        }
+
+        internal static bool IsShadePlaceholderBinding(BindingSource binding)
+        {
+            return IsPlaceholderBinding(binding);
         }
 
         private static bool IsPlaceholderBinding(BindingSource binding)
@@ -1427,6 +1445,163 @@ public partial class LegacyHelper
             protected override InputDeviceClass SourceClass => InputDeviceClass.Keyboard;
             protected override string SourceName => "Shade Controller Back";
             protected override string SourceDeviceName => "Shade Controller";
+        }
+
+        private sealed class ShadeKeyboardConfirmBinding : ShadeMenuBindingSourceBase
+        {
+            public ShadeKeyboardConfirmBinding(int id) : base(id)
+            {
+            }
+
+            protected override float ComputeValue()
+            {
+                return ShadeInput.GetActionValue(ShadeAction.Fire, ShadeBindingOptionType.Key);
+            }
+
+            protected override bool ShouldActivate()
+            {
+                return IsMenuActive() && HornetControllerBindingsEnabled();
+            }
+
+            protected override BindingSourceType SourceType => BindingSourceType.DeviceBindingSource;
+            protected override InputDeviceClass SourceClass => InputDeviceClass.Controller;
+            protected override string SourceName => "Shade Confirm Keyboard";
+            protected override string SourceDeviceName => "Shade Keyboard";
+        }
+    }
+
+    [HarmonyPatch(typeof(InputHandler), nameof(InputHandler.GetButtonBindingForAction))]
+    private class InputHandler_GetButtonBindingForAction_MenuInputBridge
+    {
+        private static void Postfix(PlayerAction action, ref InputControlType __result)
+        {
+            if (__result != InputControlType.None)
+                return;
+
+            try
+            {
+                if (action == null)
+                    return;
+
+                foreach (var binding in action.Bindings)
+                {
+                    if (binding is DeviceBindingSource deviceBinding)
+                    {
+                        if (MenuInputBridge.IsShadePlaceholderBinding(binding))
+                            continue;
+
+                        if (deviceBinding.Control != InputControlType.None)
+                        {
+                            __result = deviceBinding.Control;
+                            return;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(InputHandler), "GetKeyBindingForActionBinding")]
+    private class InputHandler_GetKeyBindingForActionBinding_MenuInputBridge
+    {
+        private static bool Prefix(PlayerAction action, BindingSource bindingSource, ref InputHandler.KeyOrMouseBinding __result)
+        {
+            try
+            {
+                if (MenuInputBridge.IsShadePlaceholderBinding(bindingSource))
+                {
+                    __result = new InputHandler.KeyOrMouseBinding(InControl.Key.None);
+                    return false;
+                }
+            }
+            catch
+            {
+            }
+
+            return true;
+        }
+    }
+
+    [HarmonyPatch(typeof(InputHandler), nameof(InputHandler.GetKeyBindingForAction))]
+    private class InputHandler_GetKeyBindingForAction_MenuInputBridge
+    {
+        private static void Postfix(InputHandler __instance, PlayerAction action, ref InputHandler.KeyOrMouseBinding __result)
+        {
+            try
+            {
+                if (!InputHandler.KeyOrMouseBinding.IsNone(__result))
+                    return;
+
+                if (__instance == null || action == null)
+                    return;
+
+                var actions = __instance.inputActions;
+                if (actions == null || !actions.Actions.Contains(action))
+                    return;
+
+                foreach (var binding in action.Bindings)
+                {
+                    if (MenuInputBridge.IsShadePlaceholderBinding(binding))
+                        continue;
+
+                    if (binding is KeyBindingSource keyBinding)
+                    {
+                        var combo = keyBinding.Control;
+                        if (combo.IncludeCount == 0)
+                            continue;
+
+                        if (combo.IncludeCount == 1)
+                        {
+                            __result = new InputHandler.KeyOrMouseBinding(combo.GetInclude(0));
+                            return;
+                        }
+
+                        continue;
+                    }
+
+                    if (binding is MouseBindingSource mouseBinding)
+                    {
+                        __result = new InputHandler.KeyOrMouseBinding(mouseBinding.Control);
+                        return;
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(InputHandler), nameof(InputHandler.SendKeyBindingsToGameSettings))]
+    private class InputHandler_SendKeyBindingsToGameSettings_MenuInputBridge
+    {
+        private static void Prefix(InputHandler __instance)
+        {
+            try
+            {
+                MenuInputBridge.RemoveSavedPlaceholders(__instance?.inputActions);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(InputHandler), nameof(InputHandler.SendButtonBindingsToGameSettings))]
+    private class InputHandler_SendButtonBindingsToGameSettings_MenuInputBridge
+    {
+        private static void Prefix(InputHandler __instance)
+        {
+            try
+            {
+                MenuInputBridge.RemoveSavedPlaceholders(__instance?.inputActions);
+            }
+            catch
+            {
+            }
         }
     }
 
