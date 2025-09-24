@@ -1,10 +1,11 @@
 {
   "placements": [
     {
-      "sceneContainsAll": ["bone", "bottom"],
-      "placementKind": "GroundAnchor",
+      "sceneName": "Tut_04",
+      "placementKind": "Ground",
       "charmId": "SoulEater",
-      "anchorOffset": { "x": 2.2, "y": 0.6, "z": 0.0 }
+      "worldPosition": { "x": 74.772, "y": 8.587, "z": 0.004 },
+      "notes": "Hornet debug location drop"
     },
     {
       "sceneContainsAll": ["bone", "bottom"],
