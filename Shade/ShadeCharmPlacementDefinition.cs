@@ -1,7 +1,7 @@
 #nullable enable
 
 using System;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
 using UnityEngine;
 
 namespace LegacyoftheAbyss.Shade
@@ -17,49 +17,49 @@ namespace LegacyoftheAbyss.Shade
 
     internal sealed class ShadeCharmPlacementDefinition
     {
-        [JsonPropertyName("charmId")]
+        [JsonProperty("charmId")]
         public ShadeCharmId CharmId { get; init; }
 
-        [JsonPropertyName("sceneName")]
+        [JsonProperty("sceneName")]
         public string? SceneName { get; init; }
 
-        [JsonPropertyName("sceneContainsAll")]
+        [JsonProperty("sceneContainsAll")]
         public string[]? SceneContainsAll { get; init; }
 
-        [JsonPropertyName("sceneExcludesAny")]
+        [JsonProperty("sceneExcludesAny")]
         public string[]? SceneExcludesAny { get; init; }
 
-        [JsonPropertyName("placementKind")]
+        [JsonProperty("placementKind")]
         public ShadeCharmPlacementKind PlacementKind { get; init; }
 
-        [JsonPropertyName("anchorPath")]
+        [JsonProperty("anchorPath")]
         public string? AnchorPath { get; init; }
 
-        [JsonPropertyName("anchorOffset")]
+        [JsonProperty("anchorOffset")]
         public ShadeCharmPlacementVector3? AnchorOffset { get; init; }
 
-        [JsonPropertyName("worldPosition")]
+        [JsonProperty("worldPosition")]
         public ShadeCharmPlacementVector3? WorldPosition { get; init; }
 
-        [JsonPropertyName("worldRotationEuler")]
+        [JsonProperty("worldRotationEuler")]
         public ShadeCharmPlacementVector3? WorldRotationEuler { get; init; }
 
-        [JsonPropertyName("playerDataBool")]
+        [JsonProperty("playerDataBool")]
         public string? PlayerDataBool { get; init; }
 
-        [JsonPropertyName("flingPickup")]
+        [JsonProperty("flingPickup")]
         public bool? FlingPickup { get; init; }
 
-        [JsonPropertyName("container")]
+        [JsonProperty("container")]
         public ShadeCharmPlacementContainerData? Container { get; init; }
 
-        [JsonPropertyName("shop")]
+        [JsonProperty("shop")]
         public ShadeCharmPlacementShopData? Shop { get; init; }
 
-        [JsonPropertyName("bossDrop")]
+        [JsonProperty("bossDrop")]
         public ShadeCharmPlacementBossDropData? BossDrop { get; init; }
 
-        [JsonPropertyName("notes")]
+        [JsonProperty("notes")]
         public string? Notes { get; init; }
 
         internal bool MatchesScene(string? sceneName)
@@ -120,64 +120,64 @@ namespace LegacyoftheAbyss.Shade
 
     internal sealed class ShadeCharmPlacementContainerData
     {
-        [JsonPropertyName("targetPath")]
+        [JsonProperty("targetPath")]
         public string? TargetPath { get; init; }
 
-        [JsonPropertyName("targetName")]
+        [JsonProperty("targetName")]
         public string? TargetName { get; init; }
 
-        [JsonPropertyName("replaceExistingItem")]
+        [JsonProperty("replaceExistingItem")]
         public bool? ReplaceExistingItem { get; init; }
     }
 
     internal sealed class ShadeCharmPlacementShopData
     {
-        [JsonPropertyName("ownerPath")]
+        [JsonProperty("ownerPath")]
         public string? OwnerPath { get; init; }
 
-        [JsonPropertyName("ownerName")]
+        [JsonProperty("ownerName")]
         public string? OwnerName { get; init; }
 
-        [JsonPropertyName("geoCost")]
+        [JsonProperty("geoCost")]
         public int? GeoCost { get; init; }
 
-        [JsonPropertyName("delayPurchase")]
+        [JsonProperty("delayPurchase")]
         public bool? DelayPurchase { get; init; }
 
-        [JsonPropertyName("closeOnPurchase")]
+        [JsonProperty("closeOnPurchase")]
         public bool? CloseOnPurchase { get; init; }
     }
 
     internal sealed class ShadeCharmPlacementBossDropData
     {
-        [JsonPropertyName("enemyName")]
+        [JsonProperty("enemyName")]
         public string? EnemyName { get; init; }
 
-        [JsonPropertyName("enemyNameContainsAll")]
+        [JsonProperty("enemyNameContainsAll")]
         public string[]? EnemyNameContainsAll { get; init; }
 
-        [JsonPropertyName("targetPath")]
+        [JsonProperty("targetPath")]
         public string? TargetPath { get; init; }
 
-        [JsonPropertyName("spawnPointPath")]
+        [JsonProperty("spawnPointPath")]
         public string? SpawnPointPath { get; init; }
 
-        [JsonPropertyName("clearExistingDrops")]
+        [JsonProperty("clearExistingDrops")]
         public bool? ClearExistingDrops { get; init; }
 
-        [JsonPropertyName("probability")]
+        [JsonProperty("probability")]
         public float? Probability { get; init; }
     }
 
     internal sealed class ShadeCharmPlacementVector3
     {
-        [JsonPropertyName("x")]
+        [JsonProperty("x")]
         public float X { get; init; }
 
-        [JsonPropertyName("y")]
+        [JsonProperty("y")]
         public float Y { get; init; }
 
-        [JsonPropertyName("z")]
+        [JsonProperty("z")]
         public float Z { get; init; }
 
         internal Vector3 ToVector3()

@@ -4,14 +4,14 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace LegacyoftheAbyss.Shade
 {
     internal static class ShadeCharmPlacementDatabase
     {
-        private static readonly JsonSerializerOptions JsonOptions;
+        private static readonly JsonSerializerSettings JsonSettings;
         private static readonly object ReloadLock = new();
 
         private static ShadeCharmPlacementDefinition[] s_allPlacements = Array.Empty<ShadeCharmPlacementDefinition>();
@@ -22,14 +22,13 @@ namespace LegacyoftheAbyss.Shade
 
         static ShadeCharmPlacementDatabase()
         {
-            JsonOptions = new JsonSerializerOptions
+            JsonSettings = new JsonSerializerSettings
             {
-                PropertyNameCaseInsensitive = true,
-                ReadCommentHandling = JsonCommentHandling.Skip,
-                AllowTrailingCommas = true
+                MissingMemberHandling = MissingMemberHandling.Ignore,
+                NullValueHandling = NullValueHandling.Ignore
             };
-            JsonOptions.Converters.Add(new JsonStringEnumIgnoreCaseConverter<ShadeCharmPlacementKind>());
-            JsonOptions.Converters.Add(new JsonStringEnumIgnoreCaseConverter<ShadeCharmId>());
+            JsonSettings.Converters.Add(new StringEnumIgnoreCaseConverter<ShadeCharmPlacementKind>());
+            JsonSettings.Converters.Add(new StringEnumIgnoreCaseConverter<ShadeCharmId>());
         }
 
         internal static void EnsureLoaded()
@@ -64,7 +63,7 @@ namespace LegacyoftheAbyss.Shade
                         }
                         else
                         {
-                            var file = JsonSerializer.Deserialize<ShadeCharmPlacementFile>(json, JsonOptions);
+                            var file = Deserialize(json);
                             placements = file?.Placements?.Where(p => p != null).ToList() ?? new List<ShadeCharmPlacementDefinition>();
                         }
                     }
@@ -161,31 +160,79 @@ namespace LegacyoftheAbyss.Shade
             return s_sourcePath;
         }
 
+        private static ShadeCharmPlacementFile? Deserialize(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return null;
+            }
+
+            try
+            {
+                var serializer = JsonSerializer.Create(JsonSettings);
+                using var reader = new JsonTextReader(new StringReader(json))
+                {
+                    DateParseHandling = DateParseHandling.None,
+                    FloatParseHandling = FloatParseHandling.Double,
+                    CloseInput = true
+                };
+                reader.CommentHandling = CommentHandling.Ignore;
+                var file = serializer.Deserialize<ShadeCharmPlacementFile>(reader);
+                return file;
+            }
+            catch (JsonException)
+            {
+                var token = JToken.Parse(json, new JsonLoadSettings
+                {
+                    CommentHandling = CommentHandling.Ignore
+                });
+                return token.ToObject<ShadeCharmPlacementFile>(JsonSerializer.Create(JsonSettings));
+            }
+        }
+
         private sealed class ShadeCharmPlacementFile
         {
-            [JsonPropertyName("placements")]
+            [JsonProperty("placements")]
             public List<ShadeCharmPlacementDefinition>? Placements { get; init; }
         }
 
-        private sealed class JsonStringEnumIgnoreCaseConverter<T> : JsonConverter<T> where T : struct, Enum
+        private sealed class StringEnumIgnoreCaseConverter<TEnum> : JsonConverter where TEnum : struct, Enum
         {
-            public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            public override bool CanConvert(Type objectType)
             {
-                if (reader.TokenType == JsonTokenType.String)
+                Type targetType = Nullable.GetUnderlyingType(objectType) ?? objectType;
+                return targetType == typeof(TEnum);
+            }
+
+            public override object? ReadJson(JsonReader reader, Type objectType, object? existingValue, JsonSerializer serializer)
+            {
+                if (reader.TokenType == JsonToken.Null)
                 {
-                    string? value = reader.GetString();
-                    if (!string.IsNullOrWhiteSpace(value) && Enum.TryParse(value, true, out T result))
+                    return Nullable.GetUnderlyingType(objectType) != null ? null : default(TEnum);
+                }
+
+                if (reader.TokenType == JsonToken.String)
+                {
+                    string? value = reader.Value?.ToString();
+                    if (!string.IsNullOrWhiteSpace(value) && Enum.TryParse(value, true, out TEnum result))
                     {
                         return result;
                     }
                 }
 
-                throw new JsonException($"Unable to convert value to {typeof(T).Name}.");
+                throw new JsonSerializationException($"Unable to convert value to {typeof(TEnum).Name}.");
             }
 
-            public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
+            public override void WriteJson(JsonWriter writer, object? value, JsonSerializer serializer)
             {
-                writer.WriteStringValue(value.ToString());
+                if (value is TEnum enumValue)
+                {
+                    writer.WriteValue(enumValue.ToString());
+                }
+                else
+                {
+                    writer.WriteNull();
+                }
             }
         }
     }
