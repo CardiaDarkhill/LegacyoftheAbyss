@@ -599,21 +599,23 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
-        private static int TryGetProfileId(GameManager gameManager)
+        private static int TryGetProfileId(GameManager? gameManager)
         {
             try
             {
-                if (gameManager != null)
+                if (gameManager == null)
                 {
-                    if (gameManager.profileID > 0)
-                    {
-                        return NormalizeSlotIndex(gameManager.profileID);
-                    }
+                    return s_hasActiveSlot ? s_activeSlot : 0;
+                }
 
-                    if (gameManager.playerData != null && gameManager.playerData.profileID > 0)
-                    {
-                        return NormalizeSlotIndex(gameManager.playerData.profileID);
-                    }
+                if (gameManager.profileID > 0)
+                {
+                    return NormalizeSlotIndex(gameManager.profileID);
+                }
+
+                if (gameManager.playerData != null && gameManager.playerData.profileID > 0)
+                {
+                    return NormalizeSlotIndex(gameManager.playerData.profileID);
                 }
 
                 const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
@@ -647,12 +649,12 @@ namespace LegacyoftheAbyss.Shade
                     }
                 }
 
-                var playerDataMember = type.GetField("playerData", flags)
-                    ?? type.GetProperty("playerData", flags)
-                    ?? type.GetField("PlayerData", flags)
-                    ?? type.GetProperty("PlayerData", flags);
+                MemberInfo? playerDataMember = (MemberInfo?)type.GetField("playerData", flags)
+                    ?? (MemberInfo?)type.GetProperty("playerData", flags)
+                    ?? (MemberInfo?)type.GetField("PlayerData", flags)
+                    ?? (MemberInfo?)type.GetProperty("PlayerData", flags);
 
-                object playerData = null;
+                object? playerData = null;
                 switch (playerDataMember)
                 {
                     case FieldInfo playerDataField:
