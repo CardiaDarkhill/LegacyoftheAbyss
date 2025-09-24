@@ -286,6 +286,9 @@ public partial class SimpleHUD
         rect.sizeDelta = new Vector2(width, height);
 
         float scale = OvercharmBackdropScale;
+        float absScale = Mathf.Abs(scale);
+        float scaledWidth = width * absScale;
+        float scaledHeight = height * absScale;
         rect.localScale = new Vector3(scale, scale, 1f);
         rect.localRotation = Quaternion.Euler(0f, 0f, OvercharmBackdropRotation);
 
@@ -295,8 +298,6 @@ public partial class SimpleHUD
             float rotation = Mathf.Repeat(OvercharmBackdropRotation, 360f) * Mathf.Deg2Rad;
             float cos = Mathf.Cos(rotation);
             float sin = Mathf.Sin(rotation);
-            float scaledWidth = width * Mathf.Abs(scale);
-            float scaledHeight = height * Mathf.Abs(scale);
 
             float maxX = float.NegativeInfinity;
             float maxY = float.NegativeInfinity;
@@ -329,6 +330,11 @@ public partial class SimpleHUD
             {
                 anchored -= new Vector2(maxX, maxY);
             }
+        }
+
+        if (scaledHeight > 0f)
+        {
+            anchored.y += scaledHeight * 2f;
         }
 
         rect.anchoredPosition = anchored;

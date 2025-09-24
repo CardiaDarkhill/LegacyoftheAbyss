@@ -5079,6 +5079,24 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return false;
         }
 
+        if (rect.transform.IsChildOf(root))
+        {
+            try
+            {
+                Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(root, rect);
+                Vector3 center = bounds.center;
+                if (!float.IsNaN(center.x) && !float.IsNaN(center.y) &&
+                    !float.IsInfinity(center.x) && !float.IsInfinity(center.y))
+                {
+                    overlayPoint = new Vector2(center.x, center.y);
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+        }
+
         Canvas? rectCanvas = null;
         try
         {
