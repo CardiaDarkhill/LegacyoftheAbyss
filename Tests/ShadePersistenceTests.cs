@@ -15,6 +15,7 @@ public class ShadePersistentStateTests
 
         Assert.True(state.HasData);
         Assert.Equal(1, state.MaxHP);
+        Assert.Equal(1, state.BaseMaxHP);
         Assert.Equal(0, state.CurrentHP);
         Assert.Equal(0, state.LifebloodMax);
         Assert.Equal(0, state.CurrentLifeblood);
@@ -30,6 +31,7 @@ public class ShadePersistentStateTests
         state.ForceMinimumHealth(4);
 
         Assert.Equal(3, state.CurrentHP); // clamped to max HP
+        Assert.Equal(3, state.BaseMaxHP);
 
         state.ForceMinimumHealth(2);
         Assert.Equal(3, state.CurrentHP); // remains at higher value
@@ -162,6 +164,7 @@ public class ShadeSaveSlotRepositoryTests
             Assert.NotSame(original, stored);
             Assert.Equal(2, stored.CurrentHP);
             Assert.Equal(5, stored.MaxHP);
+            Assert.Equal(5, stored.BaseMaxHP);
             Assert.Equal(10, stored.Soul);
             Assert.False(stored.CanTakeDamage);
             Assert.Equal(0, stored.NotchCapacity);
@@ -181,6 +184,7 @@ public class ShadeSaveSlotRepositoryTests
             Assert.True(storedWithCharms.HasDiscoveredCharm(7));
             Assert.Contains(7, storedWithCharms.GetEquippedCharms(0));
             Assert.Equal(4, storedWithCharms.NotchCapacity);
+            Assert.Equal(5, storedWithCharms.BaseMaxHP);
         });
     }
 
@@ -195,6 +199,7 @@ public class ShadeSaveSlotRepositoryTests
             var sameSlot = repository.GetOrCreateSlot(0);
             Assert.Same(slot, sameSlot);
             Assert.Equal(3, sameSlot.CurrentHP);
+            Assert.Equal(6, sameSlot.BaseMaxHP);
         });
     }
 

@@ -53,7 +53,10 @@ public partial class LegacyHelper
             baseFocusHealRange = focusHealRange;
             baseTeleportChannelTime = teleportChannelTime;
             baseHitKnockbackForce = hitKnockbackForce;
-            baseShadeMaxHP = shadeMaxHP;
+            if (baseShadeMaxHP <= 0)
+            {
+                baseShadeMaxHP = shadeMaxHP;
+            }
             ResetCharmDerivedStats();
             wasInactive = (!isDying && GetTotalCurrentHealth() <= 0);
 
@@ -89,7 +92,14 @@ public partial class LegacyHelper
             }
             catch { }
 
-            baseShadeMaxHP = shadeMaxHP;
+            if (computedMax > baseShadeMaxHP)
+            {
+                baseShadeMaxHP = computedMax;
+            }
+            else if (baseShadeMaxHP <= 0)
+            {
+                baseShadeMaxHP = shadeMaxHP;
+            }
 
             baselineStatsInitialized = true;
 
@@ -105,7 +115,7 @@ public partial class LegacyHelper
         {
             try
             {
-                LegacyHelper.SaveShadeState(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax, shadeSoul, canTakeDamage);
+                LegacyHelper.SaveShadeState(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax, shadeSoul, canTakeDamage, baseShadeMaxHP);
             }
             catch
             {

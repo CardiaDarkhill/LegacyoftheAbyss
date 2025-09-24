@@ -6,8 +6,9 @@ public partial class LegacyHelper
 {
     public partial class ShadeController
     {
-        public void RestorePersistentState(int hp, int max, int lifeblood, int lifebloodMax, int soul, bool canDamage = true)
+        public void RestorePersistentState(int hp, int max, int baseMax, int lifeblood, int lifebloodMax, int soul, bool canDamage = true)
         {
+            baseShadeMaxHP = Mathf.Max(0, baseMax);
             shadeMaxHP = Mathf.Max(0, max);
             shadeHP = Mathf.Clamp(hp, 0, shadeMaxHP);
             pendingRestoredLifebloodMax = Mathf.Max(0, lifebloodMax);
@@ -17,6 +18,11 @@ public partial class LegacyHelper
             shadeSoul = Mathf.Clamp(soul, 0, shadeSoulMax);
             canTakeDamage = canDamage;
             lastSavedCanTakeDamage = canTakeDamage;
+
+            if (baseShadeMaxHP <= 0)
+            {
+                baseShadeMaxHP = shadeMaxHP > 0 ? shadeMaxHP : 1;
+            }
         }
 
         public void FullHealFromBench()
@@ -59,6 +65,7 @@ public partial class LegacyHelper
         public int GetCurrentNormalHP() => Mathf.Max(0, shadeHP);
         public int GetMaxHP() => Mathf.Max(0, shadeMaxHP) + Mathf.Max(0, shadeLifebloodMax);
         public int GetMaxNormalHP() => Mathf.Max(0, shadeMaxHP);
+        public int GetBaseMaxHP() => Mathf.Max(0, baseShadeMaxHP);
         public int GetCurrentLifeblood() => Mathf.Max(0, shadeLifeblood);
         public int GetMaxLifeblood() => Mathf.Max(0, shadeLifebloodMax);
         public int GetShadeSoul() => shadeSoul;
@@ -76,7 +83,7 @@ public partial class LegacyHelper
                 || lastSavedSoul != shadeSoul
                 || lastSavedCanTakeDamage != canTakeDamage)
             {
-                LegacyHelper.SaveShadeState(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax, shadeSoul, canTakeDamage);
+                LegacyHelper.SaveShadeState(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax, shadeSoul, canTakeDamage, baseShadeMaxHP);
                 lastSavedHP = shadeHP;
                 lastSavedMax = shadeMaxHP;
                 lastSavedLifeblood = shadeLifeblood;

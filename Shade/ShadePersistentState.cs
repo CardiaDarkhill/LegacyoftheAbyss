@@ -16,6 +16,7 @@ namespace LegacyoftheAbyss.Shade
 
         public int CurrentHP { get; private set; } = -1;
         public int MaxHP { get; private set; } = -1;
+        public int BaseMaxHP { get; private set; } = -1;
         public int CurrentLifeblood { get; private set; } = -1;
         public int LifebloodMax { get; private set; } = -1;
         public int Soul { get; private set; } = -1;
@@ -39,6 +40,7 @@ namespace LegacyoftheAbyss.Shade
             {
                 CurrentHP = CurrentHP,
                 MaxHP = MaxHP,
+                BaseMaxHP = BaseMaxHP,
                 CurrentLifeblood = CurrentLifeblood,
                 LifebloodMax = LifebloodMax,
                 Soul = Soul,
@@ -56,7 +58,7 @@ namespace LegacyoftheAbyss.Shade
             return clone;
         }
 
-        public void Capture(int currentHp, int maxHp, int lifebloodCurrent, int lifebloodMax, int soul, bool? canTakeDamage = null)
+        public void Capture(int currentHp, int maxHp, int lifebloodCurrent, int lifebloodMax, int soul, bool? canTakeDamage = null, int? baseMaxHp = null)
         {
             int previousMax = MaxHP;
             int previousHp = CurrentHP;
@@ -64,6 +66,7 @@ namespace LegacyoftheAbyss.Shade
             int previousLifeblood = CurrentLifeblood;
 
             int sanitizedMax = Mathf.Max(0, maxHp);
+            int sanitizedBaseMax = Mathf.Max(0, baseMaxHp ?? sanitizedMax);
             int sanitizedLifebloodMax = Mathf.Max(0, lifebloodMax);
             int sanitizedHp = Mathf.Clamp(currentHp, 0, sanitizedMax);
             int sanitizedLifeblood = Mathf.Clamp(lifebloodCurrent, 0, sanitizedLifebloodMax);
@@ -84,6 +87,7 @@ namespace LegacyoftheAbyss.Shade
             {
                 sanitizedMax = previousMax;
                 sanitizedHp = Mathf.Clamp(Mathf.Max(previousHp, currentHp), 0, Mathf.Max(1, sanitizedMax));
+                sanitizedBaseMax = Mathf.Max(0, BaseMaxHP);
                 sanitizedLifebloodMax = previousLifebloodMax;
                 sanitizedLifeblood = Mathf.Clamp(Mathf.Max(previousLifeblood, lifebloodCurrent), 0, sanitizedLifebloodMax);
                 if (ModConfig.Instance.logShade)
@@ -101,6 +105,11 @@ namespace LegacyoftheAbyss.Shade
                 }
             }
 
+            if (sanitizedBaseMax <= 0 && sanitizedMax > 0)
+            {
+                sanitizedBaseMax = sanitizedMax;
+            }
+
             if (sanitizedMax <= 0 && sanitizedLifebloodMax <= 0)
             {
                 sanitizedMax = 1;
@@ -108,6 +117,7 @@ namespace LegacyoftheAbyss.Shade
 
             MaxHP = sanitizedMax;
             CurrentHP = Mathf.Clamp(sanitizedHp, 0, MaxHP > 0 ? MaxHP : sanitizedHp);
+            BaseMaxHP = Mathf.Max(0, sanitizedBaseMax);
             LifebloodMax = sanitizedLifebloodMax;
             CurrentLifeblood = Mathf.Clamp(sanitizedLifeblood, 0, LifebloodMax);
             Soul = Mathf.Max(0, soul);
@@ -122,6 +132,7 @@ namespace LegacyoftheAbyss.Shade
         {
             CurrentHP = -1;
             MaxHP = -1;
+            BaseMaxHP = -1;
             CurrentLifeblood = -1;
             LifebloodMax = -1;
             Soul = -1;
@@ -144,6 +155,7 @@ namespace LegacyoftheAbyss.Shade
             {
                 CurrentHP = CurrentHP,
                 MaxHP = MaxHP,
+                BaseMaxHP = BaseMaxHP,
                 CurrentLifeblood = CurrentLifeblood,
                 LifebloodMax = LifebloodMax,
                 Soul = Soul,
@@ -166,7 +178,7 @@ namespace LegacyoftheAbyss.Shade
             var snapshot = data.Value;
             if (snapshot.MaxHP > 0 || snapshot.LifebloodMax > 0)
             {
-                Capture(snapshot.CurrentHP, snapshot.MaxHP, snapshot.CurrentLifeblood, snapshot.LifebloodMax, snapshot.Soul, snapshot.CanTakeDamage);
+                Capture(snapshot.CurrentHP, snapshot.MaxHP, snapshot.CurrentLifeblood, snapshot.LifebloodMax, snapshot.Soul, snapshot.CanTakeDamage, snapshot.BaseMaxHP);
             }
             else
             {
@@ -218,6 +230,8 @@ namespace LegacyoftheAbyss.Shade
             public int CurrentHP { get; set; }
 
             public int MaxHP { get; set; }
+
+            public int BaseMaxHP { get; set; }
 
             public int CurrentLifeblood { get; set; }
 
