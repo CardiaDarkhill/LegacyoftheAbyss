@@ -175,7 +175,22 @@ public partial class SimpleHUD
             var img = maskImages[index];
             if (img == null) continue;
             img.sprite = maskSprite != null ? maskSprite : img.sprite;
-            img.color = i < currentLifeblood ? lifebloodMaskColor : lifebloodMissingColor;
+            bool filled = i < currentLifeblood;
+            if (filled)
+            {
+                if (!img.gameObject.activeSelf)
+                {
+                    img.gameObject.SetActive(true);
+                }
+                img.color = lifebloodMaskColor;
+            }
+            else if (!animatingMaskImages.Contains(img))
+            {
+                if (img.gameObject.activeSelf)
+                {
+                    img.gameObject.SetActive(false);
+                }
+            }
         }
 
         previousShadeTotalHealth = totalCurrent;
@@ -184,6 +199,8 @@ public partial class SimpleHUD
     private IEnumerator LoseHealth(Image img, bool wasOvercharmed, bool wasLifeblood)
     {
         if (img == null) yield break;
+
+        animatingMaskImages.Add(img);
 
         Color filledColor;
         Color flickerColor;
@@ -209,6 +226,40 @@ public partial class SimpleHUD
         }
 
         img.color = emptyColor;
+
+        if (wasLifeblood)
+        {
+            HideLifebloodMaskIfDepleted(img);
+        }
+
+        animatingMaskImages.Remove(img);
+    }
+
+    private void HideLifebloodMaskIfDepleted(Image img)
+    {
+        if (img == null || maskImages == null)
+        {
+            return;
+        }
+
+        int index = Array.IndexOf(maskImages, img);
+        if (index < 0)
+        {
+            return;
+        }
+
+        int normalMax = Mathf.Max(0, shadeMax);
+        int lifebloodIndex = index - normalMax;
+        if (lifebloodIndex < 0)
+        {
+            return;
+        }
+
+        int currentLifeblood = Mathf.Clamp(shadeLifeblood, 0, Mathf.Max(0, shadeLifebloodMax));
+        if (lifebloodIndex >= currentLifeblood && img.gameObject.activeSelf)
+        {
+            img.gameObject.SetActive(false);
+        }
     }
 
     private void RefreshSoul()
@@ -224,6 +275,7 @@ public partial class SimpleHUD
     {
         if (healthContainer == null) return;
         foreach (var img in maskImages ?? Array.Empty<Image>()) if (img != null) Destroy(img.gameObject);
+        animatingMaskImages.Clear();
         BuildMasks(healthContainer.GetComponent<RectTransform>(), GetUIScale());
     }
 

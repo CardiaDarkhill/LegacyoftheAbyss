@@ -471,6 +471,13 @@ public static class ShadeSettingsMenu
                 return;
             }
 
+            if (!ShadeRuntime.IsHornetRestingAtBench())
+            {
+                pendingStatusMessage = ShadeRuntime.BenchLockedMessage;
+                RefreshAll();
+                return;
+            }
+
             if (inventory.TryToggle(id, out var message))
             {
                 pendingStatusMessage = message;
@@ -490,6 +497,13 @@ public static class ShadeSettingsMenu
             if (inventory == null)
             {
                 pendingStatusMessage = "Charm inventory not ready.";
+                RefreshAll();
+                return;
+            }
+
+            if (!ShadeRuntime.IsHornetRestingAtBench())
+            {
+                pendingStatusMessage = ShadeRuntime.BenchLockedMessage;
                 RefreshAll();
                 return;
             }
@@ -519,6 +533,13 @@ public static class ShadeSettingsMenu
             if (inventory == null)
             {
                 pendingStatusMessage = "Charm inventory not ready.";
+                RefreshAll();
+                return;
+            }
+
+            if (!ShadeRuntime.IsHornetRestingAtBench())
+            {
+                pendingStatusMessage = ShadeRuntime.BenchLockedMessage;
                 RefreshAll();
                 return;
             }
@@ -615,6 +636,11 @@ public static class ShadeSettingsMenu
                 fallbackStatus = "Shade is overcharmed. " + fallbackStatus;
             }
 
+            if (!ShadeRuntime.IsHornetRestingAtBench())
+            {
+                fallbackStatus = ShadeRuntime.BenchLockedMessage;
+            }
+
             UpdateStatusText(fallbackStatus);
         }
 
@@ -631,6 +657,7 @@ public static class ShadeSettingsMenu
             var inventory = ShadeRuntime.Charms;
             bool canEquip = false;
             bool canUnequip = false;
+            bool atBench = ShadeRuntime.IsHornetRestingAtBench();
 
             if (inventory != null && selectedCharm.HasValue)
             {
@@ -638,14 +665,17 @@ public static class ShadeSettingsMenu
                 bool owned = inventory.IsOwned(selectedCharm.Value);
                 bool equipped = inventory.IsEquipped(selectedCharm.Value);
                 bool broken = inventory.IsBroken(selectedCharm.Value);
-                canUnequip = equipped;
-                canEquip = owned && !equipped && !broken;
+                if (atBench)
+                {
+                    canUnequip = equipped;
+                    canEquip = owned && !equipped && !broken;
+                }
             }
 
             if (equipButton != null)
-                equipButton.interactable = canEquip;
+                equipButton.interactable = canEquip && atBench;
             if (unequipButton != null)
-                unequipButton.interactable = canUnequip;
+                unequipButton.interactable = canUnequip && atBench;
         }
 
         private void UpdateStatusText(string fallback)

@@ -23,6 +23,8 @@ namespace LegacyoftheAbyss.Shade
     /// </summary>
     internal static class ShadeRuntime
     {
+        internal const string BenchLockedMessage = "Rest at a bench to change the shade's charms.";
+
         private static readonly ShadePersistentState s_persistentState = new ShadePersistentState();
         private static readonly ShadeSaveSlotRepository s_saveSlots = new ShadeSaveSlotRepository();
         private static readonly ShadeCharmInventory s_charmInventory = CreateCharmInventory();
@@ -407,6 +409,30 @@ namespace LegacyoftheAbyss.Shade
             repaired |= TryRepairFragileCharm(ShadeCharmId.FragileHeart, "Fragile Heart repaired.");
             repaired |= TryRepairFragileCharm(ShadeCharmId.FragileGreed, "Fragile Greed repaired.");
             return repaired;
+        }
+
+        internal static bool IsHornetRestingAtBench()
+        {
+            try
+            {
+                var gm = GameManager.instance;
+                if (gm == null)
+                {
+                    return true;
+                }
+
+                var pd = gm.playerData;
+                if (pd == null)
+                {
+                    return true;
+                }
+
+                return pd.atBench;
+            }
+            catch
+            {
+                return true;
+            }
         }
 
         private static bool TryBreakFragileCharm(ShadeCharmId charmId, string message)

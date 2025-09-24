@@ -699,6 +699,12 @@ namespace LegacyoftheAbyss.Shade
 
         public bool TryEquip(ShadeCharmId id, out string message)
         {
+            if (!ShadeRuntime.IsHornetRestingAtBench())
+            {
+                message = ShadeRuntime.BenchLockedMessage;
+                return false;
+            }
+
             if (!_definitionMap.TryGetValue(id, out var definition))
             {
                 message = "Charm data missing.";
@@ -814,6 +820,12 @@ namespace LegacyoftheAbyss.Shade
 
         public bool TryUnequip(ShadeCharmId id, out string message)
         {
+            if (!ShadeRuntime.IsHornetRestingAtBench())
+            {
+                message = ShadeRuntime.BenchLockedMessage;
+                return false;
+            }
+
             if (!_equipped.Contains(id))
             {
                 message = "Charm not currently equipped.";

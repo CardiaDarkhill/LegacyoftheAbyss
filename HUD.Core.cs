@@ -1,6 +1,7 @@
 #nullable disable
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -10,6 +11,7 @@ public partial class SimpleHUD : MonoBehaviour
 
     // Health masks state
     private Image[] maskImages;
+    private readonly HashSet<Image> animatingMaskImages = new HashSet<Image>();
     private Sprite maskSprite;
     private readonly Color missingMaskColor = new Color(0.2f, 0.2f, 0.2f, 0.45f);
     private readonly Color overcharmMaskColor = Color.white;

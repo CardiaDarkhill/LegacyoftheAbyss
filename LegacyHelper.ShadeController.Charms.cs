@@ -225,7 +225,8 @@ public partial class LegacyHelper
         internal void AddLifebloodBonus(int amount)
         {
             charmLifebloodBonus = Mathf.Clamp(charmLifebloodBonus + amount, 0, 99);
-            ApplyCharmHealthModifiers();
+            bool refill = amount > 0 && ShouldRefillLifebloodImmediately();
+            ApplyCharmHealthModifiers(refillLifeblood: refill);
         }
 
         internal void SetJonisBlessingActive(bool active)
@@ -241,7 +242,8 @@ public partial class LegacyHelper
                 hivebloodPendingLifebloodRestore = false;
             }
 
-            ApplyCharmHealthModifiers();
+            bool refill = jonisBlessingEquipped && ShouldRefillLifebloodImmediately();
+            ApplyCharmHealthModifiers(refillLifeblood: refill);
         }
 
         internal bool IsJonisBlessingActive() => jonisBlessingEquipped;
@@ -389,6 +391,30 @@ public partial class LegacyHelper
 
             PushShadeStatsToHud();
             PersistIfChanged();
+        }
+
+        private bool ShouldRefillLifebloodImmediately()
+        {
+            try
+            {
+                var gm = GameManager.instance;
+                if (gm == null)
+                {
+                    return false;
+                }
+
+                var pd = gm.playerData;
+                if (pd == null)
+                {
+                    return false;
+                }
+
+                return pd.atBench;
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 }
