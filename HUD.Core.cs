@@ -15,6 +15,8 @@ public partial class SimpleHUD : MonoBehaviour
     private readonly Color overcharmMaskColor = Color.white;
     private readonly Color overcharmBackdropColor = new Color(0.85f, 0.25f, 0.25f, 0.1344f);
     private readonly Color overcharmBackdropSpriteColor = new Color(1f, 1f, 1f, 0.392f);
+    private readonly Color lifebloodMaskColor = new Color(0.4f, 0.75f, 1f, 1f);
+    private readonly Color lifebloodMissingColor = new Color(0.28f, 0.46f, 0.66f, 0.45f);
 
     // Soul orb state
     private Sprite soulOrbSprite;
@@ -31,7 +33,9 @@ public partial class SimpleHUD : MonoBehaviour
     // Shade health state
     private int shadeMax;
     private int shadeHealth;
-    private int previousShadeHealth;
+    private int shadeLifebloodMax;
+    private int shadeLifeblood;
+    private int previousShadeTotalHealth;
     private int prevHornetHealth;
     private int prevHornetMax;
     private bool hasExplicitShadeStats;
@@ -80,7 +84,7 @@ public partial class SimpleHUD : MonoBehaviour
         LoadSprites();
         ComputeShadeFromPlayer();
         CreateUI();
-        previousShadeHealth = shadeHealth;
+        previousShadeTotalHealth = shadeHealth + shadeLifeblood;
     }
 
     private float GetUIScale()
@@ -262,21 +266,34 @@ public partial class SimpleHUD : MonoBehaviour
     }
 
     // Allow ShadeController to drive Shade HP and max
-    public void SetShadeStats(int current, int max)
+    public void SetShadeStats(int currentNormal, int maxNormal, int lifebloodCurrent, int lifebloodMax)
     {
         bool firstExplicit = !hasExplicitShadeStats;
         hasExplicitShadeStats = true;
-        int newMax = Mathf.Max(1, max);
-        int newCur = Mathf.Clamp(current, 0, newMax);
-        bool maxChanged = (newMax != shadeMax);
-        shadeMax = newMax;
-        shadeHealth = newCur;
+
+        int newMaxNormal = Mathf.Max(0, maxNormal);
+        int newMaxLifeblood = Mathf.Max(0, lifebloodMax);
+        int newCurNormal = Mathf.Clamp(currentNormal, 0, newMaxNormal);
+        int newCurLifeblood = Mathf.Clamp(lifebloodCurrent, 0, newMaxLifeblood);
+
+        bool maxChanged = (newMaxNormal != shadeMax) || (newMaxLifeblood != shadeLifebloodMax);
+
+        shadeMax = newMaxNormal;
+        shadeLifebloodMax = newMaxLifeblood;
+        shadeHealth = newCurNormal;
+        shadeLifeblood = newCurLifeblood;
+
         if (firstExplicit)
         {
-            previousShadeHealth = newCur;
+            previousShadeTotalHealth = shadeHealth + shadeLifeblood;
             suppressNextDamageSound = false;
         }
-        if (maxChanged) RebuildMasks();
+
+        if (maxChanged)
+        {
+            RebuildMasks();
+        }
+
         RefreshHealth();
     }
 
@@ -306,7 +323,7 @@ public partial class SimpleHUD : MonoBehaviour
         if (shadeMax != oldMax)
         {
             RebuildMasks();
-            previousShadeHealth = Mathf.Min(previousShadeHealth, shadeMax);
+            previousShadeTotalHealth = Mathf.Min(previousShadeTotalHealth, shadeMax + shadeLifebloodMax);
         }
         RefreshHealth();
         RefreshSoul();

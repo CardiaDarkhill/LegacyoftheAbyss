@@ -158,20 +158,6 @@ namespace LegacyoftheAbyss.Shade
                 iconName: "shade_charm_soul_catcher"));
 
             _definitions.Add(new ShadeCharmDefinition(
-                nameof(ShadeCharmId.FragileStrength),
-                hooks: new ShadeCharmHooks
-                {
-                    OnApplied = ctx => ctx.Controller?.MultiplyNailDamage(1.5f),
-                    OnRemoved = ctx => ctx.Controller?.MultiplyNailDamage(1f / 1.5f)
-                },
-                displayName: "Fragile Strength",
-                description: "Strengthens the bearer, allowing them to deal more damage to foes. If its bearer is killed, this charm will break.",
-                notchCost: 3,
-                fallbackTint: new Color(0.82f, 0.52f, 0.18f),
-                enumId: ShadeCharmId.FragileStrength,
-                iconName: "shade_charm_fragile_strength"));
-
-            _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.SoulEater),
                 hooks: new ShadeCharmHooks
                 {
@@ -363,6 +349,34 @@ namespace LegacyoftheAbyss.Shade
                 enumId: ShadeCharmId.FragileHeart,
                 iconName: "shade_charm_fragile_heart"));
 
+            _definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.FragileGreed),
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx => ctx.Controller?.AddSoulGainBonus(8),
+                    OnRemoved = ctx => ctx.Controller?.AddSoulGainBonus(-8)
+                },
+                displayName: "Fragile Greed",
+                description: "Fills the bearer with a desire to reap every scrap of SOUL. Increases SOUL gained from attacks, but will shatter if the shade is defeated.",
+                notchCost: 2,
+                fallbackTint: new Color(0.90f, 0.78f, 0.32f),
+                enumId: ShadeCharmId.FragileGreed,
+                iconName: "shade_charm_fragile_greed"));
+
+            _definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.FragileStrength),
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx => ctx.Controller?.MultiplyNailDamage(1.5f),
+                    OnRemoved = ctx => ctx.Controller?.MultiplyNailDamage(1f / 1.5f)
+                },
+                displayName: "Fragile Strength",
+                description: "Strengthens the bearer, allowing them to deal more damage to foes. If its bearer is killed, this charm will break.",
+                notchCost: 3,
+                fallbackTint: new Color(0.82f, 0.52f, 0.18f),
+                enumId: ShadeCharmId.FragileStrength,
+                iconName: "shade_charm_fragile_strength"));
+
             // TODO: Empower the shade's teleport to damage foes and extend its reach for Sharp Shadow.
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.SharpShadow),
@@ -411,20 +425,6 @@ namespace LegacyoftheAbyss.Shade
                 iconName: "shade_charm_grubberflys_elegy"));
 
             _definitions.Add(new ShadeCharmDefinition(
-                nameof(ShadeCharmId.FragileGreed),
-                hooks: new ShadeCharmHooks
-                {
-                    OnApplied = ctx => ctx.Controller?.AddSoulGainBonus(8),
-                    OnRemoved = ctx => ctx.Controller?.AddSoulGainBonus(-8)
-                },
-                displayName: "Fragile Greed",
-                description: "Fills the bearer with a desire to reap every scrap of SOUL. Increases SOUL gained from attacks, but will shatter if the shade is defeated.",
-                notchCost: 2,
-                fallbackTint: new Color(0.90f, 0.78f, 0.32f),
-                enumId: ShadeCharmId.FragileGreed,
-                iconName: "shade_charm_fragile_greed"));
-
-            _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.HeavyBlow),
                 hooks: new ShadeCharmHooks
                 {
@@ -456,8 +456,8 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.LifebloodHeart),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx => ctx.Controller?.AddMaxHpBonus(2, true),
-                    OnRemoved = ctx => ctx.Controller?.AddMaxHpBonus(-2, false)
+                    OnApplied = ctx => ctx.Controller?.AddLifebloodBonus(2),
+                    OnRemoved = ctx => ctx.Controller?.AddLifebloodBonus(-2)
                 },
                 displayName: "Lifeblood Heart",
                 description: "The shade grows new lifeblood nodes, granting extra vitality that must be renewed at benches.",
@@ -470,8 +470,8 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.LifebloodCore),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx => ctx.Controller?.AddMaxHpBonus(4, true),
-                    OnRemoved = ctx => ctx.Controller?.AddMaxHpBonus(-4, false)
+                    OnApplied = ctx => ctx.Controller?.AddLifebloodBonus(4),
+                    OnRemoved = ctx => ctx.Controller?.AddLifebloodBonus(-4)
                 },
                 displayName: "Lifeblood Core",
                 description: "A massive core of lifeblood that courses through the shade, dramatically increasing temporary vitality.",
@@ -487,12 +487,12 @@ namespace LegacyoftheAbyss.Shade
                     OnApplied = ctx =>
                     {
                         ctx.Controller?.SetFocusHealingDisabled(true);
-                        ctx.Controller?.AddMaxHpBonus(6, true);
+                        ctx.Controller?.SetJonisBlessingActive(true);
                     },
                     OnRemoved = ctx =>
                     {
                         ctx.Controller?.SetFocusHealingDisabled(false);
-                        ctx.Controller?.AddMaxHpBonus(-6, false);
+                        ctx.Controller?.SetJonisBlessingActive(false);
                     }
                 },
                 displayName: "Joni's Blessing",
@@ -507,7 +507,11 @@ namespace LegacyoftheAbyss.Shade
                 hooks: new ShadeCharmHooks
                 {
                     OnApplied = ctx => hivebloodTimer = 0f,
-                    OnRemoved = ctx => hivebloodTimer = 0f,
+                    OnRemoved = ctx =>
+                    {
+                        hivebloodTimer = 0f;
+                        ctx.Controller?.ResetHivebloodLifebloodRequest();
+                    },
                     OnShadeDamaged = (ctx, evt) =>
                     {
                         if (evt.ActualDamage > 0 && !evt.WasPrevented)
@@ -523,7 +527,10 @@ namespace LegacyoftheAbyss.Shade
                             return;
                         }
 
-                        if (controller.GetCurrentHP() >= controller.GetMaxHP())
+                        bool missingNormal = controller.GetCurrentNormalHP() < controller.GetMaxNormalHP();
+                        bool pendingLifeblood = controller.ShouldHivebloodRestoreLifeblood();
+
+                        if (!missingNormal && !pendingLifeblood)
                         {
                             hivebloodTimer = 0f;
                             return;
@@ -533,7 +540,14 @@ namespace LegacyoftheAbyss.Shade
                         if (hivebloodTimer >= 10f)
                         {
                             hivebloodTimer = 0f;
-                            controller.ReviveToAtLeast(controller.GetCurrentHP() + 1);
+                            if (missingNormal)
+                            {
+                                controller.ReviveToAtLeast(controller.GetCurrentNormalHP() + 1);
+                            }
+                            else if (pendingLifeblood && controller.TryRestoreLifeblood(1))
+                            {
+                                controller.ResetHivebloodLifebloodRequest();
+                            }
                         }
                     }
                 },

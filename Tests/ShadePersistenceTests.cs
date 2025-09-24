@@ -11,11 +11,13 @@ public class ShadePersistentStateTests
     public void CaptureClampsValues()
     {
         var state = new ShadePersistentState();
-        state.Capture(-10, -5, -20, false);
+        state.Capture(-10, -5, -3, -4, -20, false);
 
         Assert.True(state.HasData);
         Assert.Equal(1, state.MaxHP);
         Assert.Equal(0, state.CurrentHP);
+        Assert.Equal(0, state.LifebloodMax);
+        Assert.Equal(0, state.CurrentLifeblood);
         Assert.Equal(0, state.Soul);
         Assert.False(state.CanTakeDamage);
     }
@@ -24,7 +26,7 @@ public class ShadePersistentStateTests
     public void ForceMinimumHealthRespectsBounds()
     {
         var state = new ShadePersistentState();
-        state.Capture(1, 3, 0, true);
+        state.Capture(1, 3, 0, 0, 0, true);
         state.ForceMinimumHealth(4);
 
         Assert.Equal(3, state.CurrentHP); // clamped to max HP
@@ -151,11 +153,11 @@ public class ShadeSaveSlotRepositoryTests
         WithRepository(repository =>
         {
             var original = new ShadePersistentState();
-            original.Capture(2, 5, 10, false);
+            original.Capture(2, 5, 0, 0, 10, false);
 
             repository.UpdateSlot(1, original);
 
-            original.Capture(1, 3, 1, true);
+            original.Capture(1, 3, 0, 0, 1, true);
             Assert.True(repository.TryGetSlot(1, out var stored));
             Assert.NotSame(original, stored);
             Assert.Equal(2, stored.CurrentHP);
@@ -188,7 +190,7 @@ public class ShadeSaveSlotRepositoryTests
         WithRepository(repository =>
         {
             var slot = repository.GetOrCreateSlot(0);
-            slot.Capture(3, 6, 12, true);
+            slot.Capture(3, 6, 0, 0, 12, true);
 
             var sameSlot = repository.GetOrCreateSlot(0);
             Assert.Same(slot, sameSlot);
@@ -290,7 +292,7 @@ public class ShadeSaveSlotRepositoryTests
         try
         {
             var state = new ShadePersistentState();
-            state.Capture(4, 8, 20, true);
+            state.Capture(4, 8, 0, 0, 20, true);
             state.SetNotchCapacity(5);
             state.UnlockCharm((int)ShadeCharmId.ShamanStone);
             state.EquipCharm(0, (int)ShadeCharmId.ShamanStone);

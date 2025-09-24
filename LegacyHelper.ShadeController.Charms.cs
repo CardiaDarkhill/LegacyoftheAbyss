@@ -97,6 +97,9 @@ public partial class LegacyHelper
             charmTeleportChannelMultiplier = 1f;
             charmHurtIFrameMultiplier = 1f;
             charmMaxHpBonus = 0;
+            charmLifebloodBonus = 0;
+            jonisBlessingEquipped = false;
+            hivebloodPendingLifebloodRestore = false;
             allowFocusMovement = false;
             knockbackSuppressionCount = 0;
             focusDamageShieldEnabled = false;
@@ -212,10 +215,65 @@ public partial class LegacyHelper
 
         internal void AddMaxHpBonus(int amount, bool fillNew)
         {
-            int previousMax = Mathf.Max(1, baseShadeMaxHP + charmMaxHpBonus);
+            int previousMax = Mathf.Max(0, baseShadeMaxHP + charmMaxHpBonus);
             charmMaxHpBonus = Mathf.Clamp(charmMaxHpBonus + amount, -20, 40);
-            int fill = fillNew ? Mathf.Max(0, Mathf.Max(1, baseShadeMaxHP + charmMaxHpBonus) - previousMax) : 0;
+            int newMax = Mathf.Max(0, baseShadeMaxHP + charmMaxHpBonus);
+            int fill = fillNew ? Mathf.Max(0, newMax - previousMax) : 0;
             ApplyCharmHealthModifiers(fill);
+        }
+
+        internal void AddLifebloodBonus(int amount)
+        {
+            charmLifebloodBonus = Mathf.Clamp(charmLifebloodBonus + amount, 0, 99);
+            ApplyCharmHealthModifiers();
+        }
+
+        internal void SetJonisBlessingActive(bool active)
+        {
+            if (jonisBlessingEquipped == active)
+            {
+                return;
+            }
+
+            jonisBlessingEquipped = active;
+            if (!jonisBlessingEquipped)
+            {
+                hivebloodPendingLifebloodRestore = false;
+            }
+
+            ApplyCharmHealthModifiers();
+        }
+
+        internal bool IsJonisBlessingActive() => jonisBlessingEquipped;
+
+        internal bool ShouldHivebloodRestoreLifeblood()
+        {
+            return jonisBlessingEquipped && hivebloodPendingLifebloodRestore && shadeLifeblood < shadeLifebloodMax;
+        }
+
+        internal bool TryRestoreLifeblood(int amount)
+        {
+            if (amount <= 0 || shadeLifeblood >= shadeLifebloodMax)
+            {
+                return false;
+            }
+
+            int restored = Mathf.Min(amount, shadeLifebloodMax - shadeLifeblood);
+            if (restored <= 0)
+            {
+                return false;
+            }
+
+            shadeLifeblood += restored;
+            hivebloodPendingLifebloodRestore = jonisBlessingEquipped && shadeLifeblood < shadeLifebloodMax && hivebloodPendingLifebloodRestore;
+            PushShadeStatsToHud();
+            PersistIfChanged();
+            return true;
+        }
+
+        internal void ResetHivebloodLifebloodRequest()
+        {
+            hivebloodPendingLifebloodRestore = false;
         }
 
         internal void SetConditionalNailDamageMultiplier(string key, float multiplier)
@@ -291,16 +349,44 @@ public partial class LegacyHelper
             return Mathf.Clamp(baseAmount, 0, 12);
         }
 
-        private void ApplyCharmHealthModifiers(int fillAmount = 0)
+        private void ApplyCharmHealthModifiers(int fillAmount = 0, bool refillLifeblood = false)
         {
-            int targetMax = Mathf.Max(1, baseShadeMaxHP + charmMaxHpBonus);
-            if (fillAmount > 0)
+            int normalMax = Mathf.Max(0, baseShadeMaxHP + charmMaxHpBonus);
+            int lifebloodCapacity = Mathf.Clamp(charmLifebloodBonus, 0, 99);
+
+            if (jonisBlessingEquipped)
             {
-                shadeHP = Mathf.Clamp(shadeHP + fillAmount, 0, targetMax);
+                int jonisBase = Mathf.Max(1, normalMax);
+                lifebloodCapacity += Mathf.CeilToInt(jonisBase * 1.4f);
+                shadeMaxHP = 0;
+            }
+            else
+            {
+                shadeMaxHP = Mathf.Max(1, normalMax);
             }
 
-            shadeMaxHP = targetMax;
+            if (fillAmount > 0 && shadeMaxHP > 0)
+            {
+                shadeHP = Mathf.Clamp(shadeHP + fillAmount, 0, shadeMaxHP);
+            }
+
             shadeHP = Mathf.Clamp(shadeHP, 0, shadeMaxHP);
+
+            shadeLifebloodMax = Mathf.Clamp(lifebloodCapacity, 0, 99);
+
+            if (refillLifeblood)
+            {
+                shadeLifeblood = shadeLifebloodMax;
+            }
+            else
+            {
+                shadeLifeblood = Mathf.Clamp(shadeLifeblood, 0, shadeLifebloodMax);
+            }
+
+            hivebloodPendingLifebloodRestore = jonisBlessingEquipped
+                && hivebloodPendingLifebloodRestore
+                && shadeLifeblood < shadeLifebloodMax;
+
             PushShadeStatsToHud();
             PersistIfChanged();
         }

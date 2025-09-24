@@ -78,7 +78,7 @@ public partial class LegacyHelper
                     if (sc != null)
                     {
                         sc.ReviveToAtLeast(1);
-                        SaveShadeState(sc.GetCurrentHP(), sc.GetMaxHP(), sc.GetShadeSoul(), sc.GetCanTakeDamage());
+                        SaveShadeState(sc.GetCurrentNormalHP(), sc.GetMaxNormalHP(), sc.GetCurrentLifeblood(), sc.GetMaxLifeblood(), sc.GetShadeSoul(), sc.GetCanTakeDamage());
                         return;
                     }
                 }
@@ -354,7 +354,7 @@ public partial class LegacyHelper
                     if (sc != null)
                     {
                         sc.FullHealFromBench();
-                        SaveShadeState(sc.GetCurrentHP(), sc.GetMaxHP(), sc.GetShadeSoul(), sc.GetCanTakeDamage());
+                        SaveShadeState(sc.GetCurrentNormalHP(), sc.GetMaxNormalHP(), sc.GetCurrentLifeblood(), sc.GetMaxLifeblood(), sc.GetShadeSoul(), sc.GetCanTakeDamage());
                     }
                 }
             }
