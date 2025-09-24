@@ -515,6 +515,24 @@ public partial class LegacyHelper
 
             if (hornetTransform == null) return;
 
+            bool pushedSoulThisFrame = false;
+            if (!cachedHud)
+            {
+                var resolvedHud = Object.FindFirstObjectByType<SimpleHUD>();
+                if (resolvedHud)
+                {
+                    cachedHud = resolvedHud;
+                    PushShadeStatsToHud(suppressDamageAudio: true);
+                    PushSoulToHud();
+                    pushedSoulThisFrame = true;
+                }
+            }
+
+            if (cachedHud && !pushedSoulThisFrame)
+            {
+                PushSoulToHud();
+            }
+
             if (GameIsPaused())
             {
                 capturedMoveInput = Vector2.zero;
@@ -632,20 +650,6 @@ public partial class LegacyHelper
                 }
             }
 
-            if (!cachedHud)
-            {
-                var resolvedHud = Object.FindFirstObjectByType<SimpleHUD>();
-                if (resolvedHud)
-                {
-                    cachedHud = resolvedHud;
-                    PushShadeStatsToHud(suppressDamageAudio: true);
-                    PushSoulToHud();
-                }
-            }
-            else
-            {
-                PushSoulToHud();
-            }
             CheckHazardOverlap();
             SyncShadeLight();
             PersistIfChanged();
