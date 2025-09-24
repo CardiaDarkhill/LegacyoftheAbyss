@@ -318,6 +318,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private readonly HashSet<Image> animatingSourceIcons = new HashSet<Image>();
     private GameObject? activeOvercharmFlight;
     private bool overlayAnimationTimeInitialized;
+    private int lastOverlayAnimationFrame = -1;
     private float lastOverlayAnimationTime;
     private static Sprite? notchLitSprite;
     private static Sprite? notchUnlitSprite;
@@ -5147,6 +5148,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         animatingSourceIcons.Clear();
+        lastOverlayAnimationFrame = -1;
     }
 
     private void ClearActiveCharmFlights()
@@ -5187,6 +5189,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         animatingSourceIcons.Clear();
         activeOvercharmFlight = null;
         overlayAnimationTimeInitialized = false;
+        lastOverlayAnimationFrame = -1;
         RestoreShakeTargets();
     }
 
@@ -6262,26 +6265,20 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     internal void ProcessShadeInputTick()
     {
+        AdvanceOverlayAnimations();
+
         if (!CanProcessShadeInput())
         {
-            LogMenuEvent(FormattableString.Invariant(
-                $"ProcessShadeInputTick skipped: active={isActive} enabled={isActiveAndEnabled} inHierarchy={gameObject.activeInHierarchy} focus={hasCapturedInputFocus} cheatOpen={CheatManager.IsOpen} boundCount={boundInputs.Count}"));
             ResetShadeInputState("CannotProcessShadeInput");
             return;
         }
 
         if (lastShadeInputFrame == Time.frameCount)
         {
-            LogMenuEvent(FormattableString.Invariant(
-                $"ProcessShadeInputTick duplicate frame ignored: frame={Time.frameCount}"));
             return;
         }
 
         lastShadeInputFrame = Time.frameCount;
-
-        string heldDirection = shadeHeldDirection.HasValue ? shadeHeldDirection.Value.ToString() : "<none>";
-        LogMenuEvent(FormattableString.Invariant(
-            $"ProcessShadeInputTick processing frame={lastShadeInputFrame} heldDirection={heldDirection} heldSource={shadeHeldDirectionSource} repeatTimer={shadeDirectionRepeatTimer:0.###}"));
         ProcessShadeDirectionalInput();
         ProcessShadeSubmitInput();
     }
@@ -6628,9 +6625,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void ResetShadeInputState(string? reason = null)
     {
-        string heldDirection = shadeHeldDirection.HasValue ? shadeHeldDirection.Value.ToString() : "<none>";
-        LogMenuEvent(FormattableString.Invariant(
-            $"ResetShadeInputState -> reason={reason ?? "<unspecified>"} previousDirection={heldDirection} previousSource={shadeHeldDirectionSource} repeatTimer={shadeDirectionRepeatTimer:0.###} lastFrame={lastShadeInputFrame}"));
         shadeHeldDirection = null;
         shadeHeldDirectionSource = DirectionalInputSource.None;
         shadeDirectionRepeatTimer = 0f;
@@ -6639,6 +6633,19 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
     private void Update()
     {
+        AdvanceOverlayAnimations();
+    }
+
+    private void AdvanceOverlayAnimations()
+    {
+        int frame = Time.frameCount;
+        if (lastOverlayAnimationFrame == frame)
+        {
+            return;
+        }
+
+        lastOverlayAnimationFrame = frame;
+
         bool hasAnimations = overlayAnimations.Count > 0 || activeShakeAnimation != null;
         if (!hasAnimations)
         {
@@ -6654,17 +6661,20 @@ internal sealed class ShadeInventoryPane : InventoryPane
             overlayAnimationTimeInitialized = true;
             lastOverlayAnimationTime = currentTime;
             deltaTime = Time.unscaledDeltaTime;
+            if (deltaTime <= 0f)
+            {
+                deltaTime = 0.016f;
+            }
         }
         else
         {
             deltaTime = Mathf.Max(0f, currentTime - lastOverlayAnimationTime);
             lastOverlayAnimationTime = currentTime;
-        }
-
-        if (deltaTime <= 0f)
-        {
-            float fallback = Time.unscaledDeltaTime;
-            deltaTime = fallback > 0f ? fallback : 0.016f;
+            if (deltaTime <= 0f)
+            {
+                float fallback = Time.unscaledDeltaTime;
+                deltaTime = fallback > 0f ? fallback : 0.016f;
+            }
         }
 
         if (overlayAnimations.Count > 0)
@@ -6686,12 +6696,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
             }
         }
 
-        if (activeShakeAnimation != null)
+        if (activeShakeAnimation != null && activeShakeAnimation.Update(deltaTime, this))
         {
-            if (activeShakeAnimation.Update(deltaTime, this))
-            {
-                activeShakeAnimation = null;
-            }
+            activeShakeAnimation = null;
         }
     }
 
