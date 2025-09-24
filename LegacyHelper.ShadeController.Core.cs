@@ -2394,7 +2394,7 @@ public partial class LegacyHelper
                 float perFrame = 0.5f / deathAnimFrames.Length;
                 for (int i = 0; i < deathAnimFrames.Length; i++)
                 {
-                    if (shadeHP > 0)
+                    if (GetTotalCurrentHealth() > 0)
                     {
                         isCastingSpell = false;
                         isDying = false;
@@ -2410,7 +2410,7 @@ public partial class LegacyHelper
                 float t = 0f;
                 while (t < 0.5f)
                 {
-                    if (shadeHP > 0)
+                    if (GetTotalCurrentHealth() > 0)
                     {
                         isCastingSpell = false;
                         isDying = false;
@@ -2486,7 +2486,7 @@ public partial class LegacyHelper
                     shadeHP = Mathf.Min(shadeHP + canHeal, shadeMaxHP);
                     if (shadeHP != before)
                     {
-                        if (shadeHP > 0)
+                        if (GetTotalCurrentHealth() > 0)
                         {
                             isInactive = false;
                             CancelDeathAnimation();

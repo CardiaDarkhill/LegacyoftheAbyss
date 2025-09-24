@@ -145,8 +145,11 @@ public partial class SimpleHUD
                 TryPlayPinnedHurtSfx(lost);
             }
 
-            for (int i = totalCurrent; i < previousShadeTotalHealth && i < maskImages.Length; i++)
+            int previousClamped = Mathf.Clamp(previousShadeTotalHealth, 0, maskImages.Length);
+            int currentClamped = Mathf.Clamp(totalCurrent, 0, maskImages.Length);
+            for (int i = previousClamped - 1; i >= currentClamped; i--)
             {
+                if (i < 0 || i >= maskImages.Length) continue;
                 bool lifeblood = i >= normalMax;
                 StartCoroutine(LoseHealth(maskImages[i], shadeOvercharmed, lifeblood));
             }
@@ -320,8 +323,32 @@ public partial class SimpleHUD
             return;
         }
 
-        float width = Mathf.Max(0f, maxBounds.x - minBounds.x);
-        float height = Mathf.Max(0f, maxBounds.y - minBounds.y);
+        float measuredWidth = Mathf.Max(0f, maxBounds.x - minBounds.x);
+        float measuredHeight = Mathf.Max(0f, maxBounds.y - minBounds.y);
+        float width = measuredWidth;
+        float height = measuredHeight;
+
+        if (overcharmMaskSize.x > 0f && OvercharmBackdropReferenceMaskCount > 0)
+        {
+            float constantWidth = overcharmMaskSize.x * OvercharmBackdropReferenceMaskCount;
+            if (OvercharmBackdropReferenceMaskCount > 1 && overcharmMaskSpacing > 0f)
+            {
+                constantWidth += overcharmMaskSpacing * (OvercharmBackdropReferenceMaskCount - 1);
+            }
+            width = constantWidth;
+        }
+
+        if (overcharmMaskSize.y > 0f)
+        {
+            height = overcharmMaskSize.y;
+        }
+
+        if (width <= 0f || height <= 0f)
+        {
+            width = measuredWidth;
+            height = measuredHeight;
+        }
+
         if (width <= 0f || height <= 0f)
         {
             overcharmBackdrop.enabled = false;
