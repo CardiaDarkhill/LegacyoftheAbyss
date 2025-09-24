@@ -5066,6 +5066,33 @@ internal sealed class ShadeInventoryPane : InventoryPane
         shakeBasePositions.Clear();
     }
 
+    private bool TryGetOverlayRelativePoint(RectTransform root, RectTransform rect, out Vector2 overlayPoint)
+    {
+        overlayPoint = Vector2.zero;
+        if (root == null || rect == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(root, rect);
+            Vector3 center = bounds.center;
+            if (float.IsNaN(center.x) || float.IsNaN(center.y) ||
+                float.IsInfinity(center.x) || float.IsInfinity(center.y))
+            {
+                return false;
+            }
+
+            overlayPoint = new Vector2(center.x, center.y);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private bool TryGetOverlayPosition(RectTransform rect, out Vector2 overlayPoint)
     {
         overlayPoint = Vector2.zero;
@@ -5078,6 +5105,22 @@ internal sealed class ShadeInventoryPane : InventoryPane
         if (root == null)
         {
             return false;
+        }
+
+        RectTransform? relativeRoot = null;
+        if (IsUnityObjectAlive(panelRoot) && rect.transform.IsChildOf(panelRoot))
+        {
+            relativeRoot = panelRoot;
+        }
+
+        if (relativeRoot != null && TryGetOverlayRelativePoint(relativeRoot, rect, out overlayPoint))
+        {
+            return true;
+        }
+
+        if (rect.transform.IsChildOf(root) && TryGetOverlayRelativePoint(root, rect, out overlayPoint))
+        {
+            return true;
         }
 
         Vector3 worldCenter;

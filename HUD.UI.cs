@@ -296,7 +296,20 @@ public partial class SimpleHUD
 
         float rightEdge = Mathf.Min(0f, maxBounds.x);
         float topEdge = maxBounds.y;
-        rect.anchoredPosition = new Vector2(rightEdge, topEdge);
+
+        float horizontalOffset = width * OvercharmBackdropHorizontalOffsetFraction;
+        if (horizontalOffset <= 0f && overcharmMaskSize.x > 0f)
+        {
+            horizontalOffset = overcharmMaskSize.x * 0.55f;
+        }
+
+        float verticalOffset = height * OvercharmBackdropVerticalOffsetFraction;
+        if (verticalOffset <= 0f && overcharmMaskSize.y > 0f)
+        {
+            verticalOffset = overcharmMaskSize.y * 0.65f;
+        }
+
+        rect.anchoredPosition = new Vector2(rightEdge - horizontalOffset, topEdge - verticalOffset);
         if (overcharmBackdropSprite != null)
         {
             overcharmBackdrop.sprite = overcharmBackdropSprite;
