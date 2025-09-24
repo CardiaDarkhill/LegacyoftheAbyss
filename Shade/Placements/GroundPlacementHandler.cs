@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using GlobalSettings;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace LegacyoftheAbyss.Shade
 {
@@ -51,6 +52,7 @@ namespace LegacyoftheAbyss.Shade
             if (placement.WorldPosition is { } worldPosition)
             {
                 position = worldPosition.ToVector3();
+                position.z = context.Hero.position.z;
             }
             else
             {
@@ -80,12 +82,20 @@ namespace LegacyoftheAbyss.Shade
                 pickup.gameObject.name = $"ShadeCharmPickup_{placement.CharmId}";
                 pickup.transform.position = position;
                 pickup.transform.rotation = rotation;
+                try
+                {
+                    SceneManager.MoveGameObjectToScene(pickup.gameObject, SceneManager.GetActiveScene());
+                }
+                catch
+                {
+                }
 
                 pickup.SetItem(ShadeCharmSavedItem.Create(placement.CharmId));
                 pickup.SetPlayerDataBool(placement.PlayerDataBool ?? string.Empty);
                 pickup.SetFling(placement.FlingPickup ?? false);
 
                 ShadeCharmPlacementHelpers.ApplyPickupVisuals(pickup, context.Hero, placement.CharmId);
+                ShadeCharmPlacementService.LogInfo($"Spawned charm {placement.CharmId} pickup at {position} in scene '{context.SceneName}'.");
             }
             catch (Exception ex)
             {

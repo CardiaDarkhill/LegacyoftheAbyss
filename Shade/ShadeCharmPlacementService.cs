@@ -59,6 +59,7 @@ namespace LegacyoftheAbyss.Shade
 
                 if (IsCharmAlreadyCollected(placement.CharmId))
                 {
+                    LogInfo($"Skipping charm {placement.CharmId} in scene '{sceneName}' because it is already collected.");
                     continue;
                 }
 
@@ -90,6 +91,10 @@ namespace LegacyoftheAbyss.Shade
                     IReadOnlyList<ShadeCharmPlacementDefinition> placementsForHandler = definitions != null
                         ? definitions
                         : Array.Empty<ShadeCharmPlacementDefinition>();
+                    if (placementsForHandler.Count > 0)
+                    {
+                        LogInfo($"Dispatching {placementsForHandler.Count} {handler.GetType().Name} placements for scene '{sceneName}'.");
+                    }
                     handler.Populate(context, placementsForHandler);
                 }
                 catch (Exception ex)
