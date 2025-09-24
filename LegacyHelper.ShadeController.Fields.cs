@@ -235,6 +235,12 @@ public partial class LegacyHelper
         private float conditionalNailDamageProduct = 1f;
 
         private SimpleHUD cachedHud;
+        private bool pendingHudStatsSync;
+        private bool pendingHudAssistSync;
+        private bool pendingHudOvercharmSync;
+        private bool pendingHudSoulSync;
+        private bool pendingHudSuppressDamageSfx;
+        private Coroutine hudSyncRoutine;
         private float hurtCooldown;
         private const float HurtIFrameSeconds = 1.35f;
         private const float ReviveIFrameSeconds = 1.5f;

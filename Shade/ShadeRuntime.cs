@@ -535,6 +535,10 @@ namespace LegacyoftheAbyss.Shade
         {
             EnsureActiveSlot();
 
+            s_saveSlots.GetOrCreateSlot(s_activeSlot);
+            bool debugPersisted = s_saveSlots.IsDebugUnlockActive(s_activeSlot);
+            DisableDebugUnlockIfActive(persist: !debugPersisted);
+
             var owned = s_saveSlots.GetCollectedCharms(s_activeSlot);
             var broken = s_saveSlots.GetBrokenCharms(s_activeSlot);
             var equipped = ConvertToCharmIds(s_saveSlots.GetEquippedCharms(s_activeSlot, 0));
@@ -610,7 +614,7 @@ namespace LegacyoftheAbyss.Shade
                 s_charmInventory.NotchCapacity);
         }
 
-        private static void DisableDebugUnlockIfActive()
+        private static void DisableDebugUnlockIfActive(bool persist = true)
         {
             if (!s_debugUnlockAllCharmsActive)
             {
@@ -622,15 +626,18 @@ namespace LegacyoftheAbyss.Shade
             s_debugUnlockAllCharmsActive = false;
             s_debugCharmSnapshot = null;
 
-            ShadeDebugCharmSnapshot? persistenceSnapshot = snapshot.HasValue
-                ? new ShadeDebugCharmSnapshot(
-                    snapshot.Value.Owned,
-                    snapshot.Value.Equipped,
-                    snapshot.Value.Broken,
-                    snapshot.Value.NewlyDiscovered,
-                    snapshot.Value.NotchCapacity)
-                : (ShadeDebugCharmSnapshot?)null;
-            s_saveSlots.SetDebugUnlockState(s_activeSlot, false, persistenceSnapshot);
+            if (persist)
+            {
+                ShadeDebugCharmSnapshot? persistenceSnapshot = snapshot.HasValue
+                    ? new ShadeDebugCharmSnapshot(
+                        snapshot.Value.Owned,
+                        snapshot.Value.Equipped,
+                        snapshot.Value.Broken,
+                        snapshot.Value.NewlyDiscovered,
+                        snapshot.Value.NotchCapacity)
+                    : (ShadeDebugCharmSnapshot?)null;
+                s_saveSlots.SetDebugUnlockState(s_activeSlot, false, persistenceSnapshot);
+            }
 
             if (snapshot.HasValue)
             {

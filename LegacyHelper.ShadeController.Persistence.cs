@@ -1,4 +1,5 @@
 #nullable disable
+using System.Collections;
 using UnityEngine;
 using LegacyoftheAbyss.Shade;
 
@@ -118,22 +119,26 @@ public partial class LegacyHelper
 
         private void PushSoulToHud()
         {
-            var hud = ResolveHud();
-            if (!hud)
-            {
-                return;
-            }
-
-            try
-            {
-                hud.SetShadeSoul(shadeSoul, shadeSoulMax);
-            }
-            catch
-            {
-            }
+            pendingHudSoulSync = true;
+            TryFlushHudSync();
+            EnsureHudSyncScheduled();
         }
 
         private void PushShadeStatsToHud(bool suppressDamageAudio = false)
+        {
+            pendingHudStatsSync = true;
+            pendingHudAssistSync = true;
+            pendingHudOvercharmSync = true;
+            if (suppressDamageAudio)
+            {
+                pendingHudSuppressDamageSfx = true;
+            }
+
+            TryFlushHudSync();
+            EnsureHudSyncScheduled();
+        }
+
+        private void TryFlushHudSync()
         {
             var hud = ResolveHud();
             if (!hud)
@@ -143,18 +148,79 @@ public partial class LegacyHelper
 
             try
             {
-                if (suppressDamageAudio)
+                if (pendingHudStatsSync)
                 {
-                    hud.SuppressNextShadeDamageSfx();
+                    if (pendingHudSuppressDamageSfx)
+                    {
+                        hud.SuppressNextShadeDamageSfx();
+                    }
+
+                    hud.SetShadeStats(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax);
+                    pendingHudStatsSync = false;
+                    pendingHudSuppressDamageSfx = false;
                 }
 
-                hud.SetShadeStats(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax);
-                hud.SetShadeAssistMode(assistModeEnabled);
-                hud.SetShadeOvercharmed(ShadeRuntime.Charms?.IsOvercharmed ?? false);
+                if (pendingHudAssistSync)
+                {
+                    hud.SetShadeAssistMode(assistModeEnabled);
+                    pendingHudAssistSync = false;
+                }
+
+                if (pendingHudOvercharmSync)
+                {
+                    hud.SetShadeOvercharmed(ShadeRuntime.Charms?.IsOvercharmed ?? false);
+                    pendingHudOvercharmSync = false;
+                }
+
+                if (pendingHudSoulSync)
+                {
+                    hud.SetShadeSoul(shadeSoul, shadeSoulMax);
+                    pendingHudSoulSync = false;
+                }
             }
             catch
             {
             }
+        }
+
+        private bool IsHudSyncPending()
+        {
+            return pendingHudStatsSync
+                || pendingHudAssistSync
+                || pendingHudOvercharmSync
+                || pendingHudSoulSync;
+        }
+
+        private void EnsureHudSyncScheduled()
+        {
+            if (!IsHudSyncPending())
+            {
+                if (hudSyncRoutine != null)
+                {
+                    try { StopCoroutine(hudSyncRoutine); }
+                    catch { }
+                    hudSyncRoutine = null;
+                }
+
+                return;
+            }
+
+            if (hudSyncRoutine == null)
+            {
+                try { hudSyncRoutine = StartCoroutine(FlushHudSyncDeferred()); }
+                catch { hudSyncRoutine = null; }
+            }
+        }
+
+        private IEnumerator FlushHudSyncDeferred()
+        {
+            while (IsHudSyncPending())
+            {
+                yield return null;
+                TryFlushHudSync();
+            }
+
+            hudSyncRoutine = null;
         }
 
         private int GetTotalCurrentHealth()
