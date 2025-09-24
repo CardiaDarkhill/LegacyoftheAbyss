@@ -43,6 +43,7 @@ public partial class SimpleHUD : MonoBehaviour
     private bool hasExplicitShadeStats;
     private bool shadeOvercharmed;
     private bool suppressNextDamageSound;
+    private bool shadeAssistModeActive;
 
     // UI containers
     private GameObject healthContainer;
@@ -286,6 +287,11 @@ public partial class SimpleHUD : MonoBehaviour
         shadeHealth = newCurNormal;
         shadeLifeblood = newCurLifeblood;
 
+        if (healthContainer != null && healthContainer.activeSelf == shadeAssistModeActive)
+        {
+            healthContainer.SetActive(!shadeAssistModeActive);
+        }
+
         if (firstExplicit)
         {
             previousShadeTotalHealth = shadeHealth + shadeLifeblood;
@@ -298,6 +304,30 @@ public partial class SimpleHUD : MonoBehaviour
         }
 
         RefreshHealth();
+    }
+
+    public void SetShadeAssistMode(bool assistActive)
+    {
+        if (shadeAssistModeActive == assistActive)
+        {
+            if (healthContainer != null && healthContainer.activeSelf == assistActive)
+            {
+                healthContainer.SetActive(!assistActive);
+            }
+            return;
+        }
+
+        shadeAssistModeActive = assistActive;
+        if (healthContainer != null)
+        {
+            healthContainer.SetActive(!assistActive);
+        }
+
+        if (!assistActive)
+        {
+            RebuildMasks();
+            RefreshHealth();
+        }
     }
 
     public void SuppressNextShadeDamageSfx()

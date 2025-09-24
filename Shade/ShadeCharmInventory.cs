@@ -296,7 +296,13 @@ namespace LegacyoftheAbyss.Shade
                             return;
                         }
 
-                        bool shouldBoost = controller.GetCurrentHP() <= 1;
+                        bool nearDeathOnNormalPool = controller.GetCurrentNormalHP() <= 1;
+                        bool hasLifeblood = controller.GetCurrentLifeblood() > 0;
+                        bool alive = controller.GetCurrentHP() > 0;
+                        bool shouldBoost = alive
+                            && controller.GetCanTakeDamage()
+                            && nearDeathOnNormalPool
+                            && !hasLifeblood;
                         if (shouldBoost != furyActive)
                         {
                             furyActive = shouldBoost;

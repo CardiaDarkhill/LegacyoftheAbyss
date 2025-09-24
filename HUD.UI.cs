@@ -113,10 +113,20 @@ public partial class SimpleHUD
         }
         unlockPopup.Initialize(canvas, GetUIScale);
         UpdateMenuOrientation(ShouldTreatAsMenu());
+        SetShadeAssistMode(shadeAssistModeActive);
     }
 
     private void RefreshHealth()
     {
+        if (shadeAssistModeActive)
+        {
+            previousShadeTotalHealth = Mathf.Clamp(
+                shadeHealth + shadeLifeblood,
+                0,
+                Mathf.Max(0, shadeMax) + Mathf.Max(0, shadeLifebloodMax));
+            return;
+        }
+
         if (maskImages == null) return;
 
         int normalMax = Mathf.Max(0, shadeMax);

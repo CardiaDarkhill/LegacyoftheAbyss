@@ -147,6 +147,7 @@ public partial class LegacyHelper
                     hud.SuppressNextShadeDamageSfx();
                 }
 
+                hud.SetShadeAssistMode(!canTakeDamage);
                 hud.SetShadeStats(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax);
                 hud.SetShadeOvercharmed(ShadeRuntime.Charms?.IsOvercharmed ?? false);
             }
