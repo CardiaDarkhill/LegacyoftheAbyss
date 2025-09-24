@@ -1,0 +1,136 @@
+{
+  "placements": [
+    {
+      "sceneContainsAll": ["bone", "bottom"],
+      "placementKind": "GroundAnchor",
+      "charmId": "SoulEater",
+      "anchorOffset": { "x": 2.2, "y": 0.6, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["bone", "bottom"],
+      "placementKind": "GroundAnchor",
+      "charmId": "Grubsong",
+      "anchorOffset": { "x": -1.6, "y": 0.8, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["bone", "bottom"],
+      "placementKind": "GroundAnchor",
+      "charmId": "QuickFocus",
+      "anchorOffset": { "x": 3.0, "y": -0.4, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["bone", "bottom"],
+      "placementKind": "GroundAnchor",
+      "charmId": "DeepFocus",
+      "anchorOffset": { "x": 0.3, "y": 2.2, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["bone", "bottom"],
+      "placementKind": "GroundAnchor",
+      "charmId": "SteadyBody",
+      "anchorOffset": { "x": -2.6, "y": -0.7, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["bone", "bottom"],
+      "placementKind": "GroundAnchor",
+      "charmId": "StalwartShell",
+      "anchorOffset": { "x": 1.7, "y": -1.1, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["bone", "bottom"],
+      "placementKind": "GroundAnchor",
+      "charmId": "GrubberflysElegy",
+      "anchorOffset": { "x": -0.4, "y": 1.8, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["bone", "bottom"],
+      "placementKind": "GroundAnchor",
+      "charmId": "FragileGreed",
+      "anchorOffset": { "x": 2.9, "y": 1.4, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["bone", "bottom"],
+      "placementKind": "GroundAnchor",
+      "charmId": "HeavyBlow",
+      "anchorOffset": { "x": -3.0, "y": -1.2, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["bone", "bottom"],
+      "placementKind": "GroundAnchor",
+      "charmId": "BaldurShell",
+      "anchorOffset": { "x": 3.2, "y": 0.9, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["bone", "bottom"],
+      "placementKind": "GroundAnchor",
+      "charmId": "LifebloodHeart",
+      "anchorOffset": { "x": -2.8, "y": 0.1, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["moss", "grotto"],
+      "placementKind": "GroundAnchor",
+      "charmId": "ShapeOfUnn",
+      "anchorOffset": { "x": 1.5, "y": 0.9, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["moss", "grotto"],
+      "placementKind": "GroundAnchor",
+      "charmId": "FuryOfTheFallen",
+      "anchorOffset": { "x": -1.9, "y": 1.4, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["moss", "grotto"],
+      "placementKind": "GroundAnchor",
+      "charmId": "NailmastersGlory",
+      "anchorOffset": { "x": 2.4, "y": -0.6, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["moss", "grotto"],
+      "placementKind": "GroundAnchor",
+      "charmId": "FragileHeart",
+      "anchorOffset": { "x": -2.3, "y": -0.9, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["moss", "grotto"],
+      "placementKind": "GroundAnchor",
+      "charmId": "SharpShadow",
+      "anchorOffset": { "x": 0.8, "y": 2.0, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["moss", "grotto"],
+      "placementKind": "GroundAnchor",
+      "charmId": "LifebloodCore",
+      "anchorOffset": { "x": -3.2, "y": 1.8, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["moss", "grotto"],
+      "placementKind": "GroundAnchor",
+      "charmId": "JonisBlessing",
+      "anchorOffset": { "x": 3.0, "y": -1.5, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["moss", "grotto"],
+      "placementKind": "GroundAnchor",
+      "charmId": "CarefreeMelody",
+      "anchorOffset": { "x": -1.9, "y": -2.4, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["moss", "grotto"],
+      "placementKind": "GroundAnchor",
+      "charmId": "Hiveblood",
+      "anchorOffset": { "x": -1.2, "y": 2.5, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["moss", "grotto"],
+      "placementKind": "GroundAnchor",
+      "charmId": "Kingsoul",
+      "anchorOffset": { "x": 1.5, "y": -2.0, "z": 0.0 }
+    },
+    {
+      "sceneContainsAll": ["moss", "grotto"],
+      "placementKind": "GroundAnchor",
+      "charmId": "VoidHeart",
+      "anchorOffset": { "x": 0.2, "y": 2.7, "z": 0.0 }
+    }
+  ]
+}
