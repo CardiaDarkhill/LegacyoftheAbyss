@@ -278,66 +278,25 @@ public partial class SimpleHUD
 
         float width = Mathf.Max(0f, maxBounds.x - minBounds.x);
         float height = Mathf.Max(0f, maxBounds.y - minBounds.y);
-        float rightEdge = Mathf.Min(0f, maxBounds.x);
-        float topEdge = maxBounds.y;
+        if (width <= 0f || height <= 0f)
+        {
+            overcharmBackdrop.enabled = false;
+            overcharmBackdrop.gameObject.SetActive(false);
+            return;
+        }
+
         var rect = overcharmBackdrop.rectTransform;
         rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
         rect.pivot = new Vector2(1f, 1f);
         rect.sizeDelta = new Vector2(width, height);
 
         float scale = OvercharmBackdropScale;
-        float absScale = Mathf.Abs(scale);
-        float scaledWidth = width * absScale;
-        float scaledHeight = height * absScale;
         rect.localScale = new Vector3(scale, scale, 1f);
         rect.localRotation = Quaternion.Euler(0f, 0f, OvercharmBackdropRotation);
 
-        Vector2 anchored = new Vector2(rightEdge, topEdge);
-        if (width > 0f || height > 0f)
-        {
-            float rotation = Mathf.Repeat(OvercharmBackdropRotation, 360f) * Mathf.Deg2Rad;
-            float cos = Mathf.Cos(rotation);
-            float sin = Mathf.Sin(rotation);
-
-            float maxX = float.NegativeInfinity;
-            float maxY = float.NegativeInfinity;
-
-            Vector2[] corners =
-            {
-                Vector2.zero,
-                new Vector2(-scaledWidth, 0f),
-                new Vector2(0f, -scaledHeight),
-                new Vector2(-scaledWidth, -scaledHeight)
-            };
-
-            for (int i = 0; i < corners.Length; i++)
-            {
-                float x = corners[i].x;
-                float y = corners[i].y;
-                float rotatedX = x * cos - y * sin;
-                float rotatedY = x * sin + y * cos;
-                if (rotatedX > maxX)
-                {
-                    maxX = rotatedX;
-                }
-                if (rotatedY > maxY)
-                {
-                    maxY = rotatedY;
-                }
-            }
-
-            if (!float.IsInfinity(maxX) && !float.IsInfinity(maxY))
-            {
-                anchored -= new Vector2(maxX, maxY);
-            }
-        }
-
-        if (scaledHeight > 0f)
-        {
-            anchored.y += scaledHeight * 2f;
-        }
-
-        rect.anchoredPosition = anchored;
+        float rightEdge = Mathf.Min(0f, maxBounds.x);
+        float topEdge = maxBounds.y;
+        rect.anchoredPosition = new Vector2(rightEdge, topEdge);
         if (overcharmBackdropSprite != null)
         {
             overcharmBackdrop.sprite = overcharmBackdropSprite;

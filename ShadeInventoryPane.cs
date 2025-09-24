@@ -240,6 +240,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private Canvas? overlayCanvas;
     private CanvasScaler? overlayCanvasScaler;
     private GraphicRaycaster? overlayRaycaster;
+    private readonly Vector3[] overlayWorldCorners = new Vector3[4];
 
     private Font? bodyFont;
     private Font? headerFont;
@@ -5079,21 +5080,21 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return false;
         }
 
-        if (rect.transform.IsChildOf(root))
+        Vector3 worldCenter;
+        try
+        {
+            rect.GetWorldCorners(overlayWorldCorners);
+            worldCenter = (overlayWorldCorners[0] + overlayWorldCorners[2]) * 0.5f;
+        }
+        catch
         {
             try
             {
-                Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(root, rect);
-                Vector3 center = bounds.center;
-                if (!float.IsNaN(center.x) && !float.IsNaN(center.y) &&
-                    !float.IsInfinity(center.x) && !float.IsInfinity(center.y))
-                {
-                    overlayPoint = new Vector2(center.x, center.y);
-                    return true;
-                }
+                worldCenter = rect.TransformPoint(rect.rect.center);
             }
             catch
             {
+                worldCenter = rect.position;
             }
         }
 
@@ -5117,18 +5118,14 @@ internal sealed class ShadeInventoryPane : InventoryPane
             }
         }
 
-        Camera? overlayCamera = overlayCanvas != null && overlayCanvas.renderMode != RenderMode.ScreenSpaceOverlay
-            ? overlayCanvas.worldCamera
-            : null;
-
-        Vector3 worldCenter;
-        try
+        Camera? overlayCamera = null;
+        if (overlayCanvas != null && overlayCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
         {
-            worldCenter = rect.TransformPoint(rect.rect.center);
-        }
-        catch
-        {
-            worldCenter = rect.position;
+            overlayCamera = overlayCanvas.worldCamera;
+            if (overlayCamera == null && overlayCanvas.renderMode == RenderMode.WorldSpace)
+            {
+                overlayCamera = Camera.main;
+            }
         }
 
         try
@@ -5156,6 +5153,24 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
         catch
         {
+        }
+
+        if (rect.transform.IsChildOf(root))
+        {
+            try
+            {
+                Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(root, rect);
+                Vector3 center = bounds.center;
+                if (!float.IsNaN(center.x) && !float.IsNaN(center.y) &&
+                    !float.IsInfinity(center.x) && !float.IsInfinity(center.y))
+                {
+                    overlayPoint = new Vector2(center.x, center.y);
+                    return true;
+                }
+            }
+            catch
+            {
+            }
         }
 
         overlayPoint = Vector2.zero;
