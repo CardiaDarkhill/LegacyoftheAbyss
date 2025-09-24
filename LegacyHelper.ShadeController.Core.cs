@@ -632,8 +632,20 @@ public partial class LegacyHelper
                 }
             }
 
-            if (!cachedHud) cachedHud = Object.FindFirstObjectByType<SimpleHUD>();
-            PushSoulToHud();
+            if (!cachedHud)
+            {
+                var resolvedHud = Object.FindFirstObjectByType<SimpleHUD>();
+                if (resolvedHud)
+                {
+                    cachedHud = resolvedHud;
+                    PushShadeStatsToHud(suppressDamageAudio: true);
+                    PushSoulToHud();
+                }
+            }
+            else
+            {
+                PushSoulToHud();
+            }
             CheckHazardOverlap();
             SyncShadeLight();
             PersistIfChanged();
