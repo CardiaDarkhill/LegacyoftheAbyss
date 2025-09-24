@@ -98,30 +98,60 @@ public partial class LegacyHelper
             }
         }
 
+        private SimpleHUD ResolveHud()
+        {
+            if (!cachedHud)
+            {
+                try
+                {
+                    cachedHud = Object.FindFirstObjectByType<SimpleHUD>();
+                }
+                catch
+                {
+                    cachedHud = null;
+                }
+            }
+
+            return cachedHud;
+        }
+
         private void PushSoulToHud()
         {
-            if (cachedHud)
+            var hud = ResolveHud();
+            if (!hud)
             {
-                try { cachedHud.SetShadeSoul(shadeSoul, shadeSoulMax); } catch { }
+                return;
+            }
+
+            try
+            {
+                hud.SetShadeSoul(shadeSoul, shadeSoulMax);
+            }
+            catch
+            {
             }
         }
 
         private void PushShadeStatsToHud(bool suppressDamageAudio = false)
         {
-            if (cachedHud)
+            var hud = ResolveHud();
+            if (!hud)
             {
-                try
+                return;
+            }
+
+            try
+            {
+                if (suppressDamageAudio)
                 {
-                    if (suppressDamageAudio)
-                    {
-                        cachedHud.SuppressNextShadeDamageSfx();
-                    }
-                    cachedHud.SetShadeStats(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax);
-                    cachedHud.SetShadeOvercharmed(ShadeRuntime.Charms?.IsOvercharmed ?? false);
+                    hud.SuppressNextShadeDamageSfx();
                 }
-                catch
-                {
-                }
+
+                hud.SetShadeStats(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax);
+                hud.SetShadeOvercharmed(ShadeRuntime.Charms?.IsOvercharmed ?? false);
+            }
+            catch
+            {
             }
         }
 
