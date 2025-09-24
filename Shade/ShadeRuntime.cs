@@ -23,6 +23,8 @@ namespace LegacyoftheAbyss.Shade
     /// </summary>
     internal static class ShadeRuntime
     {
+        internal const string BenchLockedMessage = "Rest at a bench to change the shade's charms.";
+
         private static readonly ShadePersistentState s_persistentState = new ShadePersistentState();
         private static readonly ShadeSaveSlotRepository s_saveSlots = new ShadeSaveSlotRepository();
         private static readonly ShadeCharmInventory s_charmInventory = CreateCharmInventory();
@@ -69,27 +71,33 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
-        public static bool TryGetPersistentState(out int currentHp, out int maxHp, out int soul, out bool canTakeDamage)
+        public static bool TryGetPersistentState(out int currentHp, out int maxHp, out int lifebloodCurrent, out int lifebloodMax, out int soul, out bool canTakeDamage, out int baseMaxHp)
         {
             if (!s_persistentState.HasData)
             {
                 currentHp = -1;
                 maxHp = -1;
+                lifebloodCurrent = -1;
+                lifebloodMax = -1;
                 soul = -1;
                 canTakeDamage = true;
+                baseMaxHp = -1;
                 return false;
             }
 
             currentHp = s_persistentState.CurrentHP;
             maxHp = s_persistentState.MaxHP;
+            lifebloodCurrent = s_persistentState.CurrentLifeblood;
+            lifebloodMax = s_persistentState.LifebloodMax;
             soul = s_persistentState.Soul;
             canTakeDamage = s_persistentState.CanTakeDamage;
+            baseMaxHp = s_persistentState.BaseMaxHP;
             return true;
         }
 
-        public static void CaptureState(int currentHp, int maxHp, int soul, bool? canTakeDamage = null)
+        public static void CaptureState(int currentHp, int maxHp, int lifebloodCurrent, int lifebloodMax, int soul, bool? canTakeDamage = null, int? baseMaxHp = null)
         {
-            s_persistentState.Capture(currentHp, maxHp, soul, canTakeDamage);
+            s_persistentState.Capture(currentHp, maxHp, lifebloodCurrent, lifebloodMax, soul, canTakeDamage, baseMaxHp);
         }
 
         public static void EnsureMinimumHealth(int minimum)
@@ -403,6 +411,30 @@ namespace LegacyoftheAbyss.Shade
             repaired |= TryRepairFragileCharm(ShadeCharmId.FragileHeart, "Fragile Heart repaired.");
             repaired |= TryRepairFragileCharm(ShadeCharmId.FragileGreed, "Fragile Greed repaired.");
             return repaired;
+        }
+
+        internal static bool IsHornetRestingAtBench()
+        {
+            try
+            {
+                var gm = GameManager.instance;
+                if (gm == null)
+                {
+                    return true;
+                }
+
+                var pd = gm.playerData;
+                if (pd == null)
+                {
+                    return true;
+                }
+
+                return pd.atBench;
+            }
+            catch
+            {
+                return true;
+            }
         }
 
         private static bool TryBreakFragileCharm(ShadeCharmId charmId, string message)

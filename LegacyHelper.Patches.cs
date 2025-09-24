@@ -83,7 +83,7 @@ public partial class LegacyHelper
                     if (sc != null)
                     {
                         sc.ReviveToAtLeast(1);
-                        SaveShadeState(sc.GetCurrentHP(), sc.GetMaxHP(), sc.GetShadeSoul(), sc.GetCanTakeDamage());
+                        SaveShadeState(sc.GetCurrentNormalHP(), sc.GetMaxNormalHP(), sc.GetCurrentLifeblood(), sc.GetMaxLifeblood(), sc.GetShadeSoul(), sc.GetCanTakeDamage(), sc.GetBaseMaxHP());
                         return;
                     }
                 }
@@ -359,7 +359,7 @@ public partial class LegacyHelper
                     if (sc != null)
                     {
                         sc.FullHealFromBench();
-                        SaveShadeState(sc.GetCurrentHP(), sc.GetMaxHP(), sc.GetShadeSoul(), sc.GetCanTakeDamage());
+                        SaveShadeState(sc.GetCurrentNormalHP(), sc.GetMaxNormalHP(), sc.GetCurrentLifeblood(), sc.GetMaxLifeblood(), sc.GetShadeSoul(), sc.GetCanTakeDamage(), sc.GetBaseMaxHP());
                     }
                 }
             }
@@ -1034,32 +1034,94 @@ public partial class LegacyHelper
             if (actions == null)
                 return false;
 
-            return IsBindingPressed(current.GetKeyBindingForAction(actions.OpenInventory)) ||
-                   IsBindingPressed(current.GetKeyBindingForAction(actions.OpenInventoryMap)) ||
-                   IsBindingPressed(current.GetKeyBindingForAction(actions.OpenInventoryJournal)) ||
-                   IsBindingPressed(current.GetKeyBindingForAction(actions.OpenInventoryTools)) ||
-                   IsBindingPressed(current.GetKeyBindingForAction(actions.OpenInventoryQuests));
+            return IsActionKeyboardBindingPressed(actions.OpenInventory)
+                || IsActionKeyboardBindingPressed(actions.OpenInventoryMap)
+                || IsActionKeyboardBindingPressed(actions.OpenInventoryJournal)
+                || IsActionKeyboardBindingPressed(actions.OpenInventoryTools)
+                || IsActionKeyboardBindingPressed(actions.OpenInventoryQuests);
         }
 
-        private static bool IsBindingPressed(InputHandler.KeyOrMouseBinding binding)
+        private static bool IsActionKeyboardBindingPressed(PlayerAction action)
         {
-            if (binding.Key != Key.None)
+            if (action == null)
+                return false;
+
+            foreach (var binding in action.Bindings)
             {
-                try
+                if (binding == null || binding is ShadeMenuBindingSourceBase)
+                    continue;
+
+                if (binding is KeyBindingSource keyBinding)
                 {
-                    var mappings = UnityKeyboardProvider.KeyMappings;
-                    int index = (int)binding.Key;
-                    if (index >= 0 && index < mappings.Length)
-                    {
-                        return mappings[index].IsPressed;
-                    }
+                    if (IsKeyComboPressed(keyBinding.Control))
+                        return true;
+                    continue;
                 }
-                catch
+
+                if (binding is MouseBindingSource mouseBinding)
                 {
+                    if (IsMousePressed(mouseBinding.Control))
+                        return true;
                 }
             }
 
             return false;
+        }
+
+        private static bool IsKeyComboPressed(KeyCombo combo)
+        {
+            if (combo.IncludeCount == 0)
+                return false;
+
+            for (int i = 0; i < combo.IncludeCount; i++)
+            {
+                if (!IsKeyPressed(combo.GetInclude(i)))
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static bool IsKeyPressed(Key key)
+        {
+            if (key == Key.None)
+                return false;
+
+            try
+            {
+                var mappings = UnityKeyboardProvider.KeyMappings;
+                int index = (int)key;
+                if (index >= 0 && index < mappings.Length)
+                {
+                    return mappings[index].IsPressed;
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+
+        private static bool IsMousePressed(Mouse mouse)
+        {
+            if (mouse == Mouse.None)
+                return false;
+
+            try
+            {
+                return mouse switch
+                {
+                    Mouse.LeftButton => Input.GetMouseButton(0),
+                    Mouse.RightButton => Input.GetMouseButton(1),
+                    Mouse.MiddleButton => Input.GetMouseButton(2),
+                    _ => false
+                };
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static float GetShadeControllerDirectionalValue(ShadeAction action)
@@ -1451,7 +1513,7 @@ public partial class LegacyHelper
                 return IsMenuActive() && HornetKeyboardBindingsEnabled();
             }
 
-            protected override BindingSourceType SourceType => BindingSourceType.KeyBindingSource;
+            protected override BindingSourceType SourceType => BindingSourceType.DeviceBindingSource;
             protected override InputDeviceClass SourceClass => InputDeviceClass.Keyboard;
             protected override string SourceName => "Shade Controller Back";
             protected override string SourceDeviceName => "Shade Controller";

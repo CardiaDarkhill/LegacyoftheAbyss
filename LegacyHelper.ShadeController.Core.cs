@@ -53,9 +53,12 @@ public partial class LegacyHelper
             baseFocusHealRange = focusHealRange;
             baseTeleportChannelTime = teleportChannelTime;
             baseHitKnockbackForce = hitKnockbackForce;
-            baseShadeMaxHP = shadeMaxHP;
+            if (baseShadeMaxHP <= 0)
+            {
+                baseShadeMaxHP = shadeMaxHP;
+            }
             ResetCharmDerivedStats();
-            wasInactive = (!isDying && shadeHP <= 0);
+            wasInactive = (!isDying && GetTotalCurrentHealth() <= 0);
 
             // Ensure the shade can act as a pogo surface for Hornet
             try { gameObject.tag = "Recoiler"; } catch { }
@@ -68,31 +71,41 @@ public partial class LegacyHelper
             // Add a dedicated pogo target with HitResponse so hero slashes can register even when OnlyDamageEnemies is true
             EnsurePogoTarget();
             bool hasSavedState = LegacyHelper.HasSavedShadeState;
+            int computedMax = -1;
             try
             {
                 var pd = GameManager.instance != null ? GameManager.instance.playerData : null;
                 if (pd != null)
                 {
-                    int computedMax = Mathf.Max(1, (pd.maxHealth + 1) / 2);
-                    if (!hasSavedState || computedMax > shadeMaxHP)
+                    int playerDerivedMax = Mathf.Max(1, (pd.maxHealth + 1) / 2);
+                    computedMax = playerDerivedMax;
+                    if (!hasSavedState || playerDerivedMax > shadeMaxHP)
                     {
-                        shadeMaxHP = computedMax;
+                        shadeMaxHP = playerDerivedMax;
                     }
                     if (!hasSavedState && shadeHP <= 0)
                     {
                         shadeHP = Mathf.Clamp((pd.health + 1) / 2, 0, shadeMaxHP);
                     }
                     shadeHP = Mathf.Clamp(shadeHP, 0, shadeMaxHP);
-                    PushShadeStatsToHud();
+                    shadeLifeblood = Mathf.Clamp(shadeLifeblood, 0, shadeLifebloodMax);
+                    PushShadeStatsToHud(suppressDamageAudio: true);
                 }
             }
             catch { }
 
-            baseShadeMaxHP = shadeMaxHP;
+            if (computedMax > baseShadeMaxHP)
+            {
+                baseShadeMaxHP = computedMax;
+            }
+            else if (baseShadeMaxHP <= 0)
+            {
+                baseShadeMaxHP = shadeMaxHP;
+            }
 
             baselineStatsInitialized = true;
 
-            lastSavedHP = lastSavedMax = lastSavedSoul = -999;
+            lastSavedHP = lastSavedMax = lastSavedLifeblood = lastSavedLifebloodMax = lastSavedSoul = -999;
             PersistIfChanged();
             lastSoulForReady = shadeSoul;
             TryPlaySpawnAnimation();
@@ -104,7 +117,7 @@ public partial class LegacyHelper
         {
             try
             {
-                LegacyHelper.SaveShadeState(shadeHP, shadeMaxHP, shadeSoul, canTakeDamage);
+                LegacyHelper.SaveShadeState(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax, shadeSoul, canTakeDamage, baseShadeMaxHP);
             }
             catch
             {
@@ -197,6 +210,19 @@ public partial class LegacyHelper
                 }
             }
 
+            if (pendingRestoredLifebloodMax >= 0)
+            {
+                int clamped = Mathf.Clamp(pendingRestoredLifeblood, 0, Mathf.Max(0, shadeLifebloodMax));
+                if (shadeLifeblood != clamped)
+                {
+                    shadeLifeblood = clamped;
+                    PushShadeStatsToHud(suppressDamageAudio: true);
+                    PersistIfChanged();
+                }
+                pendingRestoredLifeblood = -1;
+                pendingRestoredLifebloodMax = -1;
+            }
+
             if (soulAdjusted || shadeSoulMax != previousSoulMax)
             {
                 PersistIfChanged();
@@ -212,6 +238,19 @@ public partial class LegacyHelper
             else
             {
                 pendingCharmLoadoutRecompute = true;
+            }
+        }
+
+        private void EnterPersistenceSuppression()
+        {
+            persistenceSuppressionDepth++;
+        }
+
+        private void ExitPersistenceSuppression()
+        {
+            if (persistenceSuppressionDepth > 0)
+            {
+                persistenceSuppressionDepth--;
             }
         }
 
@@ -489,6 +528,24 @@ public partial class LegacyHelper
 
             if (hornetTransform == null) return;
 
+            bool pushedSoulThisFrame = false;
+            if (!cachedHud)
+            {
+                var resolvedHud = Object.FindFirstObjectByType<SimpleHUD>();
+                if (resolvedHud)
+                {
+                    cachedHud = resolvedHud;
+                    PushShadeStatsToHud(suppressDamageAudio: true);
+                    PushSoulToHud();
+                    pushedSoulThisFrame = true;
+                }
+            }
+
+            if (cachedHud && !pushedSoulThisFrame)
+            {
+                PushSoulToHud();
+            }
+
             if (GameIsPaused())
             {
                 capturedMoveInput = Vector2.zero;
@@ -599,7 +656,7 @@ public partial class LegacyHelper
             }
 
             // Track inactive flag
-            isInactive = (!isDying && shadeHP <= 0);
+            isInactive = (!isDying && GetTotalCurrentHealth() <= 0);
             if (wasInactive && !isInactive)
             {
                 hurtCooldown = Mathf.Max(hurtCooldown, ReviveIFrameSeconds);
@@ -627,8 +684,6 @@ public partial class LegacyHelper
                 }
             }
 
-            if (!cachedHud) cachedHud = Object.FindFirstObjectByType<SimpleHUD>();
-            PushSoulToHud();
             CheckHazardOverlap();
             SyncShadeLight();
             PersistIfChanged();
@@ -681,12 +736,12 @@ public partial class LegacyHelper
                     shadeHP = Mathf.Min(shadeHP + ModConfig.Instance.bindShadeHeal, shadeMaxHP);
                     if (shadeHP != before)
                     {
-                        if (shadeHP > 0)
+                        if (GetTotalCurrentHealth() > 0)
                         {
                             isInactive = false;
                             CancelDeathAnimation();
                         }
-                        PushShadeStatsToHud();
+                        PushShadeStatsToHud(suppressDamageAudio: true);
                         PersistIfChanged();
                     }
                 }
@@ -2233,10 +2288,8 @@ public partial class LegacyHelper
                 return;
             }
 
-            int before = shadeHP;
-            shadeHP = Mathf.Max(0, shadeHP - attempted);
-            int actual = Mathf.Max(0, before - shadeHP);
-            bool lethal = shadeHP <= 0;
+            int actual = ApplyDamageToPools(attempted);
+            bool lethal = GetTotalCurrentHealth() <= 0;
             if (lethal) StartDeathAnimation();
             PushShadeStatsToHud();
             CancelFocus();
@@ -2276,11 +2329,9 @@ public partial class LegacyHelper
                 return;
             }
 
-            int beforeHp = shadeHP;
-            shadeHP = Mathf.Max(0, shadeHP - dmg);
-            int actual = Mathf.Max(0, beforeHp - shadeHP);
-            bool lethal = shadeHP <= 0;
-            if (shadeHP > 0)
+            int actual = ApplyDamageToPools(dmg);
+            bool lethal = GetTotalCurrentHealth() <= 0;
+            if (!lethal)
             {
                 ApplyKnockback(srcPos);
             }
@@ -2293,6 +2344,45 @@ public partial class LegacyHelper
             CancelFocus();
             PersistIfChanged();
             DispatchCharmDamageEvent(dmg, actual, false, actual <= 0, lethal);
+        }
+
+        private int ApplyDamageToPools(int damage)
+        {
+            int attempted = Mathf.Max(0, damage);
+            if (attempted <= 0)
+            {
+                return 0;
+            }
+
+            int lostLifeblood = 0;
+            if (shadeLifeblood > 0)
+            {
+                lostLifeblood = Mathf.Min(shadeLifeblood, attempted);
+                shadeLifeblood -= lostLifeblood;
+                attempted -= lostLifeblood;
+            }
+
+            int lostNormal = 0;
+            if (attempted > 0)
+            {
+                int before = shadeHP;
+                shadeHP = Mathf.Max(0, shadeHP - attempted);
+                lostNormal = Mathf.Max(0, before - shadeHP);
+            }
+
+            if (lostLifeblood > 0)
+            {
+                if (jonisBlessingEquipped)
+                {
+                    hivebloodPendingLifebloodRestore = true;
+                }
+            }
+            else if (shadeLifeblood <= 0)
+            {
+                hivebloodPendingLifebloodRestore = false;
+            }
+
+            return lostLifeblood + lostNormal;
         }
 
         private void DispatchCharmDamageEvent(int attemptedDamage, int actualDamage, bool wasHazard, bool prevented, bool lethal)
@@ -2399,7 +2489,7 @@ public partial class LegacyHelper
                 float perFrame = 0.5f / deathAnimFrames.Length;
                 for (int i = 0; i < deathAnimFrames.Length; i++)
                 {
-                    if (shadeHP > 0)
+                    if (GetTotalCurrentHealth() > 0)
                     {
                         isCastingSpell = false;
                         isDying = false;
@@ -2415,7 +2505,7 @@ public partial class LegacyHelper
                 float t = 0f;
                 while (t < 0.5f)
                 {
-                    if (shadeHP > 0)
+                    if (GetTotalCurrentHealth() > 0)
                     {
                         isCastingSpell = false;
                         isDying = false;
@@ -2491,12 +2581,12 @@ public partial class LegacyHelper
                     shadeHP = Mathf.Min(shadeHP + canHeal, shadeMaxHP);
                     if (shadeHP != before)
                     {
-                        if (shadeHP > 0)
+                        if (GetTotalCurrentHealth() > 0)
                         {
                             isInactive = false;
                             CancelDeathAnimation();
                         }
-                        PushShadeStatsToHud();
+                        PushShadeStatsToHud(suppressDamageAudio: true);
                     }
 
                     // Heal Hornet if close

@@ -36,6 +36,10 @@ public partial class LegacyHelper
         private Collider2D bodyCol;
         private int shadeMaxHP;
         private int shadeHP;
+        private int shadeLifeblood;
+        private int shadeLifebloodMax;
+        private int pendingRestoredLifeblood = -1;
+        private int pendingRestoredLifebloodMax = -1;
         private float hazardCooldown;
         private float baseMaxDistance, baseSoftLeashRadius, baseHardLeashRadius, baseSnapLeashRadius;
         private float baseSprintMultiplier;
@@ -217,6 +221,9 @@ public partial class LegacyHelper
         private float charmHurtIFrameMultiplier = 1f;
         private float currentHurtIFrameDuration = HurtIFrameSeconds;
         private int charmMaxHpBonus;
+        private int charmLifebloodBonus;
+        private bool jonisBlessingEquipped;
+        private bool hivebloodPendingLifebloodRestore;
         private bool allowFocusMovement;
         private int knockbackSuppressionCount;
         private readonly Dictionary<string, float> conditionalNailDamageMultipliers = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
@@ -232,7 +239,10 @@ public partial class LegacyHelper
 
         private int lastSavedHP;
         private int lastSavedMax;
+        private int lastSavedLifeblood;
+        private int lastSavedLifebloodMax;
         private int lastSavedSoul;
         private bool lastSavedCanTakeDamage = true;
+        private int persistenceSuppressionDepth;
     }
 }

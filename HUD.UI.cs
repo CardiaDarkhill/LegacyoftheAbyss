@@ -117,24 +117,41 @@ public partial class SimpleHUD
 
     private void RefreshHealth()
     {
-        int cur = shadeHealth;
         if (maskImages == null) return;
 
-        if (cur < previousShadeHealth)
+        int normalMax = Mathf.Max(0, shadeMax);
+        int lifebloodMax = Mathf.Max(0, shadeLifebloodMax);
+        int totalMax = normalMax + lifebloodMax;
+
+        if (maskImages.Length != totalMax)
         {
-            int lost = previousShadeHealth - cur;
+            RebuildMasks();
+            if (maskImages == null) return;
+        }
+
+        int currentNormal = Mathf.Clamp(shadeHealth, 0, normalMax);
+        int currentLifeblood = Mathf.Clamp(shadeLifeblood, 0, lifebloodMax);
+        int totalCurrent = currentNormal + currentLifeblood;
+
+        if (totalCurrent < previousShadeTotalHealth)
+        {
+            int lost = previousShadeTotalHealth - totalCurrent;
             if (suppressNextDamageSound)
             {
                 suppressNextDamageSound = false;
             }
-            else
+            else if (lost > 0)
             {
                 TryPlayPinnedHurtSfx(lost);
             }
 
-            for (int i = cur; i < previousShadeHealth && i < maskImages.Length; i++)
+            int previousClamped = Mathf.Clamp(previousShadeTotalHealth, 0, maskImages.Length);
+            int currentClamped = Mathf.Clamp(totalCurrent, 0, maskImages.Length);
+            for (int i = previousClamped - 1; i >= currentClamped; i--)
             {
-                StartCoroutine(LoseHealth(maskImages[i], shadeOvercharmed));
+                if (i < 0 || i >= maskImages.Length) continue;
+                bool lifeblood = i >= normalMax;
+                StartCoroutine(LoseHealth(maskImages[i], shadeOvercharmed, lifeblood));
             }
         }
         else if (suppressNextDamageSound)
@@ -143,27 +160,106 @@ public partial class SimpleHUD
         }
 
         Color filledColor = shadeOvercharmed ? overcharmMaskColor : Color.white;
-        for (int i = 0; i < cur && i < maskImages.Length; i++)
+        for (int i = 0; i < normalMax && i < maskImages.Length; i++)
         {
-            maskImages[i].sprite = maskSprite != null ? maskSprite : maskImages[i].sprite;
-            maskImages[i].color = filledColor;
+            var img = maskImages[i];
+            if (img == null) continue;
+            img.sprite = maskSprite != null ? maskSprite : img.sprite;
+            img.color = i < currentNormal ? filledColor : missingMaskColor;
         }
-        for (int i = cur; i < maskImages.Length; i++)
-            if (i >= previousShadeHealth) maskImages[i].color = missingMaskColor;
-        previousShadeHealth = cur;
+
+        for (int i = 0; i < lifebloodMax; i++)
+        {
+            int index = normalMax + i;
+            if (index >= maskImages.Length) break;
+            var img = maskImages[index];
+            if (img == null) continue;
+            img.sprite = maskSprite != null ? maskSprite : img.sprite;
+            bool filled = i < currentLifeblood;
+            if (filled)
+            {
+                if (!img.gameObject.activeSelf)
+                {
+                    img.gameObject.SetActive(true);
+                }
+                img.color = lifebloodMaskColor;
+            }
+            else if (!animatingMaskImages.Contains(img))
+            {
+                if (img.gameObject.activeSelf)
+                {
+                    img.gameObject.SetActive(false);
+                }
+            }
+        }
+
+        previousShadeTotalHealth = totalCurrent;
     }
 
-    private IEnumerator LoseHealth(Image img, bool wasOvercharmed)
+    private IEnumerator LoseHealth(Image img, bool wasOvercharmed, bool wasLifeblood)
     {
         if (img == null) yield break;
-        Color filledColor = wasOvercharmed ? overcharmMaskColor : Color.white;
-        Color flickerColor = wasOvercharmed ? filledColor : Color.red;
+
+        animatingMaskImages.Add(img);
+
+        Color filledColor;
+        Color flickerColor;
+        Color emptyColor;
+
+        if (wasLifeblood)
+        {
+            filledColor = lifebloodMaskColor;
+            flickerColor = new Color(lifebloodMaskColor.r, lifebloodMaskColor.g, lifebloodMaskColor.b, Mathf.Clamp01(lifebloodMaskColor.a * 0.6f));
+            emptyColor = lifebloodMissingColor;
+        }
+        else
+        {
+            filledColor = wasOvercharmed ? overcharmMaskColor : Color.white;
+            flickerColor = wasOvercharmed ? filledColor : Color.red;
+            emptyColor = missingMaskColor;
+        }
+
         for (int i = 0; i < 2; i++)
         {
             img.color = filledColor; yield return new WaitForSeconds(0.05f);
             img.color = flickerColor; yield return new WaitForSeconds(0.05f);
         }
-        img.color = missingMaskColor;
+
+        img.color = emptyColor;
+
+        if (wasLifeblood)
+        {
+            HideLifebloodMaskIfDepleted(img);
+        }
+
+        animatingMaskImages.Remove(img);
+    }
+
+    private void HideLifebloodMaskIfDepleted(Image img)
+    {
+        if (img == null || maskImages == null)
+        {
+            return;
+        }
+
+        int index = Array.IndexOf(maskImages, img);
+        if (index < 0)
+        {
+            return;
+        }
+
+        int normalMax = Mathf.Max(0, shadeMax);
+        int lifebloodIndex = index - normalMax;
+        if (lifebloodIndex < 0)
+        {
+            return;
+        }
+
+        int currentLifeblood = Mathf.Clamp(shadeLifeblood, 0, Mathf.Max(0, shadeLifebloodMax));
+        if (lifebloodIndex >= currentLifeblood && img.gameObject.activeSelf)
+        {
+            img.gameObject.SetActive(false);
+        }
     }
 
     private void RefreshSoul()
@@ -179,12 +275,14 @@ public partial class SimpleHUD
     {
         if (healthContainer == null) return;
         foreach (var img in maskImages ?? Array.Empty<Image>()) if (img != null) Destroy(img.gameObject);
+        animatingMaskImages.Clear();
         BuildMasks(healthContainer.GetComponent<RectTransform>(), GetUIScale());
     }
 
     private void BuildMasks(RectTransform container, float uiScale)
     {
-        maskImages = new Image[shadeMax];
+        int totalMasks = Mathf.Max(0, shadeMax) + Mathf.Max(0, shadeLifebloodMax);
+        maskImages = new Image[totalMasks];
         Vector2 maskPixels = maskSprite != null
             ? new Vector2(maskSprite.rect.width, maskSprite.rect.height)
             : new Vector2(33, 41);
@@ -195,7 +293,7 @@ public partial class SimpleHUD
         overcharmMaskSpacing = spacing;
         EnsureOvercharmBackdrop(container);
         float x = 0f;
-        for (int i = 0; i < shadeMax; i++)
+        for (int i = 0; i < totalMasks; i++)
         {
             var m = new GameObject($"Mask{i}");
             m.transform.SetParent(container, false);
@@ -260,7 +358,8 @@ public partial class SimpleHUD
         if (overcharmBackdrop == null)
             return;
 
-        if (shadeMax <= 0 || maskImages == null || maskImages.Length == 0)
+        int totalMasks = Mathf.Max(0, shadeMax) + Mathf.Max(0, shadeLifebloodMax);
+        if (totalMasks <= 0 || maskImages == null || maskImages.Length == 0)
         {
             overcharmBackdrop.enabled = false;
             overcharmBackdrop.gameObject.SetActive(false);
@@ -276,8 +375,32 @@ public partial class SimpleHUD
             return;
         }
 
-        float width = Mathf.Max(0f, maxBounds.x - minBounds.x);
-        float height = Mathf.Max(0f, maxBounds.y - minBounds.y);
+        float measuredWidth = Mathf.Max(0f, maxBounds.x - minBounds.x);
+        float measuredHeight = Mathf.Max(0f, maxBounds.y - minBounds.y);
+        float width = measuredWidth;
+        float height = measuredHeight;
+
+        if (overcharmMaskSize.x > 0f && OvercharmBackdropReferenceMaskCount > 0)
+        {
+            float constantWidth = overcharmMaskSize.x * OvercharmBackdropReferenceMaskCount;
+            if (OvercharmBackdropReferenceMaskCount > 1 && overcharmMaskSpacing > 0f)
+            {
+                constantWidth += overcharmMaskSpacing * (OvercharmBackdropReferenceMaskCount - 1);
+            }
+            width = constantWidth;
+        }
+
+        if (overcharmMaskSize.y > 0f)
+        {
+            height = overcharmMaskSize.y;
+        }
+
+        if (width <= 0f || height <= 0f)
+        {
+            width = measuredWidth;
+            height = measuredHeight;
+        }
+
         if (width <= 0f || height <= 0f)
         {
             overcharmBackdrop.enabled = false;

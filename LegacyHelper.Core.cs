@@ -24,9 +24,9 @@ public partial class LegacyHelper : BaseUnityPlugin
     // Persist shade state across scene transitions
     internal static bool HasSavedShadeState => ShadeRuntime.PersistentState.HasData;
 
-    internal static void SaveShadeState(int curHp, int maxHp, int soul, bool? canTakeDamage = null)
+    internal static void SaveShadeState(int curHp, int maxHp, int lifebloodCur, int lifebloodMax, int soul, bool? canTakeDamage = null, int? baseMaxHp = null)
     {
-        ShadeRuntime.CaptureState(curHp, maxHp, soul, canTakeDamage);
+        ShadeRuntime.CaptureState(curHp, maxHp, lifebloodCur, lifebloodMax, soul, canTakeDamage, baseMaxHp);
     }
 
     // Called when Hornet gains a new spell. Advances Shade's unlock/upgrade track.
@@ -230,7 +230,7 @@ public partial class LegacyHelper : BaseUnityPlugin
                     sc.SuppressHazardDamage(SceneSpawnProtectionSeconds);
                     sc.ApplySceneTransitionProtection(SceneSpawnProtectionSeconds);
                     sc.TriggerSpawnEntrance();
-                    SaveShadeState(sc.GetCurrentHP(), sc.GetMaxHP(), sc.GetShadeSoul(), sc.GetCanTakeDamage());
+                    SaveShadeState(sc.GetCurrentNormalHP(), sc.GetMaxNormalHP(), sc.GetCurrentLifeblood(), sc.GetMaxLifeblood(), sc.GetShadeSoul(), sc.GetCanTakeDamage(), sc.GetBaseMaxHP());
                     RequestShadeLoadoutRecompute();
                 }
                 else
@@ -249,9 +249,9 @@ public partial class LegacyHelper : BaseUnityPlugin
 
         var scNew = helper.AddComponent<ShadeController>();
         scNew.Init(gm.hero_ctrl.transform);
-        if (ShadeRuntime.TryGetPersistentState(out var savedHp, out var savedMax, out var savedSoul, out var savedCanTakeDamage))
+        if (ShadeRuntime.TryGetPersistentState(out var savedHp, out var savedMax, out var savedLifeblood, out var savedLifebloodMax, out var savedSoul, out var savedCanTakeDamage, out var savedBaseMax))
         {
-            scNew.RestorePersistentState(savedHp, savedMax, savedSoul, savedCanTakeDamage);
+            scNew.RestorePersistentState(savedHp, savedMax, savedBaseMax, savedLifeblood, savedLifebloodMax, savedSoul, savedCanTakeDamage);
         }
 
         scNew.SuppressHazardDamage(SceneSpawnProtectionSeconds);

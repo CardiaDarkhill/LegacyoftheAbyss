@@ -16,6 +16,9 @@ namespace LegacyoftheAbyss.Shade
 
         public int CurrentHP { get; private set; } = -1;
         public int MaxHP { get; private set; } = -1;
+        public int BaseMaxHP { get; private set; } = -1;
+        public int CurrentLifeblood { get; private set; } = -1;
+        public int LifebloodMax { get; private set; } = -1;
         public int Soul { get; private set; } = -1;
         public bool CanTakeDamage { get; private set; } = true;
         public int SpellProgress { get; private set; }
@@ -29,7 +32,7 @@ namespace LegacyoftheAbyss.Shade
         public int NotchCapacity { get; private set; }
             = 0;
 
-        public bool HasData => MaxHP > 0;
+        public bool HasData => MaxHP > 0 || LifebloodMax > 0;
 
         public ShadePersistentState Clone()
         {
@@ -37,6 +40,9 @@ namespace LegacyoftheAbyss.Shade
             {
                 CurrentHP = CurrentHP,
                 MaxHP = MaxHP,
+                BaseMaxHP = BaseMaxHP,
+                CurrentLifeblood = CurrentLifeblood,
+                LifebloodMax = LifebloodMax,
                 Soul = Soul,
                 CanTakeDamage = CanTakeDamage,
                 SpellProgress = SpellProgress,
@@ -52,25 +58,43 @@ namespace LegacyoftheAbyss.Shade
             return clone;
         }
 
-        public void Capture(int currentHp, int maxHp, int soul, bool? canTakeDamage = null)
+        public void Capture(int currentHp, int maxHp, int lifebloodCurrent, int lifebloodMax, int soul, bool? canTakeDamage = null, int? baseMaxHp = null)
         {
             int previousMax = MaxHP;
             int previousHp = CurrentHP;
+            int previousLifebloodMax = LifebloodMax;
+            int previousLifeblood = CurrentLifeblood;
+            int previousBaseMax = BaseMaxHP;
 
-            int sanitizedMax = Mathf.Max(1, maxHp);
+            int sanitizedMax = Mathf.Max(0, maxHp);
+            int sanitizedBaseMax = Mathf.Max(0, baseMaxHp ?? sanitizedMax);
+            int sanitizedLifebloodMax = Mathf.Max(0, lifebloodMax);
             int sanitizedHp = Mathf.Clamp(currentHp, 0, sanitizedMax);
+            int sanitizedLifeblood = Mathf.Clamp(lifebloodCurrent, 0, sanitizedLifebloodMax);
 
-            bool suspiciousDrop = previousMax > 1 && sanitizedMax <= 1 && sanitizedHp <= 1;
+            int previousTotalMax = Mathf.Max(0, previousMax) + Mathf.Max(0, previousLifebloodMax);
+            int sanitizedTotalMax = Mathf.Max(0, sanitizedMax) + Mathf.Max(0, sanitizedLifebloodMax);
+            int sanitizedTotalHp = Mathf.Clamp(sanitizedHp + sanitizedLifeblood, 0, sanitizedTotalMax);
+
+            bool suspiciousDrop = previousTotalMax > 1 && sanitizedTotalMax <= 1 && sanitizedTotalHp <= 1;
             bool invulnerableDrop = false;
             if (!CanTakeDamage || (canTakeDamage.HasValue && !canTakeDamage.Value))
             {
-                invulnerableDrop = previousHp >= 0 && sanitizedHp < previousHp;
+                int previousTotalHp = Mathf.Max(0, previousHp) + Mathf.Max(0, previousLifeblood);
+                invulnerableDrop = previousTotalHp >= 0 && sanitizedTotalHp < previousTotalHp;
             }
 
-            if (suspiciousDrop || invulnerableDrop)
+            bool baseChanged = baseMaxHp.HasValue && Mathf.Max(0, baseMaxHp.Value) != Mathf.Max(0, previousBaseMax);
+            bool lifebloodCapChanged = Mathf.Max(0, lifebloodMax) != Mathf.Max(0, previousLifebloodMax);
+            bool allowAuthoritativeDrop = baseChanged || lifebloodCapChanged;
+
+            if ((suspiciousDrop || invulnerableDrop) && !allowAuthoritativeDrop)
             {
                 sanitizedMax = previousMax;
-                sanitizedHp = Mathf.Clamp(Mathf.Max(previousHp, currentHp), 0, sanitizedMax);
+                sanitizedHp = Mathf.Clamp(Mathf.Max(previousHp, currentHp), 0, Mathf.Max(1, sanitizedMax));
+                sanitizedBaseMax = Mathf.Max(0, previousBaseMax);
+                sanitizedLifebloodMax = previousLifebloodMax;
+                sanitizedLifeblood = Mathf.Clamp(Mathf.Max(previousLifeblood, lifebloodCurrent), 0, sanitizedLifebloodMax);
                 if (ModConfig.Instance.logShade)
                 {
                     try
@@ -78,7 +102,8 @@ namespace LegacyoftheAbyss.Shade
                         string reason = suspiciousDrop
                             ? "suspicious"
                             : "invulnerable";
-                        Debug.LogWarning($"[ShadePersistence] Ignored {reason} state capture (hp={currentHp}, max={maxHp}, prevHp={previousHp}, prevMax={previousMax}, invulnerable={!CanTakeDamage}).");
+                        string requestedBase = baseMaxHp.HasValue ? baseMaxHp.Value.ToString() : "null";
+                        Debug.LogWarning($"[ShadePersistence] Ignored {reason} state capture (hp={currentHp}, max={maxHp}, lifeblood={lifebloodCurrent}, lifebloodMax={lifebloodMax}, baseMax={requestedBase}, prevHp={previousHp}, prevMax={previousMax}, prevLifeblood={previousLifeblood}, prevLifebloodMax={previousLifebloodMax}, prevBaseMax={previousBaseMax}, invulnerable={!CanTakeDamage}).");
                     }
                     catch
                     {
@@ -86,8 +111,21 @@ namespace LegacyoftheAbyss.Shade
                 }
             }
 
+            if (sanitizedBaseMax <= 0 && sanitizedMax > 0)
+            {
+                sanitizedBaseMax = sanitizedMax;
+            }
+
+            if (sanitizedMax <= 0 && sanitizedLifebloodMax <= 0)
+            {
+                sanitizedMax = 1;
+            }
+
             MaxHP = sanitizedMax;
-            CurrentHP = Mathf.Clamp(sanitizedHp, 0, MaxHP);
+            CurrentHP = Mathf.Clamp(sanitizedHp, 0, MaxHP > 0 ? MaxHP : sanitizedHp);
+            BaseMaxHP = Mathf.Max(0, sanitizedBaseMax);
+            LifebloodMax = sanitizedLifebloodMax;
+            CurrentLifeblood = Mathf.Clamp(sanitizedLifeblood, 0, LifebloodMax);
             Soul = Mathf.Max(0, soul);
             if (canTakeDamage.HasValue)
             {
@@ -100,6 +138,9 @@ namespace LegacyoftheAbyss.Shade
         {
             CurrentHP = -1;
             MaxHP = -1;
+            BaseMaxHP = -1;
+            CurrentLifeblood = -1;
+            LifebloodMax = -1;
             Soul = -1;
             CanTakeDamage = true;
             SpellProgress = 0;
@@ -120,6 +161,9 @@ namespace LegacyoftheAbyss.Shade
             {
                 CurrentHP = CurrentHP,
                 MaxHP = MaxHP,
+                BaseMaxHP = BaseMaxHP,
+                CurrentLifeblood = CurrentLifeblood,
+                LifebloodMax = LifebloodMax,
                 Soul = Soul,
                 CanTakeDamage = CanTakeDamage,
                 SpellProgress = SpellProgress,
@@ -138,9 +182,9 @@ namespace LegacyoftheAbyss.Shade
             }
 
             var snapshot = data.Value;
-            if (snapshot.MaxHP > 0)
+            if (snapshot.MaxHP > 0 || snapshot.LifebloodMax > 0)
             {
-                Capture(snapshot.CurrentHP, snapshot.MaxHP, snapshot.Soul, snapshot.CanTakeDamage);
+                Capture(snapshot.CurrentHP, snapshot.MaxHP, snapshot.CurrentLifeblood, snapshot.LifebloodMax, snapshot.Soul, snapshot.CanTakeDamage, snapshot.BaseMaxHP);
             }
             else
             {
@@ -192,6 +236,12 @@ namespace LegacyoftheAbyss.Shade
             public int CurrentHP { get; set; }
 
             public int MaxHP { get; set; }
+
+            public int BaseMaxHP { get; set; }
+
+            public int CurrentLifeblood { get; set; }
+
+            public int LifebloodMax { get; set; }
 
             public int Soul { get; set; }
 

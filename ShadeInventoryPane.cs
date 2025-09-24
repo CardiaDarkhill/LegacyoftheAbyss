@@ -1768,6 +1768,13 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         var entry = entries[Mathf.Clamp(selectedIndex, 0, entries.Count - 1)];
         var id = entry.Id;
+        if (!ShadeRuntime.IsHornetRestingAtBench())
+        {
+            LogMenuEvent("HandleSubmit blocked: hornet not at bench");
+            SetTextValue(statusText, statusTextTMP, ShadeRuntime.BenchLockedMessage);
+            return;
+        }
+
         if (!inventory.IsOwned(id))
         {
             LogMenuEvent(FormattableString.Invariant(
@@ -7004,6 +7011,11 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             RenderNotchStrip(detailCostIcons, 0, 0, false);
             status = $"No notch cost.\\n{status}";
+        }
+
+        if (!ShadeRuntime.IsHornetRestingAtBench())
+        {
+            status = ShadeRuntime.BenchLockedMessage;
         }
 
         SetTextValue(statusText, statusTextTMP, status);

@@ -9,17 +9,22 @@ public partial class SimpleHUD
         {
             shadeMax = 0;
             shadeHealth = 0;
+            shadeLifebloodMax = 0;
+            shadeLifeblood = 0;
             prevHornetMax = 0;
             prevHornetHealth = 0;
             suppressNextDamageSound = false;
             return;
         }
-        shadeMax = (playerData.maxHealth + 1) / 2;
         prevHornetMax = playerData.maxHealth;
         prevHornetHealth = playerData.health;
+
         if (!hasExplicitShadeStats)
         {
+            shadeMax = (playerData.maxHealth + 1) / 2;
+            shadeLifebloodMax = 0;
             shadeHealth = (playerData.health + 1) / 2;
+            shadeLifeblood = 0;
             suppressNextDamageSound = true;
         }
     }
@@ -29,10 +34,16 @@ public partial class SimpleHUD
         if (playerData == null) return;
         int newHornetMax = playerData.maxHealth;
         int newHornet = playerData.health;
-        int newMax = (newHornetMax + 1) / 2;
-        if (newMax != shadeMax)
+        if (!hasExplicitShadeStats)
         {
-            shadeMax = newMax; RebuildMasks(); previousShadeHealth = Mathf.Min(previousShadeHealth, shadeMax); shadeHealth = Mathf.Min(shadeHealth, shadeMax);
+            int newMax = (newHornetMax + 1) / 2;
+            if (newMax != shadeMax)
+            {
+                shadeMax = newMax;
+                RebuildMasks();
+                previousShadeTotalHealth = Mathf.Min(previousShadeTotalHealth, shadeMax + shadeLifebloodMax);
+                shadeHealth = Mathf.Min(shadeHealth, shadeMax);
+            }
         }
         prevHornetHealth = newHornet; prevHornetMax = newHornetMax;
     }
