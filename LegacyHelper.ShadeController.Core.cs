@@ -117,6 +117,12 @@ public partial class LegacyHelper
         {
             try
             {
+                if (sceneProtectionSuppressingPersistence)
+                {
+                    ExitPersistenceSuppression();
+                    sceneProtectionSuppressingPersistence = false;
+                }
+
                 LegacyHelper.SaveShadeState(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax, shadeSoul, canTakeDamage, baseShadeMaxHP);
             }
             catch
@@ -626,6 +632,7 @@ public partial class LegacyHelper
                 if (canTakeDamage)
                 {
                     canTakeDamage = false;
+                    PushShadeStatsToHud(suppressDamageAudio: true);
                     PersistIfChanged();
                 }
 
@@ -641,12 +648,20 @@ public partial class LegacyHelper
                     else
                     {
                         sceneProtectionActive = false;
-                        if (canTakeDamage != sceneProtectionDesiredDamageState)
+                        if (sceneProtectionSuppressingPersistence)
                         {
-                            canTakeDamage = sceneProtectionDesiredDamageState;
-                            PersistIfChanged();
-                            PushShadeStatsToHud(suppressDamageAudio: true);
+                            ExitPersistenceSuppression();
+                            sceneProtectionSuppressingPersistence = false;
                         }
+
+                        bool desiredCanTakeDamage = sceneProtectionDesiredDamageState;
+                        if (canTakeDamage != desiredCanTakeDamage)
+                        {
+                            canTakeDamage = desiredCanTakeDamage;
+                            PersistIfChanged();
+                        }
+
+                        PushShadeStatsToHud(suppressDamageAudio: true);
                     }
                 }
             }
@@ -2203,10 +2218,13 @@ public partial class LegacyHelper
             }
 
             sceneProtectionTimer = Mathf.Max(sceneProtectionTimer, duration);
-            if (!sceneProtectionActive)
+            bool activating = !sceneProtectionActive;
+            sceneProtectionActive = true;
+            sceneProtectionDesiredDamageState = !assistModeEnabled;
+            if (activating && !sceneProtectionSuppressingPersistence)
             {
-                sceneProtectionActive = true;
-                sceneProtectionDesiredDamageState = !assistModeEnabled;
+                EnterPersistenceSuppression();
+                sceneProtectionSuppressingPersistence = true;
             }
 
             hazardCooldown = Mathf.Max(hazardCooldown, duration);
@@ -2215,6 +2233,7 @@ public partial class LegacyHelper
             if (canTakeDamage)
             {
                 canTakeDamage = false;
+                PushShadeStatsToHud(suppressDamageAudio: true);
                 PersistIfChanged();
             }
         }

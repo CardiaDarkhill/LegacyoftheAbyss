@@ -19,6 +19,10 @@ public partial class LegacyHelper
             shadeSoul = Mathf.Clamp(soul, 0, shadeSoulMax);
             canTakeDamage = canDamage;
             assistModeEnabled = !canTakeDamage;
+            sceneProtectionDesiredDamageState = canTakeDamage;
+            sceneProtectionActive = false;
+            sceneProtectionTimer = 0f;
+            sceneProtectionSuppressingPersistence = false;
             lastSavedCanTakeDamage = canTakeDamage;
 
             if (baseShadeMaxHP <= 0)

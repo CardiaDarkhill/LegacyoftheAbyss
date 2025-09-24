@@ -1038,10 +1038,13 @@ namespace LegacyoftheAbyss.Shade
             {
                 foreach (var id in SanitizeIds(equipped))
                 {
-                    if (_owned.Contains(id) && !_broken.Contains(id))
+                    if (_broken.Contains(id))
                     {
-                        AddEquippedInternal(id);
+                        continue;
                     }
+
+                    _owned.Add(id);
+                    AddEquippedInternal(id);
                 }
             }
 

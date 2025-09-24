@@ -144,6 +144,7 @@ public partial class LegacyHelper
         private float sceneProtectionTimer;
         private bool sceneProtectionActive;
         private bool sceneProtectionDesiredDamageState = true;
+        private bool sceneProtectionSuppressingPersistence;
         private readonly Collider2D[] sceneProtectionOverlapBuffer = new Collider2D[16];
         private Vector2 capturedMoveInput;
         private float capturedHorizontalInput;
