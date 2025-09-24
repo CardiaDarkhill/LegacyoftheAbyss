@@ -42,7 +42,7 @@
   <ItemGroup>
     <Compile Remove="**\obj\**\*.cs" />
     <Compile Remove="**\bin\**\*.cs" />
-    <Compile Remove="**\DLLDecompiles\**\*.cs" />
+    <Compile Remove="**\Decompiles\**\*.cs" />
   </ItemGroup>
 
   <Target Name="CopyMod" AfterTargets="PostBuildEvent" Condition="'$(SilksongFolder)' != ''">
