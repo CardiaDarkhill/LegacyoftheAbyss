@@ -4670,6 +4670,53 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
     }
 
+    private void RefreshEquippedLayoutImmediate()
+    {
+        try
+        {
+            Canvas.ForceUpdateCanvases();
+        }
+        catch
+        {
+        }
+
+        if (leftContentRoot != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(leftContentRoot);
+        }
+
+        if (equippedIconsRoot != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(equippedIconsRoot);
+        }
+    }
+
+    private int DetermineNextEquippedSlotIndex()
+    {
+        EnsureEquippedDisplayCapacity();
+        if (equippedIcons.Count == 0)
+        {
+            return -1;
+        }
+
+        int limit = Mathf.Min(equippedDisplayIds.Count, equippedIcons.Count);
+        int filled = 0;
+        for (int i = 0; i < limit; i++)
+        {
+            if (equippedDisplayIds[i].HasValue)
+            {
+                filled++;
+            }
+        }
+
+        if (filled < equippedIcons.Count)
+        {
+            return filled;
+        }
+
+        return equippedIcons.Count - 1;
+    }
+
     private void StartOvercharmAttemptAnimation(CharmEntry entry, ShadeCharmDefinition definition, int attemptIndex, int attemptThreshold)
     {
         var root = EnsureOverlayCanvas();
@@ -4887,6 +4934,54 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return false;
         }
 
+        RefreshEquippedLayoutImmediate();
+
+        int slotIndex = DetermineNextEquippedSlotIndex();
+        if (slotIndex >= 0 && slotIndex < equippedIcons.Count)
+        {
+            var targetIcon = equippedIcons[slotIndex];
+            var rect = targetIcon != null ? targetIcon.rectTransform : null;
+            if (rect != null)
+            {
+                bool activatedPlaceholder = false;
+                bool previousEnabled = targetIcon != null && targetIcon.enabled;
+
+                try
+                {
+                    if (!rect.gameObject.activeSelf)
+                    {
+                        rect.gameObject.SetActive(true);
+                        activatedPlaceholder = true;
+                        if (targetIcon != null)
+                        {
+                            previousEnabled = targetIcon.enabled;
+                            targetIcon.enabled = false;
+                        }
+
+                        RefreshEquippedLayoutImmediate();
+                    }
+
+                    if (TryGetOverlayPosition(rect, out overlayPoint))
+                    {
+                        return true;
+                    }
+                }
+                finally
+                {
+                    if (activatedPlaceholder)
+                    {
+                        if (targetIcon != null)
+                        {
+                            targetIcon.enabled = previousEnabled;
+                        }
+
+                        rect.gameObject.SetActive(false);
+                        RefreshEquippedLayoutImmediate();
+                    }
+                }
+            }
+        }
+
         Vector2 center;
         Vector2 size;
         Vector2 min;
@@ -4899,8 +4994,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
             }
         }
 
-        var rect = equippedIconsRoot.rect;
-        Vector2 fallback = rect.center;
+        var rectRoot = equippedIconsRoot.rect;
+        Vector2 fallback = rectRoot.center;
         return TryConvertEquippedLocalToOverlay(fallback, out overlayPoint);
     }
 
@@ -4952,7 +5047,14 @@ internal sealed class ShadeInventoryPane : InventoryPane
             return;
         }
 
-        if (!TryGetOverlayPosition(sourceRect, out var start) || !TryGetOverlayPosition(destRect, out var end))
+        if (!TryGetOverlayPosition(sourceRect, out var start))
+        {
+            return;
+        }
+
+        RefreshEquippedLayoutImmediate();
+
+        if (!TryGetOverlayPosition(destRect, out var end))
         {
             return;
         }
