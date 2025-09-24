@@ -14,38 +14,47 @@ public partial class LegacyHelper
                 return;
             }
 
-            pendingCharmLoadoutRecompute = false;
+            EnterPersistenceSuppression();
+            try
+            {
+                pendingCharmLoadoutRecompute = false;
 
-            maxDistance = baseMaxDistance;
-            softLeashRadius = baseSoftLeashRadius;
-            hardLeashRadius = baseHardLeashRadius;
-            snapLeashRadius = baseSnapLeashRadius;
-            sprintMultiplier = baseSprintMultiplier;
-            fireCooldown = baseFireCooldown;
-            nailCooldown = baseNailCooldown;
-            focusSoulCost = baseFocusSoulCost;
-            projectileSoulCost = baseProjectileSoulCost;
-            shriekSoulCost = baseShriekSoulCost;
-            quakeSoulCost = baseQuakeSoulCost;
-            soulGainPerHit = baseSoulGainPerHit;
-            focusChannelTime = baseFocusChannelTime;
-            focusHealRange = baseFocusHealRange;
-            teleportChannelTime = baseTeleportChannelTime;
-            hitKnockbackForce = baseHitKnockbackForce;
-            shadeMaxHP = baseShadeMaxHP;
-            ResetCharmDerivedStats();
+                maxDistance = baseMaxDistance;
+                softLeashRadius = baseSoftLeashRadius;
+                hardLeashRadius = baseHardLeashRadius;
+                snapLeashRadius = baseSnapLeashRadius;
+                sprintMultiplier = baseSprintMultiplier;
+                fireCooldown = baseFireCooldown;
+                nailCooldown = baseNailCooldown;
+                focusSoulCost = baseFocusSoulCost;
+                projectileSoulCost = baseProjectileSoulCost;
+                shriekSoulCost = baseShriekSoulCost;
+                quakeSoulCost = baseQuakeSoulCost;
+                soulGainPerHit = baseSoulGainPerHit;
+                focusChannelTime = baseFocusChannelTime;
+                focusHealRange = baseFocusHealRange;
+                teleportChannelTime = baseTeleportChannelTime;
+                hitKnockbackForce = baseHitKnockbackForce;
+                shadeMaxHP = baseShadeMaxHP;
+                ResetCharmDerivedStats();
 
-            var inventory = ShadeRuntime.Charms;
-            var loadout = inventory?.GetEquippedDefinitions();
-            ApplyCharmLoadout(loadout);
+                var inventory = ShadeRuntime.Charms;
+                var loadout = inventory?.GetEquippedDefinitions();
+                ApplyCharmLoadout(loadout);
 
-            maxDistance = Mathf.Max(6f, maxDistance);
-            softLeashRadius = Mathf.Max(4f, softLeashRadius);
-            hardLeashRadius = Mathf.Max(softLeashRadius, hardLeashRadius);
-            snapLeashRadius = Mathf.Max(hardLeashRadius, snapLeashRadius);
+                maxDistance = Mathf.Max(6f, maxDistance);
+                softLeashRadius = Mathf.Max(4f, softLeashRadius);
+                hardLeashRadius = Mathf.Max(softLeashRadius, hardLeashRadius);
+                snapLeashRadius = Mathf.Max(hardLeashRadius, snapLeashRadius);
+            }
+            finally
+            {
+                ExitPersistenceSuppression();
+            }
 
             PushSoulToHud();
             PushShadeStatsToHud(suppressDamageAudio: true);
+            PersistIfChanged();
         }
 
         internal void MultiplyNailDamage(float factor)

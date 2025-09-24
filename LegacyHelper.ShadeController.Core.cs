@@ -241,6 +241,19 @@ public partial class LegacyHelper
             }
         }
 
+        private void EnterPersistenceSuppression()
+        {
+            persistenceSuppressionDepth++;
+        }
+
+        private void ExitPersistenceSuppression()
+        {
+            if (persistenceSuppressionDepth > 0)
+            {
+                persistenceSuppressionDepth--;
+            }
+        }
+
         private void LoadShadeSprites()
         {
             try

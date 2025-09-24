@@ -76,6 +76,11 @@ public partial class LegacyHelper
 
         private void PersistIfChanged()
         {
+            if (persistenceSuppressionDepth > 0)
+            {
+                return;
+            }
+
             if (lastSavedHP != shadeHP
                 || lastSavedMax != shadeMaxHP
                 || lastSavedLifeblood != shadeLifeblood

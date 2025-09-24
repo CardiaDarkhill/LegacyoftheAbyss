@@ -243,5 +243,6 @@ public partial class LegacyHelper
         private int lastSavedLifebloodMax;
         private int lastSavedSoul;
         private bool lastSavedCanTakeDamage = true;
+        private int persistenceSuppressionDepth;
     }
 }
