@@ -10,7 +10,8 @@
   - `ShadeCharmInventory` plus the calculator/definition classes describe charm effects and derived stats.
 - UI/HUD code is organised into partial classes under `HUD.*.cs`. `ShadeSettingsMenu.cs`, `ShadeInventoryPane.cs`, and related helpers construct and drive the custom pause-menu screens. `ShadeUnlockPopup.cs` & `ShadeUnlockPickup.cs` surface new ability notifications.
 - Input configuration is split between `HornetInput.cs` and `ShadeInputConfig.cs`, while gameplay glue and helpers reside in files such as `LegacyHelper.Projectile.cs`, `LoggingManager.cs`, and `ModConfig.cs`.
-- Decompiled game references can be found under `DLLDecompiles/Assembly-CSharp`. Use these as your API reference when interacting with Silksong types that do not ship with public documentation.
+- Decompiled game references can be found under `Decompiles/Assembly-CSharp`. Use these as your API reference when interacting with Silksong types that do not ship with public documentation.
+- An export of all in game internal names from the localization can be found in `Decompiles/localization`, in the format of XML files.
 
 ## Repository layout
 - `LegacyoftheAbyss.csproj` – main plugin project (netstandard2.1). Imports `SilksongPath.props` if present and defines a `CopyMod` target that zips & copies the built DLL into the game install.
