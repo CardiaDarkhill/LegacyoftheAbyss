@@ -117,19 +117,36 @@ public partial class LegacyHelper : BaseUnityPlugin
                 return;
             }
 
-            if (!Input.GetKey(KeyCode.LeftControl) && !Input.GetKey(KeyCode.RightControl))
+            bool ctrlHeld = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            if (ctrlHeld)
             {
+                bool unlocked = ShadeRuntime.ToggleDebugUnlockAllCharms();
+                if (unlocked)
+                {
+                    Logger?.LogInfo("Shade debug: temporarily unlocked all shade charms.");
+                }
+                else
+                {
+                    Logger?.LogInfo("Shade debug: restored shade charm unlock state.");
+                }
+
                 return;
             }
 
-            bool unlocked = ShadeRuntime.ToggleDebugUnlockAllCharms();
-            if (unlocked)
+            if (Input.GetKey(KeyCode.LeftShift))
             {
-                Logger?.LogInfo("Shade debug: temporarily unlocked all shade charms.");
-            }
-            else
-            {
-                Logger?.LogInfo("Shade debug: restored shade charm unlock state.");
+                var gm = GameManager.instance;
+                var hero = gm == null ? null : gm.hero_ctrl;
+                if (hero == null)
+                {
+                    Logger?.LogWarning("Hornet location requested, but the hero controller is unavailable.");
+                    return;
+                }
+
+                Vector3 position = hero.transform.position;
+                string sceneName = SceneManager.GetActiveScene().name;
+                Logger?.LogInfo($"Hornet location ({sceneName}): X={position.x:F3}, Y={position.y:F3}, Z={position.z:F3}");
+                return;
             }
         }
         catch (Exception ex)
@@ -157,7 +174,17 @@ public partial class LegacyHelper : BaseUnityPlugin
         try
         {
             var gm = GameManager.instance;
-            if (gm == null || gm.hero_ctrl == null) return;
+            if (gm == null)
+            {
+                return;
+            }
+
+            ShadeRuntime.SyncActiveSlot(gm);
+
+            if (gm.hero_ctrl == null)
+            {
+                return;
+            }
             Vector3 spawnPosAtControl = gm.hero_ctrl.transform.position;
             SpawnShadeAtPosition(spawnPosAtControl);
             ShadeCharmPlacer.PopulateScene(SceneManager.GetActiveScene().name, gm.hero_ctrl.transform);

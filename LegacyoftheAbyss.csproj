@@ -36,6 +36,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Assets\charm_placements.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Remove="Tests\**\*.cs" />
   </ItemGroup>
 
@@ -49,17 +55,22 @@
       <ItemGroup>
           <Binaries Include="$(TargetPath)"/>
           <Binaries Include="$(TargetDir)/$(TargetName).pdb"/>
+          <ModAssets Include="Assets\charm_placements.json" />
       </ItemGroup>
 
       <Copy SourceFiles="@(Binaries)" DestinationFolder="$(SilksongFolder)/BepInEx/plugins/$(TargetName)" />
+      <MakeDir Directories="$(SilksongFolder)/BepInEx/plugins/$(TargetName)/Assets" />
+      <Copy SourceFiles="@(ModAssets)" DestinationFolder="$(SilksongFolder)/BepInEx/plugins/$(TargetName)/Assets" SkipUnchangedFiles="true" />
 
       <PropertyGroup>
           <ExportFolder>bin/Publish</ExportFolder>
       </PropertyGroup>
-      
+
       <RemoveDir Directories="$(IntermediateOutputPath)/archive"/>
       <MakeDir Directories="$(ExportFolder)"/>
       <Copy SourceFiles="@(Binaries)" DestinationFolder="$(IntermediateOutputPath)/archive"/>
+      <MakeDir Directories="$(IntermediateOutputPath)/archive/Assets" />
+      <Copy SourceFiles="@(ModAssets)" DestinationFolder="$(IntermediateOutputPath)/archive/Assets" />
       <ZipDirectory SourceDirectory="$(IntermediateOutputPath)/archive" DestinationFile="$(ExportFolder)/$(TargetName).zip" Overwrite="True"/>
   </Target>
 </Project>

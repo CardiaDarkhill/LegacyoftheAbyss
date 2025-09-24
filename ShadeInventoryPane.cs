@@ -1799,7 +1799,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         SetTextValue(statusText, statusTextTMP, message);
-        if (triggeredOvercharmAttempt)
+        if (triggeredOvercharmAttempt && definition != null)
         {
             StartOvercharmAttemptAnimation(entry, definition, attemptIndex, attemptThreshold);
         }
@@ -4012,7 +4012,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         SetTextValue(notchText, notchTextTMP, "Notches");
         if (notchTextTMP != null)
         {
-            notchTextTMP.enableWordWrapping = false;
+            notchTextTMP.textWrappingMode = TextWrappingModes.NoWrap;
             notchTextTMP.overflowMode = TextOverflowModes.Overflow;
         }
         else if (notchText != null)

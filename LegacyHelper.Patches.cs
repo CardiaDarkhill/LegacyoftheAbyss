@@ -19,6 +19,11 @@ public partial class LegacyHelper
     {
         private static void Postfix(GameManager __instance)
         {
+            if (__instance != null)
+            {
+                ShadeRuntime.SyncActiveSlot(__instance);
+            }
+
             DisableStartup(__instance);
             bool gameplay = __instance.IsGameplayScene();
             if (hud != null)
