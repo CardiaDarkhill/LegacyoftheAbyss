@@ -928,6 +928,11 @@ public partial class LegacyHelper
 
         internal static bool IsShadePlaceholderBinding(BindingSource binding)
         {
+            if (binding is ShadeMenuBindingSourceBase)
+            {
+                return true;
+            }
+
             return IsPlaceholderBinding(binding);
         }
 
