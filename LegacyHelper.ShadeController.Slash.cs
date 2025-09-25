@@ -776,12 +776,11 @@ public partial class LegacyHelper
                     ls.x = -ls.x;
                     ls.y = -ls.y;
 
-                    // Ensure the down-slash stays vertically inverted regardless of any
-                    // prefab quirks and keep the horizontal mirror consistent with the
-                    // shade's facing so the wave art doesn't appear upside down when the
-                    // shade attacks to the right.
+                    // Mirror the horizontal scale to match the shade's facing while forcing
+                    // the vertical component negative so the reused up-slash prefab renders
+                    // as a downward strike for both directions.
                     ls.x = facing >= 0f ? Mathf.Abs(ls.x) : -Mathf.Abs(ls.x);
-                    ls.y = facing >= 0f ? Mathf.Abs(ls.y) : -Mathf.Abs(ls.y);
+                    ls.y = -Mathf.Abs(ls.y);
                 }
 
                 bool invertDownParentNegative = invertDown && ls.y < 0f;
@@ -804,7 +803,7 @@ public partial class LegacyHelper
                             if (!sr) continue;
 
                             bool baseFlip = waveBaseFlipY != null && i < waveBaseFlipY.Count ? waveBaseFlipY[i] : sr.flipY;
-                            bool invertSprite = invertDownParentNegative || facing > 0f;
+                            bool invertSprite = facing > 0f;
                             sr.flipY = invertSprite ? !baseFlip : baseFlip;
                         }
                     }
@@ -822,7 +821,7 @@ public partial class LegacyHelper
 
                             float targetSign = waveBaseSigns != null && i < waveBaseSigns.Count ? waveBaseSigns[i] : 1f;
                             if (targetSign == 0f) targetSign = 1f;
-                            else targetSign = Mathf.Sign(targetSign);
+                            else targetSign = -Mathf.Sign(targetSign);
 
                             float currentLossy = childTr.lossyScale.y;
                             float currentSign = currentLossy == 0f ? 1f : Mathf.Sign(currentLossy);
