@@ -2203,7 +2203,19 @@ public partial class LegacyHelper
                     var hz = GetHazardType(dh);
                     if (IsTerrainHazard(hz)) { LogShadeDamage(dh, col, canTakeDamage); OnShadeHitHazard(); return; }
                     int dmg = 0; try { dmg = dh.damageDealt; } catch { }
-                    if (dmg > 0) { LogShadeDamage(dh, col, canTakeDamage); OnShadeHitEnemy(dh); }
+                    if (dmg > 0)
+                    {
+                        bool preventedByVoidHeart = IsVoidHeartEvading();
+                        LogShadeDamage(dh, col, canTakeDamage && !preventedByVoidHeart);
+                        if (preventedByVoidHeart)
+                        {
+                            int attempted = ApplyOvercharmPenalty(dmg);
+                            HandleVoidHeartEvadePreventedHit(attempted);
+                            return;
+                        }
+
+                        OnShadeHitEnemy(dh);
+                    }
                     else { LogShadeDamage(dh, col, false); }
                 }
             }
@@ -2220,6 +2232,20 @@ public partial class LegacyHelper
                 LoggingManager.LogShadeDamage(source, succeeded);
             }
             catch { }
+        }
+
+        private bool IsVoidHeartEvading()
+        {
+            return voidHeartEvadeActive && sprintDashTimer > 0f;
+        }
+
+        private void HandleVoidHeartEvadePreventedHit(int attemptedDamage)
+        {
+            int attempted = Mathf.Max(0, attemptedDamage);
+            if (attempted > 0)
+            {
+                DispatchCharmDamageEvent(attempted, 0, wasHazard: false, prevented: true, lethal: false);
+            }
         }
 
         private void TeleportToHornet()
@@ -2508,6 +2534,11 @@ public partial class LegacyHelper
             {
                 DispatchCharmDamageEvent(0, 0, false, true, false);
                 return; // ignore non-damaging triggers
+            }
+            if (IsVoidHeartEvading())
+            {
+                HandleVoidHeartEvadePreventedHit(dmg);
+                return;
             }
             Vector2 srcPos = dh ? (Vector2)dh.transform.position : (Vector2)transform.position;
             if (!canTakeDamage)

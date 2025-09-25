@@ -167,6 +167,7 @@ public partial class LegacyHelper
         private float sprintDashCooldown = s_defaultCharmStats.SprintDashCooldown;
         private ParticleSystem activeDashPs;
         private Vector2 activeDashDir;
+        private bool voidHeartEvadeActive;
 
         private GameObject furyAuraObject;
         private ParticleSystem furyAuraPs;

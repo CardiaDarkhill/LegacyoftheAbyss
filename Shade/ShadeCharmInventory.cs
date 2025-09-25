@@ -587,7 +587,7 @@ namespace LegacyoftheAbyss.Shade
                     }
                 },
                 displayName: "Kingsoul",
-                description: "A revered talisman of Hallownest. Gradually draws SOUL into the shade, empowering every spell and ability.",
+                description: "Holy charm symbolising a union between higher beings. The bearer will slowly absorb the limitless SOUL contained within.",
                 notchCost: 5,
                 fallbackTint: new Color(0.92f, 0.91f, 0.75f),
                 enumId: ShadeCharmId.Kingsoul,
@@ -595,14 +595,13 @@ namespace LegacyoftheAbyss.Shade
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.VoidHeart),
-                statModifiers: new ShadeCharmStatModifiers
+                hooks: new ShadeCharmHooks
                 {
-                    SprintSpeedMultiplier = 1.05f,
-                    FocusSoulCostMultiplier = 0.85f,
-                    ShadeSoulCapacityFlatBonus = 15
+                    OnApplied = ctx => ctx.Controller?.SetVoidHeartEvadeActive(true),
+                    OnRemoved = ctx => ctx.Controller?.SetVoidHeartEvadeActive(false)
                 },
                 displayName: "Void Heart",
-                description: "The culmination of the Abyss. Harmonises Hornet and shade, reducing SOUL costs and granting unmatched stamina.",
+                description: "The Abyss calls to its lord, but once more, for the sake of an idea instilled, a Vessel defies its nature. The suffusion of abyss allows the Shade to avoid damage while evading.",
                 notchCost: 0,
                 fallbackTint: new Color(0.32f, 0.32f, 0.42f),
                 enumId: ShadeCharmId.VoidHeart,

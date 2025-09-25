@@ -117,6 +117,7 @@ public partial class LegacyHelper
             focusDamageShieldAbsorbedThisChannel = false;
             focusHealingDisabled = false;
             carefreeMelodyChance = 0f;
+            voidHeartEvadeActive = false;
             conditionalNailDamageMultipliers.Clear();
             conditionalNailDamageProduct = 1f;
             UpdateFocusDerivedValues();
@@ -147,6 +148,11 @@ public partial class LegacyHelper
         internal void AddHornetFocusHealBonus(int amount)
         {
             charmHornetFocusHealBonus = Mathf.Clamp(charmHornetFocusHealBonus + amount, -12, 12);
+        }
+
+        internal void SetVoidHeartEvadeActive(bool active)
+        {
+            voidHeartEvadeActive = active;
         }
 
         internal void MultiplyFocusTime(float factor)
