@@ -47,9 +47,8 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.Sprintmaster),
                 statModifiers: new ShadeCharmStatModifiers
                 {
-                    MoveSpeedMultiplier = 1.1f,
-                    SprintSpeedMultiplier = 1.15f,
-                    SprintDashCooldownMultiplier = 0.85f
+                    MoveSpeedMultiplier = 1.2f,
+                    SprintSpeedMultiplier = 1.2f
                 },
                 displayName: "Sprintmaster",
                 description: "Bears the likeness of a strange bug known only as 'The Sprintmaster'. Increases the running speed of the bearer, allowing them to avoid danger or overtake rivals.",
@@ -58,15 +57,14 @@ namespace LegacyoftheAbyss.Shade
                 enumId: ShadeCharmId.Sprintmaster,
                 iconName: "shade_charm_sprintmaster"));
 
-            // TODO: Allow the shade to dash downward when Dashmaster is equipped.
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.Dashmaster),
                 statModifiers: new ShadeCharmStatModifiers
                 {
-                    SprintDashCooldownMultiplier = 0.75f
+                    SprintDashCooldownMultiplier = 0.66f
                 },
                 displayName: "Dashmaster",
-                description: "Bears the likeness of an eccentric bug known only as 'The Dashmaster'. The bearer will be able to dash more often as well as dash downwards. Perfect for those who want to move around as quickly as possible.",
+                description: "Bears the likeness of an eccentric bug known only as 'The Dashmaster'. The bearer will be able to dash more often. Perfect for those who want to move around as quickly as possible.",
                 notchCost: 2,
                 fallbackTint: new Color(0.35f, 0.70f, 0.78f),
                 enumId: ShadeCharmId.Dashmaster,
