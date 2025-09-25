@@ -783,8 +783,6 @@ public partial class LegacyHelper
                     ls.y = -Mathf.Abs(ls.y);
                 }
 
-                bool invertDownParentNegative = invertDown && ls.y < 0f;
-
                 tr.localScale = ls;
 
                 if (nailSlash != null)
@@ -803,18 +801,10 @@ public partial class LegacyHelper
                             if (!sr) continue;
 
                             bool baseFlip = waveBaseFlipY != null && i < waveBaseFlipY.Count ? waveBaseFlipY[i] : sr.flipY;
-                            bool targetFlip = baseFlip;
 
-                            if (facing > 0f)
-                            {
-                                // The down-slash reuses an up-slash prefab. When mirrored to the right we
-                                // force the parent scale negative on Y so the projectile travels downward,
-                                // which also inverts the wave sprite visually. Flip the renderer to counter
-                                // that mirroring while keeping left-facing behaviour untouched.
-                                targetFlip = !baseFlip;
-                            }
-
-                            sr.flipY = targetFlip;
+                            // Restore the sprite renderer's original flip so the mirrored local-scale
+                            // adjustments below determine the final orientation.
+                            sr.flipY = baseFlip;
                         }
                     }
                     catch { }
@@ -831,7 +821,7 @@ public partial class LegacyHelper
 
                             float targetSign = waveBaseSigns != null && i < waveBaseSigns.Count ? waveBaseSigns[i] : 1f;
                             if (targetSign == 0f) targetSign = 1f;
-                            else targetSign = -Mathf.Sign(targetSign);
+                            else targetSign = Mathf.Sign(targetSign);
 
                             float currentLossy = childTr.lossyScale.y;
                             float currentSign = currentLossy == 0f ? 1f : Mathf.Sign(currentLossy);
