@@ -19,6 +19,15 @@ public partial class LegacyHelper : BaseUnityPlugin
 
     private const float SceneSpawnProtectionSeconds = 1.5f;
 
+    private static bool fragileGreedActive;
+
+    internal static bool FragileGreedActive => fragileGreedActive;
+
+    internal static void SetFragileGreedActive(bool active)
+    {
+        fragileGreedActive = active;
+    }
+
     internal static LegacyHelper Instance { get; private set; }
 
     // Persist shade state across scene transitions

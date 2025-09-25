@@ -164,6 +164,34 @@ public partial class LegacyHelper
         }
     }
 
+    [HarmonyPatch(typeof(HealthManager), "SpawnCurrency")]
+    private class HealthManager_SpawnCurrency_Patch
+    {
+        private static void Prefix(ref int smallGeoCount, ref int mediumGeoCount, ref int largeGeoCount, ref int largeSmoothGeoCount)
+        {
+            if (!FragileGreedActive)
+            {
+                return;
+            }
+
+            smallGeoCount = ApplyMultiplier(smallGeoCount);
+            mediumGeoCount = ApplyMultiplier(mediumGeoCount);
+            largeGeoCount = ApplyMultiplier(largeGeoCount);
+            largeSmoothGeoCount = ApplyMultiplier(largeSmoothGeoCount);
+        }
+
+        private static int ApplyMultiplier(int value)
+        {
+            if (value <= 0)
+            {
+                return value;
+            }
+
+            int scaled = Mathf.CeilToInt(value * 1.5f);
+            return Mathf.Max(1, scaled);
+        }
+    }
+
     [HarmonyPatch(typeof(UIManager), nameof(UIManager.ShowMenu))]
     private class UIManager_ShowMenu_Patch
     {

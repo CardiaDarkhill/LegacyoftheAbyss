@@ -28,8 +28,52 @@ public partial class LegacyHelper
             if (pressed)
             {
                 nailTimer = nailCooldown;
-                PerformNailSlash(forcedV);
+                if (shamanMovesetActive)
+                    PerformShamanBlast(forcedV);
+                else
+                    PerformNailSlash(forcedV);
             }
+        }
+
+        private void PerformShamanBlast(float forcedV = 0f)
+        {
+            Vector2 dir;
+            if (forcedV > 0.35f)
+                dir = Vector2.up;
+            else if (forcedV < -0.35f)
+                dir = Vector2.down;
+            else
+                dir = new Vector2(Mathf.Sign(facing == 0 ? 1f : facing), 0f);
+
+            StartCoroutine(ShamanBlastRoutine(dir));
+        }
+
+        private IEnumerator ShamanBlastRoutine(Vector2 dir)
+        {
+            isCastingSpell = true;
+            if (fireballCastAnimFrames != null && fireballCastAnimFrames.Length > 0)
+            {
+                currentAnimFrames = fireballCastAnimFrames;
+                animFrameIndex = 0;
+                animTimer = 0f;
+                float perFrame = 0.25f / fireballCastAnimFrames.Length;
+                for (int i = 0; i < fireballCastAnimFrames.Length; i++)
+                {
+                    if (sr) sr.sprite = fireballCastAnimFrames[i];
+                    yield return new WaitForSeconds(perFrame);
+                }
+            }
+            else
+            {
+                yield return new WaitForSeconds(0.25f);
+            }
+
+            if (dir.sqrMagnitude <= 0.0001f)
+                dir = new Vector2(facing == 0 ? 1f : facing, 0f);
+
+            SpawnProjectile(dir);
+            currentAnimFrames = null;
+            isCastingSpell = false;
         }
 
         private void PerformNailSlash(float forcedV = 0f)
