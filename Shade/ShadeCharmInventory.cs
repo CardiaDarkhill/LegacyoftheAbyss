@@ -31,6 +31,7 @@ namespace LegacyoftheAbyss.Shade
 
             bool furyActive = false;
             float hivebloodTimer = 0f;
+            bool hivebloodPendingMaskRestore = false;
             float kingsoulTimer = 0f;
 
             // TODO: Surface the shade's map position while Wayward Compass is equipped.
@@ -538,10 +539,15 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.Hiveblood),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx => hivebloodTimer = 0f,
+                    OnApplied = ctx =>
+                    {
+                        hivebloodTimer = 0f;
+                        hivebloodPendingMaskRestore = false;
+                    },
                     OnRemoved = ctx =>
                     {
                         hivebloodTimer = 0f;
+                        hivebloodPendingMaskRestore = false;
                         ctx.Controller?.ResetHivebloodLifebloodRequest();
                     },
                     OnShadeDamaged = (ctx, evt) =>
@@ -549,6 +555,15 @@ namespace LegacyoftheAbyss.Shade
                         if (evt.ActualDamage > 0 && !evt.WasPrevented)
                         {
                             hivebloodTimer = 0f;
+                            var controller = ctx.Controller;
+                            if (controller != null)
+                            {
+                                hivebloodPendingMaskRestore = controller.GetCurrentNormalHP() < controller.GetMaxNormalHP();
+                            }
+                            else
+                            {
+                                hivebloodPendingMaskRestore = false;
+                            }
                         }
                     },
                     OnUpdate = (ctx, delta) =>
@@ -559,10 +574,19 @@ namespace LegacyoftheAbyss.Shade
                             return;
                         }
 
-                        bool missingNormal = controller.GetCurrentNormalHP() < controller.GetMaxNormalHP();
+                        int currentNormal = controller.GetCurrentNormalHP();
+                        int maxNormal = controller.GetMaxNormalHP();
+                        bool missingNormal = currentNormal < maxNormal;
+
+                        if (!missingNormal)
+                        {
+                            hivebloodPendingMaskRestore = false;
+                        }
+
+                        bool shouldRestoreNormal = hivebloodPendingMaskRestore && missingNormal;
                         bool pendingLifeblood = controller.ShouldHivebloodRestoreLifeblood();
 
-                        if (!missingNormal && !pendingLifeblood)
+                        if (!shouldRestoreNormal && !pendingLifeblood)
                         {
                             hivebloodTimer = 0f;
                             return;
@@ -572,9 +596,14 @@ namespace LegacyoftheAbyss.Shade
                         if (hivebloodTimer >= 10f)
                         {
                             hivebloodTimer = 0f;
-                            if (missingNormal)
+                            if (shouldRestoreNormal)
                             {
-                                controller.ReviveToAtLeast(controller.GetCurrentNormalHP() + 1);
+                                int before = currentNormal;
+                                controller.ReviveToAtLeast(before + 1);
+                                if (controller.GetCurrentNormalHP() > before)
+                                {
+                                    hivebloodPendingMaskRestore = false;
+                                }
                             }
                             else if (pendingLifeblood && controller.TryRestoreLifeblood(1))
                             {
