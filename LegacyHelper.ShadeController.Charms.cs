@@ -475,6 +475,12 @@ public partial class LegacyHelper
                     : Mathf.Clamp(prevLifeblood, 0, targetLifebloodMax);
             }
 
+            bool statsChanged =
+                targetNormalMax != prevNormalMax
+                || targetLifebloodMax != prevLifebloodMax
+                || newNormalHp != prevNormalHp
+                || newLifeblood != prevLifeblood;
+
             shadeMaxHP = targetNormalMax;
             shadeHP = targetNormalMax > 0
                 ? Mathf.Clamp(newNormalHp, 0, targetNormalMax)
@@ -488,10 +494,14 @@ public partial class LegacyHelper
 
             if (deferHudAndPersistence)
             {
-                pendingDeferredHealthSync = true;
-                pendingDeferredHealthSuppressDamage = true;
+                if (statsChanged)
+                {
+                    pendingDeferredHealthSync = true;
+                    pendingDeferredHealthSuppressDamage = true;
+                    PushShadeStatsToHud(suppressDamageAudio: true);
+                }
             }
-            else
+            else if (statsChanged)
             {
                 PushShadeStatsToHud(suppressDamageAudio: true);
                 PersistIfChanged();
