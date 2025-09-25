@@ -486,7 +486,12 @@ public partial class LegacyHelper
                 && hivebloodPendingLifebloodRestore
                 && shadeLifeblood < shadeLifebloodMax;
 
-            if (!deferHudAndPersistence)
+            if (deferHudAndPersistence)
+            {
+                pendingDeferredHealthSync = true;
+                pendingDeferredHealthSuppressDamage = true;
+            }
+            else
             {
                 PushShadeStatsToHud(suppressDamageAudio: true);
                 PersistIfChanged();

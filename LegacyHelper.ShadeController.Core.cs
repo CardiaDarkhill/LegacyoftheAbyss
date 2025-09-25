@@ -265,7 +265,25 @@ public partial class LegacyHelper
             if (persistenceSuppressionDepth > 0)
             {
                 persistenceSuppressionDepth--;
+                if (persistenceSuppressionDepth == 0)
+                {
+                    FlushDeferredHealthSync();
+                }
             }
+        }
+
+        private void FlushDeferredHealthSync()
+        {
+            if (!pendingDeferredHealthSync)
+            {
+                return;
+            }
+
+            bool suppressDamage = pendingDeferredHealthSuppressDamage;
+            pendingDeferredHealthSync = false;
+            pendingDeferredHealthSuppressDamage = false;
+            PushShadeStatsToHud(suppressDamageAudio: suppressDamage);
+            PersistIfChanged();
         }
 
         private void LoadShadeSprites()

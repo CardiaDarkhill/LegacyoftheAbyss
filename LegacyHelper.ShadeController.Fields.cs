@@ -256,5 +256,7 @@ public partial class LegacyHelper
         private int lastSavedSoul;
         private bool lastSavedCanTakeDamage = true;
         private int persistenceSuppressionDepth;
+        private bool pendingDeferredHealthSync;
+        private bool pendingDeferredHealthSuppressDamage;
     }
 }
