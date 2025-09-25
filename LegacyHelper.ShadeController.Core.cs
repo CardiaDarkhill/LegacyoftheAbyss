@@ -1146,18 +1146,20 @@ public partial class LegacyHelper
             }
 
             bool dashNowActive = !inHardLeash && sprintDashTimer > 0f;
-            if (dashNowActive)
+            bool sharpShadowShouldBeActive = dashNowActive && sharpShadowEquipped && IsVoidHeartEvading();
+            if (sharpShadowShouldBeActive)
             {
                 if (!sharpShadowDashActive)
                 {
                     sharpShadowDashActive = true;
-                    sharpShadowDashHits.Clear();
+                    EnsureSharpShadowDashHitbox();
                 }
+                UpdateSharpShadowDashHitbox();
             }
             else if (sharpShadowDashActive)
             {
                 sharpShadowDashActive = false;
-                sharpShadowDashHits.Clear();
+                DestroySharpShadowDashHitbox();
             }
 
             if (knockbackTimer > 0f)
@@ -1641,7 +1643,7 @@ public partial class LegacyHelper
             col.radius = radius;
 
             var aoe = go.AddComponent<ShadeAoE>();
-            aoe.damage = damage;
+            aoe.ConfigureDamage(damage, applyDamageMultiplier: false);
             aoe.hornetRoot = hornetTransform;
             aoe.lifeSeconds = lifeSeconds;
 
@@ -1699,7 +1701,7 @@ public partial class LegacyHelper
             poly.SetPath(0, pts.ToArray());
 
             var aoe = go.AddComponent<ShadeAoE>();
-            aoe.damage = damage;
+            aoe.ConfigureDamage(damage, applyDamageMultiplier: false);
             aoe.hornetRoot = hornetTransform;
             aoe.lifeSeconds = lifeSeconds;
 
@@ -1922,7 +1924,7 @@ public partial class LegacyHelper
             box.size = new Vector2(10f, 1.0f);
 
             var aoe = go.AddComponent<ShadeAoE>();
-            aoe.damage = damage;
+            aoe.ConfigureDamage(damage, applyDamageMultiplier: false);
             aoe.hornetRoot = hornetTransform;
             aoe.lifeSeconds = 0.25f;
 
@@ -1947,7 +1949,7 @@ public partial class LegacyHelper
             cap.size = new Vector2(width, height);
 
             var aoe = go.AddComponent<ShadeAoE>();
-            aoe.damage = damage;
+            aoe.ConfigureDamage(damage, applyDamageMultiplier: false);
             aoe.hornetRoot = hornetTransform;
             aoe.lifeSeconds = 0.25f;
 
@@ -2180,13 +2182,11 @@ public partial class LegacyHelper
         private void OnCollisionEnter2D(Collision2D collision)
         {
             TryProcessDamageHero(collision.collider);
-            TrySharpShadowHit(collision.collider);
         }
 
         private void OnTriggerEnter2D(Collider2D other)
         {
             TryProcessDamageHero(other);
-            TrySharpShadowHit(other);
         }
 
         private bool ShouldIgnoreDamageSource(Component c)
@@ -2262,18 +2262,9 @@ public partial class LegacyHelper
             return voidHeartEvadeActive && sprintDashTimer > 0f;
         }
 
-        private void HandleVoidHeartEvadePreventedHit(int attemptedDamage)
+        private void EnsureSharpShadowDashHitbox()
         {
-            int attempted = Mathf.Max(0, attemptedDamage);
-            if (attempted > 0)
-            {
-                DispatchCharmDamageEvent(attempted, 0, wasHazard: false, prevented: true, lethal: false);
-            }
-        }
-
-        private void TrySharpShadowHit(Collider2D col)
-        {
-            if (!sharpShadowEquipped || !sharpShadowDashActive)
+            if (!sharpShadowEquipped)
             {
                 return;
             }
@@ -2283,71 +2274,184 @@ public partial class LegacyHelper
                 return;
             }
 
-            if (!col)
+            if (sharpShadowDashHitbox)
             {
+                if (!sharpShadowDashAoE)
+                {
+                    try { sharpShadowDashAoE = sharpShadowDashHitbox.GetComponent<ShadeAoE>(); }
+                    catch { }
+                }
                 return;
             }
 
+            GameObject hitbox;
             try
             {
-                if (bodyCol && col && !bodyCol.IsTouching(col))
-                {
-                    return;
-                }
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                if (col.transform == transform || col.transform.IsChildOf(transform))
-                    return;
-                if (hornetTransform)
-                {
-                    if (col.transform == hornetTransform || col.transform.IsChildOf(hornetTransform) || col.transform.root == hornetTransform.root)
-                        return;
-                }
-            }
-            catch
-            {
-            }
-
-            HealthManager hm;
-            try
-            {
-                if (!HitTaker.TryGetHealthManager(col.gameObject, out hm) || hm == null)
-                {
-                    return;
-                }
+                hitbox = new GameObject("ShadeSharpShadowHitbox");
             }
             catch
             {
                 return;
             }
 
+            hitbox.transform.SetParent(transform, false);
+            hitbox.transform.localPosition = Vector3.zero;
+            hitbox.transform.localRotation = Quaternion.identity;
+            hitbox.transform.localScale = Vector3.one;
+            hitbox.tag = "Hero Spell";
             try
             {
-                if (!hm.isActiveAndEnabled)
+                int spellLayer = LayerMask.NameToLayer("Hero Spell");
+                int atkLayer = LayerMask.NameToLayer("Hero Attack");
+                if (spellLayer >= 0) hitbox.layer = spellLayer;
+                else if (atkLayer >= 0) hitbox.layer = atkLayer;
+            }
+            catch
+            {
+            }
+
+            Collider2D collider = CloneSharpShadowDashCollider(hitbox);
+            if (!collider)
+            {
+                try
                 {
-                    return;
+                    var cap = hitbox.AddComponent<CapsuleCollider2D>();
+                    cap.direction = CapsuleDirection2D.Vertical;
+                    cap.size = new Vector2(0.95f, 1.5f);
+                    cap.offset = Vector2.zero;
+                    cap.isTrigger = true;
+                    collider = cap;
+                }
+                catch
+                {
+                }
+            }
+
+            ShadeAoE aoe = null;
+            try
+            {
+                aoe = hitbox.AddComponent<ShadeAoE>();
+                aoe.ConfigureDamage(GetShadeNailDamage(), applyDamageMultiplier: false);
+                aoe.hornetRoot = hornetTransform;
+                aoe.lifeSeconds = 0f;
+                aoe.attackType = AttackTypes.Nail;
+                aoe.direction = GetSharpShadowDashAngle();
+                aoe.magnitudeMultiplier = Mathf.Max(0.01f, charmNailKnockbackMultiplier);
+                aoe.multiplier = 1f;
+                aoe.isHeroDamage = true;
+                aoe.isFirstHit = true;
+                aoe.sourceOverride = gameObject;
+            }
+            catch
+            {
+            }
+
+            sharpShadowDashHitbox = hitbox;
+            sharpShadowDashAoE = aoe;
+
+            if (collider)
+            {
+                collider.isTrigger = true;
+                IgnoreHornetForCollider(collider);
+            }
+        }
+
+        private void UpdateSharpShadowDashHitbox()
+        {
+            if (!sharpShadowDashHitbox)
+            {
+                sharpShadowDashAoE = null;
+                return;
+            }
+
+            if (!sharpShadowDashAoE)
+            {
+                try { sharpShadowDashAoE = sharpShadowDashHitbox.GetComponent<ShadeAoE>(); }
+                catch { }
+            }
+
+            if (!sharpShadowDashAoE)
+            {
+                return;
+            }
+
+            try
+            {
+                sharpShadowDashHitbox.transform.localPosition = Vector3.zero;
+                sharpShadowDashHitbox.transform.localRotation = Quaternion.identity;
+            }
+            catch
+            {
+            }
+
+            sharpShadowDashAoE.direction = GetSharpShadowDashAngle();
+            sharpShadowDashAoE.magnitudeMultiplier = Mathf.Max(0.01f, charmNailKnockbackMultiplier);
+            sharpShadowDashAoE.sourceOverride = gameObject;
+        }
+
+        private void DestroySharpShadowDashHitbox()
+        {
+            if (sharpShadowDashHitbox)
+            {
+                try { Destroy(sharpShadowDashHitbox); }
+                catch { }
+            }
+
+            sharpShadowDashHitbox = null;
+            sharpShadowDashAoE = null;
+        }
+
+        private Collider2D CloneSharpShadowDashCollider(GameObject owner)
+        {
+            if (!owner)
+            {
+                return null;
+            }
+
+            if (!bodyCol)
+            {
+                return null;
+            }
+
+            try
+            {
+                if (bodyCol is CapsuleCollider2D cap)
+                {
+                    var clone = owner.AddComponent<CapsuleCollider2D>();
+                    clone.direction = cap.direction;
+                    clone.size = cap.size;
+                    clone.offset = cap.offset;
+                    clone.isTrigger = true;
+                    return clone;
+                }
+
+                if (bodyCol is CircleCollider2D circle)
+                {
+                    var clone = owner.AddComponent<CircleCollider2D>();
+                    clone.radius = circle.radius;
+                    clone.offset = circle.offset;
+                    clone.isTrigger = true;
+                    return clone;
+                }
+
+                if (bodyCol is BoxCollider2D box)
+                {
+                    var clone = owner.AddComponent<BoxCollider2D>();
+                    clone.size = box.size;
+                    clone.offset = box.offset;
+                    clone.isTrigger = true;
+                    return clone;
                 }
             }
             catch
             {
             }
 
-            if (!sharpShadowDashHits.Add(hm))
-            {
-                return;
-            }
+            return null;
+        }
 
-            int damage = GetShadeNailDamage();
-            if (damage <= 0)
-            {
-                return;
-            }
-
+        private float GetSharpShadowDashAngle()
+        {
             Vector2 dir = lastMoveDelta;
             if (dir.sqrMagnitude < 0.0001f)
             {
@@ -2368,38 +2472,30 @@ public partial class LegacyHelper
                 }
             }
 
-            float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+            float angle;
+            try
+            {
+                angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+            }
+            catch
+            {
+                angle = facing >= 0 ? 0f : 180f;
+            }
+
             if (float.IsNaN(angle))
             {
                 angle = facing >= 0 ? 0f : 180f;
             }
 
-            var hit = new HitInstance
-            {
-                Source = gameObject,
-                IsFirstHit = true,
-                AttackType = AttackTypes.Nail,
-                DamageDealt = damage,
-                Direction = angle,
-                MagnitudeMultiplier = Mathf.Max(0.01f, charmNailKnockbackMultiplier),
-                Multiplier = 1f,
-                IsHeroDamage = true
-            };
+            return angle;
+        }
 
-            try
+        private void HandleVoidHeartEvadePreventedHit(int attemptedDamage)
+        {
+            int attempted = Mathf.Max(0, attemptedDamage);
+            if (attempted > 0)
             {
-                HitTaker.Hit(hm.gameObject, hit);
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                hm.Hit(hit);
-            }
-            catch
-            {
+                DispatchCharmDamageEvent(attempted, 0, wasHazard: false, prevented: true, lethal: false);
             }
         }
 

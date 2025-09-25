@@ -176,7 +176,8 @@ public partial class LegacyHelper
         private bool voidHeartEvadeActive;
         private bool sharpShadowEquipped;
         private bool sharpShadowDashActive;
-        private readonly HashSet<HealthManager> sharpShadowDashHits = new HashSet<HealthManager>();
+        private GameObject sharpShadowDashHitbox;
+        private ShadeAoE sharpShadowDashAoE;
 
         private GameObject furyAuraObject;
         private ParticleSystem furyAuraPs;

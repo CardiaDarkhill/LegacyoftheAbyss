@@ -129,7 +129,7 @@ public partial class LegacyHelper
             voidHeartEvadeActive = false;
             sharpShadowEquipped = false;
             sharpShadowDashActive = false;
-            sharpShadowDashHits.Clear();
+            DestroySharpShadowDashHitbox();
             conditionalNailDamageMultipliers.Clear();
             conditionalNailDamageProduct = 1f;
             UpdateFocusDerivedValues();
@@ -166,6 +166,11 @@ public partial class LegacyHelper
         internal void SetVoidHeartEvadeActive(bool active)
         {
             voidHeartEvadeActive = active;
+            if (!active)
+            {
+                sharpShadowDashActive = false;
+                DestroySharpShadowDashHitbox();
+            }
         }
 
         internal void MultiplyFocusTime(float factor)
@@ -237,8 +242,8 @@ public partial class LegacyHelper
             if (!enabled)
             {
                 sharpShadowDashActive = false;
+                DestroySharpShadowDashHitbox();
             }
-            sharpShadowDashHits.Clear();
         }
 
         internal void SetFocusHealingDisabled(bool disabled)
