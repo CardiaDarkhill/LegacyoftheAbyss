@@ -1008,9 +1008,14 @@ public partial class LegacyHelper
 
                             bool baseFlip = waveBaseFlipY != null && i < waveBaseFlipY.Count ? waveBaseFlipY[i] : sr.flipY;
 
-                            // Ensure the sprite renderer keeps its prefab orientation; the mirrored
-                            // parent scale handles the downward facing.
-                            sr.flipY = baseFlip;
+                            // Preserve the prefab orientation for left-facing slashes, but invert the
+                            // renderer when mirrored to the right so the projectile art remains upright
+                            // despite the parent's negative vertical scale.
+                            bool finalFlip = baseFlip;
+                            if (facing > 0f)
+                                finalFlip = !finalFlip;
+
+                            sr.flipY = finalFlip;
                         }
                     }
                     catch { }
