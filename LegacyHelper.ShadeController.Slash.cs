@@ -803,7 +803,18 @@ public partial class LegacyHelper
                             if (!sr) continue;
 
                             bool baseFlip = waveBaseFlipY != null && i < waveBaseFlipY.Count ? waveBaseFlipY[i] : sr.flipY;
-                            sr.flipY = baseFlip;
+                            bool targetFlip = baseFlip;
+
+                            if (facing > 0f)
+                            {
+                                // The down-slash reuses an up-slash prefab. When mirrored to the right we
+                                // force the parent scale negative on Y so the projectile travels downward,
+                                // which also inverts the wave sprite visually. Flip the renderer to counter
+                                // that mirroring while keeping left-facing behaviour untouched.
+                                targetFlip = !baseFlip;
+                            }
+
+                            sr.flipY = targetFlip;
                         }
                     }
                     catch { }
