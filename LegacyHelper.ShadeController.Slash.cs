@@ -804,7 +804,7 @@ public partial class LegacyHelper
                             if (!sr) continue;
 
                             bool baseFlip = waveBaseFlipY != null && i < waveBaseFlipY.Count ? waveBaseFlipY[i] : sr.flipY;
-                            bool invertSprite = invertDownParentNegative;
+                            bool invertSprite = invertDownParentNegative || facing > 0f;
                             sr.flipY = invertSprite ? !baseFlip : baseFlip;
                         }
                     }
