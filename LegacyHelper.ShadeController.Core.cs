@@ -1,4 +1,5 @@
 #nullable disable
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -165,7 +166,7 @@ public partial class LegacyHelper
             equippedCharms.AddRange(charmSnapshot.Definitions);
 
             var currentDefinitions = charmSnapshot.Definitions;
-            HashSet<ShadeCharmDefinition>? currentSet = null;
+            HashSet<ShadeCharmDefinition> currentSet = null;
             ShadeCharmDefinition[] removedCharms = Array.Empty<ShadeCharmDefinition>();
             if (previousEquipped.Length > 0)
             {
