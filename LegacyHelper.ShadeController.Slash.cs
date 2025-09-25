@@ -1,7 +1,6 @@
 #nullable disable
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
 using System.Text;
@@ -317,10 +316,15 @@ public partial class LegacyHelper
                 suppressActivateOnSlash = false;
             }
             var marker = slash.AddComponent<ShadeSlashMarker>();
+            float orientationFacing = facing >= 0 ? 1f : -1f;
+            if (slashDirection == ShamanSlashDirection.Down && orientationFacing > 0f)
+                orientationFacing = -orientationFacing;
+
             if (marker != null)
             {
                 marker.verticalInput = v;
                 marker.invertDown = slashDirection == ShamanSlashDirection.Down;
+                marker.orientationFacing = orientationFacing;
             }
 
             LogSlashState("Shaman slash spawn (pre-orient)", slash, this);
@@ -343,7 +347,7 @@ public partial class LegacyHelper
 
             try
             {
-                ApplyBaseSlashOrientation(slash, nailSlash, v, marker != null && marker.invertDown);
+                ApplyBaseSlashOrientation(slash, nailSlash, v, marker != null && marker.invertDown, orientationFacing);
 
                 if (marker != null)
                 {
@@ -666,7 +670,7 @@ public partial class LegacyHelper
 
             try
             {
-                ApplyBaseSlashOrientation(slash, nailSlash, v, invertDown: false);
+                ApplyBaseSlashOrientation(slash, nailSlash, v, invertDown: false, facing);
                 var tr = slash ? slash.transform : null;
                 try
                 {
@@ -909,58 +913,9 @@ public partial class LegacyHelper
 
         }
 
-        private void ApplyBaseSlashOrientation(GameObject slash, NailSlash nailSlash, float verticalInput, bool invertDown)
+        private void ApplyBaseSlashOrientation(GameObject slash, NailSlash nailSlash, float verticalInput, bool invertDown, float facingForSlash)
         {
             if (!slash) return;
-
-            List<Transform> waveChildren = null;
-            List<float> waveBaseSigns = null;
-            List<SpriteRenderer> waveSprites = null;
-            List<bool> waveBaseFlipY = null;
-
-            if (invertDown)
-            {
-                try
-                {
-                    var sprites = slash.GetComponentsInChildren<SpriteRenderer>(true);
-                    foreach (var sr in sprites)
-                    {
-                        if (!sr) continue;
-                        var go = sr.gameObject;
-                        if (!go) continue;
-
-                        bool matches = false;
-                        var goName = go.name ?? string.Empty;
-                        if (!string.IsNullOrEmpty(goName) && goName.IndexOf("wave", StringComparison.OrdinalIgnoreCase) >= 0)
-                            matches = true;
-                        else
-                        {
-                            var spriteName = sr.sprite ? sr.sprite.name : null;
-                            if (!string.IsNullOrEmpty(spriteName) && spriteName.IndexOf("wave", StringComparison.OrdinalIgnoreCase) >= 0)
-                                matches = true;
-                        }
-
-                        if (!matches) continue;
-
-                        var childTr = go.transform;
-                        if (!childTr) continue;
-
-                        waveChildren ??= new List<Transform>();
-                        waveBaseSigns ??= new List<float>();
-
-                        float lossy = childTr.lossyScale.y;
-                        if (lossy == 0f) lossy = 1f;
-                        waveChildren.Add(childTr);
-                        waveBaseSigns.Add(Mathf.Sign(lossy));
-
-                        waveSprites ??= new List<SpriteRenderer>();
-                        waveBaseFlipY ??= new List<bool>();
-                        waveSprites.Add(sr);
-                        waveBaseFlipY.Add(sr.flipY);
-                    }
-                }
-                catch { }
-            }
 
             try
             {
@@ -969,8 +924,12 @@ public partial class LegacyHelper
 
                 var ls = tr.localScale;
 
-                float scaleSign = -facing;
-                if (verticalInput > 0.35f && facing > 0f)
+                float usedFacing = facingForSlash;
+                if (usedFacing == 0f)
+                    usedFacing = facing >= 0 ? 1f : -1f;
+
+                float scaleSign = -Mathf.Sign(usedFacing);
+                if (verticalInput > 0.35f && usedFacing > 0f)
                     scaleSign = 1f;
 
                 ls.x = Mathf.Abs(ls.x) * scaleSign;
@@ -981,12 +940,6 @@ public partial class LegacyHelper
                 {
                     ls.x = -ls.x;
                     ls.y = -ls.y;
-
-                    // Mirror the horizontal scale to match the shade's facing while forcing
-                    // the vertical component negative so the reused up-slash prefab renders
-                    // as a downward strike for both directions.
-                    ls.x = facing >= 0f ? Mathf.Abs(ls.x) : -Mathf.Abs(ls.x);
-                    ls.y = -Mathf.Abs(ls.y);
                 }
 
                 tr.localScale = ls;
@@ -995,92 +948,6 @@ public partial class LegacyHelper
                 {
                     try { s_nailSlashScaleField?.SetValue(nailSlash, ls); } catch { }
                     try { s_nailSlashLongScaleField?.SetValue(nailSlash, ls); } catch { }
-                }
-
-                if (invertDown && waveSprites != null)
-                {
-                    try
-                    {
-                        for (int i = 0; i < waveSprites.Count; i++)
-                        {
-                            var sr = waveSprites[i];
-                            if (!sr) continue;
-
-                            bool baseFlip = waveBaseFlipY != null && i < waveBaseFlipY.Count ? waveBaseFlipY[i] : sr.flipY;
-
-                            // Keep the prefab flip state so the renderer's orientation is driven purely
-                            // by the mirrored transforms we apply to the slash and its children.
-                            sr.flipY = baseFlip;
-                        }
-                    }
-                    catch { }
-                }
-
-                if (invertDown && waveChildren != null)
-                {
-                    try
-                    {
-                        for (int i = 0; i < waveChildren.Count; i++)
-                        {
-                            var childTr = waveChildren[i];
-                            if (!childTr) continue;
-
-                            var childScale = childTr.localScale;
-                            float magX = Mathf.Abs(childScale.x);
-                            if (magX <= Mathf.Epsilon) magX = 1f;
-
-                            // When mirroring the up-slash prefab into a downwards attack the parent
-                            // acquires a negative Y scale. For right-facing slashes the X scale stays
-                            // positive, which produces a vertical mirror of the wave art. Reapply a
-                            // negative X sign to the wave child so both axes are mirrored, matching the
-                            // left-facing orientation without disturbing hitboxes or travel.
-                            childScale.x = facing > 0f ? -magX : magX;
-                            childTr.localScale = childScale;
-                        }
-                    }
-                    catch { }
-                }
-
-                if (invertDown && facing > 0f && waveChildren != null)
-                {
-                    try
-                    {
-                        for (int i = 0; i < waveChildren.Count; i++)
-                        {
-                            var childTr = waveChildren[i];
-                            if (!childTr) continue;
-
-                            float targetSign = waveBaseSigns != null && i < waveBaseSigns.Count ? waveBaseSigns[i] : -1f;
-                            if (targetSign == 0f) targetSign = -1f;
-                            else targetSign = -Mathf.Sign(targetSign);
-
-                            float currentLossy = childTr.lossyScale.y;
-                            float currentSign = currentLossy == 0f ? 1f : Mathf.Sign(currentLossy);
-
-                            if (currentSign != targetSign)
-                            {
-                                var childScale = childTr.localScale;
-                                if (Mathf.Abs(childScale.y) <= Mathf.Epsilon)
-                                    childScale.y = targetSign;
-                                else
-                                    childScale.y = -childScale.y;
-
-                                childTr.localScale = childScale;
-
-                                currentLossy = childTr.lossyScale.y;
-                                currentSign = currentLossy == 0f ? 1f : Mathf.Sign(currentLossy);
-                                if (currentSign != targetSign)
-                                {
-                                    childScale = childTr.localScale;
-                                    float magnitude = Mathf.Abs(childScale.y);
-                                    if (magnitude <= Mathf.Epsilon) magnitude = 1f;
-                                    childScale.y = magnitude * targetSign;
-                                    childTr.localScale = childScale;
-                                }
-                            }
-                        }
-                    }
-                    catch { }
                 }
             }
             catch { }
@@ -1107,6 +974,7 @@ public partial class LegacyHelper
         {
             public float verticalInput;
             public bool invertDown;
+            public float orientationFacing;
             public Vector3 storedLocalScale;
             public bool hasStoredScale;
         }
@@ -1140,6 +1008,7 @@ public partial class LegacyHelper
 
             float verticalInput = marker != null ? marker.verticalInput : 0f;
             bool invertDown = marker != null && marker.invertDown;
+            float markerFacing = marker != null && marker.orientationFacing != 0f ? marker.orientationFacing : (facing >= 0 ? 1f : -1f);
 
             try { tr.SetParent(transform, false); }
             catch { }
@@ -1160,7 +1029,7 @@ public partial class LegacyHelper
             }
             else
             {
-                ApplyBaseSlashOrientation(slash, nailSlash, verticalInput, invertDown);
+                ApplyBaseSlashOrientation(slash, nailSlash, verticalInput, invertDown, markerFacing);
             }
 
             var travel = slash.GetComponent<NailSlashTravel>();
