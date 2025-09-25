@@ -66,7 +66,7 @@ public partial class LegacyHelper
             try { gameObject.tag = "Recoiler"; } catch { }
 
             SetupShadeLight();
-            cachedHud = Object.FindFirstObjectByType<SimpleHUD>();
+            cachedHud = UnityEngine.Object.FindFirstObjectByType<SimpleHUD>();
             PushSoulToHud();
             CheckHazardOverlap();
             // Ensure pogo target is present for Hornet downslash bounces
@@ -585,7 +585,7 @@ public partial class LegacyHelper
             bool pushedSoulThisFrame = false;
             if (!cachedHud)
             {
-                var resolvedHud = Object.FindFirstObjectByType<SimpleHUD>();
+                var resolvedHud = UnityEngine.Object.FindFirstObjectByType<SimpleHUD>();
                 if (resolvedHud)
                 {
                     cachedHud = resolvedHud;
@@ -1195,7 +1195,7 @@ public partial class LegacyHelper
                 battleCheckTimer -= Time.deltaTime;
                 if (battleCheckTimer <= 0f || cachedBattle == null)
                 {
-                    cachedBattle = Object.FindFirstObjectByType<BattleScene>();
+                    cachedBattle = UnityEngine.Object.FindFirstObjectByType<BattleScene>();
                     battleCheckTimer = 1f;
                 }
                 if (cachedBattle != null)
@@ -2095,7 +2095,7 @@ public partial class LegacyHelper
                 HealthManager[] enemies = null;
                 try
                 {
-                    enemies = Object.FindObjectsByType<HealthManager>(
+                    enemies = UnityEngine.Object.FindObjectsByType<HealthManager>(
                         FindObjectsInactive.Exclude,
                         FindObjectsSortMode.None);
                 }
