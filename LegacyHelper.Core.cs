@@ -346,6 +346,26 @@ public partial class LegacyHelper : BaseUnityPlugin
         ShadeSettingsMenu.NotifyCharmLoadoutChanged();
     }
 
+    internal static bool TryGetShadeController(out ShadeController controller)
+    {
+        controller = null;
+        if (helper == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            controller = helper.GetComponent<ShadeController>();
+            return controller != null;
+        }
+        catch
+        {
+            controller = null;
+            return false;
+        }
+    }
+
     internal static void DisableStartup(GameManager gm)
     {
         if (gm == null) return;

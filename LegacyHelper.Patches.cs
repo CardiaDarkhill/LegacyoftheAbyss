@@ -97,6 +97,15 @@ public partial class LegacyHelper
         }
     }
 
+    [HarmonyPatch(typeof(GameMap), "Update")]
+    private class GameMap_Update_Patch
+    {
+        private static void Postfix(GameMap __instance)
+        {
+            ShadeCompassIconManager.Update(__instance);
+        }
+    }
+
     [HarmonyPatch(typeof(UIManager), nameof(UIManager.TogglePauseGame))]
     private class UIManager_TogglePauseGame_Patch
     {
@@ -1940,6 +1949,292 @@ public partial class LegacyHelper
             if (ShadeSettingsMenu.IsShowing)
                 ShadeSettingsMenu.HideImmediate(__instance);
             ShadeSettingsMenu.Clear();
+        }
+    }
+
+    private static class ShadeCompassIconManager
+    {
+        private static readonly FieldInfo CompassIconField = AccessTools.Field(typeof(GameMap), "compassIcon");
+        private static readonly FieldInfo CurrentSceneField = AccessTools.Field(typeof(GameMap), "currentScene");
+        private static readonly FieldInfo CurrentSceneObjField = AccessTools.Field(typeof(GameMap), "currentSceneObj");
+        private static readonly FieldInfo CurrentScenePosField = AccessTools.Field(typeof(GameMap), "currentScenePos");
+        private static readonly FieldInfo CurrentSceneSizeField = AccessTools.Field(typeof(GameMap), "currentSceneSize");
+        private static readonly MethodInfo GetMapPositionMethod = AccessTools.Method(typeof(GameMap), "GetMapPosition", new[]
+        {
+            typeof(Vector2),
+            typeof(GameMapScene),
+            typeof(GameObject),
+            typeof(Vector2),
+            typeof(Vector2)
+        });
+        private static readonly MethodInfo IsLostInAbyssMethod = AccessTools.Method(typeof(GameMap), "IsLostInAbyssPreMap");
+
+        private static GameObject shadeCompassIcon;
+        private static Sprite shadeCompassSprite;
+        private static bool loggedFailure;
+
+        internal static void Update(GameMap map)
+        {
+            if (map == null)
+            {
+                return;
+            }
+
+            if (shadeCompassIcon == null)
+            {
+                shadeCompassIcon = null;
+            }
+
+            if (!ShouldDisplay(map))
+            {
+                HideIcon();
+                return;
+            }
+
+            var icon = EnsureIcon(map);
+            if (icon == null)
+            {
+                return;
+            }
+
+            if (!TryGetMapPosition(map, out var mapPosition))
+            {
+                icon.SetActive(false);
+                return;
+            }
+
+            if (!icon.activeSelf)
+            {
+                icon.SetActive(true);
+            }
+
+            var local = icon.transform.localPosition;
+            icon.transform.localPosition = new Vector3(mapPosition.x, mapPosition.y, local.z);
+            loggedFailure = false;
+        }
+
+        private static void HideIcon()
+        {
+            if (shadeCompassIcon != null)
+            {
+                shadeCompassIcon.SetActive(false);
+            }
+        }
+
+        private static bool ShouldDisplay(GameMap map)
+        {
+            if (!ModConfig.Instance.shadeEnabled)
+            {
+                return false;
+            }
+
+            var inventory = ShadeRuntime.Charms;
+            if (inventory == null || !inventory.IsEquipped(ShadeCharmId.WaywardCompass))
+            {
+                return false;
+            }
+
+            if (!LegacyHelper.TryGetShadeController(out var controller) || controller == null)
+            {
+                return false;
+            }
+
+            if (!controller.gameObject || !controller.gameObject.activeInHierarchy)
+            {
+                return false;
+            }
+
+            if (!map.gameObject.activeInHierarchy)
+            {
+                return false;
+            }
+
+            if (IsLostInAbyssMethod != null)
+            {
+                try
+                {
+                    if (IsLostInAbyssMethod.Invoke(map, Array.Empty<object>()) is bool lost && lost)
+                    {
+                        return false;
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            return true;
+        }
+
+        private static GameObject EnsureIcon(GameMap map)
+        {
+            if (shadeCompassIcon != null)
+            {
+                return shadeCompassIcon;
+            }
+
+            var template = CompassIconField?.GetValue(map) as GameObject;
+            if (template == null)
+            {
+                return null;
+            }
+
+            var parent = template.transform.parent;
+            var clone = UnityEngine.Object.Instantiate(template, parent);
+            clone.name = "ShadeCompassIcon";
+            clone.SetActive(false);
+
+            var templateRenderer = template.GetComponent<SpriteRenderer>();
+            var cloneRenderer = clone.GetComponent<SpriteRenderer>();
+            if (cloneRenderer != null)
+            {
+                var sprite = ResolveSprite(templateRenderer);
+                if (sprite != null)
+                {
+                    cloneRenderer.sprite = sprite;
+                    if (templateRenderer != null && templateRenderer.sprite != null)
+                    {
+                        MatchScale(clone.transform, templateRenderer.sprite, sprite);
+                    }
+                }
+            }
+
+            shadeCompassIcon = clone;
+            return shadeCompassIcon;
+        }
+
+        private static Sprite ResolveSprite(SpriteRenderer templateRenderer)
+        {
+            if (shadeCompassSprite != null)
+            {
+                return shadeCompassSprite;
+            }
+
+            try
+            {
+                if (ModPaths.TryGetAssetPath(out var path, "Shade_Pin.png"))
+                {
+                    var bytes = File.ReadAllBytes(path);
+                    if (bytes != null && bytes.Length > 0)
+                    {
+                        var texture = new Texture2D(2, 2, TextureFormat.ARGB32, false);
+                        if (ImageConversion.LoadImage(texture, bytes, false))
+                        {
+                            texture.filterMode = FilterMode.Bilinear;
+                            texture.wrapMode = TextureWrapMode.Clamp;
+                            float pixelsPerUnit = templateRenderer != null && templateRenderer.sprite != null
+                                ? templateRenderer.sprite.pixelsPerUnit
+                                : 100f;
+                            shadeCompassSprite = Sprite.Create(
+                                texture,
+                                new Rect(0f, 0f, texture.width, texture.height),
+                                new Vector2(0.5f, 0.5f),
+                                pixelsPerUnit);
+                            if (shadeCompassSprite != null)
+                            {
+                                shadeCompassSprite.name = "ShadeCompassSprite";
+                                return shadeCompassSprite;
+                            }
+                        }
+                        UnityEngine.Object.Destroy(texture);
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return templateRenderer != null ? templateRenderer.sprite : null;
+        }
+
+        private static bool TryGetMapPosition(GameMap map, out Vector2 mapPosition)
+        {
+            mapPosition = default;
+
+            if (!LegacyHelper.TryGetShadeController(out var controller) || controller == null)
+            {
+                return false;
+            }
+
+            var shadeTransform = controller.transform;
+            if (shadeTransform == null)
+            {
+                return false;
+            }
+
+            var scene = CurrentSceneField?.GetValue(map) as GameMapScene;
+            var sceneObj = CurrentSceneObjField?.GetValue(map) as GameObject;
+            if (sceneObj == null)
+            {
+                return false;
+            }
+
+            Vector2 scenePos = CurrentScenePosField != null ? (Vector2)CurrentScenePosField.GetValue(map) : Vector2.zero;
+            Vector2 sceneSize = CurrentSceneSizeField != null ? (Vector2)CurrentSceneSizeField.GetValue(map) : Vector2.one;
+
+            if (GetMapPositionMethod == null)
+            {
+                return false;
+            }
+
+            Vector2 shadeScenePos = new Vector2(shadeTransform.position.x, shadeTransform.position.y);
+            try
+            {
+                var raw = (Vector2)GetMapPositionMethod.Invoke(map, new object[]
+                {
+                    shadeScenePos,
+                    scene,
+                    sceneObj,
+                    scenePos,
+                    sceneSize
+                });
+
+                if (float.IsNaN(raw.x) || float.IsNaN(raw.y) || float.IsInfinity(raw.x) || float.IsInfinity(raw.y))
+                {
+                    return false;
+                }
+
+                if (raw.x <= -900f || raw.y <= -900f)
+                {
+                    return false;
+                }
+
+                mapPosition = raw;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                if (!loggedFailure && ModConfig.Instance.logGeneral)
+                {
+                    Instance?.Logger?.LogWarning($"Failed to position shade compass icon: {ex}");
+                    loggedFailure = true;
+                }
+                return false;
+            }
+        }
+
+        private static void MatchScale(Transform target, Sprite templateSprite, Sprite replacement)
+        {
+            if (target == null || templateSprite == null || replacement == null)
+            {
+                return;
+            }
+
+            var scale = target.localScale;
+            Vector2 templateSize = templateSprite.bounds.size;
+            Vector2 replacementSize = replacement.bounds.size;
+
+            if (templateSize.x > 0f && replacementSize.x > 0f)
+            {
+                scale.x *= templateSize.x / replacementSize.x;
+            }
+
+            if (templateSize.y > 0f && replacementSize.y > 0f)
+            {
+                scale.y *= templateSize.y / replacementSize.y;
+            }
+
+            target.localScale = scale;
         }
     }
 }
