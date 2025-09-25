@@ -307,22 +307,57 @@ namespace LegacyoftheAbyss.Shade
                 ? Mathf.Clamp(slot, 0, s_saveSlots.MaxSlots - 1)
                 : 0;
 
-            bool switching = !s_hasActiveSlot || s_activeSlot != clamped;
-            if (switching)
+            if (!s_hasActiveSlot)
             {
+                s_activeSlot = clamped;
+                s_hasActiveSlot = true;
                 DisableDebugUnlockIfActive();
-                s_activeSlot = clamped;
-                s_hasActiveSlot = true;
-            }
-            else if (!s_hasActiveSlot)
-            {
-                s_activeSlot = clamped;
-                s_hasActiveSlot = true;
+                s_saveSlots.GetOrCreateSlot(s_activeSlot);
+                SyncInventoryFromActiveSlot();
+                LegacyHelper.RequestShadeLoadoutRecompute();
+                return;
             }
 
-            s_saveSlots.GetOrCreateSlot(s_activeSlot);
-            SyncInventoryFromActiveSlot();
+            if (s_activeSlot != clamped)
+            {
+                if (!s_debugUnlockAllCharmsActive)
+                {
+                    PersistInventoryToSlot(s_activeSlot);
+                }
+
+                DisableDebugUnlockIfActive();
+                s_activeSlot = clamped;
+                s_saveSlots.GetOrCreateSlot(s_activeSlot);
+                SyncInventoryFromActiveSlot();
+                LegacyHelper.RequestShadeLoadoutRecompute();
+                return;
+            }
+
+            if (!s_debugUnlockAllCharmsActive)
+            {
+                PersistInventoryToSlot(s_activeSlot);
+            }
+
             LegacyHelper.RequestShadeLoadoutRecompute();
+        }
+
+        private static void PersistInventoryToSlot(int slot)
+        {
+            if (slot < 0 || s_charmInventory == null)
+            {
+                return;
+            }
+
+            var owned = s_charmInventory.GetOwnedCharms();
+            var broken = s_charmInventory.GetBrokenCharms();
+            var equipped = s_charmInventory.GetEquipped().Select(id => (int)id);
+            var newlyDiscovered = s_charmInventory.GetNewlyDiscovered();
+
+            s_saveSlots.SetCollectedCharms(slot, owned);
+            s_saveSlots.SetBrokenCharms(slot, broken);
+            s_saveSlots.SetNotchCapacity(slot, s_charmInventory.NotchCapacity);
+            s_saveSlots.SetEquippedCharms(slot, 0, equipped);
+            s_saveSlots.SetNewlyDiscoveredCharms(slot, newlyDiscovered);
         }
 
         internal static bool ToggleDebugUnlockAllCharms()
@@ -516,16 +551,7 @@ namespace LegacyoftheAbyss.Shade
 
             if (!s_debugUnlockAllCharmsActive)
             {
-                var owned = s_charmInventory.GetOwnedCharms();
-                var broken = s_charmInventory.GetBrokenCharms();
-                var equipped = s_charmInventory.GetEquipped().Select(id => (int)id);
-                var newlyDiscovered = s_charmInventory.GetNewlyDiscovered();
-
-                s_saveSlots.SetCollectedCharms(s_activeSlot, owned);
-                s_saveSlots.SetBrokenCharms(s_activeSlot, broken);
-                s_saveSlots.SetNotchCapacity(s_activeSlot, s_charmInventory.NotchCapacity);
-                s_saveSlots.SetEquippedCharms(s_activeSlot, 0, equipped);
-                s_saveSlots.SetNewlyDiscoveredCharms(s_activeSlot, newlyDiscovered);
+                PersistInventoryToSlot(s_activeSlot);
             }
 
             LegacyHelper.RequestShadeLoadoutRecompute();
