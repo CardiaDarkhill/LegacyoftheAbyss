@@ -1008,14 +1008,34 @@ public partial class LegacyHelper
 
                             bool baseFlip = waveBaseFlipY != null && i < waveBaseFlipY.Count ? waveBaseFlipY[i] : sr.flipY;
 
-                            // Preserve the prefab orientation for left-facing slashes, but invert the
-                            // renderer when mirrored to the right so the projectile art remains upright
-                            // despite the parent's negative vertical scale.
-                            bool finalFlip = baseFlip;
-                            if (facing > 0f)
-                                finalFlip = !finalFlip;
+                            // Keep the prefab flip state so the renderer's orientation is driven purely
+                            // by the mirrored transforms we apply to the slash and its children.
+                            sr.flipY = baseFlip;
+                        }
+                    }
+                    catch { }
+                }
 
-                            sr.flipY = finalFlip;
+                if (invertDown && waveChildren != null)
+                {
+                    try
+                    {
+                        for (int i = 0; i < waveChildren.Count; i++)
+                        {
+                            var childTr = waveChildren[i];
+                            if (!childTr) continue;
+
+                            var childScale = childTr.localScale;
+                            float magX = Mathf.Abs(childScale.x);
+                            if (magX <= Mathf.Epsilon) magX = 1f;
+
+                            // When mirroring the up-slash prefab into a downwards attack the parent
+                            // acquires a negative Y scale. For right-facing slashes the X scale stays
+                            // positive, which produces a vertical mirror of the wave art. Reapply a
+                            // negative X sign to the wave child so both axes are mirrored, matching the
+                            // left-facing orientation without disturbing hitboxes or travel.
+                            childScale.x = facing > 0f ? -magX : magX;
+                            childTr.localScale = childScale;
                         }
                     }
                     catch { }
