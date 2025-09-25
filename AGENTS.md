@@ -12,6 +12,7 @@
 - Input configuration is split between `HornetInput.cs` and `ShadeInputConfig.cs`, while gameplay glue and helpers reside in files such as `LegacyHelper.Projectile.cs`, `LoggingManager.cs`, and `ModConfig.cs`.
 - Decompiled game references can be found under `Decompiles/Assembly-CSharp`. Use these as your API reference when interacting with Silksong types that do not ship with public documentation.
 - An export of all in game internal names from the localization can be found in `Decompiles/localization`, in the format of XML files.
+- An export of all the FSM's in the game can be found at `Decompiles/fsms_part_1.txt` and `Decompiles/fsms_part_2.txt`, be warned that these files are trully enourmous, over 75MB, so be careful when searching through it.
 
 ## Repository layout
 - `LegacyoftheAbyss.csproj` – main plugin project (netstandard2.1). Imports `SilksongPath.props` if present and defines a `CopyMod` target that zips & copies the built DLL into the game install.
