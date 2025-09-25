@@ -14,7 +14,6 @@ public partial class LegacyHelper
                 return;
             }
 
-            ResetCharmHealthBatchTracking();
             EnterPersistenceSuppression();
             try
             {
@@ -97,7 +96,6 @@ public partial class LegacyHelper
 
         internal void ResetCharmDerivedStats()
         {
-            ResetCharmHealthBatchTracking();
             charmNailDamageMultiplier = 1f;
             charmSpellDamageMultiplier = 1f;
             charmNailScaleMultiplier = 1f;
@@ -236,19 +234,15 @@ public partial class LegacyHelper
             charmMaxHpBonus = Mathf.Clamp(charmMaxHpBonus + amount, -20, 40);
             int newLoadoutMax = Mathf.Max(0, baseShadeMaxHP + charmMaxHpBonus);
             int fill = fillNew ? Mathf.Max(0, newLoadoutMax - previousLoadoutMax) : 0;
-            QueueCharmHealthMutation(
+            ApplyCharmHealthModifiers(
                 fillAmount: fill,
                 refillLifeblood: false,
+                deferHudAndPersistence: persistenceSuppressionDepth > 0,
                 previousNormalHpOverride: prevNormalHp,
                 previousNormalMaxOverride: prevNormalMax,
                 previousLifebloodOverride: prevLifeblood,
                 previousLifebloodMaxOverride: prevLifebloodMax,
                 previousJonisOverride: wasJonis);
-
-            if (!applyingCharmLoadout)
-            {
-                FinalizeCharmHealthBatch();
-            }
         }
 
         internal void AddLifebloodBonus(int amount)
@@ -261,19 +255,15 @@ public partial class LegacyHelper
 
             charmLifebloodBonus = Mathf.Clamp(charmLifebloodBonus + amount, 0, 99);
             bool refill = amount > 0 && ShouldRefillLifebloodImmediately();
-            QueueCharmHealthMutation(
+            ApplyCharmHealthModifiers(
                 fillAmount: 0,
                 refillLifeblood: refill,
+                deferHudAndPersistence: persistenceSuppressionDepth > 0,
                 previousNormalHpOverride: prevNormalHp,
                 previousNormalMaxOverride: prevNormalMax,
                 previousLifebloodOverride: prevLifeblood,
                 previousLifebloodMaxOverride: prevLifebloodMax,
                 previousJonisOverride: wasJonis);
-
-            if (!applyingCharmLoadout)
-            {
-                FinalizeCharmHealthBatch();
-            }
         }
 
         internal void SetJonisBlessingActive(bool active)
@@ -296,19 +286,15 @@ public partial class LegacyHelper
             }
 
             bool refill = jonisBlessingEquipped && ShouldRefillLifebloodImmediately();
-            QueueCharmHealthMutation(
+            ApplyCharmHealthModifiers(
                 fillAmount: 0,
                 refillLifeblood: refill,
+                deferHudAndPersistence: persistenceSuppressionDepth > 0,
                 previousNormalHpOverride: prevNormalHp,
                 previousNormalMaxOverride: prevNormalMax,
                 previousLifebloodOverride: prevLifeblood,
                 previousLifebloodMaxOverride: prevLifebloodMax,
                 previousJonisOverride: wasJonis);
-
-            if (!applyingCharmLoadout)
-            {
-                FinalizeCharmHealthBatch();
-            }
         }
 
         internal bool IsJonisBlessingActive() => jonisBlessingEquipped;
@@ -414,79 +400,6 @@ public partial class LegacyHelper
 
             int baseAmount = ModConfig.Instance.focusHornetHeal + charmHornetFocusHealBonus;
             return Mathf.Clamp(baseAmount, 0, 12);
-        }
-
-        private void QueueCharmHealthMutation(
-            int fillAmount,
-            bool refillLifeblood,
-            int? previousNormalHpOverride,
-            int? previousNormalMaxOverride,
-            int? previousLifebloodOverride,
-            int? previousLifebloodMaxOverride,
-            bool? previousJonisOverride)
-        {
-            int prevNormalMax = Mathf.Max(0, previousNormalMaxOverride ?? shadeMaxHP);
-            int prevNormalHp = Mathf.Clamp(previousNormalHpOverride ?? shadeHP, 0, prevNormalMax);
-            int prevLifebloodMax = Mathf.Max(0, previousLifebloodMaxOverride ?? shadeLifebloodMax);
-            int prevLifeblood = Mathf.Clamp(previousLifebloodOverride ?? shadeLifeblood, 0, prevLifebloodMax);
-            bool prevJonis = previousJonisOverride ?? jonisBlessingEquipped;
-
-            if (!charmHealthBatchActive)
-            {
-                charmHealthBatchActive = true;
-                charmHealthBatchPrevNormalHp = prevNormalHp;
-                charmHealthBatchPrevNormalMax = prevNormalMax;
-                charmHealthBatchPrevLifeblood = prevLifeblood;
-                charmHealthBatchPrevLifebloodMax = prevLifebloodMax;
-                charmHealthBatchPrevJonis = prevJonis;
-                charmHealthBatchPositiveFill = Mathf.Max(0, fillAmount);
-                charmHealthBatchRefillLifeblood = refillLifeblood;
-            }
-            else
-            {
-                charmHealthBatchPositiveFill += Mathf.Max(0, fillAmount);
-                charmHealthBatchRefillLifeblood |= refillLifeblood;
-            }
-        }
-
-        private void FinalizeCharmHealthBatch()
-        {
-            if (!charmHealthBatchActive)
-            {
-                return;
-            }
-
-            int fill = charmHealthBatchPositiveFill;
-            bool refill = charmHealthBatchRefillLifeblood;
-            int prevHp = charmHealthBatchPrevNormalHp;
-            int prevMax = charmHealthBatchPrevNormalMax;
-            int prevLifeblood = charmHealthBatchPrevLifeblood;
-            int prevLifebloodMax = charmHealthBatchPrevLifebloodMax;
-            bool prevJonis = charmHealthBatchPrevJonis;
-
-            ResetCharmHealthBatchTracking();
-
-            ApplyCharmHealthModifiers(
-                fillAmount: fill,
-                refillLifeblood: refill,
-                deferHudAndPersistence: persistenceSuppressionDepth > 0,
-                previousNormalHpOverride: prevHp,
-                previousNormalMaxOverride: prevMax,
-                previousLifebloodOverride: prevLifeblood,
-                previousLifebloodMaxOverride: prevLifebloodMax,
-                previousJonisOverride: prevJonis);
-        }
-
-        private void ResetCharmHealthBatchTracking()
-        {
-            charmHealthBatchActive = false;
-            charmHealthBatchPositiveFill = 0;
-            charmHealthBatchRefillLifeblood = false;
-            charmHealthBatchPrevNormalHp = 0;
-            charmHealthBatchPrevNormalMax = 0;
-            charmHealthBatchPrevLifeblood = 0;
-            charmHealthBatchPrevLifebloodMax = 0;
-            charmHealthBatchPrevJonis = jonisBlessingEquipped;
         }
 
         private void ApplyCharmHealthModifiers(

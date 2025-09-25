@@ -259,13 +259,5 @@ public partial class LegacyHelper
         private bool pendingDeferredHealthSync;
         private bool pendingDeferredHealthSuppressDamage;
         private bool applyingCharmLoadout;
-        private bool charmHealthBatchActive;
-        private int charmHealthBatchPrevNormalHp;
-        private int charmHealthBatchPrevNormalMax;
-        private int charmHealthBatchPrevLifeblood;
-        private int charmHealthBatchPrevLifebloodMax;
-        private bool charmHealthBatchPrevJonis;
-        private int charmHealthBatchPositiveFill;
-        private bool charmHealthBatchRefillLifeblood;
     }
 }

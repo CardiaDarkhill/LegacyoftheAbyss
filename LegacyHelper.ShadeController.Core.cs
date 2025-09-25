@@ -230,7 +230,6 @@ public partial class LegacyHelper
             }
             finally
             {
-                FinalizeCharmHealthBatch();
                 applyingCharmLoadout = previousApplyingLoadout;
             }
 
