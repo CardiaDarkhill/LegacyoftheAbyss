@@ -1353,17 +1353,17 @@ public partial class LegacyHelper
                 var main = furyAuraPs.main;
                 main.loop = true;
                 main.playOnAwake = false;
-                main.startLifetime = new ParticleSystem.MinMaxCurve(0.55f, 0.95f);
+                main.startLifetime = new ParticleSystem.MinMaxCurve(0.66f, 1.14f);
                 main.startSpeed = new ParticleSystem.MinMaxCurve(0.45f, 1.35f);
                 main.startSize = new ParticleSystem.MinMaxCurve(0.22f, 0.38f);
                 main.startColor = new Color(0.82f, 0.08f, 0.12f, 0.95f);
                 main.simulationSpace = ParticleSystemSimulationSpace.Local;
-                main.maxParticles = 120;
+                main.maxParticles = 240;
                 main.startRotation = new ParticleSystem.MinMaxCurve(0f, 360f * Mathf.Deg2Rad);
 
                 var emission = furyAuraPs.emission;
                 emission.enabled = true;
-                emission.rateOverTime = new ParticleSystem.MinMaxCurve(28f, 36f);
+                emission.rateOverTime = new ParticleSystem.MinMaxCurve(56f, 72f);
 
                 var shape = furyAuraPs.shape;
                 shape.enabled = true;
@@ -2763,7 +2763,7 @@ public partial class LegacyHelper
             }
 
             Vector2 normalized = attackDirection.normalized;
-            ApplyKnockback((Vector2)transform.position + normalized, 0.5f, false, 0.15f);
+            ApplyKnockback((Vector2)transform.position + normalized, 2.5f, false, 0.15f);
         }
 
         private void OnShadeHitHazard()
