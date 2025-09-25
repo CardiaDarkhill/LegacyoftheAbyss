@@ -1831,11 +1831,7 @@ public partial class LegacyHelper
         {
             try
             {
-                var tr = __instance.transform;
-                var scale = tr.localScale;
-                string parent = tr.parent ? tr.parent.name : "(null)";
-                if (ModConfig.Instance.logShade)
-                    UnityEngine.Debug.Log($"[ShadeDebug] NailSlash spawned: {__instance.name} scale={scale} parent={parent}\n{System.Environment.StackTrace}");
+                LegacyHelper.ShadeController.LogSlashState("NailSlash.Awake", __instance != null ? __instance.gameObject : null, includeStackTrace: true);
             }
             catch (System.Exception ex)
             {
@@ -1852,9 +1848,7 @@ public partial class LegacyHelper
         {
             try
             {
-                bool isShade = __instance.GetComponent("ShadeSlashMarker") != null;
-                string owner = isShade ? "Shade" : "Hornet";
-                string parent = __instance.transform.parent ? __instance.transform.parent.name : "(null)";
+                LegacyHelper.ShadeController.LogSlashState("NailSlash.StartSlash", __instance != null ? __instance.gameObject : null, includeStackTrace: false);
             }
             catch { }
         }

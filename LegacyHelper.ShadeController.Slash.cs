@@ -2,7 +2,9 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection;
+using System.Text;
 using UnityEngine;
 using GlobalSettings;
 
@@ -19,9 +21,214 @@ public partial class LegacyHelper
 
         private static readonly FieldInfo s_nailTravelInitialPosField = typeof(NailSlashTravel).GetField("initialLocalPos", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly FieldInfo s_nailTravelInitialScaleField = typeof(NailSlashTravel).GetField("initialLocalScale", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly FieldInfo s_nailTravelHasStartedField = typeof(NailSlashTravel).GetField("hasStarted", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly FieldInfo s_nailTravelIsSlashActiveField = typeof(NailSlashTravel).GetField("isSlashActive", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly FieldInfo s_nailTravelDistanceField = typeof(NailSlashTravel).GetField("travelDistance", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly FieldInfo s_nailSlashScaleField = typeof(NailAttackBase).GetField("scale", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly FieldInfo s_nailSlashLongScaleField = typeof(NailAttackBase).GetField("longNeedleScale", BindingFlags.Instance | BindingFlags.NonPublic);
-        private static readonly FieldInfo s_nailTravelDistanceField = typeof(NailSlashTravel).GetField("travelDistance", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly FieldInfo s_nailSlashHeroField = typeof(NailAttackBase).GetField("hc", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        internal static void LogSlashState(string context, GameObject slash, ShadeController controller = null, bool includeStackTrace = true)
+        {
+            if (!ModConfig.Instance.logShade || !slash)
+                return;
+
+            try
+            {
+                Transform tr = null;
+                try { tr = slash.transform; }
+                catch { }
+
+                if (controller == null && tr != null)
+                {
+                    try { controller = tr.GetComponentInParent<ShadeController>(); }
+                    catch { }
+                }
+
+                ShadeSlashMarker marker = null;
+                if (controller != null)
+                {
+                    try { marker = slash.GetComponent<ShadeSlashMarker>(); }
+                    catch { }
+                }
+
+                var sb = new StringBuilder();
+                try
+                {
+                    sb.Append("[ShadeDebug] ").Append(context ?? "Slash");
+                    sb.Append(": ");
+                    sb.Append(slash.name ?? "(unnamed)");
+                }
+                catch { }
+
+                try { sb.Append(" frame=").Append(Time.frameCount); }
+                catch { }
+
+                try { sb.Append(" active=").Append(slash.activeSelf).Append('/').Append(slash.activeInHierarchy); }
+                catch { }
+
+                if (tr != null)
+                {
+                    try
+                    {
+                        Transform parent = tr.parent;
+                        sb.Append(" parent=").Append(parent ? parent.name : "(null)");
+                    }
+                    catch { }
+
+                    try { sb.Append(" localPos=").Append(tr.localPosition); }
+                    catch { }
+
+                    try { sb.Append(" worldPos=").Append(tr.position); }
+                    catch { }
+
+                    try { sb.Append(" localEuler=").Append(tr.localEulerAngles); }
+                    catch { }
+
+                    try { sb.Append(" localScale=").Append(tr.localScale); }
+                    catch { }
+
+                    try { sb.Append(" lossyScale=").Append(tr.lossyScale); }
+                    catch { }
+                }
+
+                if (controller != null)
+                {
+                    try { sb.Append(" shadeFacing=").Append(controller.facing); }
+                    catch { }
+
+                    try { sb.Append(" shadeLocalScale=").Append(controller.transform.localScale); }
+                    catch { }
+
+                    try { sb.Append(" shamanActive=").Append(controller.shamanMovesetActive); }
+                    catch { }
+                }
+
+                if (marker != null)
+                {
+                    try { sb.Append(" markerVertical=").Append(marker.verticalInput.ToString("0.###", CultureInfo.InvariantCulture)); }
+                    catch { }
+
+                    try { sb.Append(" markerInvertDown=").Append(marker.invertDown); }
+                    catch { }
+
+                    try { sb.Append(" markerHasStoredScale=").Append(marker.hasStoredScale); }
+                    catch { }
+
+                    if (marker.hasStoredScale)
+                    {
+                        try { sb.Append(" markerStoredScale=").Append(marker.storedLocalScale); }
+                        catch { }
+                    }
+                }
+
+                NailSlash nailSlash = null;
+                try { nailSlash = slash.GetComponent<NailSlash>(); }
+                catch { }
+
+                if (nailSlash != null)
+                {
+                    try { sb.Append(" anim=").Append(nailSlash.animName ?? "(null)"); }
+                    catch { }
+
+                    try { sb.Append(" isStarting=").Append(nailSlash.IsStartingSlash); }
+                    catch { }
+
+                    try { sb.Append(" isOut=").Append(nailSlash.IsSlashOut); }
+                    catch { }
+                }
+
+                NailAttackBase nailAttack = nailSlash;
+                if (nailAttack == null)
+                {
+                    try { nailAttack = slash.GetComponent<NailAttackBase>(); }
+                    catch { }
+                }
+
+                if (nailAttack != null)
+                {
+                    if (s_nailSlashScaleField != null)
+                    {
+                        try { sb.Append(" baseScale=").Append((Vector3)s_nailSlashScaleField.GetValue(nailAttack)); }
+                        catch { }
+                    }
+
+                    if (s_nailSlashLongScaleField != null)
+                    {
+                        try { sb.Append(" longScale=").Append((Vector3)s_nailSlashLongScaleField.GetValue(nailAttack)); }
+                        catch { }
+                    }
+
+                    if (s_nailSlashHeroField != null)
+                    {
+                        try
+                        {
+                            if (s_nailSlashHeroField.GetValue(nailAttack) is HeroController hero && hero)
+                            {
+                                sb.Append(" heroScale=").Append(hero.transform.localScale);
+                                sb.Append(" heroPos=").Append(hero.transform.position);
+                            }
+                        }
+                        catch { }
+                    }
+                }
+
+                NailSlashTravel travel = null;
+                try { travel = slash.GetComponent<NailSlashTravel>(); }
+                catch { }
+
+                if (travel != null)
+                {
+                    try { sb.Append(" travelLocalPos=").Append(travel.transform.localPosition); }
+                    catch { }
+
+                    if (s_nailTravelInitialPosField != null)
+                    {
+                        try { sb.Append(" travelInitialPos=").Append((Vector3)s_nailTravelInitialPosField.GetValue(travel)); }
+                        catch { }
+                    }
+
+                    if (s_nailTravelInitialScaleField != null)
+                    {
+                        try { sb.Append(" travelInitialScale=").Append((Vector3)s_nailTravelInitialScaleField.GetValue(travel)); }
+                        catch { }
+                    }
+
+                    if (s_nailTravelDistanceField != null)
+                    {
+                        try { sb.Append(" travelDistance=").Append((Vector2)s_nailTravelDistanceField.GetValue(travel)); }
+                        catch { }
+                    }
+
+                    if (s_nailTravelHasStartedField != null)
+                    {
+                        try { sb.Append(" travelHasStarted=").Append((bool)s_nailTravelHasStartedField.GetValue(travel)); }
+                        catch { }
+                    }
+
+                    if (s_nailTravelIsSlashActiveField != null)
+                    {
+                        try { sb.Append(" travelIsActive=").Append((bool)s_nailTravelIsSlashActiveField.GetValue(travel)); }
+                        catch { }
+                    }
+                }
+
+                string message = sb.ToString();
+                if (includeStackTrace)
+                {
+                    try { message = message + "\n" + System.Environment.StackTrace; }
+                    catch { }
+                }
+
+                try { UnityEngine.Debug.Log(message); }
+                catch { }
+            }
+            catch (System.Exception ex)
+            {
+                try { UnityEngine.Debug.Log($"[ShadeDebug] LogSlashState error: {ex}"); }
+                catch { }
+            }
+        }
 
         private void HandleNailAttack()
         {
@@ -116,6 +323,8 @@ public partial class LegacyHelper
                 marker.invertDown = slashDirection == ShamanSlashDirection.Down;
             }
 
+            LogSlashState("Shaman slash spawn (pre-orient)", slash, this);
+
             var nailSlash = slash.GetComponent<NailSlash>();
 
             var tempCols = slash.GetComponentsInChildren<Collider2D>(true);
@@ -154,11 +363,7 @@ public partial class LegacyHelper
                     }
                 }
 
-                if (ModConfig.Instance.logShade)
-                {
-                    var tr = slash.transform;
-                    UnityEngine.Debug.Log($"[ShadeDebug] Shade slash spawned: {slash.name} scale={tr.localScale} parent={tr.parent?.name}\n{System.Environment.StackTrace}");
-                }
+                LogSlashState("Shaman slash oriented", slash, this, includeStackTrace: false);
             }
             catch { }
 
@@ -441,6 +646,8 @@ public partial class LegacyHelper
             slash.AddComponent<ShadeSlashMarker>();
             slash.transform.position = transform.position;
 
+            LogSlashState("Shade slash spawn (pre-orient)", slash, this);
+
             var nailSlash = slash.GetComponent<NailSlash>();
 
             var tempCols = slash.GetComponentsInChildren<Collider2D>(true);
@@ -476,8 +683,7 @@ public partial class LegacyHelper
                     }
                 }
                 catch { }
-                if (ModConfig.Instance.logShade && tr != null)
-                    UnityEngine.Debug.Log($"[ShadeDebug] Shade slash spawned: {slash.name} scale={tr.localScale} parent={tr.parent?.name}\n{System.Environment.StackTrace}");
+                LogSlashState("Shade slash oriented", slash, this, includeStackTrace: false);
             }
             catch { }
 
@@ -948,6 +1154,8 @@ public partial class LegacyHelper
                     catch { }
                 }
             }
+
+            LogSlashState("Shaman slash adopted", slash, this, includeStackTrace: false);
         }
 
         private void SpawnProjectile(Vector2 dir)
