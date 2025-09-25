@@ -3,6 +3,7 @@ using System;
 using System.Globalization;
 using LegacyoftheAbyss.Shade;
 using UnityEngine;
+using GlobalEnums;
 
 public partial class LegacyHelper
 {
@@ -116,8 +117,18 @@ public partial class LegacyHelper
             focusDamageShieldEnabled = false;
             focusDamageShieldAbsorbedThisChannel = false;
             focusHealingDisabled = false;
+            shamanMovesetActive = false;
+            shamanHorizontalSlashTemplate = null;
+            shamanHorizontalAltSlashTemplate = null;
+            shamanUpSlashTemplate = null;
+            shamanDownSlashTemplate = null;
+            shamanSlashConfigSource = null;
+            shamanDownSlashType = HeroControllerConfig.DownSlashTypes.Slash;
+            carefreeMelodyEquipped = false;
             carefreeMelodyChance = 0f;
             voidHeartEvadeActive = false;
+            DisableCarefreeMelodyEffect();
+            LegacyHelper.SetFragileGreedActive(false);
             conditionalNailDamageMultipliers.Clear();
             conditionalNailDamageProduct = 1f;
             UpdateFocusDerivedValues();
@@ -225,9 +236,98 @@ public partial class LegacyHelper
             }
         }
 
-        internal void SetCarefreeMelodyChance(float chance)
+        internal void SetCarefreeMelodyEquipped(bool equipped)
         {
-            carefreeMelodyChance = Mathf.Clamp01(chance);
+            carefreeMelodyEquipped = equipped;
+            if (!equipped)
+            {
+                carefreeMelodyChance = 0f;
+                DisableCarefreeMelodyEffect();
+            }
+            else
+            {
+                carefreeMelodyChance = 0f;
+            }
+        }
+
+        internal void IncrementCarefreeMelodyChance()
+        {
+            if (!carefreeMelodyEquipped)
+            {
+                return;
+            }
+
+            carefreeMelodyChance = Mathf.Clamp01(carefreeMelodyChance + CarefreeMelodyChanceStep);
+        }
+
+        private void ResetCarefreeMelodyChance()
+        {
+            carefreeMelodyChance = 0f;
+        }
+
+        private void DisableCarefreeMelodyEffect()
+        {
+            try
+            {
+                if (carefreeMelodyShieldEffect)
+                {
+                    carefreeMelodyShieldEffect.SetActive(false);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private void PlayCarefreeMelodyBlockEffect()
+        {
+            var effect = EnsureCarefreeMelodyEffect();
+            if (!effect)
+            {
+                return;
+            }
+
+            effect.SetActive(false);
+            effect.SetActive(true);
+        }
+
+        private GameObject EnsureCarefreeMelodyEffect()
+        {
+            if (carefreeMelodyShieldEffect)
+            {
+                return carefreeMelodyShieldEffect;
+            }
+
+            try
+            {
+                var hc = HeroController.instance;
+                if (hc != null && hc.luckyDiceShieldEffectPrefab != null)
+                {
+                    carefreeMelodyShieldEffect = Instantiate(hc.luckyDiceShieldEffectPrefab, transform);
+                    carefreeMelodyShieldEffect.transform.localPosition = Vector3.zero;
+                    carefreeMelodyShieldEffect.SetActive(false);
+                }
+            }
+            catch
+            {
+            }
+
+            return carefreeMelodyShieldEffect;
+        }
+
+        internal void SetFragileGreedActive(bool active)
+        {
+            LegacyHelper.SetFragileGreedActive(active);
+        }
+
+        internal void SetShamanMovesetOverride(bool active)
+        {
+            if (shamanMovesetActive == active)
+            {
+                return;
+            }
+
+            shamanMovesetActive = active;
         }
 
         internal void AddMaxHpBonus(int amount, bool fillNew)

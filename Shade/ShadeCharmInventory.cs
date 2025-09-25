@@ -30,7 +30,6 @@ namespace LegacyoftheAbyss.Shade
             _definitions = new List<ShadeCharmDefinition>();
 
             bool furyActive = false;
-            bool elegyDamageBoostActive = false;
             float hivebloodTimer = 0f;
             float kingsoulTimer = 0f;
 
@@ -328,8 +327,15 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.CarefreeMelody),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx => ctx.Controller?.SetCarefreeMelodyChance(0.25f),
-                    OnRemoved = ctx => ctx.Controller?.SetCarefreeMelodyChance(0f)
+                    OnApplied = ctx => ctx.Controller?.SetCarefreeMelodyEquipped(true),
+                    OnRemoved = ctx => ctx.Controller?.SetCarefreeMelodyEquipped(false),
+                    OnShadeDamaged = (ctx, evt) =>
+                    {
+                        if (evt.ActualDamage > 0)
+                        {
+                            ctx.Controller?.IncrementCarefreeMelodyChance();
+                        }
+                    }
                 },
                 displayName: "Carefree Melody",
                 description: "A soothing anthem that sometimes lets blows simply glance away from the shade.",
@@ -356,8 +362,8 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.FragileGreed),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx => ctx.Controller?.AddSoulGainBonus(8),
-                    OnRemoved = ctx => ctx.Controller?.AddSoulGainBonus(-8)
+                    OnApplied = ctx => ctx.Controller?.SetFragileGreedActive(true),
+                    OnRemoved = ctx => ctx.Controller?.SetFragileGreedActive(false)
                 },
                 displayName: "Fragile Greed",
                 description: "Fills the bearer with a desire to reap every scrap of SOUL. Increases SOUL gained from attacks, but will shatter if the shade is defeated.",
@@ -390,42 +396,51 @@ namespace LegacyoftheAbyss.Shade
                 enumId: ShadeCharmId.SharpShadow,
                 iconName: "shade_charm_sharp_shadow"));
 
-            _definitions.Add(new ShadeCharmDefinition(
-                nameof(ShadeCharmId.GrubberflysElegy),
-                hooks: new ShadeCharmHooks
+            {
+                bool shamanActive = false;
+                void RefreshShamanState(LegacyHelper.ShadeController controller)
                 {
-                    OnApplied = ctx =>
+                    if (controller == null)
                     {
-                        elegyDamageBoostActive = false;
-                        ctx.Controller?.SetConditionalNailDamageMultiplier(nameof(ShadeCharmId.GrubberflysElegy), 1f);
-                    },
-                    OnRemoved = ctx =>
-                    {
-                        elegyDamageBoostActive = false;
-                        ctx.Controller?.ClearConditionalNailDamageMultiplier(nameof(ShadeCharmId.GrubberflysElegy));
-                    },
-                    OnUpdate = (ctx, _) =>
-                    {
-                        var controller = ctx.Controller;
-                        if (controller == null)
-                        {
-                            return;
-                        }
-
-                        bool atFull = controller.GetCurrentHP() >= controller.GetMaxHP();
-                        if (atFull != elegyDamageBoostActive)
-                        {
-                            elegyDamageBoostActive = atFull;
-                            controller.SetConditionalNailDamageMultiplier(nameof(ShadeCharmId.GrubberflysElegy), atFull ? 1.4f : 1f);
-                        }
+                        return;
                     }
-                },
-                displayName: "Grubberfly's Elegy",
-                description: "Calls upon the gratitude of every rescued grub. While at full health the shade's nail strikes with brilliant, searing force.",
-                notchCost: 3,
-                fallbackTint: new Color(0.50f, 0.68f, 0.94f),
-                enumId: ShadeCharmId.GrubberflysElegy,
-                iconName: "shade_charm_grubberflys_elegy"));
+
+                    int maxNormal = controller.GetMaxNormalHP();
+                    int currentNormal = controller.GetCurrentNormalHP();
+                    bool shouldEnable = maxNormal <= 0 || currentNormal >= maxNormal;
+                    if (shouldEnable == shamanActive)
+                    {
+                        return;
+                    }
+
+                    shamanActive = shouldEnable;
+                    controller.SetShamanMovesetOverride(shouldEnable);
+                }
+
+                _definitions.Add(new ShadeCharmDefinition(
+                    nameof(ShadeCharmId.GrubberflysElegy),
+                    hooks: new ShadeCharmHooks
+                    {
+                        OnApplied = ctx =>
+                        {
+                            shamanActive = false;
+                            RefreshShamanState(ctx.Controller);
+                        },
+                        OnRemoved = ctx =>
+                        {
+                            shamanActive = false;
+                            ctx.Controller?.SetShamanMovesetOverride(false);
+                        },
+                        OnShadeDamaged = (ctx, _) => RefreshShamanState(ctx.Controller),
+                        OnUpdate = (ctx, _) => RefreshShamanState(ctx.Controller)
+                    },
+                    displayName: "Grubberfly's Elegy",
+                    description: "Calls upon the gratitude of every rescued grub. While at full health the shade's nail strikes with brilliant, searing force.",
+                    notchCost: 3,
+                    fallbackTint: new Color(0.50f, 0.68f, 0.94f),
+                    enumId: ShadeCharmId.GrubberflysElegy,
+                    iconName: "shade_charm_grubberflys_elegy"));
+            }
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.HeavyBlow),

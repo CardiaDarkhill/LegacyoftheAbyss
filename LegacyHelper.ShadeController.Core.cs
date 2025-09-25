@@ -2647,16 +2647,24 @@ public partial class LegacyHelper
 
         private bool TryPreventCarefreeMelody(int attemptedDamage, bool wasHazard)
         {
-            if (carefreeMelodyChance <= 0f)
+            if (!carefreeMelodyEquipped)
             {
                 return false;
             }
 
-            if (UnityEngine.Random.value > Mathf.Clamp01(carefreeMelodyChance))
+            float chance = Mathf.Clamp01(carefreeMelodyChance);
+            if (chance <= 0f)
             {
                 return false;
             }
 
+            if (UnityEngine.Random.value > chance)
+            {
+                return false;
+            }
+
+            ResetCarefreeMelodyChance();
+            PlayCarefreeMelodyBlockEffect();
             DispatchCharmDamageEvent(attemptedDamage, 0, wasHazard, true, false);
             return true;
         }
