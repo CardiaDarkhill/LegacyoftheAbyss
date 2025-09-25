@@ -418,62 +418,56 @@ public partial class LegacyHelper
             int prevLifeblood = Mathf.Clamp(previousLifebloodOverride ?? shadeLifeblood, 0, prevLifebloodMax);
             bool wasJonis = previousJonisOverride ?? jonisBlessingEquipped;
 
+            int combinedPrevious = Mathf.Clamp(prevNormalHp, 0, prevNormalMax)
+                + Mathf.Clamp(prevLifeblood, 0, prevLifebloodMax);
+            int positiveFill = Mathf.Max(0, fillAmount);
+            int adjustedCombined = combinedPrevious + positiveFill;
+
             int baseNormalMax = Mathf.Max(0, baseShadeMaxHP + charmMaxHpBonus);
             int lifebloodCapacity = Mathf.Clamp(charmLifebloodBonus, 0, 99);
+            bool jonisActive = jonisBlessingEquipped;
 
-            int targetNormalMax;
-            int targetLifebloodMax;
-
-            if (jonisBlessingEquipped)
+            if (jonisActive)
             {
                 int jonisBase = Mathf.Max(1, baseNormalMax);
                 lifebloodCapacity += Mathf.CeilToInt(jonisBase * 1.4f);
-                targetNormalMax = 0;
-                targetLifebloodMax = Mathf.Clamp(lifebloodCapacity, 0, 99);
-            }
-            else
-            {
-                targetNormalMax = Mathf.Max(1, baseNormalMax);
-                targetLifebloodMax = lifebloodCapacity;
             }
 
-            int positiveFill = Mathf.Max(0, fillAmount);
+            int targetNormalMax = jonisActive ? 0 : Mathf.Max(1, baseNormalMax);
+            int targetLifebloodMax = jonisActive
+                ? Mathf.Clamp(lifebloodCapacity, 0, 99)
+                : lifebloodCapacity;
+
             int newNormalHp;
             int newLifeblood;
 
-            if (jonisBlessingEquipped)
+            if (jonisActive)
             {
-                int combined = prevNormalHp + prevLifeblood;
                 newNormalHp = 0;
-                int adjustedCombined = combined + positiveFill;
                 newLifeblood = refillLifeblood
                     ? targetLifebloodMax
                     : Mathf.Clamp(adjustedCombined, 0, targetLifebloodMax);
             }
-            else if (wasJonis && !jonisBlessingEquipped)
-            {
-                int combined = prevNormalHp + prevLifeblood;
-                int adjustedCombined = combined + positiveFill;
-                newNormalHp = Mathf.Clamp(adjustedCombined, 0, targetNormalMax);
-                int leftover = adjustedCombined - newNormalHp;
-                newLifeblood = refillLifeblood
-                    ? targetLifebloodMax
-                    : Mathf.Clamp(leftover, 0, targetLifebloodMax);
-            }
             else
             {
-                int adjustedNormal = prevNormalHp + positiveFill;
-                newNormalHp = Mathf.Clamp(adjustedNormal, 0, targetNormalMax);
-                newLifeblood = refillLifeblood
-                    ? targetLifebloodMax
-                    : Mathf.Clamp(prevLifeblood, 0, targetLifebloodMax);
+                newNormalHp = Mathf.Clamp(adjustedCombined, 0, targetNormalMax);
+                if (refillLifeblood)
+                {
+                    newLifeblood = targetLifebloodMax;
+                }
+                else
+                {
+                    int leftover = Mathf.Max(0, adjustedCombined - newNormalHp);
+                    newLifeblood = Mathf.Clamp(leftover, 0, targetLifebloodMax);
+                }
             }
 
             bool statsChanged =
                 targetNormalMax != prevNormalMax
                 || targetLifebloodMax != prevLifebloodMax
                 || newNormalHp != prevNormalHp
-                || newLifeblood != prevLifeblood;
+                || newLifeblood != prevLifeblood
+                || jonisActive != wasJonis;
 
             shadeMaxHP = targetNormalMax;
             shadeHP = targetNormalMax > 0
@@ -482,23 +476,23 @@ public partial class LegacyHelper
             shadeLifebloodMax = Mathf.Clamp(targetLifebloodMax, 0, 99);
             shadeLifeblood = Mathf.Clamp(newLifeblood, 0, shadeLifebloodMax);
 
-            hivebloodPendingLifebloodRestore = jonisBlessingEquipped
+            hivebloodPendingLifebloodRestore = jonisActive
                 && hivebloodPendingLifebloodRestore
                 && shadeLifeblood < shadeLifebloodMax;
 
-            if (deferHudAndPersistence)
+            if (statsChanged)
             {
-                if (statsChanged)
+                if (deferHudAndPersistence)
                 {
                     pendingDeferredHealthSync = true;
                     pendingDeferredHealthSuppressDamage = true;
                     PushShadeStatsToHud(suppressDamageAudio: true);
                 }
-            }
-            else if (statsChanged)
-            {
-                PushShadeStatsToHud(suppressDamageAudio: true);
-                PersistIfChanged();
+                else
+                {
+                    PushShadeStatsToHud(suppressDamageAudio: true);
+                    PersistIfChanged();
+                }
             }
         }
 
