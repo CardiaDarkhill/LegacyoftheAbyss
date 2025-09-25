@@ -781,8 +781,10 @@ public partial class LegacyHelper
                     // shade's facing so the wave art doesn't appear upside down when the
                     // shade attacks to the right.
                     ls.x = facing >= 0f ? Mathf.Abs(ls.x) : -Mathf.Abs(ls.x);
-                    ls.y = -Mathf.Abs(ls.y);
+                    ls.y = facing >= 0f ? Mathf.Abs(ls.y) : -Mathf.Abs(ls.y);
                 }
+
+                bool invertDownParentNegative = invertDown && ls.y < 0f;
 
                 tr.localScale = ls;
 
@@ -794,7 +796,6 @@ public partial class LegacyHelper
 
                 if (invertDown && waveSprites != null)
                 {
-                    bool facingRight = facing > 0f;
                     try
                     {
                         for (int i = 0; i < waveSprites.Count; i++)
@@ -803,7 +804,8 @@ public partial class LegacyHelper
                             if (!sr) continue;
 
                             bool baseFlip = waveBaseFlipY != null && i < waveBaseFlipY.Count ? waveBaseFlipY[i] : sr.flipY;
-                            sr.flipY = facingRight ? !baseFlip : baseFlip;
+                            bool invertSprite = invertDownParentNegative;
+                            sr.flipY = invertSprite ? !baseFlip : baseFlip;
                         }
                     }
                     catch { }
