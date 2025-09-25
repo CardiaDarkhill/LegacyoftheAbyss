@@ -20,6 +20,7 @@ public partial class LegacyHelper
         private static readonly FieldInfo s_nailTravelInitialScaleField = typeof(NailSlashTravel).GetField("initialLocalScale", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly FieldInfo s_nailSlashScaleField = typeof(NailAttackBase).GetField("scale", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly FieldInfo s_nailSlashLongScaleField = typeof(NailAttackBase).GetField("longNeedleScale", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly FieldInfo s_nailTravelDistanceField = typeof(NailSlashTravel).GetField("travelDistance", BindingFlags.Instance | BindingFlags.NonPublic);
 
         private void HandleNailAttack()
         {
@@ -819,6 +820,16 @@ public partial class LegacyHelper
             {
                 try { s_nailTravelInitialPosField?.SetValue(travel, tr.localPosition); } catch { }
                 try { s_nailTravelInitialScaleField?.SetValue(travel, tr.localScale); } catch { }
+                if (invertDown && s_nailTravelDistanceField != null)
+                {
+                    try
+                    {
+                        var distance = (Vector2)s_nailTravelDistanceField.GetValue(travel);
+                        distance.y = -distance.y;
+                        s_nailTravelDistanceField.SetValue(travel, distance);
+                    }
+                    catch { }
+                }
             }
         }
 
