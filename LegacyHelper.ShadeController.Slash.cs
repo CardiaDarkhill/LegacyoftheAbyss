@@ -709,6 +709,8 @@ public partial class LegacyHelper
 
             List<Transform> waveChildren = null;
             List<float> waveBaseSigns = null;
+            List<SpriteRenderer> waveSprites = null;
+            List<bool> waveBaseFlipY = null;
 
             if (invertDown)
             {
@@ -744,6 +746,11 @@ public partial class LegacyHelper
                         if (lossy == 0f) lossy = 1f;
                         waveChildren.Add(childTr);
                         waveBaseSigns.Add(Mathf.Sign(lossy));
+
+                        waveSprites ??= new List<SpriteRenderer>();
+                        waveBaseFlipY ??= new List<bool>();
+                        waveSprites.Add(sr);
+                        waveBaseFlipY.Add(sr.flipY);
                     }
                 }
                 catch { }
@@ -776,6 +783,23 @@ public partial class LegacyHelper
                 {
                     try { s_nailSlashScaleField?.SetValue(nailSlash, ls); } catch { }
                     try { s_nailSlashLongScaleField?.SetValue(nailSlash, ls); } catch { }
+                }
+
+                if (invertDown && waveSprites != null)
+                {
+                    bool facingRight = facing > 0f;
+                    try
+                    {
+                        for (int i = 0; i < waveSprites.Count; i++)
+                        {
+                            var sr = waveSprites[i];
+                            if (!sr) continue;
+
+                            bool baseFlip = waveBaseFlipY != null && i < waveBaseFlipY.Count ? waveBaseFlipY[i] : sr.flipY;
+                            sr.flipY = facingRight ? !baseFlip : baseFlip;
+                        }
+                    }
+                    catch { }
                 }
 
                 if (invertDown && facing > 0f && waveChildren != null)
