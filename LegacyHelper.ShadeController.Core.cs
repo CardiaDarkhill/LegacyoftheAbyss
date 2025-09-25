@@ -123,7 +123,15 @@ public partial class LegacyHelper
                     sceneProtectionSuppressingPersistence = false;
                 }
 
-                LegacyHelper.SaveShadeState(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax, shadeSoul, canTakeDamage, baseShadeMaxHP);
+                bool desiredDamageState = sceneProtectionActive ? sceneProtectionDesiredDamageState : canTakeDamage;
+                LegacyHelper.SaveShadeState(
+                    shadeHP,
+                    shadeMaxHP,
+                    shadeLifeblood,
+                    shadeLifebloodMax,
+                    shadeSoul,
+                    desiredDamageState,
+                    baseShadeMaxHP);
             }
             catch
             {

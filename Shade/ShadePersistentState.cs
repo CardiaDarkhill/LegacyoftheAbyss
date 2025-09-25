@@ -326,7 +326,7 @@ namespace LegacyoftheAbyss.Shade
 
         public void SetDiscoveredCharms(IEnumerable<int>? charmIds)
         {
-            _discoveredCharmIds.Clear();
+            var sanitized = new HashSet<int>();
 
             if (charmIds != null)
             {
@@ -334,12 +334,37 @@ namespace LegacyoftheAbyss.Shade
                 {
                     if (charmId >= 0)
                     {
-                        _discoveredCharmIds.Add(charmId);
+                        sanitized.Add(charmId);
                     }
                 }
             }
 
-            if (_equippedCharmLoadouts.Count == 0)
+            if (_equippedCharmLoadouts.Count > 0)
+            {
+                foreach (var loadout in _equippedCharmLoadouts.Values)
+                {
+                    if (loadout == null)
+                    {
+                        continue;
+                    }
+
+                    foreach (var charmId in loadout)
+                    {
+                        if (charmId >= 0)
+                        {
+                            sanitized.Add(charmId);
+                        }
+                    }
+                }
+            }
+
+            if (!_discoveredCharmIds.SetEquals(sanitized))
+            {
+                _discoveredCharmIds.Clear();
+                _discoveredCharmIds.UnionWith(sanitized);
+            }
+
+            if (_equippedCharmLoadouts.Count == 0 || sanitized.Count == 0)
             {
                 return;
             }
@@ -352,7 +377,7 @@ namespace LegacyoftheAbyss.Shade
                     continue;
                 }
 
-                loadout.RemoveWhere(id => !_discoveredCharmIds.Contains(id));
+                loadout.RemoveWhere(id => !sanitized.Contains(id));
                 if (loadout.Count == 0)
                 {
                     _equippedCharmLoadouts.Remove(loadoutId);

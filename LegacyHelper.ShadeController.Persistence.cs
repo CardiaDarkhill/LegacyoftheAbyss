@@ -76,7 +76,10 @@ public partial class LegacyHelper
         public int GetMaxLifeblood() => Mathf.Max(0, shadeLifebloodMax);
         public int GetShadeSoul() => shadeSoul;
         public int GetShadeSoulMax() => shadeSoulMax;
-        public bool GetCanTakeDamage() => canTakeDamage;
+        public bool GetCanTakeDamage()
+        {
+            return sceneProtectionActive ? sceneProtectionDesiredDamageState : canTakeDamage;
+        }
 
         public void Init(Transform hornet) { hornetTransform = hornet; }
 

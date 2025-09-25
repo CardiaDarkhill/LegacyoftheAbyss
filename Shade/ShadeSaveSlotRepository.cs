@@ -442,9 +442,26 @@ namespace LegacyoftheAbyss.Shade
                 }
             }
 
-            var discoveredIds = record.CollectedCharms
-                .Select(charm => (int)charm)
-                .ToArray();
+            var discoveredIds = new HashSet<int>(record.CollectedCharms
+                .Select(charm => (int)charm));
+
+            var loadouts = record.State.GetEquippedCharmLoadouts();
+            foreach (var loadout in loadouts.Values)
+            {
+                if (loadout == null)
+                {
+                    continue;
+                }
+
+                foreach (var charmId in loadout)
+                {
+                    if (charmId >= 0)
+                    {
+                        discoveredIds.Add(charmId);
+                    }
+                }
+            }
+
             record.State.SetDiscoveredCharms(discoveredIds);
 
             PersistSlot(slot);
