@@ -324,6 +324,42 @@ namespace LegacyoftheAbyss.Shade
             return removed;
         }
 
+        public void SetDiscoveredCharms(IEnumerable<int>? charmIds)
+        {
+            _discoveredCharmIds.Clear();
+
+            if (charmIds != null)
+            {
+                foreach (var charmId in charmIds)
+                {
+                    if (charmId >= 0)
+                    {
+                        _discoveredCharmIds.Add(charmId);
+                    }
+                }
+            }
+
+            if (_equippedCharmLoadouts.Count == 0)
+            {
+                return;
+            }
+
+            var loadoutIds = _equippedCharmLoadouts.Keys.ToArray();
+            foreach (var loadoutId in loadoutIds)
+            {
+                if (!_equippedCharmLoadouts.TryGetValue(loadoutId, out var loadout) || loadout == null)
+                {
+                    continue;
+                }
+
+                loadout.RemoveWhere(id => !_discoveredCharmIds.Contains(id));
+                if (loadout.Count == 0)
+                {
+                    _equippedCharmLoadouts.Remove(loadoutId);
+                }
+            }
+        }
+
         public IReadOnlyCollection<int> GetDiscoveredCharmIdsSnapshot()
         {
             if (_discoveredCharmIds.Count == 0)

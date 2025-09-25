@@ -442,6 +442,11 @@ namespace LegacyoftheAbyss.Shade
                 }
             }
 
+            var discoveredIds = record.CollectedCharms
+                .Select(charm => (int)charm)
+                .ToArray();
+            record.State.SetDiscoveredCharms(discoveredIds);
+
             PersistSlot(slot);
         }
 
@@ -501,6 +506,12 @@ namespace LegacyoftheAbyss.Shade
             {
                 foreach (var charmId in charmIds)
                 {
+                    if (charmId < 0)
+                    {
+                        continue;
+                    }
+
+                    record.State.UnlockCharm(charmId);
                     record.State.EquipCharm(loadoutId, charmId);
                 }
             }
