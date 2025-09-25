@@ -94,9 +94,9 @@ public partial class LegacyHelper
                 expectedSlashParent = null;
                 suppressActivateOnSlash = false;
             }
-            slash.transform.SetParent(transform, false);
             slash.AddComponent<ShadeSlashMarker>();
             slash.transform.position = transform.position;
+            StartCoroutine(AdoptSlashAfterFrame(slash));
 
             var nailSlash = slash.GetComponent<NailSlash>();
 
@@ -749,6 +749,20 @@ public partial class LegacyHelper
                 var colsAll = slash.GetComponentsInChildren<Collider2D>(true);
                 foreach (var c2 in colsAll) if (c2) c2.enabled = false;
             }
+            catch { }
+        }
+
+        private IEnumerator AdoptSlashAfterFrame(GameObject slash)
+        {
+            yield return null;
+            if (!slash) yield break;
+            Transform tr = null;
+            try { tr = slash.transform; }
+            catch { }
+            if (!tr) yield break;
+            try { tr.SetParent(transform, true); }
+            catch { }
+            try { tr.position = transform.position; }
             catch { }
         }
 
