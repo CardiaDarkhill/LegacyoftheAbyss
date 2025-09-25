@@ -775,6 +775,13 @@ public partial class LegacyHelper
                 {
                     ls.x = -ls.x;
                     ls.y = -ls.y;
+
+                    // Ensure the down-slash stays vertically inverted regardless of any
+                    // prefab quirks and keep the horizontal mirror consistent with the
+                    // shade's facing so the wave art doesn't appear upside down when the
+                    // shade attacks to the right.
+                    ls.x = facing >= 0f ? Mathf.Abs(ls.x) : -Mathf.Abs(ls.x);
+                    ls.y = -Mathf.Abs(ls.y);
                 }
 
                 tr.localScale = ls;
