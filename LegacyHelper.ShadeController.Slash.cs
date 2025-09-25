@@ -107,7 +107,7 @@ public partial class LegacyHelper
                 expectedSlashParent = null;
                 suppressActivateOnSlash = false;
             }
-            slash.AddComponent<ShadeSlashMarker>();
+            var marker = slash.AddComponent<ShadeSlashMarker>();
 
             var nailSlash = slash.GetComponent<NailSlash>();
 
@@ -128,7 +128,7 @@ public partial class LegacyHelper
             try
             {
                 float facingSign = facing >= 0 ? 1f : -1f;
-                ApplyShamanSlashOrientation(slash, nailSlash, slashDirection, facingSign, transform.position);
+                ApplyShamanSlashOrientation(slash, nailSlash, marker, slashDirection, facingSign, transform);
 
                 var travel = slash.GetComponent<NailSlashTravel>();
                 if (travel != null)
@@ -712,7 +712,7 @@ public partial class LegacyHelper
 
         }
 
-        private void ApplyShamanSlashOrientation(GameObject slash, NailSlash nailSlash, ShamanSlashDirection direction, float facingSign, Vector3 shadePosition)
+        private void ApplyShamanSlashOrientation(GameObject slash, NailSlash nailSlash, ShadeSlashMarker marker, ShamanSlashDirection direction, float facingSign, Transform shadeTransform)
         {
             if (!slash) return;
 
@@ -758,44 +758,53 @@ public partial class LegacyHelper
                     case ShamanSlashDirection.Up:
                         orientedPos.x = posXMag * facingSign;
                         orientedPos.y = posYMag;
-                        orientedScale.x = Mathf.Abs(baseLocalScale.x);
+                        orientedScale.x = Mathf.Abs(baseLocalScale.x) * facingSign;
                         orientedScale.y = Mathf.Abs(baseLocalScale.y);
                         break;
                     case ShamanSlashDirection.Down:
                         orientedPos.x = posXMag * facingSign;
                         orientedPos.y = -posYMag;
-                        orientedScale.x = Mathf.Abs(baseLocalScale.x);
+                        orientedScale.x = Mathf.Abs(baseLocalScale.x) * facingSign;
                         orientedScale.y = -Mathf.Abs(baseLocalScale.y);
                         break;
                 }
 
-                tr.localPosition = orientedPos;
-
                 Vector3 finalScale = orientedScale;
                 finalScale *= 1f / SpriteScale;
                 finalScale *= charmNailScaleMultiplier;
-                tr.localScale = finalScale;
-
-                if (travel != null)
+                if (marker != null)
                 {
-                    try { s_shamanInitialPosField?.SetValue(travel, orientedPos); } catch { }
-                    try { s_shamanInitialScaleField?.SetValue(travel, finalScale); } catch { }
+                    marker.localPosition = orientedPos;
+                    marker.localScale = finalScale;
+                    marker.hasWorldPosition = false;
+                    if (shadeTransform != null)
+                    {
+                        try
+                        {
+                            marker.worldPosition = shadeTransform.TransformPoint(orientedPos);
+                            marker.hasWorldPosition = true;
+                        }
+                        catch
+                        {
+                            marker.hasWorldPosition = false;
+                        }
+                    }
+                    else if (tr != null)
+                    {
+                        try { marker.worldPosition = tr.position; } catch { }
+                    }
                 }
 
-                if (nailSlash != null)
+                if (tr != null)
                 {
-                    try { s_shamanNailScaleField?.SetValue(nailSlash, finalScale); } catch { }
-                    try { s_shamanNailLongScaleField?.SetValue(nailSlash, finalScale); } catch { }
+                    try { tr.localScale = finalScale; } catch { }
+                    if (marker != null && marker.hasWorldPosition)
+                    {
+                        try { tr.position = marker.worldPosition; } catch { }
+                    }
                 }
             }
             catch { }
-            finally
-            {
-                if (tr != null)
-                {
-                    try { tr.position = shadePosition; } catch { }
-                }
-            }
         }
 
         private void DestroyOtherSlashes(GameObject keep)
@@ -815,7 +824,13 @@ public partial class LegacyHelper
         }
 
 
-        private class ShadeSlashMarker : MonoBehaviour { }
+        private class ShadeSlashMarker : MonoBehaviour
+        {
+            public Vector3 localPosition;
+            public Vector3 localScale = Vector3.one;
+            public Vector3 worldPosition;
+            public bool hasWorldPosition;
+        }
 
         private IEnumerator DisableSlashAfterWindow(GameObject slash, float seconds)
         {
@@ -839,10 +854,45 @@ public partial class LegacyHelper
             try { tr = slash.transform; }
             catch { }
             if (!tr) yield break;
-            try { tr.SetParent(transform, true); }
+
+            ShadeSlashMarker marker = null;
+            try { marker = slash.GetComponent<ShadeSlashMarker>(); }
             catch { }
-            try { tr.position = transform.position; }
+
+            Vector3 desiredLocalPos = Vector3.zero;
+            Vector3 desiredLocalScale = tr.localScale;
+            Vector3 desiredWorldPos = transform.position;
+
+            if (marker != null)
+            {
+                desiredLocalPos = marker.localPosition;
+                desiredLocalScale = marker.localScale;
+                if (marker.hasWorldPosition)
+                    desiredWorldPos = marker.worldPosition;
+            }
+
+            try { tr.position = desiredWorldPos; }
             catch { }
+            try { tr.SetParent(transform, false); }
+            catch { }
+            try { tr.localPosition = desiredLocalPos; }
+            catch { }
+            try { tr.localScale = desiredLocalScale; }
+            catch { }
+
+            var travel = slash.GetComponent<NailSlashTravel>();
+            if (travel != null)
+            {
+                try { s_shamanInitialPosField?.SetValue(travel, desiredLocalPos); } catch { }
+                try { s_shamanInitialScaleField?.SetValue(travel, desiredLocalScale); } catch { }
+            }
+
+            var nailSlash = slash.GetComponent<NailSlash>();
+            if (nailSlash != null)
+            {
+                try { s_shamanNailScaleField?.SetValue(nailSlash, desiredLocalScale); } catch { }
+                try { s_shamanNailLongScaleField?.SetValue(nailSlash, desiredLocalScale); } catch { }
+            }
         }
 
         private void SpawnProjectile(Vector2 dir)
