@@ -393,19 +393,51 @@ namespace LegacyoftheAbyss.Shade
                 enumId: ShadeCharmId.SharpShadow,
                 iconName: "shade_charm_sharp_shadow"));
 
-            _definitions.Add(new ShadeCharmDefinition(
-                nameof(ShadeCharmId.GrubberflysElegy),
-                hooks: new ShadeCharmHooks
+            {
+                bool shamanActive = false;
+                void RefreshShamanState(LegacyHelper.ShadeController controller)
                 {
-                    OnApplied = ctx => ctx.Controller?.SetShamanMovesetOverride(true),
-                    OnRemoved = ctx => ctx.Controller?.SetShamanMovesetOverride(false)
-                },
-                displayName: "Grubberfly's Elegy",
-                description: "Calls upon the gratitude of every rescued grub. While at full health the shade's nail strikes with brilliant, searing force.",
-                notchCost: 3,
-                fallbackTint: new Color(0.50f, 0.68f, 0.94f),
-                enumId: ShadeCharmId.GrubberflysElegy,
-                iconName: "shade_charm_grubberflys_elegy"));
+                    if (controller == null)
+                    {
+                        return;
+                    }
+
+                    int maxNormal = controller.GetMaxNormalHP();
+                    int currentNormal = controller.GetCurrentNormalHP();
+                    bool shouldEnable = maxNormal <= 0 || currentNormal >= maxNormal;
+                    if (shouldEnable == shamanActive)
+                    {
+                        return;
+                    }
+
+                    shamanActive = shouldEnable;
+                    controller.SetShamanMovesetOverride(shouldEnable);
+                }
+
+                _definitions.Add(new ShadeCharmDefinition(
+                    nameof(ShadeCharmId.GrubberflysElegy),
+                    hooks: new ShadeCharmHooks
+                    {
+                        OnApplied = ctx =>
+                        {
+                            shamanActive = false;
+                            RefreshShamanState(ctx.Controller);
+                        },
+                        OnRemoved = ctx =>
+                        {
+                            shamanActive = false;
+                            ctx.Controller?.SetShamanMovesetOverride(false);
+                        },
+                        OnShadeDamaged = (ctx, _) => RefreshShamanState(ctx.Controller),
+                        OnUpdate = (ctx, _) => RefreshShamanState(ctx.Controller)
+                    },
+                    displayName: "Grubberfly's Elegy",
+                    description: "Calls upon the gratitude of every rescued grub. While at full health the shade's nail strikes with brilliant, searing force.",
+                    notchCost: 3,
+                    fallbackTint: new Color(0.50f, 0.68f, 0.94f),
+                    enumId: ShadeCharmId.GrubberflysElegy,
+                    iconName: "shade_charm_grubberflys_elegy"));
+            }
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.HeavyBlow),

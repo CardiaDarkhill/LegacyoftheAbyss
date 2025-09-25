@@ -202,6 +202,12 @@ public partial class LegacyHelper
         private bool focusDamageShieldAbsorbedThisChannel;
         private bool focusHealingDisabled;
         private bool shamanMovesetActive;
+        private GameObject shamanHorizontalSlashTemplate;
+        private GameObject shamanHorizontalAltSlashTemplate;
+        private GameObject shamanUpSlashTemplate;
+        private GameObject shamanDownSlashTemplate;
+        private HeroControllerConfig.DownSlashTypes shamanDownSlashType = HeroControllerConfig.DownSlashTypes.Slash;
+        private HeroControllerConfig shamanSlashConfigSource;
         private bool carefreeMelodyEquipped;
         private float carefreeMelodyChance;
         private GameObject carefreeMelodyShieldEffect;

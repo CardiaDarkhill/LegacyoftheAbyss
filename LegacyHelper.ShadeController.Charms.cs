@@ -1,6 +1,7 @@
 #nullable disable
 using LegacyoftheAbyss.Shade;
 using UnityEngine;
+using GlobalEnums;
 
 public partial class LegacyHelper
 {
@@ -115,6 +116,12 @@ public partial class LegacyHelper
             focusDamageShieldAbsorbedThisChannel = false;
             focusHealingDisabled = false;
             shamanMovesetActive = false;
+            shamanHorizontalSlashTemplate = null;
+            shamanHorizontalAltSlashTemplate = null;
+            shamanUpSlashTemplate = null;
+            shamanDownSlashTemplate = null;
+            shamanSlashConfigSource = null;
+            shamanDownSlashType = HeroControllerConfig.DownSlashTypes.Slash;
             carefreeMelodyEquipped = false;
             carefreeMelodyChance = 0f;
             DisableCarefreeMelodyEffect();
@@ -307,6 +314,11 @@ public partial class LegacyHelper
 
         internal void SetShamanMovesetOverride(bool active)
         {
+            if (shamanMovesetActive == active)
+            {
+                return;
+            }
+
             shamanMovesetActive = active;
         }
 
