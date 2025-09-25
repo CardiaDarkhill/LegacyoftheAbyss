@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using LegacyoftheAbyss.Shade;
 using UnityEngine;
@@ -141,7 +142,7 @@ public partial class LegacyHelper
         internal void ApplyCharmLoadout(IEnumerable<ShadeCharmDefinition> loadout)
         {
             var previousSnapshot = charmSnapshot;
-            var removedCharms = equippedCharms.ToArray();
+            var previousEquipped = equippedCharms.ToArray();
 
             var sanitized = new List<ShadeCharmDefinition>();
             if (loadout != null)
@@ -162,6 +163,17 @@ public partial class LegacyHelper
 
             equippedCharms.Clear();
             equippedCharms.AddRange(charmSnapshot.Definitions);
+
+            var currentDefinitions = charmSnapshot.Definitions;
+            HashSet<ShadeCharmDefinition>? currentSet = null;
+            ShadeCharmDefinition[] removedCharms = Array.Empty<ShadeCharmDefinition>();
+            if (previousEquipped.Length > 0)
+            {
+                currentSet = currentSet ?? new HashSet<ShadeCharmDefinition>(currentDefinitions);
+                removedCharms = previousEquipped
+                    .Where(charm => charm != null && !currentSet.Contains(charm))
+                    .ToArray();
+            }
 
             charmUpdateCallbacks.Clear();
             charmDamageCallbacks.Clear();

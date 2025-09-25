@@ -235,7 +235,23 @@ public partial class LegacyHelper
             int previousLoadoutMax = Mathf.Max(0, baseShadeMaxHP + charmMaxHpBonus);
             charmMaxHpBonus = Mathf.Clamp(charmMaxHpBonus + amount, -20, 40);
             int newLoadoutMax = Mathf.Max(0, baseShadeMaxHP + charmMaxHpBonus);
-            int fill = fillNew ? Mathf.Max(0, newLoadoutMax - previousLoadoutMax) : 0;
+
+            int fill = 0;
+            if (fillNew)
+            {
+                if (jonisBlessingEquipped)
+                {
+                    int lifebloodCapacity = Mathf.Clamp(charmLifebloodBonus, 0, 99);
+                    int jonisBase = Mathf.Max(1, newLoadoutMax);
+                    lifebloodCapacity += Mathf.CeilToInt(jonisBase * 1.4f);
+                    fill = Mathf.Max(0, lifebloodCapacity - prevLifeblood);
+                }
+                else
+                {
+                    fill = Mathf.Max(0, newLoadoutMax - prevNormalHp);
+                }
+            }
+
             LogCharmHealthEvent($"AddMaxHpBonus amount={amount} fillNew={fillNew} previousLoadoutMax={previousLoadoutMax} newLoadoutMax={newLoadoutMax} prevNormal={prevNormalHp}/{prevNormalMax} prevLifeblood={prevLifeblood}/{prevLifebloodMax} wasJonis={wasJonis}");
             ApplyCharmHealthModifiers(
                 fillAmount: fill,

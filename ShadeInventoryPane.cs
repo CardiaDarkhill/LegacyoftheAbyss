@@ -3729,10 +3729,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
         float glowScale = HighlightScaleMultiplier;
         var newSize = new Vector2(baseSize.x * glowScale, baseSize.y * glowScale);
         highlightRect.sizeDelta = newSize;
-
-        string entryName = entryRoot.gameObject != null ? entryRoot.gameObject.name : "<null>";
-        LogMenuEvent(FormattableString.Invariant(
-            $"PositionHighlight -> entry='{entryName}' baseSize={FormatVector2(baseSize)} scale={glowScale:0.##} finalSize={FormatVector2(newSize)}"));
     }
 
     public void ForceLayoutRebuild()
@@ -5888,9 +5884,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private void MoveSelectionHorizontal(int direction)
     {
         EnsureBuilt();
-        int originIndex = selectedIndex;
-        LogMenuEvent(FormattableString.Invariant(
-            $"MoveSelectionHorizontal -> direction={direction} selected={selectedIndex} entries={entries.Count} positions={entryGridPositions.Count}"));
         if (entries.Count == 0 || direction == 0)
         {
             UpdateEquippedRow();
@@ -5927,23 +5920,13 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         if (candidate >= 0)
         {
-            LogMenuEvent(FormattableString.Invariant(
-                $"MoveSelectionHorizontal success -> {originIndex}->{candidate} row={row} targetColumn={targetColumn}"));
             SelectIndex(candidate);
-        }
-        else
-        {
-            LogMenuEvent(FormattableString.Invariant(
-                $"MoveSelectionHorizontal no candidate -> row={row} targetColumn={targetColumn}"));
         }
     }
 
     private void MoveSelectionVertical(int direction)
     {
         EnsureBuilt();
-        int originIndex = selectedIndex;
-        LogMenuEvent(FormattableString.Invariant(
-            $"MoveSelectionVertical -> direction={direction} selected={selectedIndex} entries={entries.Count} positions={entryGridPositions.Count}"));
         if (entries.Count == 0 || direction == 0)
         {
             return;
@@ -5993,14 +5976,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         if (candidate >= 0)
         {
-            LogMenuEvent(FormattableString.Invariant(
-                $"MoveSelectionVertical success -> {originIndex}->{candidate} targetRow={targetRow} distance={candidateDistance:0.###}"));
             SelectIndex(candidate);
-        }
-        else
-        {
-            LogMenuEvent(FormattableString.Invariant(
-                $"MoveSelectionVertical no candidate -> targetRow={targetRow}"));
         }
     }
 
@@ -6053,8 +6029,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
         string entryName = entry.Root != null && entry.Root.gameObject != null
             ? entry.Root.gameObject.name
             : "<null>";
-        LogMenuEvent(FormattableString.Invariant(
-            $"SelectIndex -> {previousIndex}->{selectedIndex} entry='{entryName}' id={entry.Id}"));
         var highlightRect = EnsureHighlightRect();
         RectTransform? entryRoot = entry.Root;
         if (highlightRect != null && entryRoot != null)
