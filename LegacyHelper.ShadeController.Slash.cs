@@ -769,6 +769,19 @@ public partial class LegacyHelper
                 try { var thunks = slash.GetComponentsInChildren<NailSlashTerrainThunk>(true); foreach (var t in thunks) if (t) Destroy(t); } catch { }
                 try { var downAttacks = slash.GetComponentsInChildren<HeroDownAttack>(true); foreach (var d in downAttacks) if (d) Destroy(d); } catch { }
 
+                Vector2 slashForward = (facing >= 0 ? Vector2.right : Vector2.left);
+                float slashDir = (facing >= 0 ? 0f : 180f);
+                if (v > 0.35f)
+                {
+                    slashDir = 90f;
+                    slashForward = Vector2.up;
+                }
+                else if (v < -0.35f)
+                {
+                    slashDir = 270f;
+                    slashForward = Vector2.down;
+                }
+
                 try
                 {
                     var damagers = slash.GetComponentsInChildren<DamageEnemies>(true);
@@ -788,24 +801,6 @@ public partial class LegacyHelper
                     var useNailDmgField = typeof(DamageEnemies).GetField("useNailDamage", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                     var damageDealtField = typeof(DamageEnemies).GetField("damageDealt", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
-                    float dir = 0f;
-                    Vector2 fwd = Vector2.zero;
-                    if (v > 0.35f)
-                    {
-                        dir = 90f;
-                        fwd = Vector2.up;
-                    }
-                    else if (v < -0.35f)
-                    {
-                        dir = 270f;
-                        fwd = Vector2.down;
-                    }
-                    else
-                    {
-                        dir = (facing >= 0 ? 0f : 180f);
-                        fwd = (facing >= 0 ? Vector2.right : Vector2.left);
-                    }
-
                     int nailDmg = GetShadeNailDamage();
                     foreach (var d in damagers)
                     {
@@ -814,10 +809,10 @@ public partial class LegacyHelper
                         try { ihField?.SetValue(d, false); } catch { }
                         try { isNailAttackField?.SetValue(d, false); } catch { }
                         try { attackTypeField?.SetValue(d, AttackTypes.Generic); } catch { }
-                        try { dirField?.SetValue(d, dir); } catch { }
+                        try { dirField?.SetValue(d, slashDir); } catch { }
                         try { moveDirField?.SetValue(d, false); } catch { }
                         try { flipBehindField?.SetValue(d, false); } catch { }
-                        try { fwdVecField?.SetValue(d, fwd); } catch { }
+                        try { fwdVecField?.SetValue(d, slashForward); } catch { }
                         try { if (setOnlyEnemies != null) setOnlyEnemies.Invoke(d, new object[] { false }); else onlyEnemiesField?.SetValue(d, false); } catch { }
                         try { ignoreNailPosField?.SetValue(d, true); } catch { }
                         try { if (silkGenField != null) { var enumType = silkGenField.FieldType; var noneVal = System.Enum.ToObject(enumType, 0); silkGenField.SetValue(d, noneVal);} } catch { }
@@ -867,6 +862,9 @@ public partial class LegacyHelper
                         var primaryDamager = nailSlash.EnemyDamager;
                         if (primaryDamager != null)
                         {
+                            Vector2 recoilDirection = slashForward.sqrMagnitude > 0.001f
+                                ? slashForward.normalized
+                                : (facing >= 0 ? Vector2.right : Vector2.left);
                             System.Action onDamaged = null; System.Action<bool> onEnded = null;
                             onDamaged = () =>
                             {
@@ -879,6 +877,7 @@ public partial class LegacyHelper
                                 {
                                     try { EnsureFocusSfx(); if (focusSfx != null && sfxFocusReady != null) focusSfx.PlayOneShot(sfxFocusReady, Mathf.Clamp01(GetEffectiveSfxVolume())); } catch { }
                                 }
+                                ApplyAttackRecoil(recoilDirection);
                             };
                             primaryDamager.DamagedEnemy += onDamaged;
 
@@ -1212,10 +1211,29 @@ public partial class LegacyHelper
 
         private Sprite MakeDotSprite()
         {
-            var tex = new Texture2D(6, 6);
+            const int size = 8;
+            var tex = new Texture2D(size, size, TextureFormat.ARGB32, false);
+            tex.filterMode = FilterMode.Bilinear;
+            Vector2 center = new Vector2((size - 1) * 0.5f, (size - 1) * 0.5f);
+            float radius = center.x;
             for (int x = 0; x < tex.width; x++)
+            {
                 for (int y = 0; y < tex.height; y++)
-                    tex.SetPixel(x, y, Color.black);
+                {
+                    Vector2 pos = new Vector2(x, y);
+                    float dist = Vector2.Distance(pos, center);
+                    if (dist <= radius)
+                    {
+                        float t = Mathf.Clamp01(1f - dist / radius);
+                        float alpha = t * t;
+                        tex.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+                    }
+                    else
+                    {
+                        tex.SetPixel(x, y, new Color(1f, 1f, 1f, 0f));
+                    }
+                }
+            }
             tex.Apply();
             return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 16f);
         }

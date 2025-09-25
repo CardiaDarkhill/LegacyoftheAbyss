@@ -88,9 +88,9 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.SpellTwister),
                 statModifiers: new ShadeCharmStatModifiers
                 {
-                    ProjectileSoulCostMultiplier = 0.85f,
-                    ShriekSoulCostMultiplier = 0.85f,
-                    QuakeSoulCostMultiplier = 0.85f
+                    ProjectileSoulCostMultiplier = 0.73f,
+                    ShriekSoulCostMultiplier = 0.73f,
+                    QuakeSoulCostMultiplier = 0.73f
                 },
                 displayName: "Spell Twister",
                 description: "Reflecting the desire of the Soul Sanctum for mastery over SOUL. Increases the bearer's mastery of Spells, reducing the SOUL cost of casting them.",
@@ -103,7 +103,7 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.QuickSlash),
                 statModifiers: new ShadeCharmStatModifiers
                 {
-                    NailCooldownMultiplier = 0.6f
+                    NailCooldownMultiplier = 0.68f
                 },
                 displayName: "Quick Slash",
                 description: "Born from imperfect, discarded Nails that have fused together. The Nails still long to feel proper use and will grant the bearer faster attacks.",
@@ -116,8 +116,8 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.MarkOfPride),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx => ctx.Controller?.MultiplyNailScale(1.35f),
-                    OnRemoved = ctx => ctx.Controller?.MultiplyNailScale(1f / 1.35f)
+                    OnApplied = ctx => ctx.Controller?.MultiplyNailScale(1.25f),
+                    OnRemoved = ctx => ctx.Controller?.MultiplyNailScale(1f / 1.25f)
                 },
                 displayName: "Mark of Pride",
                 description: "Contains the passion, skill and pride of the Moth Tribe. Increases the range of the bearer's nail, allowing them to strike foes from further away.",
@@ -130,8 +130,8 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.Longnail),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx => ctx.Controller?.MultiplyNailScale(1.2f),
-                    OnRemoved = ctx => ctx.Controller?.MultiplyNailScale(1f / 1.2f)
+                    OnApplied = ctx => ctx.Controller?.MultiplyNailScale(1.15f),
+                    OnRemoved = ctx => ctx.Controller?.MultiplyNailScale(1f / 1.15f)
                 },
                 displayName: "Longnail",
                 description: "A Nail forged long ago. Increases the range of the bearer's nail, allowing them to strike foes from further away.",
@@ -144,8 +144,8 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.SoulCatcher),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx => ctx.Controller?.AddSoulGainBonus(6),
-                    OnRemoved = ctx => ctx.Controller?.AddSoulGainBonus(-6)
+                    OnApplied = ctx => ctx.Controller?.AddSoulGainBonus(3),
+                    OnRemoved = ctx => ctx.Controller?.AddSoulGainBonus(-3)
                 },
                 displayName: "Soul Catcher",
                 description: "Used by shamans to draw more SOUL from the world around them. Increases the amount of SOUL gained when striking an enemy with the nail.",
@@ -158,8 +158,8 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.SoulEater),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx => ctx.Controller?.AddSoulGainBonus(12),
-                    OnRemoved = ctx => ctx.Controller?.AddSoulGainBonus(-12)
+                    OnApplied = ctx => ctx.Controller?.AddSoulGainBonus(8),
+                    OnRemoved = ctx => ctx.Controller?.AddSoulGainBonus(-8)
                 },
                 displayName: "Soul Eater",
                 description: "Forgotten shaman artefact, used to draw SOUL from still-living creatures. Greatly increases the amount of SOUL gained when striking an enemy with the nail.",
@@ -179,7 +179,7 @@ namespace LegacyoftheAbyss.Shade
                             return;
                         }
 
-                        int reward = Mathf.Max(6, evt.ActualDamage * 6);
+                        int reward = Mathf.Max(15, evt.ActualDamage * 15);
                         ctx.Controller?.GainShadeSoul(reward);
                     }
                 },
@@ -261,8 +261,16 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.StalwartShell),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx => ctx.Controller?.MultiplyHurtInvulnerability(1.35f),
-                    OnRemoved = ctx => ctx.Controller?.MultiplyHurtInvulnerability(1f / 1.35f)
+                    OnApplied = ctx =>
+                    {
+                        ctx.Controller?.MultiplyHurtInvulnerability(1.35f);
+                        ctx.Controller?.MultiplyDamageStaggerDuration(0.4f);
+                    },
+                    OnRemoved = ctx =>
+                    {
+                        ctx.Controller?.MultiplyHurtInvulnerability(1f / 1.35f);
+                        ctx.Controller?.MultiplyDamageStaggerDuration(1f / 0.4f);
+                    }
                 },
                 displayName: "Stalwart Shell",
                 description: "Builds resilience. When recovering from damage, the bearer will remain invulnerable for longer.",
