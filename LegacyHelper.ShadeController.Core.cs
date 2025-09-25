@@ -204,24 +204,34 @@ public partial class LegacyHelper
                 PushSoulToHud();
             }
 
-            if (removedCharms.Length > 0)
+            bool previousApplyingLoadout = applyingCharmLoadout;
+            applyingCharmLoadout = true;
+            try
             {
-                var removedContext = new ShadeCharmContext(this, previousSnapshot);
-                foreach (var removed in removedCharms)
+                if (removedCharms.Length > 0)
                 {
-                    try { removed.Hooks.OnRemoved?.Invoke(removedContext); }
-                    catch { }
+                    var removedContext = new ShadeCharmContext(this, previousSnapshot);
+                    foreach (var removed in removedCharms)
+                    {
+                        try { removed.Hooks.OnRemoved?.Invoke(removedContext); }
+                        catch { }
+                    }
+                }
+
+                if (equippedCharms.Count > 0)
+                {
+                    var appliedContext = new ShadeCharmContext(this, charmSnapshot);
+                    foreach (var applied in equippedCharms)
+                    {
+                        try { applied.Hooks.OnApplied?.Invoke(appliedContext); }
+                        catch { }
+                    }
                 }
             }
-
-            if (equippedCharms.Count > 0)
+            finally
             {
-                var appliedContext = new ShadeCharmContext(this, charmSnapshot);
-                foreach (var applied in equippedCharms)
-                {
-                    try { applied.Hooks.OnApplied?.Invoke(appliedContext); }
-                    catch { }
-                }
+                FinalizeCharmHealthBatch();
+                applyingCharmLoadout = previousApplyingLoadout;
             }
 
             if (pendingRestoredLifebloodMax >= 0)
