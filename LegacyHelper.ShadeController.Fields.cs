@@ -96,6 +96,7 @@ public partial class LegacyHelper
         private Sprite[] dDiveSlamAnimFrames;
         private Sprite[] dDarkSlamAnimFrames;
         private Sprite[] dDarkBurstAnimFrames;
+        private Sprite[] baldurShellFocusAnimFrames;
         private Sprite inactiveSprite;
         private SpriteRenderer inactivePulseSr;
         private Sprite[] currentAnimFrames;
@@ -105,6 +106,7 @@ public partial class LegacyHelper
         private bool pendingSpawnAnimation;
         private bool isSpawning;
         private const float AnimFrameTime = 0.1f;
+        private const float BaldurShellFrameTime = 0.08f;
         private Vector2 lastMoveDelta;
         private Renderer[] shadeLightRenderers;
         public float simpleLightSize = 14f;
@@ -116,6 +118,10 @@ public partial class LegacyHelper
         private float nailTimer;
         internal static bool suppressActivateOnSlash;
         internal static Transform expectedSlashParent;
+        private SpriteRenderer baldurShellRenderer;
+        private Coroutine baldurShellRoutine;
+        private bool baldurShellActive;
+        private int baldurShellFrameIndex;
 
         private struct AxisLeashLimits
         {
@@ -168,6 +174,10 @@ public partial class LegacyHelper
         private ParticleSystem activeDashPs;
         private Vector2 activeDashDir;
         private bool voidHeartEvadeActive;
+        private bool sharpShadowEquipped;
+        private bool sharpShadowDashActive;
+        private GameObject sharpShadowDashHitbox;
+        private ShadeAoE sharpShadowDashAoE;
 
         private GameObject furyAuraObject;
         private ParticleSystem furyAuraPs;
@@ -187,6 +197,7 @@ public partial class LegacyHelper
         private float charmNailDamageMultiplier = 1f;
         private float charmSpellDamageMultiplier = 1f;
         private float charmNailScaleMultiplier = 1f;
+        private float charmNailKnockbackMultiplier = 1f;
         private int projectileSoulCost = s_defaultCharmStats.ProjectileSoulCost;
         private int shriekSoulCost = s_defaultCharmStats.ShriekSoulCost;
         private int quakeSoulCost = s_defaultCharmStats.QuakeSoulCost;

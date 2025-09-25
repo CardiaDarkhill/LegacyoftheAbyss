@@ -328,6 +328,11 @@ public partial class LegacyHelper
                 dDiveSlamAnimFrames = LoadSpriteStrip(SpritePath("DDive_Slam_Sheet.png"), 2);
                 dDarkSlamAnimFrames = LoadSpriteStrip(SpritePath("DDark_Slam_Sheet.png"), 6);
                 dDarkBurstAnimFrames = LoadSpriteStrip(SpritePath("DDark_Burst_sheet.png"), 7);
+                baldurShellFocusAnimFrames = LoadSpriteStrip(SpritePath("Shade_Baldur_Shell_Sheet.png"), 7);
+                if (baldurShellFocusAnimFrames == null || baldurShellFocusAnimFrames.Length == 0)
+                {
+                    baldurShellFocusAnimFrames = LoadSpriteStrip(ModPaths.GetAssetPath("Baldur_sheet.png"), 7);
+                }
                 var inactive = LoadSpriteStrip(SpritePath("ShadeInactive.png"));
                 inactiveSprite = inactive.Length > 0 ? inactive[0] : null;
             }
@@ -348,6 +353,7 @@ public partial class LegacyHelper
                 dDiveSlamAnimFrames = System.Array.Empty<Sprite>();
                 dDarkSlamAnimFrames = System.Array.Empty<Sprite>();
                 dDarkBurstAnimFrames = System.Array.Empty<Sprite>();
+                baldurShellFocusAnimFrames = System.Array.Empty<Sprite>();
                 inactiveSprite = null;
             }
         }
@@ -1139,6 +1145,23 @@ public partial class LegacyHelper
                 sprintDashTimer = 0f;
             }
 
+            bool dashNowActive = !inHardLeash && sprintDashTimer > 0f;
+            bool sharpShadowShouldBeActive = dashNowActive && sharpShadowEquipped && IsVoidHeartEvading();
+            if (sharpShadowShouldBeActive)
+            {
+                if (!sharpShadowDashActive)
+                {
+                    sharpShadowDashActive = true;
+                    EnsureSharpShadowDashHitbox();
+                }
+                UpdateSharpShadowDashHitbox();
+            }
+            else if (sharpShadowDashActive)
+            {
+                sharpShadowDashActive = false;
+                DestroySharpShadowDashHitbox();
+            }
+
             if (knockbackTimer > 0f)
             {
                 moveDelta += knockbackVelocity * deltaTime;
@@ -1620,7 +1643,7 @@ public partial class LegacyHelper
             col.radius = radius;
 
             var aoe = go.AddComponent<ShadeAoE>();
-            aoe.damage = damage;
+            aoe.ConfigureDamage(damage, applyDamageMultiplier: false);
             aoe.hornetRoot = hornetTransform;
             aoe.lifeSeconds = lifeSeconds;
 
@@ -1678,7 +1701,7 @@ public partial class LegacyHelper
             poly.SetPath(0, pts.ToArray());
 
             var aoe = go.AddComponent<ShadeAoE>();
-            aoe.damage = damage;
+            aoe.ConfigureDamage(damage, applyDamageMultiplier: false);
             aoe.hornetRoot = hornetTransform;
             aoe.lifeSeconds = lifeSeconds;
 
@@ -1901,7 +1924,7 @@ public partial class LegacyHelper
             box.size = new Vector2(10f, 1.0f);
 
             var aoe = go.AddComponent<ShadeAoE>();
-            aoe.damage = damage;
+            aoe.ConfigureDamage(damage, applyDamageMultiplier: false);
             aoe.hornetRoot = hornetTransform;
             aoe.lifeSeconds = 0.25f;
 
@@ -1926,7 +1949,7 @@ public partial class LegacyHelper
             cap.size = new Vector2(width, height);
 
             var aoe = go.AddComponent<ShadeAoE>();
-            aoe.damage = damage;
+            aoe.ConfigureDamage(damage, applyDamageMultiplier: false);
             aoe.hornetRoot = hornetTransform;
             aoe.lifeSeconds = 0.25f;
 
@@ -2237,6 +2260,234 @@ public partial class LegacyHelper
         private bool IsVoidHeartEvading()
         {
             return voidHeartEvadeActive && sprintDashTimer > 0f;
+        }
+
+        private void EnsureSharpShadowDashHitbox()
+        {
+            if (!sharpShadowEquipped)
+            {
+                return;
+            }
+
+            if (!IsVoidHeartEvading())
+            {
+                return;
+            }
+
+            if (sharpShadowDashHitbox)
+            {
+                if (!sharpShadowDashAoE)
+                {
+                    try { sharpShadowDashAoE = sharpShadowDashHitbox.GetComponent<ShadeAoE>(); }
+                    catch { }
+                }
+                return;
+            }
+
+            GameObject hitbox;
+            try
+            {
+                hitbox = new GameObject("ShadeSharpShadowHitbox");
+            }
+            catch
+            {
+                return;
+            }
+
+            hitbox.transform.SetParent(transform, false);
+            hitbox.transform.localPosition = Vector3.zero;
+            hitbox.transform.localRotation = Quaternion.identity;
+            hitbox.transform.localScale = Vector3.one;
+            hitbox.tag = "Hero Spell";
+            try
+            {
+                int spellLayer = LayerMask.NameToLayer("Hero Spell");
+                int atkLayer = LayerMask.NameToLayer("Hero Attack");
+                if (spellLayer >= 0) hitbox.layer = spellLayer;
+                else if (atkLayer >= 0) hitbox.layer = atkLayer;
+            }
+            catch
+            {
+            }
+
+            Collider2D collider = CloneSharpShadowDashCollider(hitbox);
+            if (!collider)
+            {
+                try
+                {
+                    var cap = hitbox.AddComponent<CapsuleCollider2D>();
+                    cap.direction = CapsuleDirection2D.Vertical;
+                    cap.size = new Vector2(0.95f, 1.5f);
+                    cap.offset = Vector2.zero;
+                    cap.isTrigger = true;
+                    collider = cap;
+                }
+                catch
+                {
+                }
+            }
+
+            ShadeAoE aoe = null;
+            try
+            {
+                aoe = hitbox.AddComponent<ShadeAoE>();
+                aoe.ConfigureDamage(GetShadeNailDamage(), applyDamageMultiplier: false);
+                aoe.hornetRoot = hornetTransform;
+                aoe.lifeSeconds = 0f;
+                aoe.attackType = AttackTypes.Nail;
+                aoe.direction = GetSharpShadowDashAngle();
+                aoe.magnitudeMultiplier = Mathf.Max(0.01f, charmNailKnockbackMultiplier);
+                aoe.multiplier = 1f;
+                aoe.isHeroDamage = true;
+                aoe.isFirstHit = true;
+                aoe.sourceOverride = gameObject;
+            }
+            catch
+            {
+            }
+
+            sharpShadowDashHitbox = hitbox;
+            sharpShadowDashAoE = aoe;
+
+            if (collider)
+            {
+                collider.isTrigger = true;
+                IgnoreHornetForCollider(collider);
+            }
+        }
+
+        private void UpdateSharpShadowDashHitbox()
+        {
+            if (!sharpShadowDashHitbox)
+            {
+                sharpShadowDashAoE = null;
+                return;
+            }
+
+            if (!sharpShadowDashAoE)
+            {
+                try { sharpShadowDashAoE = sharpShadowDashHitbox.GetComponent<ShadeAoE>(); }
+                catch { }
+            }
+
+            if (!sharpShadowDashAoE)
+            {
+                return;
+            }
+
+            try
+            {
+                sharpShadowDashHitbox.transform.localPosition = Vector3.zero;
+                sharpShadowDashHitbox.transform.localRotation = Quaternion.identity;
+            }
+            catch
+            {
+            }
+
+            sharpShadowDashAoE.direction = GetSharpShadowDashAngle();
+            sharpShadowDashAoE.magnitudeMultiplier = Mathf.Max(0.01f, charmNailKnockbackMultiplier);
+            sharpShadowDashAoE.sourceOverride = gameObject;
+        }
+
+        private void DestroySharpShadowDashHitbox()
+        {
+            if (sharpShadowDashHitbox)
+            {
+                try { Destroy(sharpShadowDashHitbox); }
+                catch { }
+            }
+
+            sharpShadowDashHitbox = null;
+            sharpShadowDashAoE = null;
+        }
+
+        private Collider2D CloneSharpShadowDashCollider(GameObject owner)
+        {
+            if (!owner)
+            {
+                return null;
+            }
+
+            if (!bodyCol)
+            {
+                return null;
+            }
+
+            try
+            {
+                if (bodyCol is CapsuleCollider2D cap)
+                {
+                    var clone = owner.AddComponent<CapsuleCollider2D>();
+                    clone.direction = cap.direction;
+                    clone.size = cap.size;
+                    clone.offset = cap.offset;
+                    clone.isTrigger = true;
+                    return clone;
+                }
+
+                if (bodyCol is CircleCollider2D circle)
+                {
+                    var clone = owner.AddComponent<CircleCollider2D>();
+                    clone.radius = circle.radius;
+                    clone.offset = circle.offset;
+                    clone.isTrigger = true;
+                    return clone;
+                }
+
+                if (bodyCol is BoxCollider2D box)
+                {
+                    var clone = owner.AddComponent<BoxCollider2D>();
+                    clone.size = box.size;
+                    clone.offset = box.offset;
+                    clone.isTrigger = true;
+                    return clone;
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
+        private float GetSharpShadowDashAngle()
+        {
+            Vector2 dir = lastMoveDelta;
+            if (dir.sqrMagnitude < 0.0001f)
+            {
+                try
+                {
+                    if (rb && rb.linearVelocity.sqrMagnitude > 0.0001f)
+                    {
+                        dir = rb.linearVelocity;
+                    }
+                }
+                catch
+                {
+                }
+
+                if (dir.sqrMagnitude < 0.0001f)
+                {
+                    dir = new Vector2(facing >= 0 ? 1f : -1f, 0f);
+                }
+            }
+
+            float angle;
+            try
+            {
+                angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+            }
+            catch
+            {
+                angle = facing >= 0 ? 0f : 180f;
+            }
+
+            if (float.IsNaN(angle))
+            {
+                angle = facing >= 0 ? 0f : 180f;
+            }
+
+            return angle;
         }
 
         private void HandleVoidHeartEvadePreventedHit(int attemptedDamage)
@@ -2860,6 +3111,7 @@ public partial class LegacyHelper
                 StopFocusChargeSfx();
                 focusSoulAccumulator = 0f;
                 PersistIfChanged();
+                RefreshBaldurShellFocusState();
                 return;
             }
 
@@ -2879,6 +3131,7 @@ public partial class LegacyHelper
             EnsureFocusAura();
             try { if (focusAuraRenderer) focusAuraRenderer.enabled = true; } catch { }
             StartFocusChargeSfx();
+            RefreshBaldurShellFocusState();
         }
 
         private void CancelFocus()
@@ -2891,6 +3144,7 @@ public partial class LegacyHelper
             StopFocusChargeSfx();
             focusSoulAccumulator = 0f;
             focusDamageShieldAbsorbedThisChannel = false;
+            RefreshBaldurShellFocusState();
         }
 
         private void EnsureFocusAura()
@@ -2920,6 +3174,164 @@ public partial class LegacyHelper
                 mr.enabled = false;
             }
             catch { }
+        }
+
+        private void EnsureBaldurShellRenderer()
+        {
+            try
+            {
+                if (baldurShellRenderer && baldurShellRenderer.gameObject)
+                {
+                    if (sr)
+                    {
+                        baldurShellRenderer.sortingLayerID = sr.sortingLayerID;
+                        baldurShellRenderer.sortingOrder = sr.sortingOrder + 1;
+                    }
+                    return;
+                }
+
+                var go = new GameObject("ShadeBaldurShell");
+                go.transform.SetParent(transform, false);
+                go.transform.localPosition = Vector3.zero;
+                var renderer = go.AddComponent<SpriteRenderer>();
+                renderer.enabled = false;
+                renderer.sprite = null;
+                if (sr)
+                {
+                    renderer.sortingLayerID = sr.sortingLayerID;
+                    renderer.sortingOrder = sr.sortingOrder + 1;
+                }
+                renderer.color = Color.white;
+                baldurShellRenderer = renderer;
+            }
+            catch { }
+        }
+
+        private void RefreshBaldurShellFocusState(bool immediate = false)
+        {
+            bool hasFrames = baldurShellFocusAnimFrames != null && baldurShellFocusAnimFrames.Length > 0;
+            bool shouldShow = focusDamageShieldEnabled && isFocusing && hasFrames;
+
+            if (shouldShow)
+            {
+                EnsureBaldurShellRenderer();
+                if (!baldurShellRenderer)
+                {
+                    return;
+                }
+
+                try
+                {
+                    if (sr)
+                    {
+                        baldurShellRenderer.sortingLayerID = sr.sortingLayerID;
+                        baldurShellRenderer.sortingOrder = sr.sortingOrder + 1;
+                    }
+                }
+                catch { }
+
+                if (baldurShellActive)
+                {
+                    try
+                    {
+                        baldurShellRenderer.enabled = true;
+                        int index = Mathf.Clamp(baldurShellFrameIndex, 0, baldurShellFocusAnimFrames.Length - 1);
+                        baldurShellRenderer.sprite = baldurShellFocusAnimFrames[index];
+                    }
+                    catch { }
+                    return;
+                }
+
+                if (baldurShellRoutine == null)
+                {
+                    baldurShellRoutine = StartCoroutine(PlayBaldurShellAnimation(true));
+                }
+
+                return;
+            }
+
+            if (baldurShellRoutine != null)
+            {
+                try { StopCoroutine(baldurShellRoutine); } catch { }
+                baldurShellRoutine = null;
+            }
+
+            if (baldurShellActive && !immediate && hasFrames && baldurShellRenderer)
+            {
+                baldurShellRoutine = StartCoroutine(PlayBaldurShellAnimation(false));
+            }
+            else
+            {
+                HideBaldurShell();
+            }
+        }
+
+        private IEnumerator PlayBaldurShellAnimation(bool forward)
+        {
+            if (baldurShellRenderer == null || baldurShellFocusAnimFrames == null || baldurShellFocusAnimFrames.Length == 0)
+            {
+                baldurShellRoutine = null;
+                yield break;
+            }
+
+            var frames = baldurShellFocusAnimFrames;
+            int length = frames.Length;
+
+            if (forward)
+            {
+                baldurShellActive = false;
+                for (int i = 0; i < length; i++)
+                {
+                    baldurShellFrameIndex = i;
+                    try
+                    {
+                        baldurShellRenderer.enabled = true;
+                        baldurShellRenderer.sprite = frames[i];
+                    }
+                    catch { }
+                    if (i < length - 1)
+                    {
+                        yield return new WaitForSeconds(BaldurShellFrameTime);
+                    }
+                }
+                baldurShellActive = true;
+            }
+            else
+            {
+                int start = Mathf.Clamp(baldurShellFrameIndex, 0, length - 1);
+                for (int i = start; i >= 0; i--)
+                {
+                    baldurShellFrameIndex = i;
+                    try
+                    {
+                        baldurShellRenderer.enabled = true;
+                        baldurShellRenderer.sprite = frames[i];
+                    }
+                    catch { }
+                    if (i > 0)
+                    {
+                        yield return new WaitForSeconds(BaldurShellFrameTime);
+                    }
+                }
+                HideBaldurShell();
+            }
+
+            baldurShellRoutine = null;
+        }
+
+        private void HideBaldurShell()
+        {
+            baldurShellActive = false;
+            baldurShellFrameIndex = 0;
+            if (baldurShellRenderer)
+            {
+                try
+                {
+                    baldurShellRenderer.enabled = false;
+                    baldurShellRenderer.sprite = null;
+                }
+                catch { }
+            }
         }
 
         private void EnsureFocusSfx()

@@ -84,6 +84,14 @@ public partial class LegacyHelper
             charmNailScaleMultiplier = Mathf.Clamp(charmNailScaleMultiplier * factor, 0.5f, 3f);
         }
 
+        internal void MultiplyNailKnockback(float factor)
+        {
+            if (factor <= 0f)
+                return;
+
+            charmNailKnockbackMultiplier = Mathf.Clamp(charmNailKnockbackMultiplier * factor, 0.1f, 5f);
+        }
+
         internal void AddSoulGainBonus(int amount)
         {
             charmSoulGainBonus = Mathf.Clamp(charmSoulGainBonus + amount, -99, 99);
@@ -102,6 +110,7 @@ public partial class LegacyHelper
             charmNailDamageMultiplier = 1f;
             charmSpellDamageMultiplier = 1f;
             charmNailScaleMultiplier = 1f;
+            charmNailKnockbackMultiplier = 1f;
             charmSoulGainBonus = 0;
             charmFocusHealBonus = 0;
             charmHornetFocusHealBonus = 0;
@@ -129,12 +138,16 @@ public partial class LegacyHelper
             voidHeartEvadeActive = false;
             DisableCarefreeMelodyEffect();
             LegacyHelper.SetFragileGreedActive(false);
+            sharpShadowEquipped = false;
+            sharpShadowDashActive = false;
+            DestroySharpShadowDashHitbox();
             conditionalNailDamageMultipliers.Clear();
             conditionalNailDamageProduct = 1f;
             UpdateFocusDerivedValues();
             UpdateTeleportChannelTime();
             UpdateHurtIFrameDuration();
             ApplyCharmHealthModifiers(deferHudAndPersistence: true);
+            RefreshBaldurShellFocusState(immediate: true);
         }
 
         internal void GainShadeSoul(int amount)
@@ -164,6 +177,11 @@ public partial class LegacyHelper
         internal void SetVoidHeartEvadeActive(bool active)
         {
             voidHeartEvadeActive = active;
+            if (!active)
+            {
+                sharpShadowDashActive = false;
+                DestroySharpShadowDashHitbox();
+            }
         }
 
         internal void MultiplyFocusTime(float factor)
@@ -219,6 +237,23 @@ public partial class LegacyHelper
             if (!enabled)
             {
                 focusDamageShieldAbsorbedThisChannel = false;
+            }
+
+            RefreshBaldurShellFocusState(immediate: !enabled);
+        }
+
+        internal void SetSharpShadowEnabled(bool enabled)
+        {
+            if (sharpShadowEquipped == enabled)
+            {
+                return;
+            }
+
+            sharpShadowEquipped = enabled;
+            if (!enabled)
+            {
+                sharpShadowDashActive = false;
+                DestroySharpShadowDashHitbox();
             }
         }
 
@@ -474,6 +509,15 @@ public partial class LegacyHelper
             {
                 UpdateConditionalNailDamageProduct();
             }
+        }
+
+        private int GetShadeNailDamage()
+        {
+            int nailDmg = Mathf.Max(1, GetHornetNailDamage());
+            nailDmg = Mathf.Max(1, Mathf.RoundToInt(nailDmg * ModConfig.Instance.shadeDamageMultiplier));
+            nailDmg = Mathf.Max(1, Mathf.RoundToInt(nailDmg * charmNailDamageMultiplier));
+            nailDmg = Mathf.Max(1, Mathf.RoundToInt(nailDmg * GetConditionalNailDamageMultiplier()));
+            return nailDmg;
         }
 
         private void UpdateConditionalNailDamageProduct()

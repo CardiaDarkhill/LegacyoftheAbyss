@@ -92,17 +92,36 @@ public partial class LegacyHelper
         public int damage = 20;
         public Transform hornetRoot;
         public float lifeSeconds = 0.25f;
+        public GameObject sourceOverride;
+        public AttackTypes attackType = AttackTypes.Spell;
+        public float direction = 90f;
+        public float magnitudeMultiplier = 1f;
+        public float multiplier = 1f;
+        public bool isHeroDamage = true;
+        public bool isFirstHit = true;
         private HashSet<Collider2D> hitSet;
 
         void Awake()
         {
             hitSet = new HashSet<Collider2D>();
-            damage = Mathf.RoundToInt(damage * ModConfig.Instance.shadeDamageMultiplier);
+        }
+
+        public void ConfigureDamage(int amount, bool applyDamageMultiplier)
+        {
+            if (applyDamageMultiplier)
+            {
+                damage = Mathf.Max(0, Mathf.RoundToInt(amount * ModConfig.Instance.shadeDamageMultiplier));
+            }
+            else
+            {
+                damage = Mathf.Max(0, amount);
+            }
         }
 
         void Start()
         {
-            Destroy(gameObject, lifeSeconds);
+            if (lifeSeconds > 0f)
+                Destroy(gameObject, lifeSeconds);
         }
 
         void OnTriggerEnter2D(Collider2D other)
@@ -115,14 +134,14 @@ public partial class LegacyHelper
 
             var hit = new HitInstance
             {
-                Source = gameObject,
-                AttackType = AttackTypes.Spell,
+                Source = sourceOverride ? sourceOverride : gameObject,
+                AttackType = attackType,
                 DamageDealt = damage,
-                Direction = 90f,
-                MagnitudeMultiplier = 1f,
-                Multiplier = 1f,
-                IsHeroDamage = true,
-                IsFirstHit = true
+                Direction = direction,
+                MagnitudeMultiplier = magnitudeMultiplier,
+                Multiplier = multiplier,
+                IsHeroDamage = isHeroDamage,
+                IsFirstHit = isFirstHit
             };
 
             HitTaker.Hit(other.gameObject, hit);
