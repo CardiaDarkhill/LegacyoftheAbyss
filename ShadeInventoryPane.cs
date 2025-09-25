@@ -6009,8 +6009,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
         EnsureBuilt();
         bool skipDuplicate = fromInputComponent && inputHandlersRegistered && lastPaneInputCameFromEvent &&
             lastPaneInputFrame == Time.frameCount && lastPaneInputDirection == direction;
-        LogMenuEvent(FormattableString.Invariant(
-            $"HandleDirectionalInput -> direction={direction} fromInputComponent={fromInputComponent} skipDuplicate={skipDuplicate} selectedIndex={selectedIndex} entryCount={entries.Count}"));
         if (skipDuplicate)
         {
             lastPaneInputCameFromEvent = false;
@@ -6431,8 +6429,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
         var pressed = TryGetShadeDirectionalPress(out var source);
         if (pressed.HasValue)
         {
-            LogMenuEvent(FormattableString.Invariant(
-                $"ProcessShadeDirectionalInput press detected: direction={pressed.Value} source={source}"));
             shadeHeldDirection = pressed;
             shadeHeldDirectionSource = source;
             shadeDirectionRepeatTimer = ShadeInputInitialRepeatDelay;
@@ -6448,8 +6444,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
         var direction = shadeHeldDirection.Value;
         if (!IsShadeDirectionHeld(direction))
         {
-            LogMenuEvent(FormattableString.Invariant(
-                $"ProcessShadeDirectionalInput releasing direction={direction} heldSource={shadeHeldDirectionSource}"));
             ResetShadeInputState("DirectionReleased");
             return;
         }
@@ -6461,8 +6455,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
         }
 
         shadeDirectionRepeatTimer = ShadeInputRepeatInterval;
-        LogMenuEvent(FormattableString.Invariant(
-            $"ProcessShadeDirectionalInput repeat fired: direction={direction} source={shadeHeldDirectionSource} nextRepeat={ShadeInputRepeatInterval:0.###}"));
         HandleDirectionalInput(direction, fromInputComponent: false);
     }
 
@@ -6470,28 +6462,24 @@ internal sealed class ShadeInventoryPane : InventoryPane
     {
         if (ShadeInput.WasActionPressed(ShadeAction.MoveLeft))
         {
-            LogMenuEvent("TryGetShadeDirectionalPress -> Shade MoveLeft pressed");
             source = DirectionalInputSource.ShadeBindings;
             return InventoryPaneBase.InputEventType.Left;
         }
 
         if (ShadeInput.WasActionPressed(ShadeAction.MoveRight))
         {
-            LogMenuEvent("TryGetShadeDirectionalPress -> Shade MoveRight pressed");
             source = DirectionalInputSource.ShadeBindings;
             return InventoryPaneBase.InputEventType.Right;
         }
 
         if (ShadeInput.WasActionPressed(ShadeAction.MoveUp))
         {
-            LogMenuEvent("TryGetShadeDirectionalPress -> Shade MoveUp pressed");
             source = DirectionalInputSource.ShadeBindings;
             return InventoryPaneBase.InputEventType.Up;
         }
 
         if (ShadeInput.WasActionPressed(ShadeAction.MoveDown))
         {
-            LogMenuEvent("TryGetShadeDirectionalPress -> Shade MoveDown pressed");
             source = DirectionalInputSource.ShadeBindings;
             return InventoryPaneBase.InputEventType.Down;
         }
@@ -6541,25 +6529,21 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         if (actions.Left != null && actions.Left.WasPressed)
         {
-            LogMenuEvent("TryGetHeroDirectionalPress -> Hero Left pressed");
             return InventoryPaneBase.InputEventType.Left;
         }
 
         if (actions.Right != null && actions.Right.WasPressed)
         {
-            LogMenuEvent("TryGetHeroDirectionalPress -> Hero Right pressed");
             return InventoryPaneBase.InputEventType.Right;
         }
 
         if (actions.Up != null && actions.Up.WasPressed)
         {
-            LogMenuEvent("TryGetHeroDirectionalPress -> Hero Up pressed");
             return InventoryPaneBase.InputEventType.Up;
         }
 
         if (actions.Down != null && actions.Down.WasPressed)
         {
-            LogMenuEvent("TryGetHeroDirectionalPress -> Hero Down pressed");
             return InventoryPaneBase.InputEventType.Down;
         }
 
@@ -6707,7 +6691,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
     {
         if (ShadeInput.WasActionPressed(ShadeAction.Nail))
         {
-            LogMenuEvent("ProcessShadeSubmitInput -> Shade slash pressed");
             HandleSubmit();
             return;
         }
@@ -6715,10 +6698,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
         var actions = ResolveHeroActions();
         if (actions == null)
         {
-            if (!loggedMissingHeroActions)
-            {
-                LogMenuEvent("ProcessShadeSubmitInput -> Hero actions unavailable");
-            }
             return;
         }
 
@@ -6726,8 +6705,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
         bool jumpPressed = actions.Jump != null && actions.Jump.WasPressed;
         if (attackPressed || jumpPressed)
         {
-            LogMenuEvent(FormattableString.Invariant(
-                $"ProcessShadeSubmitInput -> Hero submit pressed (attack={attackPressed} jump={jumpPressed})"));
             HandleSubmit();
         }
     }

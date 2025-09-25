@@ -1,4 +1,6 @@
 #nullable disable
+using System;
+using System.Globalization;
 using LegacyoftheAbyss.Shade;
 using UnityEngine;
 
@@ -234,6 +236,7 @@ public partial class LegacyHelper
             charmMaxHpBonus = Mathf.Clamp(charmMaxHpBonus + amount, -20, 40);
             int newLoadoutMax = Mathf.Max(0, baseShadeMaxHP + charmMaxHpBonus);
             int fill = fillNew ? Mathf.Max(0, newLoadoutMax - previousLoadoutMax) : 0;
+            LogCharmHealthEvent($"AddMaxHpBonus amount={amount} fillNew={fillNew} previousLoadoutMax={previousLoadoutMax} newLoadoutMax={newLoadoutMax} prevNormal={prevNormalHp}/{prevNormalMax} prevLifeblood={prevLifeblood}/{prevLifebloodMax} wasJonis={wasJonis}");
             ApplyCharmHealthModifiers(
                 fillAmount: fill,
                 refillLifeblood: false,
@@ -255,6 +258,7 @@ public partial class LegacyHelper
 
             charmLifebloodBonus = Mathf.Clamp(charmLifebloodBonus + amount, 0, 99);
             bool refill = amount > 0 && ShouldRefillLifebloodImmediately();
+            LogCharmHealthEvent($"AddLifebloodBonus amount={amount} refill={refill} prevNormal={prevNormalHp}/{prevNormalMax} prevLifeblood={prevLifeblood}/{prevLifebloodMax} wasJonis={wasJonis}");
             ApplyCharmHealthModifiers(
                 fillAmount: 0,
                 refillLifeblood: refill,
@@ -286,6 +290,7 @@ public partial class LegacyHelper
             }
 
             bool refill = jonisBlessingEquipped && ShouldRefillLifebloodImmediately();
+            LogCharmHealthEvent($"SetJonisBlessingActive active={active} refill={refill} prevNormal={prevNormalHp}/{prevNormalMax} prevLifeblood={prevLifeblood}/{prevLifebloodMax} wasJonis={wasJonis}");
             ApplyCharmHealthModifiers(
                 fillAmount: 0,
                 refillLifeblood: refill,
@@ -427,6 +432,8 @@ public partial class LegacyHelper
             int lifebloodCapacity = Mathf.Clamp(charmLifebloodBonus, 0, 99);
             bool jonisActive = jonisBlessingEquipped;
 
+            LogCharmHealthEvent($"ApplyCharmHealthModifiers start fill={fillAmount} refillLifeblood={refillLifeblood} defer={deferHudAndPersistence} prevNormal={prevNormalHp}/{prevNormalMax} prevLifeblood={prevLifeblood}/{prevLifebloodMax} wasJonis={wasJonis} combinedPrevious={combinedPrevious} baseNormalMax={baseNormalMax} lifebloodCapacity={lifebloodCapacity} jonisActive={jonisActive}");
+
             if (jonisActive)
             {
                 int jonisBase = Mathf.Max(1, baseNormalMax);
@@ -482,6 +489,7 @@ public partial class LegacyHelper
 
             if (statsChanged)
             {
+                LogCharmHealthEvent($"ApplyCharmHealthModifiers result statsChanged=True normal={shadeHP}/{shadeMaxHP} lifeblood={shadeLifeblood}/{shadeLifebloodMax} jonisActive={jonisActive} adjustedCombined={adjustedCombined} defer={deferHudAndPersistence}");
                 if (deferHudAndPersistence)
                 {
                     pendingDeferredHealthSync = true;
@@ -493,6 +501,36 @@ public partial class LegacyHelper
                     PushShadeStatsToHud(suppressDamageAudio: true);
                     PersistIfChanged();
                 }
+            }
+            else
+            {
+                LogCharmHealthEvent($"ApplyCharmHealthModifiers result statsChanged=False normal={shadeHP}/{shadeMaxHP} lifeblood={shadeLifeblood}/{shadeLifebloodMax} jonisActive={jonisActive} adjustedCombined={adjustedCombined}");
+            }
+        }
+
+        private static void LogCharmHealthEvent(FormattableString message)
+        {
+            if (!ModConfig.Instance.logShade)
+            {
+                return;
+            }
+
+            LogCharmHealthEvent(message.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static void LogCharmHealthEvent(string message)
+        {
+            if (!ModConfig.Instance.logShade)
+            {
+                return;
+            }
+
+            try
+            {
+                UnityEngine.Debug.Log("[ShadeCharmHealth] " + message);
+            }
+            catch
+            {
             }
         }
 
