@@ -1,6 +1,7 @@
 #nullable disable
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 using GlobalSettings;
@@ -706,6 +707,48 @@ public partial class LegacyHelper
         {
             if (!slash) return;
 
+            List<Transform> waveChildren = null;
+            List<float> waveBaseSigns = null;
+
+            if (invertDown)
+            {
+                try
+                {
+                    var sprites = slash.GetComponentsInChildren<SpriteRenderer>(true);
+                    foreach (var sr in sprites)
+                    {
+                        if (!sr) continue;
+                        var go = sr.gameObject;
+                        if (!go) continue;
+
+                        bool matches = false;
+                        var goName = go.name ?? string.Empty;
+                        if (!string.IsNullOrEmpty(goName) && goName.IndexOf("wave", StringComparison.OrdinalIgnoreCase) >= 0)
+                            matches = true;
+                        else
+                        {
+                            var spriteName = sr.sprite ? sr.sprite.name : null;
+                            if (!string.IsNullOrEmpty(spriteName) && spriteName.IndexOf("wave", StringComparison.OrdinalIgnoreCase) >= 0)
+                                matches = true;
+                        }
+
+                        if (!matches) continue;
+
+                        var childTr = go.transform;
+                        if (!childTr) continue;
+
+                        waveChildren ??= new List<Transform>();
+                        waveBaseSigns ??= new List<float>();
+
+                        float lossy = childTr.lossyScale.y;
+                        if (lossy == 0f) lossy = 1f;
+                        waveChildren.Add(childTr);
+                        waveBaseSigns.Add(Mathf.Sign(lossy));
+                    }
+                }
+                catch { }
+            }
+
             try
             {
                 var tr = slash.transform;
@@ -735,37 +778,43 @@ public partial class LegacyHelper
                     try { s_nailSlashLongScaleField?.SetValue(nailSlash, ls); } catch { }
                 }
 
-                if (invertDown && facing > 0f)
+                if (invertDown && facing > 0f && waveChildren != null)
                 {
                     try
                     {
-                        float parentYSign = ls.y == 0f ? 1f : Mathf.Sign(ls.y);
-                        var sprites = slash.GetComponentsInChildren<SpriteRenderer>(true);
-                        foreach (var sr in sprites)
+                        for (int i = 0; i < waveChildren.Count; i++)
                         {
-                            if (!sr) continue;
-                            var go = sr.gameObject;
-                            if (!go) continue;
-
-                            bool matches = false;
-                            var goName = go.name ?? string.Empty;
-                            if (!string.IsNullOrEmpty(goName) && goName.IndexOf("wave", StringComparison.OrdinalIgnoreCase) >= 0)
-                                matches = true;
-                            else
-                            {
-                                var spriteName = sr.sprite ? sr.sprite.name : null;
-                                if (!string.IsNullOrEmpty(spriteName) && spriteName.IndexOf("wave", StringComparison.OrdinalIgnoreCase) >= 0)
-                                    matches = true;
-                            }
-
-                            if (!matches) continue;
-
-                            var childTr = go.transform;
+                            var childTr = waveChildren[i];
                             if (!childTr) continue;
 
-                            var childScale = childTr.localScale;
-                            childScale.y = Mathf.Abs(childScale.y) * parentYSign;
-                            childTr.localScale = childScale;
+                            float targetSign = waveBaseSigns != null && i < waveBaseSigns.Count ? waveBaseSigns[i] : 1f;
+                            if (targetSign == 0f) targetSign = 1f;
+                            else targetSign = Mathf.Sign(targetSign);
+
+                            float currentLossy = childTr.lossyScale.y;
+                            float currentSign = currentLossy == 0f ? 1f : Mathf.Sign(currentLossy);
+
+                            if (currentSign != targetSign)
+                            {
+                                var childScale = childTr.localScale;
+                                if (Mathf.Abs(childScale.y) <= Mathf.Epsilon)
+                                    childScale.y = targetSign;
+                                else
+                                    childScale.y = -childScale.y;
+
+                                childTr.localScale = childScale;
+
+                                currentLossy = childTr.lossyScale.y;
+                                currentSign = currentLossy == 0f ? 1f : Mathf.Sign(currentLossy);
+                                if (currentSign != targetSign)
+                                {
+                                    childScale = childTr.localScale;
+                                    float magnitude = Mathf.Abs(childScale.y);
+                                    if (magnitude <= Mathf.Epsilon) magnitude = 1f;
+                                    childScale.y = magnitude * targetSign;
+                                    childTr.localScale = childScale;
+                                }
+                            }
                         }
                     }
                     catch { }
