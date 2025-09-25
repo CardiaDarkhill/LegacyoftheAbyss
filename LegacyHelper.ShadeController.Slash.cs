@@ -1011,6 +1011,14 @@ public partial class LegacyHelper
                             // Restore the sprite renderer's original flip so the mirrored local-scale
                             // adjustments below determine the final orientation.
                             sr.flipY = baseFlip;
+
+                            if (facing > 0f)
+                            {
+                                // When the slash is mirrored to face right the reused up-slash art still
+                                // needs an additional vertical flip so the travelling wave points
+                                // downward instead of appearing upside down.
+                                sr.flipY = !sr.flipY;
+                            }
                         }
                     }
                     catch { }
