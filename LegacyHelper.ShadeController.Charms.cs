@@ -123,6 +123,7 @@ public partial class LegacyHelper
             hivebloodPendingLifebloodRestore = false;
             allowFocusMovement = false;
             knockbackSuppressionCount = 0;
+            damageStaggerDurationMultiplier = 1f;
             focusDamageShieldEnabled = false;
             focusDamageShieldAbsorbedThisChannel = false;
             focusHealingDisabled = false;
@@ -209,6 +210,16 @@ public partial class LegacyHelper
 
             charmHurtIFrameMultiplier = Mathf.Clamp(charmHurtIFrameMultiplier * factor, 0.5f, 5f);
             UpdateHurtIFrameDuration();
+        }
+
+        internal void MultiplyDamageStaggerDuration(float factor)
+        {
+            if (factor <= 0f)
+            {
+                return;
+            }
+
+            damageStaggerDurationMultiplier = Mathf.Clamp(damageStaggerDurationMultiplier * factor, 0.1f, 5f);
         }
 
         internal void ModifyKnockbackSuppression(int delta)

@@ -867,6 +867,9 @@ public partial class LegacyHelper
                         var primaryDamager = nailSlash.EnemyDamager;
                         if (primaryDamager != null)
                         {
+                            Vector2 recoilDirection = fwd.sqrMagnitude > 0.001f
+                                ? fwd.normalized
+                                : (facing >= 0 ? Vector2.right : Vector2.left);
                             System.Action onDamaged = null; System.Action<bool> onEnded = null;
                             onDamaged = () =>
                             {
@@ -879,6 +882,7 @@ public partial class LegacyHelper
                                 {
                                     try { EnsureFocusSfx(); if (focusSfx != null && sfxFocusReady != null) focusSfx.PlayOneShot(sfxFocusReady, Mathf.Clamp01(GetEffectiveSfxVolume())); } catch { }
                                 }
+                                ApplyAttackRecoil(recoilDirection);
                             };
                             primaryDamager.DamagedEnemy += onDamaged;
 
@@ -1212,10 +1216,29 @@ public partial class LegacyHelper
 
         private Sprite MakeDotSprite()
         {
-            var tex = new Texture2D(6, 6);
+            const int size = 8;
+            var tex = new Texture2D(size, size, TextureFormat.ARGB32, false);
+            tex.filterMode = FilterMode.Bilinear;
+            Vector2 center = new Vector2((size - 1) * 0.5f, (size - 1) * 0.5f);
+            float radius = center.x;
             for (int x = 0; x < tex.width; x++)
+            {
                 for (int y = 0; y < tex.height; y++)
-                    tex.SetPixel(x, y, Color.black);
+                {
+                    Vector2 pos = new Vector2(x, y);
+                    float dist = Vector2.Distance(pos, center);
+                    if (dist <= radius)
+                    {
+                        float t = Mathf.Clamp01(1f - dist / radius);
+                        float alpha = t * t;
+                        tex.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+                    }
+                    else
+                    {
+                        tex.SetPixel(x, y, new Color(1f, 1f, 1f, 0f));
+                    }
+                }
+            }
             tex.Apply();
             return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 16f);
         }

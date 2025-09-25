@@ -155,6 +155,9 @@ public partial class LegacyHelper
         private Vector2 capturedMoveInput;
         private float capturedHorizontalInput;
         private bool capturedSprintHeld;
+        private float damageStaggerTimer;
+        private float damageStaggerDurationMultiplier = 1f;
+        private const float DamageStaggerBaseDuration = 0.2f;
         // Spells use Fire + Up (Shriek) or Fire + Down (Descending Dark)
 
         // Teleport channel

@@ -261,8 +261,16 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.StalwartShell),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx => ctx.Controller?.MultiplyHurtInvulnerability(1.35f),
-                    OnRemoved = ctx => ctx.Controller?.MultiplyHurtInvulnerability(1f / 1.35f)
+                    OnApplied = ctx =>
+                    {
+                        ctx.Controller?.MultiplyHurtInvulnerability(1.35f);
+                        ctx.Controller?.MultiplyDamageStaggerDuration(0.4f);
+                    },
+                    OnRemoved = ctx =>
+                    {
+                        ctx.Controller?.MultiplyHurtInvulnerability(1f / 1.35f);
+                        ctx.Controller?.MultiplyDamageStaggerDuration(1f / 0.4f);
+                    }
                 },
                 displayName: "Stalwart Shell",
                 description: "Builds resilience. When recovering from damage, the bearer will remain invulnerable for longer.",

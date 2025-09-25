@@ -644,6 +644,7 @@ public partial class LegacyHelper
 
             if (hazardCooldown > 0f) hazardCooldown = Mathf.Max(0f, hazardCooldown - Time.deltaTime);
             if (hurtCooldown > 0f) hurtCooldown = Mathf.Max(0f, hurtCooldown - Time.deltaTime);
+            if (damageStaggerTimer > 0f) damageStaggerTimer = Mathf.Max(0f, damageStaggerTimer - Time.deltaTime);
             if (ShadeInput.WasActionPressed(ShadeAction.AssistMode))
             {
                 assistModeEnabled = !assistModeEnabled;
@@ -749,7 +750,7 @@ public partial class LegacyHelper
 
             CaptureMovementInput();
             // Allow starting focus even when not casting other spells; focusing itself sets isCastingSpell
-            if (!inHardLeash && !isChannelingTeleport && !isInactive)
+            if (!inHardLeash && !isChannelingTeleport && !isInactive && damageStaggerTimer <= 0f)
             {
                 HandleFocus();
                 if (!isCastingSpell)
@@ -838,9 +839,11 @@ public partial class LegacyHelper
                 input.Normalize();
             if (isChannelingTeleport)
                 input = Vector2.zero;
+            if (damageStaggerTimer > 0f)
+                input = Vector2.zero;
             capturedMoveInput = input;
             capturedHorizontalInput = Mathf.Clamp(input.x, -1f, 1f);
-            capturedSprintHeld = sprintUnlocked && ShadeInput.IsActionHeld(ShadeAction.Sprint) && input.sqrMagnitude > 0f;
+            capturedSprintHeld = damageStaggerTimer <= 0f && sprintUnlocked && ShadeInput.IsActionHeld(ShadeAction.Sprint) && input.sqrMagnitude > 0f;
         }
 
         private static bool GameIsPaused()
@@ -1353,9 +1356,10 @@ public partial class LegacyHelper
                 main.startLifetime = new ParticleSystem.MinMaxCurve(0.55f, 0.95f);
                 main.startSpeed = new ParticleSystem.MinMaxCurve(0.45f, 1.35f);
                 main.startSize = new ParticleSystem.MinMaxCurve(0.22f, 0.38f);
-                main.startColor = new Color(0.95f, 0.12f, 0.16f, 0.95f);
+                main.startColor = new Color(0.82f, 0.08f, 0.12f, 0.95f);
                 main.simulationSpace = ParticleSystemSimulationSpace.Local;
                 main.maxParticles = 120;
+                main.startRotation = new ParticleSystem.MinMaxCurve(0f, 360f * Mathf.Deg2Rad);
 
                 var emission = furyAuraPs.emission;
                 emission.enabled = true;
@@ -1367,7 +1371,9 @@ public partial class LegacyHelper
                 shape.radius = 0.15f;
                 shape.radiusThickness = 0f;
                 shape.arcMode = ParticleSystemShapeMultiModeValue.Random;
-                shape.arcSpread = 1f;
+                shape.arc = 360f;
+                shape.randomDirectionAmount = 1f;
+                shape.alignToDirection = true;
 
                 var velocity = furyAuraPs.velocityOverLifetime;
                 velocity.enabled = true;
@@ -1380,8 +1386,8 @@ public partial class LegacyHelper
                 grad.SetKeys(
                     new[]
                     {
-                        new GradientColorKey(new Color(1f, 0.2f, 0.22f, 1f), 0f),
-                        new GradientColorKey(new Color(0.36f, 0f, 0f, 1f), 1f)
+                        new GradientColorKey(new Color(0.96f, 0.18f, 0.22f, 1f), 0f),
+                        new GradientColorKey(new Color(0.35f, 0f, 0f, 1f), 1f)
                     },
                     new[]
                     {
@@ -2724,8 +2730,14 @@ public partial class LegacyHelper
             return GlobalEnums.HazardType.NON_HAZARD;
         }
 
-        private void ApplyKnockback(Vector2 sourcePos)
+        private void ApplyKnockback(Vector2 sourcePos, float forceMultiplier = 1f, bool fromDamage = false, float duration = 0.2f)
         {
+            if (fromDamage)
+            {
+                float stagger = DamageStaggerBaseDuration * damageStaggerDurationMultiplier;
+                damageStaggerTimer = Mathf.Max(damageStaggerTimer, stagger);
+            }
+
             if (knockbackSuppressionCount > 0)
             {
                 knockbackVelocity = Vector2.zero;
@@ -2736,10 +2748,22 @@ public partial class LegacyHelper
             try
             {
                 Vector2 dir = ((Vector2)transform.position - sourcePos).normalized;
-                knockbackVelocity = dir * hitKnockbackForce;
-                knockbackTimer = 0.2f;
+                float scale = Mathf.Max(0f, forceMultiplier);
+                knockbackVelocity = dir * hitKnockbackForce * scale;
+                knockbackTimer = Mathf.Max(0f, duration);
             }
             catch { }
+        }
+
+        private void ApplyAttackRecoil(Vector2 attackDirection)
+        {
+            if (attackDirection.sqrMagnitude <= 0.0001f)
+            {
+                return;
+            }
+
+            Vector2 normalized = attackDirection.normalized;
+            ApplyKnockback((Vector2)transform.position + normalized, 0.5f, false, 0.15f);
         }
 
         private void OnShadeHitHazard()
@@ -2816,7 +2840,9 @@ public partial class LegacyHelper
             bool lethal = GetTotalCurrentHealth() <= 0;
             if (!lethal)
             {
-                ApplyKnockback(srcPos);
+                bool tookDamage = actual > 0;
+                float forceScale = tookDamage ? 0.5f : 1f;
+                ApplyKnockback(srcPos, forceScale, tookDamage);
             }
             else
             {
