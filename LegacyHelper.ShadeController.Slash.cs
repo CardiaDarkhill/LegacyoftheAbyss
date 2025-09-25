@@ -1008,17 +1008,9 @@ public partial class LegacyHelper
 
                             bool baseFlip = waveBaseFlipY != null && i < waveBaseFlipY.Count ? waveBaseFlipY[i] : sr.flipY;
 
-                            // Restore the sprite renderer's original flip so the mirrored local-scale
-                            // adjustments below determine the final orientation.
+                            // Ensure the sprite renderer keeps its prefab orientation; the mirrored
+                            // parent scale handles the downward facing.
                             sr.flipY = baseFlip;
-
-                            if (facing > 0f)
-                            {
-                                // When the slash is mirrored to face right the reused up-slash art still
-                                // needs an additional vertical flip so the travelling wave points
-                                // downward instead of appearing upside down.
-                                sr.flipY = !sr.flipY;
-                            }
                         }
                     }
                     catch { }
@@ -1033,9 +1025,9 @@ public partial class LegacyHelper
                             var childTr = waveChildren[i];
                             if (!childTr) continue;
 
-                            float targetSign = waveBaseSigns != null && i < waveBaseSigns.Count ? waveBaseSigns[i] : 1f;
-                            if (targetSign == 0f) targetSign = 1f;
-                            else targetSign = Mathf.Sign(targetSign);
+                            float targetSign = waveBaseSigns != null && i < waveBaseSigns.Count ? waveBaseSigns[i] : -1f;
+                            if (targetSign == 0f) targetSign = -1f;
+                            else targetSign = -Mathf.Sign(targetSign);
 
                             float currentLossy = childTr.lossyScale.y;
                             float currentSign = currentLossy == 0f ? 1f : Mathf.Sign(currentLossy);
