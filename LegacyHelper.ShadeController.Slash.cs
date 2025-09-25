@@ -739,6 +739,7 @@ public partial class LegacyHelper
                 {
                     try
                     {
+                        float parentYSign = ls.y == 0f ? 1f : Mathf.Sign(ls.y);
                         var sprites = slash.GetComponentsInChildren<SpriteRenderer>(true);
                         foreach (var sr in sprites)
                         {
@@ -763,7 +764,7 @@ public partial class LegacyHelper
                             if (!childTr) continue;
 
                             var childScale = childTr.localScale;
-                            childScale.y = -Mathf.Abs(childScale.y);
+                            childScale.y = Mathf.Abs(childScale.y) * parentYSign;
                             childTr.localScale = childScale;
                         }
                     }
