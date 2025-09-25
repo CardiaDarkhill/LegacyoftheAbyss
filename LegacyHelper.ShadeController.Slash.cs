@@ -734,6 +734,41 @@ public partial class LegacyHelper
                     try { s_nailSlashScaleField?.SetValue(nailSlash, ls); } catch { }
                     try { s_nailSlashLongScaleField?.SetValue(nailSlash, ls); } catch { }
                 }
+
+                if (invertDown && facing > 0f)
+                {
+                    try
+                    {
+                        var sprites = slash.GetComponentsInChildren<SpriteRenderer>(true);
+                        foreach (var sr in sprites)
+                        {
+                            if (!sr) continue;
+                            var go = sr.gameObject;
+                            if (!go) continue;
+
+                            bool matches = false;
+                            var goName = go.name ?? string.Empty;
+                            if (!string.IsNullOrEmpty(goName) && goName.IndexOf("wave", StringComparison.OrdinalIgnoreCase) >= 0)
+                                matches = true;
+                            else
+                            {
+                                var spriteName = sr.sprite ? sr.sprite.name : null;
+                                if (!string.IsNullOrEmpty(spriteName) && spriteName.IndexOf("wave", StringComparison.OrdinalIgnoreCase) >= 0)
+                                    matches = true;
+                            }
+
+                            if (!matches) continue;
+
+                            var childTr = go.transform;
+                            if (!childTr) continue;
+
+                            var childScale = childTr.localScale;
+                            childScale.y = -Mathf.Abs(childScale.y);
+                            childTr.localScale = childScale;
+                        }
+                    }
+                    catch { }
+                }
             }
             catch { }
         }
