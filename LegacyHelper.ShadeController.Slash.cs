@@ -59,7 +59,7 @@ public partial class LegacyHelper
             }
             else if (v < -0.35f)
             {
-                if (shamanDownSlashType == HeroControllerConfig.DownSlashTypes.Slash && shamanDownSlashTemplate != null)
+                if (shamanDownSlashTemplate != null)
                     source = shamanDownSlashTemplate;
                 else
                     source = shamanHorizontalSlashTemplate ?? shamanHorizontalAltSlashTemplate;
@@ -118,16 +118,11 @@ public partial class LegacyHelper
             {
                 var tr = slash.transform;
                 var ls = tr.localScale;
-                // Determine the original facing of the source slash so that we can
-                // mirror only when necessary. Wanderer slashes are authored facing
-                // left, so by default we mirror when the shade faces right. The
-                // up-slash is authored facing right but only needs special handling
-                // when the shade is also facing right; the left-facing up-slash
-                // already matches the Wanderer baseline.
-                float scaleSign = -facing;
-                if (v > 0.35f && facing > 0f) // right-facing up-slash
-                    scaleSign = 1f;
-                ls.x = Mathf.Abs(ls.x) * scaleSign;
+                float facingSign = facing >= 0 ? 1f : -1f;
+                // Force the horizontal orientation to line up with the shade's current
+                // facing direction instead of the hero's orientation, since the hero is
+                // only used as a temporary spawning parent.
+                ls.x = Mathf.Abs(ls.x) * facingSign;
                 //ls.y = Mathf.Abs(ls.y);
                 ls *= 1f / SpriteScale;
                 ls *= charmNailScaleMultiplier;
@@ -144,6 +139,8 @@ public partial class LegacyHelper
                     var travel = slash.GetComponent<NailSlashTravel>();
                     if (travel != null)
                     {
+                        var initialScaleField = typeof(NailSlashTravel).GetField("initialLocalScale", BindingFlags.Instance | BindingFlags.NonPublic);
+                        try { initialScaleField?.SetValue(travel, tr.localScale); } catch { }
                         var evt = typeof(HeroController).GetEvent("FlippedSprite");
                         var method = typeof(NailSlashTravel).GetMethod("OnHeroFlipped", BindingFlags.Instance | BindingFlags.NonPublic);
                         if (evt != null && method != null)
@@ -883,17 +880,10 @@ public partial class LegacyHelper
             shamanHorizontalAltSlashTemplate = group.AlternateSlashObject;
             shamanUpSlashTemplate = group.UpSlashObject ?? group.AltUpSlashObject ?? shamanHorizontalSlashTemplate ?? shamanHorizontalAltSlashTemplate;
             shamanDownSlashType = config.DownSlashType;
-            if (shamanDownSlashType == HeroControllerConfig.DownSlashTypes.Slash)
-            {
-                shamanDownSlashTemplate = group.DownSlashObject ?? group.AltDownSlashObject;
-            }
-            else
-            {
-                shamanDownSlashTemplate = null;
-            }
+            shamanDownSlashTemplate = group.DownSlashObject ?? group.AltDownSlashObject;
 
             shamanSlashConfigSource = config;
-            return shamanHorizontalSlashTemplate != null || shamanHorizontalAltSlashTemplate != null || shamanUpSlashTemplate != null;
+            return shamanHorizontalSlashTemplate != null || shamanHorizontalAltSlashTemplate != null || shamanUpSlashTemplate != null || shamanDownSlashTemplate != null;
         }
 
         private HeroController.ConfigGroup FindShamanConfigGroup(HeroController hc, HeroControllerConfig config)
