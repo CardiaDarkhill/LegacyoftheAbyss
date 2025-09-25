@@ -263,10 +263,7 @@ public partial class LegacyHelper
                         fwd = (facing >= 0 ? Vector2.right : Vector2.left);
                     }
 
-                    int nailDmg = Mathf.Max(1, GetHornetNailDamage());
-                    nailDmg = Mathf.Max(1, Mathf.RoundToInt(nailDmg * ModConfig.Instance.shadeDamageMultiplier));
-                    nailDmg = Mathf.Max(1, Mathf.RoundToInt(nailDmg * charmNailDamageMultiplier));
-                    nailDmg = Mathf.Max(1, Mathf.RoundToInt(nailDmg * GetConditionalNailDamageMultiplier()));
+                    int nailDmg = GetShadeNailDamage();
                     foreach (var d in damagers)
                     {
                         if (!d) continue;
@@ -284,6 +281,7 @@ public partial class LegacyHelper
                         try { doesNotGenSilkField?.SetValue(d, true); } catch { }
                         try { useNailDmgField?.SetValue(d, false); } catch { }
                         try { damageDealtField?.SetValue(d, nailDmg); } catch { }
+                        try { d.magnitudeMult = Mathf.Max(0.01f, d.magnitudeMult * charmNailKnockbackMultiplier); } catch { }
                     }
 
                 }

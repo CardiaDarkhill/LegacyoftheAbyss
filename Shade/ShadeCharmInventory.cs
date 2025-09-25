@@ -380,11 +380,19 @@ namespace LegacyoftheAbyss.Shade
                 enumId: ShadeCharmId.FragileStrength,
                 iconName: "shade_charm_fragile_strength"));
 
-            // TODO: Empower the shade's teleport to damage foes and extend its reach for Sharp Shadow.
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.SharpShadow),
+                statModifiers: new ShadeCharmStatModifiers
+                {
+                    SprintDashSpeedMultiplier = 1.4f
+                },
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx => ctx.Controller?.SetSharpShadowEnabled(true),
+                    OnRemoved = ctx => ctx.Controller?.SetSharpShadowEnabled(false)
+                },
                 displayName: "Sharp Shadow",
-                description: "Contains a forbidden spell that transforms shadows into deadly weapons. When using Shadow Dash, the bearer's body will sharpen and damage enemies.",
+                description: "Contains a forbidden spell that transforms shadows into deadly weapons. When using Shadow Dash, the bearer's body will sharpen, slice through foes, and surge forward faster.",
                 notchCost: 2,
                 fallbackTint: new Color(0.28f, 0.24f, 0.42f),
                 enumId: ShadeCharmId.SharpShadow,
@@ -431,8 +439,8 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.HeavyBlow),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx => ctx.Controller?.MultiplyKnockbackForce(1.4f),
-                    OnRemoved = ctx => ctx.Controller?.MultiplyKnockbackForce(1f / 1.4f)
+                    OnApplied = ctx => ctx.Controller?.MultiplyNailKnockback(1.4f),
+                    OnRemoved = ctx => ctx.Controller?.MultiplyNailKnockback(1f / 1.4f)
                 },
                 displayName: "Heavy Blow",
                 description: "Embues the shade's nail with tremendous force, sending foes staggering further with every strike.",

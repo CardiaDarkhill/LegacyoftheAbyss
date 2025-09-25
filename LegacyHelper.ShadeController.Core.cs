@@ -328,6 +328,11 @@ public partial class LegacyHelper
                 dDiveSlamAnimFrames = LoadSpriteStrip(SpritePath("DDive_Slam_Sheet.png"), 2);
                 dDarkSlamAnimFrames = LoadSpriteStrip(SpritePath("DDark_Slam_Sheet.png"), 6);
                 dDarkBurstAnimFrames = LoadSpriteStrip(SpritePath("DDark_Burst_sheet.png"), 7);
+                baldurShellFocusAnimFrames = LoadSpriteStrip(SpritePath("Shade_Baldur_Shell_Sheet.png"), 7);
+                if (baldurShellFocusAnimFrames == null || baldurShellFocusAnimFrames.Length == 0)
+                {
+                    baldurShellFocusAnimFrames = LoadSpriteStrip(ModPaths.GetAssetPath("Baldur_sheet.png"), 7);
+                }
                 var inactive = LoadSpriteStrip(SpritePath("ShadeInactive.png"));
                 inactiveSprite = inactive.Length > 0 ? inactive[0] : null;
             }
@@ -348,6 +353,7 @@ public partial class LegacyHelper
                 dDiveSlamAnimFrames = System.Array.Empty<Sprite>();
                 dDarkSlamAnimFrames = System.Array.Empty<Sprite>();
                 dDarkBurstAnimFrames = System.Array.Empty<Sprite>();
+                baldurShellFocusAnimFrames = System.Array.Empty<Sprite>();
                 inactiveSprite = null;
             }
         }
@@ -1137,6 +1143,21 @@ public partial class LegacyHelper
             {
                 isSprinting = false;
                 sprintDashTimer = 0f;
+            }
+
+            bool dashNowActive = !inHardLeash && sprintDashTimer > 0f;
+            if (dashNowActive)
+            {
+                if (!sharpShadowDashActive)
+                {
+                    sharpShadowDashActive = true;
+                    sharpShadowDashHits.Clear();
+                }
+            }
+            else if (sharpShadowDashActive)
+            {
+                sharpShadowDashActive = false;
+                sharpShadowDashHits.Clear();
             }
 
             if (knockbackTimer > 0f)
@@ -2159,11 +2180,13 @@ public partial class LegacyHelper
         private void OnCollisionEnter2D(Collision2D collision)
         {
             TryProcessDamageHero(collision.collider);
+            TrySharpShadowHit(collision.collider);
         }
 
         private void OnTriggerEnter2D(Collider2D other)
         {
             TryProcessDamageHero(other);
+            TrySharpShadowHit(other);
         }
 
         private bool ShouldIgnoreDamageSource(Component c)
@@ -2245,6 +2268,138 @@ public partial class LegacyHelper
             if (attempted > 0)
             {
                 DispatchCharmDamageEvent(attempted, 0, wasHazard: false, prevented: true, lethal: false);
+            }
+        }
+
+        private void TrySharpShadowHit(Collider2D col)
+        {
+            if (!sharpShadowEquipped || !sharpShadowDashActive)
+            {
+                return;
+            }
+
+            if (!IsVoidHeartEvading())
+            {
+                return;
+            }
+
+            if (!col)
+            {
+                return;
+            }
+
+            try
+            {
+                if (bodyCol && col && !bodyCol.IsTouching(col))
+                {
+                    return;
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                if (col.transform == transform || col.transform.IsChildOf(transform))
+                    return;
+                if (hornetTransform)
+                {
+                    if (col.transform == hornetTransform || col.transform.IsChildOf(hornetTransform) || col.transform.root == hornetTransform.root)
+                        return;
+                }
+            }
+            catch
+            {
+            }
+
+            HealthManager hm;
+            try
+            {
+                if (!HitTaker.TryGetHealthManager(col.gameObject, out hm) || hm == null)
+                {
+                    return;
+                }
+            }
+            catch
+            {
+                return;
+            }
+
+            try
+            {
+                if (!hm.isActiveAndEnabled)
+                {
+                    return;
+                }
+            }
+            catch
+            {
+            }
+
+            if (!sharpShadowDashHits.Add(hm))
+            {
+                return;
+            }
+
+            int damage = GetShadeNailDamage();
+            if (damage <= 0)
+            {
+                return;
+            }
+
+            Vector2 dir = lastMoveDelta;
+            if (dir.sqrMagnitude < 0.0001f)
+            {
+                try
+                {
+                    if (rb && rb.linearVelocity.sqrMagnitude > 0.0001f)
+                    {
+                        dir = rb.linearVelocity;
+                    }
+                }
+                catch
+                {
+                }
+
+                if (dir.sqrMagnitude < 0.0001f)
+                {
+                    dir = new Vector2(facing >= 0 ? 1f : -1f, 0f);
+                }
+            }
+
+            float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+            if (float.IsNaN(angle))
+            {
+                angle = facing >= 0 ? 0f : 180f;
+            }
+
+            var hit = new HitInstance
+            {
+                Source = gameObject,
+                IsFirstHit = true,
+                AttackType = AttackTypes.Nail,
+                DamageDealt = damage,
+                Direction = angle,
+                MagnitudeMultiplier = Mathf.Max(0.01f, charmNailKnockbackMultiplier),
+                Multiplier = 1f,
+                IsHeroDamage = true
+            };
+
+            try
+            {
+                HitTaker.Hit(hm.gameObject, hit);
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                hm.Hit(hit);
+            }
+            catch
+            {
             }
         }
 
@@ -2852,6 +3007,7 @@ public partial class LegacyHelper
                 StopFocusChargeSfx();
                 focusSoulAccumulator = 0f;
                 PersistIfChanged();
+                RefreshBaldurShellFocusState();
                 return;
             }
 
@@ -2871,6 +3027,7 @@ public partial class LegacyHelper
             EnsureFocusAura();
             try { if (focusAuraRenderer) focusAuraRenderer.enabled = true; } catch { }
             StartFocusChargeSfx();
+            RefreshBaldurShellFocusState();
         }
 
         private void CancelFocus()
@@ -2883,6 +3040,7 @@ public partial class LegacyHelper
             StopFocusChargeSfx();
             focusSoulAccumulator = 0f;
             focusDamageShieldAbsorbedThisChannel = false;
+            RefreshBaldurShellFocusState();
         }
 
         private void EnsureFocusAura()
@@ -2912,6 +3070,164 @@ public partial class LegacyHelper
                 mr.enabled = false;
             }
             catch { }
+        }
+
+        private void EnsureBaldurShellRenderer()
+        {
+            try
+            {
+                if (baldurShellRenderer && baldurShellRenderer.gameObject)
+                {
+                    if (sr)
+                    {
+                        baldurShellRenderer.sortingLayerID = sr.sortingLayerID;
+                        baldurShellRenderer.sortingOrder = sr.sortingOrder + 1;
+                    }
+                    return;
+                }
+
+                var go = new GameObject("ShadeBaldurShell");
+                go.transform.SetParent(transform, false);
+                go.transform.localPosition = Vector3.zero;
+                var renderer = go.AddComponent<SpriteRenderer>();
+                renderer.enabled = false;
+                renderer.sprite = null;
+                if (sr)
+                {
+                    renderer.sortingLayerID = sr.sortingLayerID;
+                    renderer.sortingOrder = sr.sortingOrder + 1;
+                }
+                renderer.color = Color.white;
+                baldurShellRenderer = renderer;
+            }
+            catch { }
+        }
+
+        private void RefreshBaldurShellFocusState(bool immediate = false)
+        {
+            bool hasFrames = baldurShellFocusAnimFrames != null && baldurShellFocusAnimFrames.Length > 0;
+            bool shouldShow = focusDamageShieldEnabled && isFocusing && hasFrames;
+
+            if (shouldShow)
+            {
+                EnsureBaldurShellRenderer();
+                if (!baldurShellRenderer)
+                {
+                    return;
+                }
+
+                try
+                {
+                    if (sr)
+                    {
+                        baldurShellRenderer.sortingLayerID = sr.sortingLayerID;
+                        baldurShellRenderer.sortingOrder = sr.sortingOrder + 1;
+                    }
+                }
+                catch { }
+
+                if (baldurShellActive)
+                {
+                    try
+                    {
+                        baldurShellRenderer.enabled = true;
+                        int index = Mathf.Clamp(baldurShellFrameIndex, 0, baldurShellFocusAnimFrames.Length - 1);
+                        baldurShellRenderer.sprite = baldurShellFocusAnimFrames[index];
+                    }
+                    catch { }
+                    return;
+                }
+
+                if (baldurShellRoutine == null)
+                {
+                    baldurShellRoutine = StartCoroutine(PlayBaldurShellAnimation(true));
+                }
+
+                return;
+            }
+
+            if (baldurShellRoutine != null)
+            {
+                try { StopCoroutine(baldurShellRoutine); } catch { }
+                baldurShellRoutine = null;
+            }
+
+            if (baldurShellActive && !immediate && hasFrames && baldurShellRenderer)
+            {
+                baldurShellRoutine = StartCoroutine(PlayBaldurShellAnimation(false));
+            }
+            else
+            {
+                HideBaldurShell();
+            }
+        }
+
+        private IEnumerator PlayBaldurShellAnimation(bool forward)
+        {
+            if (baldurShellRenderer == null || baldurShellFocusAnimFrames == null || baldurShellFocusAnimFrames.Length == 0)
+            {
+                baldurShellRoutine = null;
+                yield break;
+            }
+
+            var frames = baldurShellFocusAnimFrames;
+            int length = frames.Length;
+
+            if (forward)
+            {
+                baldurShellActive = false;
+                for (int i = 0; i < length; i++)
+                {
+                    baldurShellFrameIndex = i;
+                    try
+                    {
+                        baldurShellRenderer.enabled = true;
+                        baldurShellRenderer.sprite = frames[i];
+                    }
+                    catch { }
+                    if (i < length - 1)
+                    {
+                        yield return new WaitForSeconds(BaldurShellFrameTime);
+                    }
+                }
+                baldurShellActive = true;
+            }
+            else
+            {
+                int start = Mathf.Clamp(baldurShellFrameIndex, 0, length - 1);
+                for (int i = start; i >= 0; i--)
+                {
+                    baldurShellFrameIndex = i;
+                    try
+                    {
+                        baldurShellRenderer.enabled = true;
+                        baldurShellRenderer.sprite = frames[i];
+                    }
+                    catch { }
+                    if (i > 0)
+                    {
+                        yield return new WaitForSeconds(BaldurShellFrameTime);
+                    }
+                }
+                HideBaldurShell();
+            }
+
+            baldurShellRoutine = null;
+        }
+
+        private void HideBaldurShell()
+        {
+            baldurShellActive = false;
+            baldurShellFrameIndex = 0;
+            if (baldurShellRenderer)
+            {
+                try
+                {
+                    baldurShellRenderer.enabled = false;
+                    baldurShellRenderer.sprite = null;
+                }
+                catch { }
+            }
         }
 
         private void EnsureFocusSfx()
