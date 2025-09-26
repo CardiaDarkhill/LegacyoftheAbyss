@@ -114,6 +114,7 @@ public sealed class ShadeUnlockPickup : MonoBehaviour
         consumed = true;
 
         bool grantedCharm = false;
+        Sprite? notificationIcon = null;
         if (grantCharm)
         {
             grantedCharm = ShadeRuntime.TryCollectCharm(charmId);
@@ -128,7 +129,23 @@ public sealed class ShadeUnlockPickup : MonoBehaviour
                 if (inventory != null)
                 {
                     var definition = inventory.GetDefinition(charmId);
-                    resolvedMessage = $"{definition.DisplayName} acquired.";
+                    resolvedMessage = definition.DisplayName;
+                    notificationIcon = definition.Icon;
+                }
+            }
+            catch
+            {
+            }
+        }
+        else if (grantCharm && grantedCharm && notificationIcon == null)
+        {
+            try
+            {
+                var inventory = ShadeRuntime.Charms;
+                if (inventory != null)
+                {
+                    var definition = inventory.GetDefinition(charmId);
+                    notificationIcon = definition.Icon;
                 }
             }
             catch
@@ -140,7 +157,7 @@ public sealed class ShadeUnlockPickup : MonoBehaviour
         {
             string key = !string.IsNullOrWhiteSpace(notificationKey) ? notificationKey : resolvedMessage;
             float duration = durationSeconds > 0f ? durationSeconds : ShadeRuntime.ShadeUnlockNotification.DefaultDuration;
-            ShadeRuntime.EnqueueNotification(key, resolvedMessage, notificationType, duration);
+            ShadeRuntime.EnqueueNotification(key, resolvedMessage, notificationType, duration, notificationIcon);
         }
 
         if (destroyOnPickup)

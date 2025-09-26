@@ -13,21 +13,24 @@ using UnityEngine.UI;
 public sealed class ShadeUnlockPopup : MonoBehaviour
 {
     private const float FadeSpeed = 6f;
-    private const float BaseWidth = 560f;
-    private const float BaseHeight = 120f;
-    private const float BaseVerticalOffset = 140f;
+    private const float BaseIconSize = 96f;
+    private const float BaseFontSize = 32f;
+    private const float BaseSpacing = 18f;
+    private static readonly Vector2 AnchorPoint = new Vector2(0.82f, 0.22f);
 
     private static readonly Color AbilityColor = new Color(0.87f, 0.95f, 1f, 1f);
     private static readonly Color CharmColor = new Color(1f, 0.92f, 0.75f, 1f);
     private static readonly Color SpellColor = new Color(0.8f, 0.95f, 0.85f, 1f);
 
-    private static Sprite? s_backgroundSprite;
-
     private Canvas? targetCanvas;
     private Func<float>? scaleProvider;
     private RectTransform? container;
     private CanvasGroup? containerGroup;
-    private Image? background;
+    private HorizontalLayoutGroup? layoutGroup;
+    private ContentSizeFitter? contentSizeFitter;
+    private Image? iconImage;
+    private LayoutElement? iconLayout;
+    private LayoutElement? messageLayout;
     private Text? messageLabel;
     private ShadeRuntime.ShadeUnlockNotification? activeNotification;
     private float activeTimer;
@@ -109,69 +112,55 @@ public sealed class ShadeUnlockPopup : MonoBehaviour
         var root = new GameObject("ShadeUnlockPopupRoot");
         container = root.AddComponent<RectTransform>();
         container.SetParent(targetCanvas.transform, false);
-        container.anchorMin = new Vector2(0.5f, 1f);
-        container.anchorMax = new Vector2(0.5f, 1f);
-        container.pivot = new Vector2(0.5f, 1f);
-        container.anchoredPosition = new Vector2(0f, -BaseVerticalOffset);
+        container.anchorMin = AnchorPoint;
+        container.anchorMax = AnchorPoint;
+        container.pivot = new Vector2(0.5f, 0.5f);
+        container.anchoredPosition = Vector2.zero;
 
         containerGroup = root.AddComponent<CanvasGroup>();
         containerGroup.alpha = 0f;
         containerGroup.interactable = false;
         containerGroup.blocksRaycasts = false;
 
-        var backgroundGO = new GameObject("Background");
-        backgroundGO.transform.SetParent(container, false);
-        background = backgroundGO.AddComponent<Image>();
-        background.rectTransform.anchorMin = Vector2.zero;
-        background.rectTransform.anchorMax = Vector2.one;
-        background.rectTransform.offsetMin = new Vector2(-18f, -14f);
-        background.rectTransform.offsetMax = new Vector2(18f, 14f);
-        background.color = new Color(0f, 0f, 0f, 0.72f);
-        background.raycastTarget = false;
-        background.sprite = EnsureBackgroundSprite();
-        background.type = Image.Type.Sliced;
+        layoutGroup = root.AddComponent<HorizontalLayoutGroup>();
+        layoutGroup.childAlignment = TextAnchor.MiddleLeft;
+        layoutGroup.spacing = BaseSpacing;
+        layoutGroup.childForceExpandWidth = false;
+        layoutGroup.childForceExpandHeight = false;
+
+        contentSizeFitter = root.AddComponent<ContentSizeFitter>();
+        contentSizeFitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+        contentSizeFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        var iconGO = new GameObject("Icon");
+        iconGO.transform.SetParent(container, false);
+        iconImage = iconGO.AddComponent<Image>();
+        iconImage.preserveAspect = true;
+        iconImage.raycastTarget = false;
+        iconImage.enabled = false;
+        iconLayout = iconGO.AddComponent<LayoutElement>();
+        iconLayout.preferredWidth = BaseIconSize;
+        iconLayout.preferredHeight = BaseIconSize;
+        iconLayout.ignoreLayout = true;
 
         var messageGO = new GameObject("Message");
         messageGO.transform.SetParent(container, false);
         messageLabel = messageGO.AddComponent<Text>();
-        messageLabel.rectTransform.anchorMin = new Vector2(0.08f, 0.15f);
-        messageLabel.rectTransform.anchorMax = new Vector2(0.92f, 0.85f);
-        messageLabel.rectTransform.offsetMin = Vector2.zero;
-        messageLabel.rectTransform.offsetMax = Vector2.zero;
-        messageLabel.alignment = TextAnchor.MiddleCenter;
+        messageLabel.alignment = TextAnchor.MiddleLeft;
         messageLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        messageLabel.fontSize = 30;
-        messageLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
+        messageLabel.fontSize = Mathf.RoundToInt(BaseFontSize);
+        messageLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
         messageLabel.verticalOverflow = VerticalWrapMode.Overflow;
         messageLabel.raycastTarget = false;
         messageLabel.text = string.Empty;
         messageLabel.color = AbilityColor;
+        messageLayout = messageGO.AddComponent<LayoutElement>();
+        messageLayout.flexibleWidth = 1f;
+        messageLayout.minHeight = BaseIconSize * 0.5f;
 
         var shadow = messageGO.AddComponent<Shadow>();
         shadow.effectColor = new Color(0f, 0f, 0f, 0.85f);
         shadow.effectDistance = new Vector2(2f, -2f);
-    }
-
-    private static Sprite EnsureBackgroundSprite()
-    {
-        if (s_backgroundSprite != null)
-        {
-            return s_backgroundSprite;
-        }
-
-        var tex = new Texture2D(4, 4, TextureFormat.ARGB32, false);
-        for (int x = 0; x < tex.width; x++)
-        {
-            for (int y = 0; y < tex.height; y++)
-            {
-                tex.SetPixel(x, y, Color.white);
-            }
-        }
-
-        tex.Apply();
-        s_backgroundSprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f), 16f, 1, SpriteMeshType.FullRect);
-        s_backgroundSprite.name = "ShadeUnlockPopupBackground";
-        return s_backgroundSprite;
     }
 
     private void Update()
@@ -254,6 +243,19 @@ public sealed class ShadeUnlockPopup : MonoBehaviour
             messageLabel.color = GetColorFor(notification.Type);
         }
 
+        if (iconImage != null)
+        {
+            Sprite? sprite = notification.Icon;
+            bool hasIcon = sprite != null;
+            iconImage.sprite = sprite;
+            iconImage.enabled = hasIcon;
+            iconImage.gameObject.SetActive(hasIcon);
+            if (iconLayout != null)
+            {
+                iconLayout.ignoreLayout = !hasIcon;
+            }
+        }
+
         FadeTowards(1f);
     }
 
@@ -265,6 +267,18 @@ public sealed class ShadeUnlockPopup : MonoBehaviour
         if (messageLabel != null)
         {
             messageLabel.text = string.Empty;
+        }
+
+        if (iconImage != null)
+        {
+            iconImage.sprite = null;
+            iconImage.enabled = false;
+            iconImage.gameObject.SetActive(false);
+        }
+
+        if (iconLayout != null)
+        {
+            iconLayout.ignoreLayout = true;
         }
     }
 
@@ -293,20 +307,28 @@ public sealed class ShadeUnlockPopup : MonoBehaviour
             return;
         }
 
-        container.sizeDelta = new Vector2(BaseWidth * scale, BaseHeight * scale);
-        container.anchoredPosition = new Vector2(0f, -BaseVerticalOffset * scale);
-
-        if (background != null)
+        if (layoutGroup != null)
         {
-            background.rectTransform.offsetMin = new Vector2(-18f * scale, -14f * scale);
-            background.rectTransform.offsetMax = new Vector2(18f * scale, 14f * scale);
+            layoutGroup.spacing = BaseSpacing * scale;
+        }
+
+        if (iconLayout != null)
+        {
+            float iconSize = Mathf.Max(24f, BaseIconSize * scale);
+            iconLayout.preferredWidth = iconSize;
+            iconLayout.preferredHeight = iconSize;
+        }
+
+        if (messageLayout != null && iconLayout != null)
+        {
+            messageLayout.minHeight = Mathf.Max(iconLayout.preferredHeight * 0.5f, 24f);
         }
 
         if (messageLabel != null)
         {
-            int fontSize = Mathf.Clamp(Mathf.RoundToInt(30f * scale), 18, 60);
+            int fontSize = Mathf.Clamp(Mathf.RoundToInt(BaseFontSize * scale), 18, 64);
             messageLabel.fontSize = fontSize;
-            messageLabel.lineSpacing = Mathf.Lerp(1f, 1.2f, Mathf.Clamp01(scale - 1f));
+            messageLabel.lineSpacing = Mathf.Lerp(1f, 1.15f, Mathf.Clamp01(scale - 1f));
         }
 
         lastAppliedScale = scale;

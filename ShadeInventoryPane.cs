@@ -335,6 +335,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         public Image Background;
         public GameObject? NewMarker;
         public Sprite? BaseSprite;
+        public Sprite? BrokenSprite;
     }
 
     private struct NotchAssignment
@@ -6068,6 +6069,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
             entry.Id = definitions[i].EnumId ?? ShadeCharmId.WaywardCompass;
             var sprite = definitions[i].Icon ?? GetFallbackSprite();
             entry.BaseSprite = sprite;
+            entry.BrokenSprite = definitions[i].BrokenIcon ?? sprite;
             if (entry.Icon != null)
             {
                 entry.Icon.sprite = sprite;
@@ -6177,7 +6179,8 @@ internal sealed class ShadeInventoryPane : InventoryPane
             Background = background,
             Icon = icon,
             NewMarker = newMarker,
-            BaseSprite = null
+            BaseSprite = null,
+            BrokenSprite = null
         };
     }
 
@@ -6238,7 +6241,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
                 }
                 else
                 {
-                    entry.Icon.sprite = entry.BaseSprite;
+                    entry.Icon.sprite = broken ? entry.BrokenSprite : entry.BaseSprite;
                     entry.Icon.enabled = entry.Icon.sprite != null && !animatingSourceIcons.Contains(entry.Icon);
 
                     if (!owned)
@@ -6848,6 +6851,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
         if (!owned)
         {
             sprite = ResolveLockedCharmSprite() ?? definition?.Icon ?? GetFallbackSprite();
+        }
+        else if (broken)
+        {
+            sprite = definition?.BrokenIcon ?? definition?.Icon ?? GetFallbackSprite();
         }
         else
         {

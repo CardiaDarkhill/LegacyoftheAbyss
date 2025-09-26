@@ -139,14 +139,14 @@ namespace LegacyoftheAbyss.Shade
             return false;
         }
 
-        public static bool EnqueueNotification(string? key, string message, ShadeUnlockNotificationType type, float duration = ShadeUnlockNotification.DefaultDuration)
+        public static bool EnqueueNotification(string? key, string message, ShadeUnlockNotificationType type, float duration = ShadeUnlockNotification.DefaultDuration, Sprite? icon = null)
         {
             if (string.IsNullOrWhiteSpace(message))
             {
                 return false;
             }
 
-            var notification = new ShadeUnlockNotification(key, message, type, duration);
+            var notification = new ShadeUnlockNotification(key, message, type, duration, icon);
             return EnqueueNotification(notification);
         }
 
@@ -437,9 +437,9 @@ namespace LegacyoftheAbyss.Shade
             }
 
             bool brokeCharm = false;
-            brokeCharm |= TryBreakFragileCharm(ShadeCharmId.FragileStrength, "Fragile Strength shattered. Rest at a bench to repair it.");
-            brokeCharm |= TryBreakFragileCharm(ShadeCharmId.FragileHeart, "Fragile Heart shattered. Rest at a bench to repair it.");
-            brokeCharm |= TryBreakFragileCharm(ShadeCharmId.FragileGreed, "Fragile Greed shattered. Rest at a bench to repair it.");
+            brokeCharm |= TryBreakFragileCharm(ShadeCharmId.FragileStrength, string.Empty);
+            brokeCharm |= TryBreakFragileCharm(ShadeCharmId.FragileHeart, string.Empty);
+            brokeCharm |= TryBreakFragileCharm(ShadeCharmId.FragileGreed, string.Empty);
             return brokeCharm;
         }
 
@@ -451,9 +451,9 @@ namespace LegacyoftheAbyss.Shade
             }
 
             bool repaired = false;
-            repaired |= TryRepairFragileCharm(ShadeCharmId.FragileStrength, "Fragile Strength repaired.");
-            repaired |= TryRepairFragileCharm(ShadeCharmId.FragileHeart, "Fragile Heart repaired.");
-            repaired |= TryRepairFragileCharm(ShadeCharmId.FragileGreed, "Fragile Greed repaired.");
+            repaired |= TryRepairFragileCharm(ShadeCharmId.FragileStrength, string.Empty);
+            repaired |= TryRepairFragileCharm(ShadeCharmId.FragileHeart, string.Empty);
+            repaired |= TryRepairFragileCharm(ShadeCharmId.FragileGreed, string.Empty);
             return repaired;
         }
 
@@ -493,10 +493,14 @@ namespace LegacyoftheAbyss.Shade
                 return false;
             }
 
+            ShadeCharmDefinition definition = s_charmInventory.GetDefinition(charmId);
+            string displayName = definition.DisplayName;
+            Sprite? icon = definition.BrokenIcon ?? definition.Icon;
             EnqueueNotification(
                 $"shade::fragile_{charmId.ToString().ToLowerInvariant()}_broken::{Guid.NewGuid():N}",
-                message,
-                ShadeUnlockNotificationType.Ability);
+                string.IsNullOrWhiteSpace(message) ? displayName + " broken!" : message,
+                ShadeUnlockNotificationType.Charm,
+                icon: icon);
             return true;
         }
 
@@ -512,10 +516,14 @@ namespace LegacyoftheAbyss.Shade
                 return false;
             }
 
+            ShadeCharmDefinition definition = s_charmInventory.GetDefinition(charmId);
+            string displayName = definition.DisplayName;
+            Sprite? icon = definition.Icon;
             EnqueueNotification(
                 $"shade::fragile_{charmId.ToString().ToLowerInvariant()}_repaired::{Guid.NewGuid():N}",
-                message,
-                ShadeUnlockNotificationType.Ability);
+                string.IsNullOrWhiteSpace(message) ? displayName + " repaired!" : message,
+                ShadeUnlockNotificationType.Charm,
+                icon: icon);
             return true;
         }
 
@@ -821,7 +829,7 @@ namespace LegacyoftheAbyss.Shade
         {
             public const float DefaultDuration = 3.5f;
 
-            public ShadeUnlockNotification(string? key, string message, ShadeUnlockNotificationType type, float duration)
+            public ShadeUnlockNotification(string? key, string message, ShadeUnlockNotificationType type, float duration, Sprite? icon = null)
             {
                 if (string.IsNullOrWhiteSpace(message))
                 {
@@ -832,6 +840,7 @@ namespace LegacyoftheAbyss.Shade
                 Type = type;
                 Duration = SanitizeDuration(duration);
                 Key = NormalizeKey(key, Message);
+                Icon = icon;
             }
 
             public string Key { get; }
@@ -841,6 +850,8 @@ namespace LegacyoftheAbyss.Shade
             public ShadeUnlockNotificationType Type { get; }
 
             public float Duration { get; }
+
+            public Sprite? Icon { get; }
 
             private static string NormalizeKey(string? key, string message)
             {

@@ -371,7 +371,8 @@ namespace LegacyoftheAbyss.Shade
                 notchCost: 2,
                 fallbackTint: new Color(0.94f, 0.56f, 0.60f),
                 enumId: ShadeCharmId.FragileHeart,
-                iconName: "shade_charm_fragile_heart"));
+                iconName: "shade_charm_fragile_heart",
+                brokenIconName: "shade_charm_fragileheartbroken0002charmglasshealbroken.png"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.FragileGreed),
@@ -385,7 +386,8 @@ namespace LegacyoftheAbyss.Shade
                 notchCost: 2,
                 fallbackTint: new Color(0.90f, 0.78f, 0.32f),
                 enumId: ShadeCharmId.FragileGreed,
-                iconName: "shade_charm_fragile_greed"));
+                iconName: "shade_charm_fragile_greed",
+                brokenIconName: "shade_charm_fragilegreedbroken0003charmglassgeobroken.png"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.FragileStrength),
@@ -399,7 +401,8 @@ namespace LegacyoftheAbyss.Shade
                 notchCost: 3,
                 fallbackTint: new Color(0.82f, 0.52f, 0.18f),
                 enumId: ShadeCharmId.FragileStrength,
-                iconName: "shade_charm_fragile_strength"));
+                iconName: "shade_charm_fragile_strength",
+                brokenIconName: "shade_charm_fragilestrengthbroken0002charmglassattackupbroken.png"));
 
             _definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.SharpShadow),

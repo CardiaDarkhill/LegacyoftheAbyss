@@ -95,9 +95,9 @@ namespace LegacyoftheAbyss.Shade
 
             try
             {
-                string message = $"{definition.DisplayName} acquired.";
+                string message = definition.DisplayName;
                 string key = $"{NotificationKeyPrefix}{_charmId}";
-                ShadeRuntime.EnqueueNotification(key, message, ShadeUnlockNotificationType.Charm);
+                ShadeRuntime.EnqueueNotification(key, message, ShadeUnlockNotificationType.Charm, icon: definition.Icon);
             }
             catch
             {

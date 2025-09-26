@@ -56,7 +56,8 @@ namespace LegacyoftheAbyss.Shade
             int notchCost = 0,
             Color? fallbackTint = null,
             ShadeCharmId? enumId = null,
-            string? iconName = null)
+            string? iconName = null,
+            string? brokenIconName = null)
         {
             Id = id ?? throw new ArgumentNullException(nameof(id));
             StatModifiers = statModifiers ?? ShadeCharmStatModifiers.Identity;
@@ -68,6 +69,12 @@ namespace LegacyoftheAbyss.Shade
             FallbackTint = fallbackTint ?? Color.white;
             EnumId = enumId;
             Icon = ShadeCharmIconLoader.TryLoadIcon(iconName, Id, DisplayName, EnumId?.ToString());
+            BrokenIcon = ShadeCharmIconLoader.TryLoadIcon(
+                brokenIconName,
+                string.IsNullOrWhiteSpace(brokenIconName) ? null : Path.GetFileNameWithoutExtension(brokenIconName),
+                EnumId?.ToString() is string enumName ? enumName + "_broken" : null,
+                Id + "_broken",
+                DisplayName + "_broken");
         }
 
         public string Id { get; }
@@ -89,6 +96,8 @@ namespace LegacyoftheAbyss.Shade
         public ShadeCharmId? EnumId { get; }
 
         public Sprite? Icon { get; }
+
+        public Sprite? BrokenIcon { get; }
 
         public override string ToString() => DisplayName;
     }
