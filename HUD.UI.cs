@@ -120,6 +120,9 @@ public partial class SimpleHUD
     {
         HandleAssistVisibilityChange();
 
+        var charms = ShadeRuntime.Charms;
+        hivebloodEquipped = charms != null && charms.IsEquipped(ShadeCharmId.Hiveblood);
+
         if (shadeAssistModeActive)
         {
             int total = Mathf.Max(0, shadeMax) + Mathf.Max(0, shadeLifebloodMax);
@@ -172,7 +175,7 @@ public partial class SimpleHUD
             {
                 if (i < 0 || i >= maskImages.Length) continue;
                 bool lifeblood = i >= normalMax;
-                StartCoroutine(LoseHealth(maskImages[i], shadeOvercharmed, lifeblood));
+                StartCoroutine(LoseHealth(maskImages[i], shadeOvercharmed, lifeblood, hivebloodEquipped));
             }
         }
         else if (suppressNextDamageSound)
@@ -180,7 +183,7 @@ public partial class SimpleHUD
             suppressNextDamageSound = false;
         }
 
-        Color filledColor = shadeOvercharmed ? overcharmMaskColor : Color.white;
+        Color filledColor = GetNormalMaskFilledColor();
         for (int i = 0; i < normalMax && i < maskImages.Length; i++)
         {
             var img = maskImages[i];
@@ -216,6 +219,16 @@ public partial class SimpleHUD
 
         RefreshHivebloodPreview();
         previousShadeTotalHealth = totalCurrent;
+    }
+
+    private Color GetNormalMaskFilledColor()
+    {
+        if (shadeOvercharmed)
+        {
+            return overcharmMaskColor;
+        }
+
+        return hivebloodEquipped ? hivebloodMaskColor : Color.white;
     }
 
     private void RefreshHivebloodPreview()
@@ -288,7 +301,7 @@ public partial class SimpleHUD
         previewRect.sizeDelta = baseSize * scale;
 
         previewImage.sprite = maskSprite != null ? maskSprite : targetImage.sprite;
-        previewImage.color = shadeOvercharmed ? overcharmMaskColor : Color.white;
+        previewImage.color = GetNormalMaskFilledColor();
         previewImage.enabled = true;
         var previewGO = previewImage.gameObject;
         if (!previewGO.activeSelf)
@@ -337,7 +350,7 @@ public partial class SimpleHUD
         }
     }
 
-    private IEnumerator LoseHealth(Image img, bool wasOvercharmed, bool wasLifeblood)
+    private IEnumerator LoseHealth(Image img, bool wasOvercharmed, bool wasLifeblood, bool hivebloodActive)
     {
         if (img == null) yield break;
 
@@ -355,7 +368,7 @@ public partial class SimpleHUD
         }
         else
         {
-            filledColor = wasOvercharmed ? overcharmMaskColor : Color.white;
+            filledColor = wasOvercharmed ? overcharmMaskColor : (hivebloodActive ? hivebloodMaskColor : Color.white);
             flickerColor = wasOvercharmed ? filledColor : Color.red;
             emptyColor = missingMaskColor;
         }
