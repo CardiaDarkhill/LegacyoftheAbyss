@@ -7,6 +7,57 @@ using UnityEngine.UI;
 
 public partial class SimpleHUD
 {
+    private void SubscribeToCharmInventory()
+    {
+        var inventory = ShadeRuntime.Charms;
+        if (inventory == null)
+        {
+            UnsubscribeFromCharmInventory();
+            return;
+        }
+
+        if (subscribedCharmInventory == inventory)
+        {
+            return;
+        }
+
+        UnsubscribeFromCharmInventory();
+
+        subscribedCharmInventory = inventory;
+        try
+        {
+            subscribedCharmInventory.StateChanged += HandleCharmInventoryChanged;
+            charmInventoryDirty = true;
+        }
+        catch
+        {
+            subscribedCharmInventory = null;
+        }
+    }
+
+    private void UnsubscribeFromCharmInventory()
+    {
+        if (subscribedCharmInventory == null)
+        {
+            return;
+        }
+
+        try
+        {
+            subscribedCharmInventory.StateChanged -= HandleCharmInventoryChanged;
+        }
+        catch
+        {
+        }
+
+        subscribedCharmInventory = null;
+    }
+
+    private void HandleCharmInventoryChanged()
+    {
+        charmInventoryDirty = true;
+    }
+
     private void CreateUI()
     {
         // Canvas

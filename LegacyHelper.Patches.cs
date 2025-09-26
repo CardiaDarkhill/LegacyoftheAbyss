@@ -1995,6 +1995,11 @@ public partial class LegacyHelper
 
         private static Sprite shadeCompassSprite;
         private static bool loggedFailure;
+        private static MethodInfo imageConversionLoadImageMethod;
+        private static MethodInfo textureLoadImageBoolMethod;
+        private static MethodInfo textureLoadImageMethod;
+        private static bool attemptedImageConversionLookup;
+        private static bool attemptedTextureLoadImageLookup;
 
         private sealed class ShadeCompassIconMarker : MonoBehaviour
         {
@@ -2577,28 +2582,13 @@ public partial class LegacyHelper
 
             try
             {
-                if (ModPaths.TryGetAssetPath(out var path, "Shade_Pin.png"))
+                if (ModPaths.TryGetAssetPath(out var path, "Shade_Pin.png") && File.Exists(path))
                 {
                     var bytes = File.ReadAllBytes(path);
-                    if (bytes != null && bytes.Length > 0)
+                    if (TryCreateCompassSprite(bytes, pixelsPerUnit, out var sprite))
                     {
-                        var texture = new Texture2D(2, 2, TextureFormat.ARGB32, false);
-                        if (ImageConversion.LoadImage(texture, bytes, false))
-                        {
-                            texture.filterMode = FilterMode.Bilinear;
-                            texture.wrapMode = TextureWrapMode.Clamp;
-                            shadeCompassSprite = Sprite.Create(
-                                texture,
-                                new Rect(0f, 0f, texture.width, texture.height),
-                                new Vector2(0.5f, 0.5f),
-                                pixelsPerUnit);
-                            if (shadeCompassSprite != null)
-                            {
-                                shadeCompassSprite.name = "ShadeCompassSprite";
-                                return shadeCompassSprite;
-                            }
-                        }
-                        UnityEngine.Object.Destroy(texture);
+                        shadeCompassSprite = sprite;
+                        return shadeCompassSprite;
                     }
                 }
             }
@@ -2607,6 +2597,135 @@ public partial class LegacyHelper
             }
 
             return templateSprite;
+        }
+
+        private static bool TryCreateCompassSprite(byte[] bytes, float pixelsPerUnit, out Sprite sprite)
+        {
+            sprite = null;
+            if (bytes == null || bytes.Length == 0)
+            {
+                return false;
+            }
+
+            Texture2D texture = null;
+            try
+            {
+                texture = new Texture2D(2, 2, TextureFormat.ARGB32, false);
+                if (!TryLoadImage(texture, bytes))
+                {
+                    UnityEngine.Object.Destroy(texture);
+                    return false;
+                }
+
+                texture.filterMode = FilterMode.Point;
+                texture.wrapMode = TextureWrapMode.Clamp;
+
+                sprite = Sprite.Create(
+                    texture,
+                    new Rect(0f, 0f, texture.width, texture.height),
+                    new Vector2(0.5f, 0.5f),
+                    pixelsPerUnit);
+
+                if (sprite != null)
+                {
+                    sprite.name = "ShadeCompassSprite";
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            if (texture != null)
+            {
+                UnityEngine.Object.Destroy(texture);
+            }
+
+            sprite = null;
+            return false;
+        }
+
+        private static bool TryLoadImage(Texture2D texture, byte[] bytes)
+        {
+            if (texture == null || bytes == null || bytes.Length == 0)
+            {
+                return false;
+            }
+
+            if (!attemptedImageConversionLookup)
+            {
+                attemptedImageConversionLookup = true;
+                var type = Type.GetType("UnityEngine.ImageConversion, UnityEngine.ImageConversionModule");
+                if (type != null)
+                {
+                    imageConversionLoadImageMethod = type.GetMethod(
+                        "LoadImage",
+                        BindingFlags.Public | BindingFlags.Static,
+                        null,
+                        new[] { typeof(Texture2D), typeof(byte[]), typeof(bool) },
+                        null)
+                        ?? type.GetMethod(
+                            "LoadImage",
+                            BindingFlags.Public | BindingFlags.Static,
+                            null,
+                            new[] { typeof(Texture2D), typeof(byte[]) },
+                            null);
+                }
+            }
+
+            if (imageConversionLoadImageMethod != null)
+            {
+                try
+                {
+                    var parameters = imageConversionLoadImageMethod.GetParameters().Length == 3
+                        ? new object[] { texture, bytes, false }
+                        : new object[] { texture, bytes };
+                    imageConversionLoadImageMethod.Invoke(null, parameters);
+                    return true;
+                }
+                catch
+                {
+                }
+            }
+
+            if (!attemptedTextureLoadImageLookup)
+            {
+                attemptedTextureLoadImageLookup = true;
+                textureLoadImageBoolMethod = typeof(Texture2D).GetMethod(
+                    "LoadImage",
+                    BindingFlags.Instance | BindingFlags.Public,
+                    null,
+                    new[] { typeof(byte[]), typeof(bool) },
+                    null);
+                textureLoadImageMethod = typeof(Texture2D).GetMethod(
+                    "LoadImage",
+                    BindingFlags.Instance | BindingFlags.Public,
+                    null,
+                    new[] { typeof(byte[]) },
+                    null);
+            }
+
+            var method = textureLoadImageBoolMethod ?? textureLoadImageMethod;
+            if (method != null)
+            {
+                try
+                {
+                    if (method.GetParameters().Length == 2)
+                    {
+                        method.Invoke(texture, new object[] { bytes, false });
+                    }
+                    else
+                    {
+                        method.Invoke(texture, new object[] { bytes });
+                    }
+                    return true;
+                }
+                catch
+                {
+                }
+            }
+
+            return false;
         }
 
         private static void MatchScale(Transform target, Sprite templateSprite, Sprite replacement)

@@ -2,6 +2,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using LegacyoftheAbyss.Shade;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -48,6 +49,8 @@ public partial class SimpleHUD : MonoBehaviour
     private bool pendingMaskRefresh;
     private Image hivebloodPreviewMask;
     private bool hivebloodEquipped;
+    private ShadeCharmInventory subscribedCharmInventory;
+    private bool charmInventoryDirty;
 
     // UI containers
     private GameObject healthContainer;
@@ -94,7 +97,10 @@ public partial class SimpleHUD : MonoBehaviour
         LoadSprites();
         ComputeShadeFromPlayer();
         CreateUI();
+        SubscribeToCharmInventory();
+        charmInventoryDirty = true;
         previousShadeTotalHealth = shadeHealth + shadeLifeblood;
+        RefreshHealth();
     }
 
     private float GetUIScale()
@@ -106,6 +112,13 @@ public partial class SimpleHUD : MonoBehaviour
     private void Update()
     {
         UpdatePauseFade();
+        SubscribeToCharmInventory();
+
+        if (charmInventoryDirty && playerData != null)
+        {
+            charmInventoryDirty = false;
+            RefreshHealth();
+        }
 
         if (playerData == null) return;
 
@@ -349,6 +362,8 @@ public partial class SimpleHUD : MonoBehaviour
         if (pd == playerData) return;
         playerData = pd;
         int oldMax = shadeMax;
+        SubscribeToCharmInventory();
+        charmInventoryDirty = true;
         ComputeShadeFromPlayer();
         if (shadeMax != oldMax)
         {
@@ -357,6 +372,11 @@ public partial class SimpleHUD : MonoBehaviour
         }
         RefreshHealth();
         RefreshSoul();
+    }
+
+    private void OnDestroy()
+    {
+        UnsubscribeFromCharmInventory();
     }
 }
 
