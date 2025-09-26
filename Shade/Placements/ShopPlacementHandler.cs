@@ -2,7 +2,12 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using GlobalEnums;
 using HarmonyLib;
+using TeamCherry.Localization;
 using UnityEngine;
 
 namespace LegacyoftheAbyss.Shade
@@ -11,8 +16,18 @@ namespace LegacyoftheAbyss.Shade
     {
         internal static ShopPlacementHandler? Instance { get; private set; }
 
+        private static readonly FieldInfo? ShopOwnerTitleField = AccessTools.Field(typeof(ShopOwnerBase), "shopTitle");
+        private static readonly FieldInfo? ShopItemPlayerDataBoolField = AccessTools.Field(typeof(ShopItem), "playerDataBoolName");
+        private static readonly FieldInfo? ShopItemExtraPlayerDataBoolsField = AccessTools.Field(typeof(ShopItem), "setExtraPlayerDataBools");
+        private static readonly FieldInfo? SimpleShopItemDisplayIconField = AccessTools.Field(typeof(SimpleShopItemDisplay), "itemIcon");
+
+        private const float CharmShopIconScale = 0.65f;
+
         private readonly List<ShadeCharmPlacementDefinition> _activePlacements = new();
         private readonly Dictionary<SimpleShopMenuOwner, ShopStockInfo> _activeStock = new();
+        private readonly Dictionary<ShopOwnerBase, ShopOwnerStockInfo> _activeOwnerStock = new();
+        private readonly Dictionary<ShopItem, ShopOwnerText> _ownerItemText = new();
+        private static readonly ConditionalWeakTable<SimpleShopItemDisplay, SimpleShopItemDisplayIconState> SimpleShopIconStates = new();
         private string _sceneName = string.Empty;
 
         internal ShopPlacementHandler()
@@ -25,6 +40,12 @@ namespace LegacyoftheAbyss.Shade
             _sceneName = context.SceneName;
             _activePlacements.Clear();
             _activeStock.Clear();
+            foreach (var info in _activeOwnerStock.Values)
+            {
+                info.Dispose();
+            }
+            _activeOwnerStock.Clear();
+            _ownerItemText.Clear();
 
             if (placements == null || placements.Count == 0)
             {
@@ -58,13 +79,21 @@ namespace LegacyoftheAbyss.Shade
             var matches = new List<ShadeCharmPlacementDefinition>();
             foreach (var placement in _activePlacements)
             {
-                if (!MatchesOwner(placement, owner))
+                if (!MatchesOwner(placement, owner, out var failureReason))
                 {
+                    LogPlacementSkip(owner, placement, failureReason);
+                    continue;
+                }
+
+                if (!MeetsShopConditions(placement, out var conditionFailure))
+                {
+                    LogPlacementSkip(owner, placement, conditionFailure);
                     continue;
                 }
 
                 if (ShadeCharmPlacementService.IsCharmAlreadyCollected(placement.CharmId))
                 {
+                    LogPlacementSkip(owner, placement, "charm already collected");
                     continue;
                 }
 
@@ -150,19 +179,208 @@ namespace LegacyoftheAbyss.Shade
             return true;
         }
 
-        private static bool MatchesOwner(ShadeCharmPlacementDefinition placement, SimpleShopMenuOwner owner)
+        private void RegisterOwnerItemText(ShopItem? item, ShopOwnerText text)
         {
+            if (item == null)
+            {
+                return;
+            }
+
+            _ownerItemText[item] = text;
+        }
+
+        private void UnregisterOwnerItemText(ShopItem? item)
+        {
+            if (item == null)
+            {
+                return;
+            }
+
+            _ownerItemText.Remove(item);
+        }
+
+        internal bool TryGetOwnerItemText(ShopItem? item, out ShopOwnerText text)
+        {
+            if (item != null && _ownerItemText.TryGetValue(item, out text))
+            {
+                return true;
+            }
+
+            text = default;
+            return false;
+        }
+
+        private void LogPlacementSkip(Component owner, ShadeCharmPlacementDefinition placement, string? reason)
+        {
+            if (string.IsNullOrWhiteSpace(reason))
+            {
+                return;
+            }
+
+            try
+            {
+                string ownerName = owner?.name ?? "<null>";
+                string hierarchyPath = owner != null ? ShadeCharmPlacementHelpers.GetHierarchyPath(owner.transform) : string.Empty;
+                if (!string.IsNullOrWhiteSpace(hierarchyPath))
+                {
+                    ownerName = $"{ownerName} ({hierarchyPath})";
+                }
+
+                ShadeCharmPlacementService.LogInfo($"Skipped injecting charm {placement.CharmId} for '{ownerName}' in scene '{_sceneName}': {reason}.");
+            }
+            catch
+            {
+            }
+        }
+
+        private static string DescribeStockPlayerDataBools(ShopItem[]? stock)
+        {
+            if (stock == null)
+            {
+                return string.Empty;
+            }
+
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in stock)
+            {
+                if (item == null)
+                {
+                    continue;
+                }
+
+                string primary = GetPlayerDataBoolName(item);
+                if (!string.IsNullOrWhiteSpace(primary))
+                {
+                    names.Add(primary);
+                }
+
+                foreach (string extra in GetExtraPlayerDataBools(item))
+                {
+                    if (!string.IsNullOrWhiteSpace(extra))
+                    {
+                        names.Add(extra);
+                    }
+                }
+            }
+
+            return names.Count == 0 ? string.Empty : string.Join(", ", names.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+        }
+
+        internal void AugmentStock(ShopOwnerBase owner, ref ShopItem[] stock)
+        {
+            if (owner == null)
+            {
+                return;
+            }
+
+            if (_activePlacements.Count == 0)
+            {
+                if (_activeOwnerStock.Remove(owner, out var stale))
+                {
+                    stale.Dispose();
+                }
+
+                return;
+            }
+
+            var matches = new List<ShadeCharmPlacementDefinition>();
+            foreach (var placement in _activePlacements)
+            {
+                if (!MatchesOwner(placement, owner, stock, out var failureReason))
+                {
+                    LogPlacementSkip(owner, placement, failureReason);
+                    continue;
+                }
+
+                if (!MeetsShopConditions(placement, out var conditionFailure))
+                {
+                    LogPlacementSkip(owner, placement, conditionFailure);
+                    continue;
+                }
+
+                if (ShadeCharmPlacementService.IsCharmAlreadyCollected(placement.CharmId))
+                {
+                    LogPlacementSkip(owner, placement, "charm already collected");
+                    continue;
+                }
+
+                matches.Add(placement);
+            }
+
+            if (matches.Count == 0)
+            {
+                if (_activeOwnerStock.Remove(owner, out var stale))
+                {
+                    stale.Dispose();
+                }
+
+                return;
+            }
+
+            if (!_activeOwnerStock.TryGetValue(owner, out var info))
+            {
+                info = new ShopOwnerStockInfo(this);
+                _activeOwnerStock[owner] = info;
+            }
+
+            var items = info.ResolveItems(matches);
+            if (items.Count == 0)
+            {
+                if (_activeOwnerStock.Remove(owner, out var stale))
+                {
+                    stale.Dispose();
+                }
+
+                return;
+            }
+
+            int baseCount = stock?.Length ?? 0;
+            var combined = new ShopItem[baseCount + items.Count];
+            if (baseCount > 0 && stock != null)
+            {
+                Array.Copy(stock, combined, baseCount);
+            }
+
+            for (int i = 0; i < items.Count; i++)
+            {
+                combined[baseCount + i] = items[i];
+            }
+
+            stock = combined;
+
+            if (!info.HasLogged)
+            {
+                ShadeCharmPlacementService.LogInfo($"Injected {items.Count} charm shop item(s) for '{owner.name}' in scene '{_sceneName}'.");
+                info.HasLogged = true;
+            }
+        }
+
+        private static bool MatchesOwner(ShadeCharmPlacementDefinition placement, Component owner, out string? failureReason)
+            => MatchesOwner(placement, owner, null, out failureReason);
+
+        private static bool MatchesOwner(ShadeCharmPlacementDefinition placement, Component owner, ShopItem[]? existingStock, out string? failureReason)
+        {
+            failureReason = null;
+
             var shop = placement.Shop;
             if (shop == null)
             {
+                failureReason = "no shop metadata";
                 return false;
             }
+
+            bool hasOwnerIdentifier =
+                !string.IsNullOrWhiteSpace(shop.OwnerPath) ||
+                !string.IsNullOrWhiteSpace(shop.OwnerName) ||
+                (shop.OwnerNameContainsAll != null && shop.OwnerNameContainsAll.Length > 0) ||
+                (shop.StockContainsAnyPlayerDataBools != null && shop.StockContainsAnyPlayerDataBools.Length > 0);
 
             if (!string.IsNullOrWhiteSpace(shop.OwnerPath))
             {
                 string currentPath = ShadeCharmPlacementHelpers.GetHierarchyPath(owner.transform);
                 if (!string.Equals(currentPath, shop.OwnerPath, StringComparison.OrdinalIgnoreCase))
                 {
+                    failureReason = $"owner path '{currentPath}' did not match required '{shop.OwnerPath}'";
                     return false;
                 }
             }
@@ -171,14 +389,243 @@ namespace LegacyoftheAbyss.Shade
             {
                 if (!string.Equals(owner.name, shop.OwnerName, StringComparison.OrdinalIgnoreCase))
                 {
+                    failureReason = $"owner name '{owner.name}' did not match required '{shop.OwnerName}'";
                     return false;
                 }
             }
 
-            if (string.IsNullOrWhiteSpace(shop.OwnerPath) && string.IsNullOrWhiteSpace(shop.OwnerName))
+            if (shop.OwnerNameContainsAll is { Length: > 0 })
             {
-                ShadeCharmPlacementService.LogWarning($"Shop placement for charm {placement.CharmId} in scene '{Instance?._sceneName}' does not specify an ownerPath or ownerName; skipping.");
+                string ownerTokens = BuildOwnerTokenString(owner);
+                foreach (string token in shop.OwnerNameContainsAll)
+                {
+                    if (string.IsNullOrWhiteSpace(token))
+                    {
+                        continue;
+                    }
+
+                    if (ownerTokens.IndexOf(token, StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        failureReason = $"owner tokens '{ownerTokens}' missing required token '{token}'";
+                        return false;
+                    }
+                }
+            }
+
+            if (shop.StockContainsAnyPlayerDataBools is { Length: > 0 })
+            {
+                if (existingStock == null)
+                {
+                    failureReason = "existing stock unavailable while purchase flag hints provided";
+                    return false;
+                }
+
+                if (!StockContainsAnyPlayerDataBool(existingStock, shop.StockContainsAnyPlayerDataBools))
+                {
+                    failureReason =
+                        $"existing stock did not expose required purchase flags ({string.Join(", ", shop.StockContainsAnyPlayerDataBools ?? Array.Empty<string>())}); found [{DescribeStockPlayerDataBools(existingStock)}]";
+                    return false;
+                }
+            }
+
+            if (!hasOwnerIdentifier)
+            {
+                ShadeCharmPlacementService.LogWarning($"Shop placement for charm {placement.CharmId} in scene '{Instance?._sceneName}' does not specify any owner matching data; skipping.");
+                failureReason = "no owner identifiers configured";
                 return false;
+            }
+
+            return true;
+        }
+
+        private static string BuildOwnerTokenString(Component owner)
+        {
+            string ownerName = owner.name ?? string.Empty;
+            string typeName = owner.GetType().FullName ?? owner.GetType().Name;
+            string hierarchyPath = ShadeCharmPlacementHelpers.GetHierarchyPath(owner.transform) ?? string.Empty;
+            string sceneName = string.Empty;
+            string scenePath = string.Empty;
+
+            try
+            {
+                var scene = owner.gameObject.scene;
+                sceneName = scene.name ?? string.Empty;
+                scenePath = scene.path ?? string.Empty;
+            }
+            catch
+            {
+            }
+
+            string title = string.Empty;
+            try
+            {
+                if (owner is SimpleShopMenuOwner menuOwner)
+                {
+                    title = menuOwner.ShopTitle ?? string.Empty;
+                }
+                else if (ShopOwnerTitleField != null && owner is ShopOwnerBase)
+                {
+                    if (ShopOwnerTitleField.GetValue(owner) is LocalisedString localised)
+                    {
+                        title = $"{localised.Sheet}:{localised.Key}";
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            string rootName = string.Empty;
+            try
+            {
+                rootName = owner.transform?.root?.name ?? string.Empty;
+            }
+            catch
+            {
+            }
+
+            return string.Join("|", new[]
+            {
+                ownerName,
+                typeName,
+                hierarchyPath,
+                sceneName,
+                scenePath,
+                title,
+                rootName
+            }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        }
+
+        private static bool StockContainsAnyPlayerDataBool(ShopItem[]? stock, string[]? boolNames)
+        {
+            if (stock == null || boolNames == null || boolNames.Length == 0)
+            {
+                return false;
+            }
+
+            foreach (string candidate in boolNames)
+            {
+                if (string.IsNullOrWhiteSpace(candidate))
+                {
+                    continue;
+                }
+
+                if (StockContainsPlayerDataBool(stock, candidate))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool StockContainsPlayerDataBool(ShopItem[] stock, string boolName)
+        {
+            foreach (var item in stock)
+            {
+                if (item == null)
+                {
+                    continue;
+                }
+
+                string primary = GetPlayerDataBoolName(item);
+                if (!string.IsNullOrWhiteSpace(primary) &&
+                    string.Equals(primary, boolName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                foreach (string extra in GetExtraPlayerDataBools(item))
+                {
+                    if (string.Equals(extra, boolName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static string GetPlayerDataBoolName(ShopItem item)
+        {
+            if (ShopItemPlayerDataBoolField == null || item == null)
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                return ShopItemPlayerDataBoolField.GetValue(item) as string ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private static IEnumerable<string> GetExtraPlayerDataBools(ShopItem item)
+        {
+            if (ShopItemExtraPlayerDataBoolsField == null || item == null)
+            {
+                yield break;
+            }
+
+            string[]? values = null;
+            try
+            {
+                values = ShopItemExtraPlayerDataBoolsField.GetValue(item) as string[];
+            }
+            catch
+            {
+            }
+
+            if (values == null)
+            {
+                yield break;
+            }
+
+            foreach (var value in values)
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    yield return value;
+                }
+            }
+        }
+
+        private static bool MeetsShopConditions(ShadeCharmPlacementDefinition placement, out string? failureReason)
+        {
+            failureReason = null;
+
+            var shop = placement.Shop;
+            if (shop == null)
+            {
+                return true;
+            }
+
+            if (shop.RequireCollected is { Length: > 0 })
+            {
+                foreach (var required in shop.RequireCollected)
+                {
+                    if (!ShadeCharmPlacementService.IsCharmAlreadyCollected(required))
+                    {
+                        failureReason = $"required charm {required} has not been collected";
+                        return false;
+                    }
+                }
+            }
+
+            if (shop.RequireNotCollected is { Length: > 0 })
+            {
+                foreach (var forbidden in shop.RequireNotCollected)
+                {
+                    if (ShadeCharmPlacementService.IsCharmAlreadyCollected(forbidden))
+                    {
+                        failureReason = $"forbidden charm {forbidden} was already collected";
+                        return false;
+                    }
+                }
             }
 
             return true;
@@ -195,6 +642,158 @@ namespace LegacyoftheAbyss.Shade
             internal int StartIndex { get; }
 
             internal List<ShadeCharmShopItem?> Items { get; }
+        }
+
+        private sealed class ShopOwnerStockInfo : IDisposable
+        {
+            private readonly ShopPlacementHandler _handler;
+            private readonly Dictionary<ShadeCharmPlacementDefinition, ShopOwnerItemEntry> _items = new();
+
+            internal ShopOwnerStockInfo(ShopPlacementHandler handler)
+            {
+                _handler = handler;
+            }
+
+            internal bool HasLogged { get; set; }
+
+            internal List<ShopItem> ResolveItems(IReadOnlyList<ShadeCharmPlacementDefinition> definitions)
+            {
+                var result = new List<ShopItem>(definitions.Count);
+                var remaining = new HashSet<ShadeCharmPlacementDefinition>(_items.Keys);
+
+                foreach (var definition in definitions)
+                {
+                    if (definition == null)
+                    {
+                        continue;
+                    }
+
+                    remaining.Remove(definition);
+
+                    if (!_items.TryGetValue(definition, out var entry) || entry == null)
+                    {
+                        entry = _handler.CreateOwnerItem(definition);
+                        if (entry == null)
+                        {
+                            continue;
+                        }
+
+                        _items[definition] = entry;
+                    }
+
+                    if (entry.Item != null)
+                    {
+                        result.Add(entry.Item);
+                        _handler.RegisterOwnerItemText(entry.Item, entry.Text);
+                    }
+                }
+
+                foreach (var stale in remaining)
+                {
+                    if (_items.TryGetValue(stale, out var entry))
+                    {
+                        entry.Dispose();
+                        _items.Remove(stale);
+                    }
+                }
+
+                return result;
+            }
+
+            public void Dispose()
+            {
+                foreach (var entry in _items.Values)
+                {
+                    entry.Dispose();
+                }
+
+                _items.Clear();
+            }
+        }
+
+        private sealed class ShopOwnerItemEntry : IDisposable
+        {
+            private readonly ShopPlacementHandler _handler;
+
+            internal ShopOwnerItemEntry(ShopPlacementHandler handler, ShopItem item, ShadeCharmSavedItem savedItem, ShopOwnerText text)
+            {
+                _handler = handler;
+                Item = item;
+                SavedItem = savedItem;
+                Text = text;
+
+                handler?.RegisterOwnerItemText(item, text);
+            }
+
+            internal ShopItem Item { get; }
+
+            internal ShadeCharmSavedItem SavedItem { get; }
+
+            internal ShopOwnerText Text { get; }
+
+            public void Dispose()
+            {
+                try
+                {
+                    _handler?.UnregisterOwnerItemText(Item);
+
+                    if (SavedItem != null)
+                    {
+                        if (Application.isPlaying)
+                        {
+                            UnityEngine.Object.Destroy(SavedItem);
+                        }
+                        else
+                        {
+                            UnityEngine.Object.DestroyImmediate(SavedItem);
+                        }
+                    }
+                }
+                catch
+                {
+                }
+
+                try
+                {
+                    if (Item != null)
+                    {
+                        if (Application.isPlaying)
+                        {
+                            UnityEngine.Object.Destroy(Item);
+                        }
+                        else
+                        {
+                            UnityEngine.Object.DestroyImmediate(Item);
+                        }
+                    }
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        internal readonly struct ShopOwnerText
+        {
+            internal ShopOwnerText(string name, string description)
+            {
+                Name = string.IsNullOrWhiteSpace(name) ? string.Empty : name;
+                Description = string.IsNullOrWhiteSpace(description) ? string.Empty : description;
+            }
+
+            internal string Name { get; }
+
+            internal string Description { get; }
+        }
+
+        private sealed class SimpleShopItemDisplayIconState
+        {
+            internal SimpleShopItemDisplayIconState(Vector3 baseScale)
+            {
+                BaseScale = baseScale;
+            }
+
+            internal Vector3 BaseScale { get; }
         }
 
         private sealed class ShadeCharmShopItem : ISimpleShopItem
@@ -287,6 +886,47 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
+        private ShopOwnerItemEntry? CreateOwnerItem(ShadeCharmPlacementDefinition definition)
+        {
+            try
+            {
+                var shopData = definition.Shop ?? new ShadeCharmPlacementShopData();
+                var item = ShopItem.CreateTemp($"ShadeCharm_{definition.CharmId}_ShopItem");
+                item.hideFlags = HideFlags.HideAndDontSave;
+
+                ShadeCharmSavedItem savedItem = ShadeCharmSavedItem.Create(definition.CharmId);
+                savedItem.hideFlags = HideFlags.HideAndDontSave;
+
+                var definitionInventory = ShadeRuntime.Charms;
+                ShadeCharmDefinition? charmDefinition = definitionInventory?.GetDefinition(definition.CharmId);
+
+                string displayName = charmDefinition?.DisplayName ?? definition.CharmId.ToString();
+                string description = charmDefinition?.Description ?? string.Empty;
+                var localisedName = new LocalisedString("LegacyAbyss", displayName);
+                var localisedDescription = new LocalisedString("LegacyAbyss", description);
+
+                AccessTools.Field(typeof(ShopItem), "displayName").SetValue(item, localisedName);
+                AccessTools.Field(typeof(ShopItem), "description").SetValue(item, localisedDescription);
+                AccessTools.Field(typeof(ShopItem), "descriptionMultiple").SetValue(item, localisedDescription);
+
+                var sprite = ShadeCharmSavedItem.ResolveCharmSprite(definition.CharmId, out _);
+                AccessTools.Field(typeof(ShopItem), "itemSprite").SetValue(item, sprite);
+                AccessTools.Field(typeof(ShopItem), "itemSpriteScale").SetValue(item, CharmShopIconScale);
+
+                AccessTools.Field(typeof(ShopItem), "currencyType").SetValue(item, CurrencyType.Money);
+                AccessTools.Field(typeof(ShopItem), "cost").SetValue(item, Math.Max(0, shopData.GeoCost ?? 0));
+                AccessTools.Field(typeof(ShopItem), "savedItem").SetValue(item, savedItem);
+
+                var text = new ShopOwnerText(displayName, description);
+                return new ShopOwnerItemEntry(this, item, savedItem, text);
+            }
+            catch (Exception ex)
+            {
+                ShadeCharmPlacementService.LogWarning($"Failed to create shop item for charm {definition.CharmId}: {ex}");
+                return null;
+            }
+        }
+
         [HarmonyPatch(typeof(SimpleShopMenu), nameof(SimpleShopMenu.SetStock))]
         private static class SimpleShopMenu_SetStock_Patch
         {
@@ -299,6 +939,86 @@ namespace LegacyoftheAbyss.Shade
                 }
 
                 handler.AugmentStock(newOwner, newShopItems);
+            }
+        }
+
+        [HarmonyPatch(typeof(ShopOwner), nameof(ShopOwner.Stock), MethodType.Getter)]
+        private static class ShopOwner_get_Stock_Patch
+        {
+            private static void Postfix(ShopOwner __instance, ref ShopItem[] __result)
+            {
+                var handler = Instance;
+                if (handler == null || __instance == null)
+                {
+                    return;
+                }
+
+                var stock = __result;
+                handler.AugmentStock(__instance, ref stock);
+                __result = stock;
+            }
+        }
+
+        [HarmonyPatch(typeof(ShopItem), nameof(ShopItem.DisplayName), MethodType.Getter)]
+        private static class ShopItem_get_DisplayName_Patch
+        {
+            private static void Postfix(ShopItem __instance, ref string __result)
+            {
+                var handler = Instance;
+                if (handler == null)
+                {
+                    return;
+                }
+
+                if (handler.TryGetOwnerItemText(__instance, out var text))
+                {
+                    __result = text.Name;
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(ShopItem), nameof(ShopItem.Description), MethodType.Getter)]
+        private static class ShopItem_get_Description_Patch
+        {
+            private static void Postfix(ShopItem __instance, ref string __result)
+            {
+                var handler = Instance;
+                if (handler == null)
+                {
+                    return;
+                }
+
+                if (handler.TryGetOwnerItemText(__instance, out var text))
+                {
+                    __result = text.Description;
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(SimpleShopItemDisplay), nameof(SimpleShopItemDisplay.SetItem))]
+        private static class SimpleShopItemDisplay_SetItem_Postfix
+        {
+            private static void Postfix(SimpleShopItemDisplay __instance, ISimpleShopItem item)
+            {
+                if (__instance == null)
+                {
+                    return;
+                }
+
+                if (SimpleShopItemDisplayIconField?.GetValue(__instance) is not SpriteRenderer iconRenderer || iconRenderer == null)
+                {
+                    return;
+                }
+
+                var state = SimpleShopIconStates.GetValue(__instance, display => new SimpleShopItemDisplayIconState(iconRenderer.transform.localScale));
+                Vector3 targetScale = state.BaseScale;
+
+                if (item is ShadeCharmShopItem)
+                {
+                    targetScale = state.BaseScale * CharmShopIconScale;
+                }
+
+                iconRenderer.transform.localScale = targetScale;
             }
         }
 

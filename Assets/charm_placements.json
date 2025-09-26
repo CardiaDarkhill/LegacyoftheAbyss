@@ -203,6 +203,79 @@
       "placementKind": "GroundAnchor",
       "charmId": "VoidHeart",
       "anchorOffset": { "x": 0.2, "y": 2.7, "z": 0.0 }
+    },
+    {
+      "placementKind": "ShopListing",
+      "charmId": "SoulCatcher",
+      "shop": {
+        "ownerNameContainsAll": ["bone", "shop"],
+        "stockContainsAnyPlayerDataBools": [
+          "PurchasedBonebottomFaithToken",
+          "PurchasedBonebottomHeartPiece",
+          "PurchasedBonebottomToolMetal"
+        ],
+        "geoCost": 150,
+        "requireNotCollected": ["VoidHeart"]
+      },
+      "notes": "Soul Catcher sold by the Bonebottom shopkeeper"
+    },
+    {
+      "placementKind": "ShopListing",
+      "charmId": "SoulCatcher",
+      "shop": {
+        "ownerNameContainsAll": ["grindle"],
+        "stockContainsAnyPlayerDataBools": [
+          "purchasedGrindleSimpleKey",
+          "purchasedGrindleMemoryLocket",
+          "purchasedGrindleSpoolPiece",
+          "purchasedGrindleToolKit"
+        ],
+        "geoCost": 250,
+        "requireCollected": ["VoidHeart"]
+      },
+      "notes": "Soul Catcher fallback listing for Grindle after Act 3"
+    },
+    {
+      "placementKind": "ShopListing",
+      "charmId": "FragileGreed",
+      "shop": {
+        "ownerNameContainsAll": ["grindle"],
+        "stockContainsAnyPlayerDataBools": [
+          "purchasedGrindleSimpleKey",
+          "purchasedGrindleMemoryLocket",
+          "purchasedGrindleSpoolPiece",
+          "purchasedGrindleToolKit"
+        ],
+        "geoCost": 300
+      },
+      "notes": "Fragile Greed available from Grindle"
+    },
+    {
+      "placementKind": "ShopListing",
+      "charmId": "FragileHeart",
+      "shop": {
+        "ownerNameContainsAll": ["bell", "shop"],
+        "stockContainsAnyPlayerDataBools": [
+          "PurchasedBelltownShellFragment",
+          "PurchasedBelltownToolPouch",
+          "PurchasedBelltownSpoolSegment",
+          "PurchasedBelltownMemoryLocket"
+        ],
+        "geoCost": 250
+      },
+      "notes": "Fragile Heart sold by the Belltown shopkeeper"
+    },
+    {
+      "placementKind": "ShopListing",
+      "charmId": "StalwartShell",
+      "shop": {
+        "ownerNameContainsAll": ["forge", "daughter"],
+        "stockContainsAnyPlayerDataBools": [
+          "PurchasedForgeToolKit"
+        ],
+        "geoCost": 200
+      },
+      "notes": "Stalwart Shell sold by the Forge Daughter"
     }
   ]
 }

@@ -15,12 +15,23 @@ namespace LegacyoftheAbyss.Tests
             var placements = Shade.ShadeCharmPlacementDatabase.GetPlacementsForScene("BoneBottom");
 
             Assert.NotNull(placements);
-            Assert.Equal(10, placements.Count);
+            Assert.True(placements.Count >= 10);
 
-            var grubsong = placements.First(p => p.CharmId == Shade.ShadeCharmId.Grubsong);
+            var anchors = placements.Where(p => p.PlacementKind == Shade.ShadeCharmPlacementKind.GroundAnchor).ToList();
+            Assert.Equal(10, anchors.Count);
+
+            var grubsong = anchors.First(p => p.CharmId == Shade.ShadeCharmId.Grubsong);
             Assert.NotNull(grubsong.AnchorOffset);
             Assert.Equal(-1.6f, grubsong.AnchorOffset!.X, 3);
             Assert.Equal(0.8f, grubsong.AnchorOffset.Y, 3);
+
+            var soulCatcherListing = placements.First(p => p.PlacementKind == Shade.ShadeCharmPlacementKind.ShopListing && p.CharmId == Shade.ShadeCharmId.SoulCatcher);
+            Assert.NotNull(soulCatcherListing.Shop);
+            Assert.Equal(150, soulCatcherListing.Shop!.GeoCost);
+            Assert.NotNull(soulCatcherListing.Shop.StockContainsAnyPlayerDataBools);
+            Assert.Contains("PurchasedBonebottomFaithToken", soulCatcherListing.Shop.StockContainsAnyPlayerDataBools!);
+            Assert.NotNull(soulCatcherListing.Shop.RequireNotCollected);
+            Assert.Contains(Shade.ShadeCharmId.VoidHeart, soulCatcherListing.Shop.RequireNotCollected!);
         }
 
         [Fact]
