@@ -142,12 +142,12 @@
       "anchorOffset": { "x": 0.2, "y": 2.7, "z": 0.0 }
     },
     {
-      "sceneContainsAll": ["bone", "bottom"],
       "placementKind": "ShopListing",
       "charmId": "SoulCatcher",
       "shop": {
         "ownerNameContainsAll": ["bone", "shop"],
-        "geoCost": 150
+        "geoCost": 150,
+        "requireNotCollected": ["VoidHeart"]
       },
       "notes": "Soul Catcher sold by the Bonebottom shopkeeper"
     },
@@ -171,7 +171,6 @@
       "notes": "Fragile Greed available from Grindle"
     },
     {
-      "sceneContainsAll": ["bell", "town"],
       "placementKind": "ShopListing",
       "charmId": "FragileHeart",
       "shop": {
@@ -181,7 +180,6 @@
       "notes": "Fragile Heart sold by the Belltown shopkeeper"
     },
     {
-      "sceneContainsAll": ["forge"],
       "placementKind": "ShopListing",
       "charmId": "StalwartShell",
       "shop": {
