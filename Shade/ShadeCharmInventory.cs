@@ -885,6 +885,7 @@ namespace LegacyoftheAbyss.Shade
                 message += " Kingsoul withdrew to make room.";
             }
 
+            EnsureVoidHeartEquipped();
             RaiseStateChanged();
             return true;
         }
@@ -894,6 +895,12 @@ namespace LegacyoftheAbyss.Shade
             if (!ShadeRuntime.IsHornetRestingAtBench())
             {
                 message = ShadeRuntime.BenchLockedMessage;
+                return false;
+            }
+
+            if (id == ShadeCharmId.VoidHeart && ShouldForceVoidHeartEquipped())
+            {
+                message = "Void Heart refuses to be unequipped.";
                 return false;
             }
 
@@ -915,6 +922,7 @@ namespace LegacyoftheAbyss.Shade
 
             _overcharmAttemptCounter = 0;
             RecalculateOvercharmed();
+            EnsureVoidHeartEquipped();
             RaiseStateChanged();
             return true;
         }
@@ -934,21 +942,31 @@ namespace LegacyoftheAbyss.Shade
             _hivebloodTimer = 0f;
             _hivebloodPendingMaskRestore = false;
 
+            bool changed = false;
+
             if (_equipped.Count == 0 && _equippedOrder.Count == 0)
             {
                 _overcharmAttemptCounter = 0;
-                if (RecalculateOvercharmed())
-                {
-                    RaiseStateChanged();
-                }
-                return;
+                changed = RecalculateOvercharmed();
+            }
+            else
+            {
+                _equipped.Clear();
+                _equippedOrder.Clear();
+                _isOvercharmed = false;
+                _overcharmAttemptCounter = 0;
+                changed = true;
             }
 
-            _equipped.Clear();
-            _equippedOrder.Clear();
-            _isOvercharmed = false;
-            _overcharmAttemptCounter = 0;
-            RaiseStateChanged();
+            if (EnsureVoidHeartEquipped())
+            {
+                changed = true;
+            }
+
+            if (changed)
+            {
+                RaiseStateChanged();
+            }
         }
 
         public void GrantCharm(ShadeCharmId id)
@@ -959,9 +977,21 @@ namespace LegacyoftheAbyss.Shade
             }
 
             bool added = _owned.Add(id);
+            bool changed = false;
+
             if (added)
             {
                 _newlyDiscovered.Add(id);
+                changed = true;
+            }
+
+            if (EnsureVoidHeartEquipped())
+            {
+                changed = true;
+            }
+
+            if (changed)
+            {
                 RaiseStateChanged();
             }
         }
@@ -976,6 +1006,11 @@ namespace LegacyoftheAbyss.Shade
                     _newlyDiscovered.Add(id);
                     changed = true;
                 }
+            }
+
+            if (EnsureVoidHeartEquipped())
+            {
+                changed = true;
             }
 
             if (changed)
@@ -1136,6 +1171,8 @@ namespace LegacyoftheAbyss.Shade
             RecalculateOvercharmed();
             _overcharmAttemptCounter = 0;
 
+            EnsureVoidHeartEquipped();
+
             _suppressStateChanged = false;
             RaiseStateChanged();
         }
@@ -1151,6 +1188,64 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
+        private bool ShouldForceVoidHeartEquipped()
+        {
+            if (!_definitionMap.ContainsKey(ShadeCharmId.VoidHeart))
+            {
+                return false;
+            }
+
+            if (!_owned.Contains(ShadeCharmId.VoidHeart))
+            {
+                return false;
+            }
+
+            if (_broken.Contains(ShadeCharmId.VoidHeart))
+            {
+                return false;
+            }
+
+            return !ShadeRuntime.IsDebugCharmModeActive();
+        }
+
+        private bool EnsureVoidHeartEquipped()
+        {
+            if (!ShouldForceVoidHeartEquipped())
+            {
+                return false;
+            }
+
+            bool changed = false;
+
+            if (_equipped.Contains(ShadeCharmId.Kingsoul))
+            {
+                if (RemoveEquippedInternal(ShadeCharmId.Kingsoul))
+                {
+                    changed = true;
+                }
+            }
+
+            if (!_equipped.Contains(ShadeCharmId.VoidHeart))
+            {
+                AddEquippedInternal(ShadeCharmId.VoidHeart);
+                changed = true;
+            }
+            else if (_equippedOrder.Count == 0 || _equippedOrder[0] != ShadeCharmId.VoidHeart)
+            {
+                _equippedOrder.Remove(ShadeCharmId.VoidHeart);
+                _equippedOrder.Insert(0, ShadeCharmId.VoidHeart);
+                changed = true;
+            }
+
+            if (changed)
+            {
+                _overcharmAttemptCounter = 0;
+                RecalculateOvercharmed();
+            }
+
+            return changed;
+        }
+
         private bool AddEquippedInternal(ShadeCharmId id)
         {
             if (!_equipped.Add(id))
@@ -1158,7 +1253,14 @@ namespace LegacyoftheAbyss.Shade
                 return false;
             }
 
-            _equippedOrder.Add(id);
+            if (id == ShadeCharmId.VoidHeart)
+            {
+                _equippedOrder.Insert(0, id);
+            }
+            else
+            {
+                _equippedOrder.Add(id);
+            }
             return true;
         }
 

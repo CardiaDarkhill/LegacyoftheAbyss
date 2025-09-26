@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Linq;
 using LegacyoftheAbyss.Shade;
 using Xunit;
 
@@ -65,5 +66,53 @@ public class ShadeCharmInventoryTests
         Assert.Contains("notch", message, StringComparison.OrdinalIgnoreCase);
         Assert.False(inventory.IsEquipped(ShadeCharmId.WaywardCompass));
         Assert.Equal(0, inventory.UsedNotches);
+    }
+
+    [Fact]
+    public void VoidHeartAutomaticallyEquippedOutsideDebug()
+    {
+        var inventory = new ShadeCharmInventory();
+        inventory.GrantCharm(ShadeCharmId.VoidHeart);
+
+        var equipped = inventory.GetEquipped().ToArray();
+        Assert.Single(equipped);
+        Assert.Equal(ShadeCharmId.VoidHeart, equipped[0]);
+    }
+
+    [Fact]
+    public void VoidHeartCannotBeUnequippedOutsideDebug()
+    {
+        var inventory = new ShadeCharmInventory();
+        inventory.GrantCharm(ShadeCharmId.VoidHeart);
+
+        Assert.False(inventory.TryUnequip(ShadeCharmId.VoidHeart, out var message));
+        Assert.Contains("Void Heart", message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(ShadeCharmId.VoidHeart, inventory.GetEquipped());
+    }
+
+    [Fact]
+    public void VoidHeartCanBeUnequippedDuringDebugMode()
+    {
+        ShadeRuntime.Clear();
+        var inventory = ShadeRuntime.Charms;
+        inventory.ResetLoadout();
+        inventory.GrantCharm(ShadeCharmId.VoidHeart);
+
+        bool debugEnabled = ShadeRuntime.ToggleDebugUnlockAllCharms();
+
+        try
+        {
+            Assert.True(debugEnabled);
+            Assert.True(inventory.TryUnequip(ShadeCharmId.VoidHeart, out _));
+        }
+        finally
+        {
+            if (ShadeRuntime.IsDebugCharmModeActive())
+            {
+                ShadeRuntime.ToggleDebugUnlockAllCharms();
+            }
+
+            ShadeRuntime.Clear();
+        }
     }
 }

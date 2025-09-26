@@ -404,6 +404,18 @@ namespace LegacyoftheAbyss.Shade
             return true;
         }
 
+        internal static bool IsDebugCharmModeActive()
+        {
+            EnsureActiveSlot();
+
+            if (s_debugUnlockAllCharmsActive)
+            {
+                return true;
+            }
+
+            return s_saveSlots.IsDebugUnlockActive(s_activeSlot);
+        }
+
         internal static IReadOnlyCollection<ShadeCharmId> GetCollectedCharms()
         {
             EnsureActiveSlot();
