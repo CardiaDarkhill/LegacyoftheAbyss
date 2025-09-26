@@ -72,18 +72,21 @@ namespace LegacyoftheAbyss.Shade
             var matches = new List<ShadeCharmPlacementDefinition>();
             foreach (var placement in _activePlacements)
             {
-                if (!MatchesOwner(placement, owner))
+                if (!MatchesOwner(placement, owner, out var failureReason))
                 {
+                    LogPlacementSkip(owner, placement, failureReason);
                     continue;
                 }
 
-                if (!MeetsShopConditions(placement))
+                if (!MeetsShopConditions(placement, out var conditionFailure))
                 {
+                    LogPlacementSkip(owner, placement, conditionFailure);
                     continue;
                 }
 
                 if (ShadeCharmPlacementService.IsCharmAlreadyCollected(placement.CharmId))
                 {
+                    LogPlacementSkip(owner, placement, "charm already collected");
                     continue;
                 }
 
@@ -169,6 +172,62 @@ namespace LegacyoftheAbyss.Shade
             return true;
         }
 
+        private void LogPlacementSkip(Component owner, ShadeCharmPlacementDefinition placement, string? reason)
+        {
+            if (string.IsNullOrWhiteSpace(reason))
+            {
+                return;
+            }
+
+            try
+            {
+                string ownerName = owner?.name ?? "<null>";
+                string hierarchyPath = owner != null ? ShadeCharmPlacementHelpers.GetHierarchyPath(owner.transform) : string.Empty;
+                if (!string.IsNullOrWhiteSpace(hierarchyPath))
+                {
+                    ownerName = $"{ownerName} ({hierarchyPath})";
+                }
+
+                ShadeCharmPlacementService.LogInfo($"Skipped injecting charm {placement.CharmId} for '{ownerName}' in scene '{_sceneName}': {reason}.");
+            }
+            catch
+            {
+            }
+        }
+
+        private static string DescribeStockPlayerDataBools(ShopItem[]? stock)
+        {
+            if (stock == null)
+            {
+                return string.Empty;
+            }
+
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in stock)
+            {
+                if (item == null)
+                {
+                    continue;
+                }
+
+                string primary = GetPlayerDataBoolName(item);
+                if (!string.IsNullOrWhiteSpace(primary))
+                {
+                    names.Add(primary);
+                }
+
+                foreach (string extra in GetExtraPlayerDataBools(item))
+                {
+                    if (!string.IsNullOrWhiteSpace(extra))
+                    {
+                        names.Add(extra);
+                    }
+                }
+            }
+
+            return names.Count == 0 ? string.Empty : string.Join(", ", names.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+        }
+
         internal void AugmentStock(ShopOwnerBase owner, ref ShopItem[] stock)
         {
             if (owner == null)
@@ -189,13 +248,21 @@ namespace LegacyoftheAbyss.Shade
             var matches = new List<ShadeCharmPlacementDefinition>();
             foreach (var placement in _activePlacements)
             {
-                if (!MatchesOwner(placement, owner, stock))
+                if (!MatchesOwner(placement, owner, stock, out var failureReason))
                 {
+                    LogPlacementSkip(owner, placement, failureReason);
                     continue;
                 }
 
-                if (!MeetsShopConditions(placement))
+                if (!MeetsShopConditions(placement, out var conditionFailure))
                 {
+                    LogPlacementSkip(owner, placement, conditionFailure);
+                    continue;
+                }
+
+                if (ShadeCharmPlacementService.IsCharmAlreadyCollected(placement.CharmId))
+                {
+                    LogPlacementSkip(owner, placement, "charm already collected");
                     continue;
                 }
 
@@ -250,11 +317,17 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
-        private static bool MatchesOwner(ShadeCharmPlacementDefinition placement, Component owner, ShopItem[]? existingStock = null)
+        private static bool MatchesOwner(ShadeCharmPlacementDefinition placement, Component owner, out string? failureReason)
+            => MatchesOwner(placement, owner, null, out failureReason);
+
+        private static bool MatchesOwner(ShadeCharmPlacementDefinition placement, Component owner, ShopItem[]? existingStock, out string? failureReason)
         {
+            failureReason = null;
+
             var shop = placement.Shop;
             if (shop == null)
             {
+                failureReason = "no shop metadata";
                 return false;
             }
 
@@ -269,6 +342,7 @@ namespace LegacyoftheAbyss.Shade
                 string currentPath = ShadeCharmPlacementHelpers.GetHierarchyPath(owner.transform);
                 if (!string.Equals(currentPath, shop.OwnerPath, StringComparison.OrdinalIgnoreCase))
                 {
+                    failureReason = $"owner path '{currentPath}' did not match required '{shop.OwnerPath}'";
                     return false;
                 }
             }
@@ -277,6 +351,7 @@ namespace LegacyoftheAbyss.Shade
             {
                 if (!string.Equals(owner.name, shop.OwnerName, StringComparison.OrdinalIgnoreCase))
                 {
+                    failureReason = $"owner name '{owner.name}' did not match required '{shop.OwnerName}'";
                     return false;
                 }
             }
@@ -293,6 +368,7 @@ namespace LegacyoftheAbyss.Shade
 
                     if (ownerTokens.IndexOf(token, StringComparison.OrdinalIgnoreCase) < 0)
                     {
+                        failureReason = $"owner tokens '{ownerTokens}' missing required token '{token}'";
                         return false;
                     }
                 }
@@ -300,8 +376,16 @@ namespace LegacyoftheAbyss.Shade
 
             if (shop.StockContainsAnyPlayerDataBools is { Length: > 0 })
             {
-                if (existingStock == null || !StockContainsAnyPlayerDataBool(existingStock, shop.StockContainsAnyPlayerDataBools))
+                if (existingStock == null)
                 {
+                    failureReason = "existing stock unavailable while purchase flag hints provided";
+                    return false;
+                }
+
+                if (!StockContainsAnyPlayerDataBool(existingStock, shop.StockContainsAnyPlayerDataBools))
+                {
+                    failureReason =
+                        $"existing stock did not expose required purchase flags ({string.Join(", ", shop.StockContainsAnyPlayerDataBools ?? Array.Empty<string>())}); found [{DescribeStockPlayerDataBools(existingStock)}]";
                     return false;
                 }
             }
@@ -309,6 +393,7 @@ namespace LegacyoftheAbyss.Shade
             if (!hasOwnerIdentifier)
             {
                 ShadeCharmPlacementService.LogWarning($"Shop placement for charm {placement.CharmId} in scene '{Instance?._sceneName}' does not specify any owner matching data; skipping.");
+                failureReason = "no owner identifiers configured";
                 return false;
             }
 
@@ -471,8 +556,10 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
-        private static bool MeetsShopConditions(ShadeCharmPlacementDefinition placement)
+        private static bool MeetsShopConditions(ShadeCharmPlacementDefinition placement, out string? failureReason)
         {
+            failureReason = null;
+
             var shop = placement.Shop;
             if (shop == null)
             {
@@ -485,6 +572,7 @@ namespace LegacyoftheAbyss.Shade
                 {
                     if (!ShadeCharmPlacementService.IsCharmAlreadyCollected(required))
                     {
+                        failureReason = $"required charm {required} has not been collected";
                         return false;
                     }
                 }
@@ -496,6 +584,7 @@ namespace LegacyoftheAbyss.Shade
                 {
                     if (ShadeCharmPlacementService.IsCharmAlreadyCollected(forbidden))
                     {
+                        failureReason = $"forbidden charm {forbidden} was already collected";
                         return false;
                     }
                 }
