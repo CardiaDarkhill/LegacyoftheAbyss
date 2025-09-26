@@ -130,4 +130,29 @@ public class ShadeCharmInventoryTests
             ShadeRuntime.Clear();
         }
     }
+
+    [Fact]
+    public void VoidHeartGrantedWhenEnteringSongTowerDestroyedScene()
+    {
+        ShadeRuntime.Clear();
+
+        try
+        {
+            var inventory = ShadeRuntime.Charms;
+            inventory.ResetLoadout();
+
+            Assert.False(inventory.IsOwned(ShadeCharmId.VoidHeart));
+            Assert.False(ShadeRuntime.IsCharmCollected(ShadeCharmId.VoidHeart));
+
+            ShadeRuntime.HandleSceneEntered("Song_Tower_Destroyed");
+
+            Assert.True(inventory.IsOwned(ShadeCharmId.VoidHeart));
+            Assert.True(ShadeRuntime.IsCharmCollected(ShadeCharmId.VoidHeart));
+            Assert.Contains(ShadeCharmId.VoidHeart, inventory.GetEquipped());
+        }
+        finally
+        {
+            ShadeRuntime.Clear();
+        }
+    }
 }

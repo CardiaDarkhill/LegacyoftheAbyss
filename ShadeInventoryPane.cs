@@ -225,6 +225,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
     private TMP_Text? detailTitleTextTMP;
     private TMP_Text? descriptionTextTMP;
     private TMP_Text? statusTextTMP;
+    private bool statusTextAlignmentCaptured;
+    private TextAnchor statusTextDefaultAlignment = TextAnchor.UpperLeft;
+    private TextAlignmentOptions statusTextDefaultTmpAlignment = TextAlignmentOptions.TopLeft;
     private TMP_Text? hintTextTMP;
     private TMP_Text? detailCostLabelTMP;
     private Image? detailPreviewImage;
@@ -563,6 +566,41 @@ internal sealed class ShadeInventoryPane : InventoryPane
         if (hintTextTMP != null)
         {
             hintTextTMP.gameObject.SetActive(active);
+        }
+    }
+
+    private void EnsureStatusTextAlignmentCaptured()
+    {
+        if (statusTextAlignmentCaptured)
+        {
+            return;
+        }
+
+        if (statusText != null)
+        {
+            statusTextDefaultAlignment = statusText.alignment;
+        }
+
+        if (statusTextTMP != null)
+        {
+            statusTextDefaultTmpAlignment = statusTextTMP.alignment;
+        }
+
+        statusTextAlignmentCaptured = true;
+    }
+
+    private void ApplyStatusTextAlignment(TextAnchor? textAlignment, TextAlignmentOptions? tmpAlignment)
+    {
+        EnsureStatusTextAlignmentCaptured();
+
+        if (statusText != null)
+        {
+            statusText.alignment = textAlignment ?? statusTextDefaultAlignment;
+        }
+
+        if (statusTextTMP != null)
+        {
+            statusTextTMP.alignment = tmpAlignment ?? statusTextDefaultTmpAlignment;
         }
     }
 
@@ -2255,6 +2293,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
         detailTitleTextTMP = null;
         descriptionTextTMP = null;
         statusTextTMP = null;
+        statusTextAlignmentCaptured = false;
+        statusTextDefaultAlignment = TextAnchor.UpperLeft;
+        statusTextDefaultTmpAlignment = TextAlignmentOptions.TopLeft;
         hintTextTMP = null;
         leftContentRoot = null;
         notchIconContainer = null;
@@ -6898,6 +6939,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
             SetTextValue(detailTitleText, detailTitleTextTMP, displayLabel);
             SetTextValue(descriptionText, descriptionTextTMP, "Collect shade charms to unlock new abilities for your companion.");
             SetTextValue(statusText, statusTextTMP, string.Empty);
+            ApplyStatusTextAlignment(null, null);
             SetHintMessage(string.Empty);
             if (detailCostRow != null)
             {
@@ -6910,13 +6952,34 @@ internal sealed class ShadeInventoryPane : InventoryPane
 
         var entry = entries[Mathf.Clamp(selectedIndex, 0, entries.Count - 1)];
         var definition = entry.Definition;
-        SetTextValue(detailTitleText, detailTitleTextTMP, definition?.DisplayName ?? displayLabel);
-        SetTextValue(descriptionText, descriptionTextTMP, definition?.Description ?? string.Empty);
+
+        EnsureStatusTextAlignmentCaptured();
 
         bool owned = inventory.IsOwned(entry.Id);
-        bool equipped = inventory.IsEquipped(entry.Id);
-        bool broken = inventory.IsBroken(entry.Id);
+        bool equipped = owned && inventory.IsEquipped(entry.Id);
+        bool broken = owned && inventory.IsBroken(entry.Id);
+
+        if (!owned)
+        {
+            SetTextValue(detailTitleText, detailTitleTextTMP, string.Empty);
+            SetTextValue(descriptionText, descriptionTextTMP, string.Empty);
+            UpdateDetailPreview(null, false, false, false);
+            if (detailCostRow != null)
+            {
+                detailCostRow.gameObject.SetActive(false);
+            }
+            RenderNotchStrip(detailCostIcons, 0, 0, false);
+            ApplyStatusTextAlignment(TextAnchor.MiddleCenter, TextAlignmentOptions.Midline);
+            SetTextValue(statusText, statusTextTMP, "This charm has not been discovered.");
+            SetHintMessage(string.Empty);
+            return;
+        }
+
+        ApplyStatusTextAlignment(null, null);
+        SetTextValue(detailTitleText, detailTitleTextTMP, definition?.DisplayName ?? displayLabel);
+        SetTextValue(descriptionText, descriptionTextTMP, definition?.Description ?? string.Empty);
         UpdateDetailPreview(definition, owned, equipped, broken);
+
         int notchCost = definition?.NotchCost ?? 0;
         string bindingLabel = DescribeShadeSlashBinding();
         string equipPrompt = BuildEquipPrompt(bindingLabel);
@@ -6924,11 +6987,9 @@ internal sealed class ShadeInventoryPane : InventoryPane
         string status;
         bool overcharmed = inventory.IsOvercharmed;
         bool wouldOvercharm = inventory.UsedNotches + notchCost > inventory.NotchCapacity;
-        if (!owned)
-        {
-            status = "This charm has not been discovered.";
-        }
-        else if (broken)
+        bool debugCharmMode = ShadeRuntime.IsDebugCharmModeActive();
+        bool isVoidHeart = entry.Id == ShadeCharmId.VoidHeart;
+        if (broken)
         {
             status = "Charm is broken. Rest at a bench to repair it.";
         }
@@ -6944,10 +7005,15 @@ internal sealed class ShadeInventoryPane : InventoryPane
         {
             status = "Shade is overcharmed. Unequip a charm first.";
         }
+        else if (isVoidHeart && !debugCharmMode)
+        {
+            status = "Void Heart is bound to the Shade.";
+        }
         else
         {
             status = equipPrompt;
         }
+
         int displayCost = Mathf.Clamp(notchCost, 0, MaxNotchIcons);
         if (detailCostRow != null)
         {
@@ -6961,7 +7027,10 @@ internal sealed class ShadeInventoryPane : InventoryPane
         else
         {
             RenderNotchStrip(detailCostIcons, 0, 0, false);
-            status = $"No notch cost.\\n{status}";
+            if (!isVoidHeart)
+            {
+                status = $"No notch cost.\n{status}";
+            }
         }
 
         if (!ShadeRuntime.IsHornetRestingAtBench())
@@ -6972,7 +7041,6 @@ internal sealed class ShadeInventoryPane : InventoryPane
         SetTextValue(statusText, statusTextTMP, status);
         SetHintMessage(string.Empty);
     }
-
     private static Sprite? ResolveLockedCharmSprite()
     {
         if (lockedCharmSpriteSearched)

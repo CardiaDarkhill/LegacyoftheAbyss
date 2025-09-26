@@ -24,6 +24,7 @@ namespace LegacyoftheAbyss.Shade
     internal static class ShadeRuntime
     {
         internal const string BenchLockedMessage = "Rest at a bench to change the shade's charms.";
+        private const string VoidHeartUnlockSceneName = "Song_Tower_Destroyed";
 
         private static readonly ShadePersistentState s_persistentState = new ShadePersistentState();
         private static readonly ShadeSaveSlotRepository s_saveSlots = new ShadeSaveSlotRepository();
@@ -103,6 +104,12 @@ namespace LegacyoftheAbyss.Shade
         public static void EnsureMinimumHealth(int minimum)
         {
             s_persistentState.ForceMinimumHealth(minimum);
+        }
+
+        internal static void HandleSceneEntered(string? sceneName)
+        {
+            EnsureActiveSlot();
+            TryGrantVoidHeartForScene(sceneName);
         }
 
         public static void Clear()
@@ -554,6 +561,42 @@ namespace LegacyoftheAbyss.Shade
             if (!s_hasActiveSlot)
             {
                 SetActiveSlot(0);
+            }
+        }
+
+        private static void TryGrantVoidHeartForScene(string? sceneName)
+        {
+            if (!string.Equals(sceneName, VoidHeartUnlockSceneName, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (IsCharmCollected(ShadeCharmId.VoidHeart))
+            {
+                return;
+            }
+
+            bool granted = TryCollectCharm(ShadeCharmId.VoidHeart);
+            if (!granted)
+            {
+                return;
+            }
+
+            QueueVoidHeartUnlockNotification();
+        }
+
+        private static void QueueVoidHeartUnlockNotification()
+        {
+            try
+            {
+                var definition = s_charmInventory?.GetDefinition(ShadeCharmId.VoidHeart);
+                string displayName = definition?.DisplayName ?? "Void Heart";
+                string message = FormattableString.Invariant($"{displayName} awakened.");
+                string key = $"shade::void_heart_scene_unlock::{Guid.NewGuid():N}";
+                EnqueueNotification(key, message, ShadeUnlockNotificationType.Charm);
+            }
+            catch
+            {
             }
         }
 
