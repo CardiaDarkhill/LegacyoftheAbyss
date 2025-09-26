@@ -22,22 +22,81 @@
       "notes": "Requested Wayward Compass placement"
     },
     {
-      "sceneContainsAll": ["bone", "bottom"],
-      "placementKind": "GroundAnchor",
+      "sceneName": "Sprintmaster_Cave",
+      "placementKind": "Ground",
+      "charmId": "Dashmaster",
+      "worldPosition": { "x": 88.711, "y": 8.568, "z": 0.004 },
+      "notes": "Requested Dashmaster placement"
+    },
+    {
+      "sceneName": "Bone_East_Weavehome",
+      "placementKind": "Ground",
+      "charmId": "Sprintmaster",
+      "worldPosition": { "x": 155.320, "y": 61.568, "z": 0.004 },
+      "notes": "Requested Sprintmaster placement"
+    },
+    {
+      "sceneName": "Shadow_Bilehaven_Room",
+      "placementKind": "Ground",
+      "charmId": "ShamanStone",
+      "worldPosition": { "x": 29.605, "y": 7.568, "z": 0.004 },
+      "notes": "Requested Shaman Stone placement"
+    },
+    {
+      "sceneName": "Belltown_basement_03",
+      "placementKind": "Ground",
+      "charmId": "SpellTwister",
+      "worldPosition": { "x": 101.445, "y": 102.568, "z": 0.004 },
+      "notes": "Requested Spell Twister placement"
+    },
+    {
+      "sceneName": "Coral_39",
+      "placementKind": "Ground",
+      "charmId": "QuickSlash",
+      "worldPosition": { "x": 126.181, "y": 7.568, "z": 0.004 },
+      "notes": "Requested Quick Slash placement"
+    },
+    {
+      "sceneName": "Clover_01",
+      "placementKind": "Ground",
+      "charmId": "MarkOfPride",
+      "worldPosition": { "x": 118.603, "y": 8.568, "z": 0.004 },
+      "notes": "Requested Mark of Pride placement"
+    },
+    {
+      "sceneName": "Under_03",
+      "placementKind": "Ground",
+      "charmId": "Longnail",
+      "worldPosition": { "x": 5.910, "y": 7.568, "z": 0.004 },
+      "notes": "Requested Longnail placement"
+    },
+    {
+      "sceneName": "Bone_10",
+      "placementKind": "Ground",
       "charmId": "Grubsong",
-      "anchorOffset": { "x": -1.6, "y": 0.8, "z": 0.0 }
+      "worldPosition": { "x": 22.882, "y": 16.568, "z": 0.004 },
+      "notes": "Requested Grubsong placement"
     },
     {
-      "sceneContainsAll": ["bone", "bottom"],
-      "placementKind": "GroundAnchor",
+      "sceneName": "Shadow_Weavehome",
+      "placementKind": "Ground",
       "charmId": "QuickFocus",
-      "anchorOffset": { "x": 3.0, "y": -0.4, "z": 0.0 }
+      "worldPosition": { "x": 127.268, "y": 54.568, "z": 0.004 },
+      "notes": "Requested Quick Focus placement"
     },
     {
-      "sceneContainsAll": ["bone", "bottom"],
-      "placementKind": "GroundAnchor",
+      "sceneName": "Dock_11",
+      "placementKind": "Ground",
       "charmId": "DeepFocus",
-      "anchorOffset": { "x": 0.3, "y": 2.2, "z": 0.0 }
+      "worldPosition": { "x": 99.405, "y": 7.568, "z": 0.004 },
+      "notes": "Requested Deep Focus placement"
+    },
+    {
+      "sceneName": "Halfway_01",
+      "placementKind": "Ground",
+      "charmId": "ShapeOfUnn",
+      "worldPosition": { "x": 33.831, "y": 20.568, "z": 0.004 },
+      "notes": "Requested Shape of Unn placement"
     },
     {
       "sceneContainsAll": ["bone", "bottom"],
@@ -80,12 +139,6 @@
       "placementKind": "GroundAnchor",
       "charmId": "LifebloodHeart",
       "anchorOffset": { "x": -2.8, "y": 0.1, "z": 0.0 }
-    },
-    {
-      "sceneContainsAll": ["moss", "grotto"],
-      "placementKind": "GroundAnchor",
-      "charmId": "ShapeOfUnn",
-      "anchorOffset": { "x": 1.5, "y": 0.9, "z": 0.0 }
     },
     {
       "sceneContainsAll": ["moss", "grotto"],
