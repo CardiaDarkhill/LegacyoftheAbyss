@@ -2971,7 +2971,7 @@ internal sealed class ShadeInventoryPane : InventoryPane
         return cachedTrajanFont;
     }
 
-    private static Font? ResolveTrajanSourceFont()
+    internal static Font? ResolveTrajanSourceFont()
     {
         if (cachedTrajanSourceFont != null)
         {

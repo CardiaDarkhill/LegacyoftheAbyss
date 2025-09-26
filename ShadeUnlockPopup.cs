@@ -147,13 +147,20 @@ public sealed class ShadeUnlockPopup : MonoBehaviour
         messageGO.transform.SetParent(container, false);
         messageLabel = messageGO.AddComponent<Text>();
         messageLabel.alignment = TextAnchor.MiddleLeft;
-        messageLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        var defaultFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        messageLabel.font = defaultFont;
         messageLabel.fontSize = Mathf.RoundToInt(BaseFontSize);
         messageLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
         messageLabel.verticalOverflow = VerticalWrapMode.Overflow;
         messageLabel.raycastTarget = false;
         messageLabel.text = string.Empty;
         messageLabel.color = AbilityColor;
+
+        var trajanFont = ShadeInventoryPane.ResolveTrajanSourceFont();
+        if (trajanFont != null)
+        {
+            messageLabel.font = trajanFont;
+        }
         messageLayout = messageGO.AddComponent<LayoutElement>();
         messageLayout.flexibleWidth = 1f;
         messageLayout.minHeight = BaseIconSize * 0.5f;

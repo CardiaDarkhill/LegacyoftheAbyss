@@ -2000,6 +2000,8 @@ public partial class LegacyHelper
         private static MethodInfo textureLoadImageMethod;
         private static bool attemptedImageConversionLookup;
         private static bool attemptedTextureLoadImageLookup;
+        private static bool quickCompassActive;
+        private static bool wideCompassActive;
 
         private static GameObject GetQuickMapIcon(GameMap map)
         {
@@ -2075,18 +2077,24 @@ public partial class LegacyHelper
         {
             if (map == null || CompassIconField == null)
             {
+                quickCompassActive = false;
                 return;
             }
 
             var icon = GetQuickMapIcon(map);
             if (icon == null)
             {
+                quickCompassActive = false;
                 return;
             }
 
             if (!ShouldDisplay(map))
             {
-                HideIcon(icon, map);
+                if (quickCompassActive)
+                {
+                    HideIcon(icon, map);
+                    quickCompassActive = false;
+                }
                 return;
             }
 
@@ -2094,7 +2102,11 @@ public partial class LegacyHelper
 
             if (!TryGetMapPosition(map, out var mapPosition))
             {
-                HideIcon(icon, map);
+                if (quickCompassActive)
+                {
+                    HideIcon(icon, map);
+                    quickCompassActive = false;
+                }
                 return;
             }
 
@@ -2114,18 +2126,21 @@ public partial class LegacyHelper
             var local = icon.transform.localPosition;
             icon.transform.localPosition = new Vector3(mapPosition.x, mapPosition.y, local.z);
             loggedFailure = false;
+            quickCompassActive = true;
         }
 
         internal static void UpdateWideMap(InventoryWideMap wideMap)
         {
             if (wideMap == null || WideMapCompassIconField == null)
             {
+                wideCompassActive = false;
                 return;
             }
 
             var icon = GetWideMapIcon(wideMap);
             if (icon == null)
             {
+                wideCompassActive = false;
                 return;
             }
 
@@ -2135,7 +2150,11 @@ public partial class LegacyHelper
             var map = gameManager != null ? gameManager.gameMap : null;
             if (map == null || !ShouldDisplay(map))
             {
-                iconObject.SetActive(false);
+                if (wideCompassActive)
+                {
+                    iconObject.SetActive(false);
+                    wideCompassActive = false;
+                }
                 return;
             }
 
@@ -2144,12 +2163,14 @@ public partial class LegacyHelper
             if (!TryGetMapPosition(map, out var mapPosition))
             {
                 iconObject.SetActive(false);
+                wideCompassActive = false;
                 return;
             }
 
             if (!TryGetLocalBounds(map, mapPosition, out var mapBounds, out var zone))
             {
                 iconObject.SetActive(false);
+                wideCompassActive = false;
                 return;
             }
 
@@ -2158,6 +2179,7 @@ public partial class LegacyHelper
                 try
                 {
                     PositionWideMapIconMethod.Invoke(wideMap, new object[] { icon, mapBounds, true, zone });
+                    wideCompassActive = true;
                     return;
                 }
                 catch
@@ -2166,6 +2188,7 @@ public partial class LegacyHelper
             }
 
             iconObject.SetActive(true);
+            wideCompassActive = true;
         }
 
         private static bool ShouldDisplay(GameMap map)
