@@ -16,6 +16,8 @@ namespace LegacyoftheAbyss.Shade
         internal static ShopPlacementHandler? Instance { get; private set; }
 
         private static readonly FieldInfo? ShopOwnerTitleField = AccessTools.Field(typeof(ShopOwnerBase), "shopTitle");
+        private static readonly FieldInfo? ShopItemPlayerDataBoolField = AccessTools.Field(typeof(ShopItem), "playerDataBoolName");
+        private static readonly FieldInfo? ShopItemExtraPlayerDataBoolsField = AccessTools.Field(typeof(ShopItem), "setExtraPlayerDataBools");
 
         private readonly List<ShadeCharmPlacementDefinition> _activePlacements = new();
         private readonly Dictionary<SimpleShopMenuOwner, ShopStockInfo> _activeStock = new();
@@ -187,7 +189,7 @@ namespace LegacyoftheAbyss.Shade
             var matches = new List<ShadeCharmPlacementDefinition>();
             foreach (var placement in _activePlacements)
             {
-                if (!MatchesOwner(placement, owner))
+                if (!MatchesOwner(placement, owner, stock))
                 {
                     continue;
                 }
@@ -248,13 +250,19 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
-        private static bool MatchesOwner(ShadeCharmPlacementDefinition placement, Component owner)
+        private static bool MatchesOwner(ShadeCharmPlacementDefinition placement, Component owner, ShopItem[]? existingStock = null)
         {
             var shop = placement.Shop;
             if (shop == null)
             {
                 return false;
             }
+
+            bool hasOwnerIdentifier =
+                !string.IsNullOrWhiteSpace(shop.OwnerPath) ||
+                !string.IsNullOrWhiteSpace(shop.OwnerName) ||
+                (shop.OwnerNameContainsAll != null && shop.OwnerNameContainsAll.Length > 0) ||
+                (shop.StockContainsAnyPlayerDataBools != null && shop.StockContainsAnyPlayerDataBools.Length > 0);
 
             if (!string.IsNullOrWhiteSpace(shop.OwnerPath))
             {
@@ -290,9 +298,15 @@ namespace LegacyoftheAbyss.Shade
                 }
             }
 
-            if (string.IsNullOrWhiteSpace(shop.OwnerPath) &&
-                string.IsNullOrWhiteSpace(shop.OwnerName) &&
-                (shop.OwnerNameContainsAll == null || shop.OwnerNameContainsAll.Length == 0))
+            if (shop.StockContainsAnyPlayerDataBools is { Length: > 0 })
+            {
+                if (existingStock == null || !StockContainsAnyPlayerDataBool(existingStock, shop.StockContainsAnyPlayerDataBools))
+                {
+                    return false;
+                }
+            }
+
+            if (!hasOwnerIdentifier)
             {
                 ShadeCharmPlacementService.LogWarning($"Shop placement for charm {placement.CharmId} in scene '{Instance?._sceneName}' does not specify any owner matching data; skipping.");
                 return false;
@@ -357,6 +371,104 @@ namespace LegacyoftheAbyss.Shade
                 title,
                 rootName
             }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        }
+
+        private static bool StockContainsAnyPlayerDataBool(ShopItem[]? stock, string[]? boolNames)
+        {
+            if (stock == null || boolNames == null || boolNames.Length == 0)
+            {
+                return false;
+            }
+
+            foreach (string candidate in boolNames)
+            {
+                if (string.IsNullOrWhiteSpace(candidate))
+                {
+                    continue;
+                }
+
+                if (StockContainsPlayerDataBool(stock, candidate))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool StockContainsPlayerDataBool(ShopItem[] stock, string boolName)
+        {
+            foreach (var item in stock)
+            {
+                if (item == null)
+                {
+                    continue;
+                }
+
+                string primary = GetPlayerDataBoolName(item);
+                if (!string.IsNullOrWhiteSpace(primary) &&
+                    string.Equals(primary, boolName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                foreach (string extra in GetExtraPlayerDataBools(item))
+                {
+                    if (string.Equals(extra, boolName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static string GetPlayerDataBoolName(ShopItem item)
+        {
+            if (ShopItemPlayerDataBoolField == null || item == null)
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                return ShopItemPlayerDataBoolField.GetValue(item) as string ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private static IEnumerable<string> GetExtraPlayerDataBools(ShopItem item)
+        {
+            if (ShopItemExtraPlayerDataBoolsField == null || item == null)
+            {
+                yield break;
+            }
+
+            string[]? values = null;
+            try
+            {
+                values = ShopItemExtraPlayerDataBoolsField.GetValue(item) as string[];
+            }
+            catch
+            {
+            }
+
+            if (values == null)
+            {
+                yield break;
+            }
+
+            foreach (var value in values)
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    yield return value;
+                }
+            }
         }
 
         private static bool MeetsShopConditions(ShadeCharmPlacementDefinition placement)

@@ -165,6 +165,9 @@ namespace LegacyoftheAbyss.Shade
         [JsonProperty("ownerNameContainsAll")]
         public string[]? OwnerNameContainsAll { get; init; }
 
+        [JsonProperty("stockContainsAnyPlayerDataBools")]
+        public string[]? StockContainsAnyPlayerDataBools { get; init; }
+
         [JsonProperty("geoCost")]
         public int? GeoCost { get; init; }
 

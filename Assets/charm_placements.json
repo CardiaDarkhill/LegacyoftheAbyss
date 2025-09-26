@@ -146,6 +146,11 @@
       "charmId": "SoulCatcher",
       "shop": {
         "ownerNameContainsAll": ["bone", "shop"],
+        "stockContainsAnyPlayerDataBools": [
+          "PurchasedBonebottomFaithToken",
+          "PurchasedBonebottomHeartPiece",
+          "PurchasedBonebottomToolMetal"
+        ],
         "geoCost": 150,
         "requireNotCollected": ["VoidHeart"]
       },
@@ -156,6 +161,12 @@
       "charmId": "SoulCatcher",
       "shop": {
         "ownerNameContainsAll": ["grindle"],
+        "stockContainsAnyPlayerDataBools": [
+          "purchasedGrindleSimpleKey",
+          "purchasedGrindleMemoryLocket",
+          "purchasedGrindleSpoolPiece",
+          "purchasedGrindleToolKit"
+        ],
         "geoCost": 250,
         "requireCollected": ["VoidHeart"]
       },
@@ -166,6 +177,12 @@
       "charmId": "FragileGreed",
       "shop": {
         "ownerNameContainsAll": ["grindle"],
+        "stockContainsAnyPlayerDataBools": [
+          "purchasedGrindleSimpleKey",
+          "purchasedGrindleMemoryLocket",
+          "purchasedGrindleSpoolPiece",
+          "purchasedGrindleToolKit"
+        ],
         "geoCost": 300
       },
       "notes": "Fragile Greed available from Grindle"
@@ -175,6 +192,12 @@
       "charmId": "FragileHeart",
       "shop": {
         "ownerNameContainsAll": ["bell", "shop"],
+        "stockContainsAnyPlayerDataBools": [
+          "PurchasedBelltownShellFragment",
+          "PurchasedBelltownToolPouch",
+          "PurchasedBelltownSpoolSegment",
+          "PurchasedBelltownMemoryLocket"
+        ],
         "geoCost": 250
       },
       "notes": "Fragile Heart sold by the Belltown shopkeeper"
@@ -184,6 +207,9 @@
       "charmId": "StalwartShell",
       "shop": {
         "ownerNameContainsAll": ["forge", "daughter"],
+        "stockContainsAnyPlayerDataBools": [
+          "PurchasedForgeToolKit"
+        ],
         "geoCost": 200
       },
       "notes": "Stalwart Shell sold by the Forge Daughter"
