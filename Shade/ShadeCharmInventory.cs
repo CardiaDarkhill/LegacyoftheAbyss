@@ -22,16 +22,24 @@ namespace LegacyoftheAbyss.Shade
         private int _notchCapacity;
         private bool _isOvercharmed;
         private int _overcharmAttemptCounter;
+        private float _hivebloodTimer;
+        private bool _hivebloodPendingMaskRestore;
+
+        private const float HivebloodRegenDurationSeconds = 10f;
 
         public event Action? StateChanged;
+
+        public bool HivebloodMaskRegenerating => _hivebloodPendingMaskRestore;
+
+        public float HivebloodRegenTimer => _hivebloodTimer;
+
+        public float HivebloodRegenDuration => HivebloodRegenDurationSeconds;
 
         public ShadeCharmInventory()
         {
             _definitions = new List<ShadeCharmDefinition>();
 
             bool furyActive = false;
-            float hivebloodTimer = 0f;
-            bool hivebloodPendingMaskRestore = false;
             float kingsoulTimer = 0f;
 
             // TODO: Surface the shade's map position while Wayward Compass is equipped.
@@ -541,28 +549,28 @@ namespace LegacyoftheAbyss.Shade
                 {
                     OnApplied = ctx =>
                     {
-                        hivebloodTimer = 0f;
-                        hivebloodPendingMaskRestore = false;
+                        _hivebloodTimer = 0f;
+                        _hivebloodPendingMaskRestore = false;
                     },
                     OnRemoved = ctx =>
                     {
-                        hivebloodTimer = 0f;
-                        hivebloodPendingMaskRestore = false;
+                        _hivebloodTimer = 0f;
+                        _hivebloodPendingMaskRestore = false;
                         ctx.Controller?.ResetHivebloodLifebloodRequest();
                     },
                     OnShadeDamaged = (ctx, evt) =>
                     {
                         if (evt.ActualDamage > 0 && !evt.WasPrevented)
                         {
-                            hivebloodTimer = 0f;
+                            _hivebloodTimer = 0f;
                             var controller = ctx.Controller;
                             if (controller != null)
                             {
-                                hivebloodPendingMaskRestore = controller.GetCurrentNormalHP() < controller.GetMaxNormalHP();
+                                _hivebloodPendingMaskRestore = controller.GetCurrentNormalHP() < controller.GetMaxNormalHP();
                             }
                             else
                             {
-                                hivebloodPendingMaskRestore = false;
+                                _hivebloodPendingMaskRestore = false;
                             }
                         }
                     },
@@ -580,29 +588,32 @@ namespace LegacyoftheAbyss.Shade
 
                         if (!missingNormal)
                         {
-                            hivebloodPendingMaskRestore = false;
+                            _hivebloodPendingMaskRestore = false;
                         }
 
-                        bool shouldRestoreNormal = hivebloodPendingMaskRestore && missingNormal;
+                        bool shouldRestoreNormal = _hivebloodPendingMaskRestore && missingNormal;
                         bool pendingLifeblood = controller.ShouldHivebloodRestoreLifeblood();
 
                         if (!shouldRestoreNormal && !pendingLifeblood)
                         {
-                            hivebloodTimer = 0f;
+                            _hivebloodTimer = 0f;
                             return;
                         }
 
-                        hivebloodTimer += Mathf.Max(0f, delta);
-                        if (hivebloodTimer >= 10f)
+                        _hivebloodTimer = Mathf.Min(
+                            HivebloodRegenDurationSeconds,
+                            _hivebloodTimer + Mathf.Max(0f, delta));
+
+                        if (_hivebloodTimer >= HivebloodRegenDurationSeconds)
                         {
-                            hivebloodTimer = 0f;
+                            _hivebloodTimer = 0f;
                             if (shouldRestoreNormal)
                             {
                                 int before = currentNormal;
                                 controller.ReviveToAtLeast(before + 1);
                                 if (controller.GetCurrentNormalHP() > before)
                                 {
-                                    hivebloodPendingMaskRestore = false;
+                                    _hivebloodPendingMaskRestore = false;
                                 }
                             }
                             else if (pendingLifeblood && controller.TryRestoreLifeblood(1))
@@ -920,6 +931,9 @@ namespace LegacyoftheAbyss.Shade
 
         public void ResetLoadout()
         {
+            _hivebloodTimer = 0f;
+            _hivebloodPendingMaskRestore = false;
+
             if (_equipped.Count == 0 && _equippedOrder.Count == 0)
             {
                 _overcharmAttemptCounter = 0;

@@ -45,6 +45,7 @@ public partial class SimpleHUD : MonoBehaviour
     private bool shadeAssistModeActive;
     private bool suppressNextDamageSound;
     private bool pendingMaskRefresh;
+    private Image hivebloodPreviewMask;
 
     // UI containers
     private GameObject healthContainer;
@@ -82,6 +83,8 @@ public partial class SimpleHUD : MonoBehaviour
     private const int OvercharmBackdropReferenceMaskCount = 3;
     private Vector2 overcharmMaskSize = Vector2.zero;
     private float overcharmMaskSpacing;
+    private const float HivebloodPreviewFirstStageSeconds = 3.5f;
+    private const float HivebloodPreviewSecondStageSeconds = 7f;
 
     public void Init(PlayerData pd)
     {

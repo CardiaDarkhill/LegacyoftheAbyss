@@ -1,6 +1,7 @@
 #nullable disable
 using System;
 using System.Collections;
+using LegacyoftheAbyss.Shade;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -123,6 +124,7 @@ public partial class SimpleHUD
         {
             int total = Mathf.Max(0, shadeMax) + Mathf.Max(0, shadeLifebloodMax);
             previousShadeTotalHealth = Mathf.Clamp(shadeHealth + shadeLifeblood, 0, total);
+            HideHivebloodPreview();
             return;
         }
 
@@ -134,6 +136,7 @@ public partial class SimpleHUD
         if (maskImages == null)
         {
             pendingMaskRefresh = true;
+            HideHivebloodPreview();
             return;
         }
 
@@ -211,7 +214,127 @@ public partial class SimpleHUD
             }
         }
 
+        RefreshHivebloodPreview();
         previousShadeTotalHealth = totalCurrent;
+    }
+
+    private void RefreshHivebloodPreview()
+    {
+        if (hivebloodPreviewMask == null && maskImages == null)
+        {
+            return;
+        }
+
+        if (shadeAssistModeActive)
+        {
+            HideHivebloodPreview();
+            return;
+        }
+
+        var charms = ShadeRuntime.Charms;
+        if (charms == null || !charms.HivebloodMaskRegenerating)
+        {
+            HideHivebloodPreview();
+            return;
+        }
+
+        float elapsed = Mathf.Clamp(charms.HivebloodRegenTimer, 0f, charms.HivebloodRegenDuration);
+        if (elapsed < HivebloodPreviewFirstStageSeconds)
+        {
+            HideHivebloodPreview();
+            return;
+        }
+
+        if (maskImages == null || maskImages.Length == 0)
+        {
+            HideHivebloodPreview();
+            return;
+        }
+
+        int normalMax = Mathf.Max(0, shadeMax);
+        if (normalMax <= 0 || shadeHealth < 0 || shadeHealth >= normalMax)
+        {
+            HideHivebloodPreview();
+            return;
+        }
+
+        if (shadeHealth >= maskImages.Length)
+        {
+            HideHivebloodPreview();
+            return;
+        }
+
+        var targetImage = maskImages[shadeHealth];
+        if (targetImage == null)
+        {
+            HideHivebloodPreview();
+            return;
+        }
+
+        var previewImage = EnsureHivebloodPreviewMask();
+        var previewRect = previewImage.rectTransform;
+        var targetRect = targetImage.rectTransform;
+
+        previewRect.SetParent(targetRect, false);
+        previewRect.anchorMin = previewRect.anchorMax = new Vector2(0.5f, 0.5f);
+        previewRect.pivot = new Vector2(0.5f, 0.5f);
+        previewRect.anchoredPosition = Vector2.zero;
+        previewRect.localScale = Vector3.one;
+        previewRect.localRotation = Quaternion.identity;
+        previewRect.SetAsLastSibling();
+
+        float scale = elapsed >= HivebloodPreviewSecondStageSeconds ? (2f / 3f) : (1f / 3f);
+        Vector2 baseSize = targetRect.sizeDelta;
+        previewRect.sizeDelta = baseSize * scale;
+
+        previewImage.sprite = maskSprite != null ? maskSprite : targetImage.sprite;
+        previewImage.color = shadeOvercharmed ? overcharmMaskColor : Color.white;
+        previewImage.enabled = true;
+        var previewGO = previewImage.gameObject;
+        if (!previewGO.activeSelf)
+        {
+            previewGO.SetActive(true);
+        }
+    }
+
+    private Image EnsureHivebloodPreviewMask()
+    {
+        if (hivebloodPreviewMask != null)
+        {
+            return hivebloodPreviewMask;
+        }
+
+        var go = new GameObject("HivebloodRegenPreview");
+        var rect = go.AddComponent<RectTransform>();
+        rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.SetParent(transform, false);
+        go.SetActive(false);
+
+        hivebloodPreviewMask = go.AddComponent<Image>();
+        hivebloodPreviewMask.preserveAspect = true;
+        hivebloodPreviewMask.raycastTarget = false;
+        return hivebloodPreviewMask;
+    }
+
+    private void HideHivebloodPreview()
+    {
+        if (hivebloodPreviewMask == null)
+        {
+            return;
+        }
+
+        var rect = hivebloodPreviewMask.rectTransform;
+        if (rect != null && rect.parent != transform)
+        {
+            rect.SetParent(transform, false);
+        }
+
+        var go = hivebloodPreviewMask.gameObject;
+        if (go.activeSelf)
+        {
+            go.SetActive(false);
+        }
     }
 
     private IEnumerator LoseHealth(Image img, bool wasOvercharmed, bool wasLifeblood)
@@ -329,6 +452,7 @@ public partial class SimpleHUD
             pendingMaskRefresh = true;
             return;
         }
+        HideHivebloodPreview();
         foreach (var img in maskImages ?? Array.Empty<Image>()) if (img != null) Destroy(img.gameObject);
         animatingMaskImages.Clear();
         BuildMasks(healthContainer.GetComponent<RectTransform>(), GetUIScale());

@@ -2084,18 +2084,43 @@ public partial class LegacyHelper
             clone.name = "ShadeCompassIcon";
             clone.SetActive(false);
 
-            var templateRenderer = template.GetComponent<SpriteRenderer>();
-            var cloneRenderer = clone.GetComponent<SpriteRenderer>();
-            if (cloneRenderer != null)
+            var templateRenderer = template.GetComponentInChildren<SpriteRenderer>(true);
+            var templateSprite = templateRenderer != null ? templateRenderer.sprite : null;
+            var cloneRenderers = clone.GetComponentsInChildren<SpriteRenderer>(true);
+
+            var sprite = ResolveSprite(templateRenderer);
+            if (sprite != null)
             {
-                var sprite = ResolveSprite(templateRenderer);
-                if (sprite != null)
+                if (cloneRenderers == null || cloneRenderers.Length == 0)
                 {
-                    cloneRenderer.sprite = sprite;
-                    if (templateRenderer != null && templateRenderer.sprite != null)
+                    var newRenderer = clone.AddComponent<SpriteRenderer>();
+                    cloneRenderers = new[] { newRenderer };
+                }
+
+                foreach (var renderer in cloneRenderers)
+                {
+                    if (renderer == null)
                     {
-                        MatchScale(clone.transform, templateRenderer.sprite, sprite);
+                        continue;
                     }
+
+                    if (templateSprite == null || renderer.sprite == templateSprite)
+                    {
+                        renderer.sprite = sprite;
+                        if (templateRenderer != null)
+                        {
+                            renderer.sortingLayerID = templateRenderer.sortingLayerID;
+                            renderer.sortingOrder = templateRenderer.sortingOrder;
+                            renderer.color = templateRenderer.color;
+                            renderer.flipX = templateRenderer.flipX;
+                            renderer.flipY = templateRenderer.flipY;
+                        }
+                    }
+                }
+
+                if (templateRenderer != null && templateSprite != null)
+                {
+                    MatchScale(clone.transform, templateSprite, sprite);
                 }
             }
 
