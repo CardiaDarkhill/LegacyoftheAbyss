@@ -1,5 +1,6 @@
 #nullable enable
 
+using System.IO;
 using UnityEngine;
 
 namespace LegacyoftheAbyss.Shade
@@ -27,7 +28,7 @@ namespace LegacyoftheAbyss.Shade
 
         internal static Sprite ResolveSprite(out Color tint)
         {
-            tint = new Color(0.85f, 0.95f, 1f, 1f);
+            tint = Color.white;
             return EnsureDefaultSprite();
         }
 
@@ -95,8 +96,7 @@ namespace LegacyoftheAbyss.Shade
             try
             {
                 string key = $"{NotificationKeyPrefix}{_targetCapacity}";
-                string message = $"Shade unlocked a new charm notch ({newCapacity} capacity).";
-                ShadeRuntime.EnqueueNotification(key, message, ShadeUnlockNotificationType.Ability, icon: EnsureDefaultSprite());
+                ShadeRuntime.EnqueueNotification(key, PopupName, ShadeUnlockNotificationType.Ability, icon: EnsureDefaultSprite());
             }
             catch
             {
@@ -110,6 +110,50 @@ namespace LegacyoftheAbyss.Shade
                 return s_defaultSprite;
             }
 
+            s_defaultSprite = TryLoadAssetSprite() ?? CreateFallbackSprite();
+            return s_defaultSprite;
+        }
+
+        private static Sprite? TryLoadAssetSprite()
+        {
+            try
+            {
+                if (!ModPaths.TryGetAssetPath(out var path, "CharmIcons", "Charm_Notch.png") || !File.Exists(path))
+                {
+                    return null;
+                }
+
+                var bytes = File.ReadAllBytes(path);
+                if (bytes == null || bytes.Length == 0)
+                {
+                    return null;
+                }
+
+                var tex = new Texture2D(2, 2, TextureFormat.ARGB32, false);
+                if (!ImageConversion.LoadImage(tex, bytes, false))
+                {
+                    Object.Destroy(tex);
+                    return null;
+                }
+
+                tex.filterMode = FilterMode.Point;
+                tex.wrapMode = TextureWrapMode.Clamp;
+                tex.hideFlags = HideFlags.HideAndDontSave;
+                tex.name = Path.GetFileName(path);
+
+                var sprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f), 64f);
+                sprite.hideFlags = HideFlags.HideAndDontSave;
+                sprite.name = Path.GetFileNameWithoutExtension(path);
+                return sprite;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static Sprite CreateFallbackSprite()
+        {
             var tex = new Texture2D(20, 20, TextureFormat.ARGB32, false)
             {
                 hideFlags = HideFlags.HideAndDontSave,
@@ -137,10 +181,10 @@ namespace LegacyoftheAbyss.Shade
 
             tex.Apply();
 
-            s_defaultSprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f), 32f);
-            s_defaultSprite.hideFlags = HideFlags.HideAndDontSave;
-            s_defaultSprite.name = "ShadeNotchPickup";
-            return s_defaultSprite;
+            var sprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f), 32f);
+            sprite.hideFlags = HideFlags.HideAndDontSave;
+            sprite.name = "ShadeNotchPickup";
+            return sprite;
         }
     }
 }
