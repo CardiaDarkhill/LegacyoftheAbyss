@@ -109,6 +109,7 @@ namespace LegacyoftheAbyss.Shade
         internal static void HandleSceneEntered(string? sceneName)
         {
             EnsureActiveSlot();
+            TryGrantBossDropCharms();
             TryGrantVoidHeartForScene(sceneName);
         }
 
@@ -591,6 +592,37 @@ namespace LegacyoftheAbyss.Shade
             }
 
             QueueVoidHeartUnlockNotification();
+        }
+
+        private static void TryGrantBossDropCharms()
+        {
+            PlayerData? playerData;
+            try
+            {
+                playerData = GameManager.instance?.playerData;
+            }
+            catch
+            {
+                return;
+            }
+
+            if (playerData == null)
+            {
+                return;
+            }
+
+            TryGrantCharmFromFlag(playerData.defeatedSongGolem, ShadeCharmId.SteadyBody);
+            TryGrantCharmFromFlag(playerData.garmondBlackThreadDefeated, ShadeCharmId.FragileStrength);
+        }
+
+        private static void TryGrantCharmFromFlag(bool flag, ShadeCharmId charmId)
+        {
+            if (!flag)
+            {
+                return;
+            }
+
+            TryCollectCharm(charmId);
         }
 
         private static void QueueVoidHeartUnlockNotification()

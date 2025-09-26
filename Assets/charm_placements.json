@@ -78,13 +78,6 @@
       "notes": "Requested Grubberfly's Elegy placement"
     },
     {
-      "sceneName": "Slab_14",
-      "placementKind": "Ground",
-      "charmId": "HeavyBlow",
-      "worldPosition": { "x": 11.052, "y": 3.569, "z": 0.004 },
-      "notes": "Requested Heavy Blow placement"
-    },
-    {
       "sceneName": "Coral_38",
       "placementKind": "Ground",
       "charmId": "BaldurShell",
@@ -111,6 +104,13 @@
       "charmId": "JonisBlessing",
       "worldPosition": { "x": 38.159, "y": 8.568, "z": 0.004 },
       "notes": "Requested Joni's Blessing placement"
+    },
+    {
+      "sceneName": "Slab_14",
+      "placementKind": "Ground",
+      "charmId": "HeavyBlow",
+      "worldPosition": { "x": 11.052, "y": 3.569, "z": 0.004 },
+      "notes": "Requested Heavy Blow placement"
     },
     {
       "sceneName": "Song_09b",
@@ -167,12 +167,6 @@
       "charmId": "ShapeOfUnn",
       "worldPosition": { "x": 33.831, "y": 20.568, "z": 0.004 },
       "notes": "Requested Shape of Unn placement"
-    },
-    {
-      "sceneContainsAll": ["bone", "bottom"],
-      "placementKind": "GroundAnchor",
-      "charmId": "SteadyBody",
-      "anchorOffset": { "x": -2.6, "y": -0.7, "z": 0.0 }
     },
     {
       "sceneContainsAll": ["bone", "bottom"],
@@ -276,6 +270,22 @@
         "geoCost": 200
       },
       "notes": "Stalwart Shell sold by the Forge Daughter"
+    },
+    {
+      "placementKind": "BossDrop",
+      "charmId": "SteadyBody",
+      "bossDrop": {
+        "enemyNameContainsAll": ["Song", "Golem"]
+      },
+      "notes": "Steady Body dropped by the Fourth Chorus"
+    },
+    {
+      "placementKind": "BossDrop",
+      "charmId": "FragileStrength",
+      "bossDrop": {
+        "enemyNameContainsAll": ["Lost", "Garmond"]
+      },
+      "notes": "Fragile Strength dropped by Lost Garmond"
     }
   ]
 }
