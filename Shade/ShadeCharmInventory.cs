@@ -800,29 +800,9 @@ namespace LegacyoftheAbyss.Shade
                 return false;
             }
 
-            if (id == ShadeCharmId.Kingsoul && _equipped.Contains(ShadeCharmId.VoidHeart))
-            {
-                message = "Void Heart refuses to share power with Kingsoul.";
-                return false;
-            }
-
-            bool removedKingsoul = false;
-            int removedKingsoulIndex = -1;
-            if (id == ShadeCharmId.VoidHeart && _equipped.Contains(ShadeCharmId.Kingsoul))
-            {
-                removedKingsoulIndex = _equippedOrder.IndexOf(ShadeCharmId.Kingsoul);
-                RemoveEquippedInternal(ShadeCharmId.Kingsoul);
-                removedKingsoul = true;
-            }
-
             int notchCost = definition.NotchCost;
             if (notchCost > 0 && _notchCapacity <= 0)
             {
-                if (removedKingsoul)
-                {
-                    RestoreEquippedAtIndex(ShadeCharmId.Kingsoul, removedKingsoulIndex);
-                }
-
                 message = "Shade lacks any notches to equip this charm.";
                 return false;
             }
@@ -832,11 +812,6 @@ namespace LegacyoftheAbyss.Shade
 
             if (!fits && _isOvercharmed)
             {
-                if (removedKingsoul)
-                {
-                    RestoreEquippedAtIndex(ShadeCharmId.Kingsoul, removedKingsoulIndex);
-                }
-
                 message = "Shade is already overcharmed. Unequip a charm first.";
                 return false;
             }
@@ -844,14 +819,8 @@ namespace LegacyoftheAbyss.Shade
             if (!fits && !_isOvercharmed)
             {
                 _overcharmAttemptCounter++;
-                int remaining = Math.Max(0, OvercharmAttemptsRequired - _overcharmAttemptCounter);
                 if (_overcharmAttemptCounter < OvercharmAttemptsRequired)
                 {
-                    if (removedKingsoul)
-                    {
-                        RestoreEquippedAtIndex(ShadeCharmId.Kingsoul, removedKingsoulIndex);
-                    }
-
                     message = "Not enough notches available.";
                     return false;
                 }
@@ -878,11 +847,6 @@ namespace LegacyoftheAbyss.Shade
             else
             {
                 message = $"{definition.DisplayName} equipped.";
-            }
-
-            if (removedKingsoul)
-            {
-                message += " Kingsoul withdrew to make room.";
             }
 
             EnsureVoidHeartEquipped();
@@ -1217,14 +1181,6 @@ namespace LegacyoftheAbyss.Shade
 
             bool changed = false;
 
-            if (_equipped.Contains(ShadeCharmId.Kingsoul))
-            {
-                if (RemoveEquippedInternal(ShadeCharmId.Kingsoul))
-                {
-                    changed = true;
-                }
-            }
-
             if (!_equipped.Contains(ShadeCharmId.VoidHeart))
             {
                 AddEquippedInternal(ShadeCharmId.VoidHeart);
@@ -1273,29 +1229,6 @@ namespace LegacyoftheAbyss.Shade
             }
 
             return removed;
-        }
-
-        private void RestoreEquippedAtIndex(ShadeCharmId id, int index)
-        {
-            if (_equipped.Contains(id) || _equippedOrder.Contains(id))
-            {
-                return;
-            }
-
-            if (!_definitionMap.ContainsKey(id))
-            {
-                return;
-            }
-
-            _equipped.Add(id);
-            if (index >= 0 && index <= _equippedOrder.Count)
-            {
-                _equippedOrder.Insert(index, id);
-            }
-            else
-            {
-                _equippedOrder.Add(id);
-            }
         }
 
         private bool RecalculateOvercharmed()

@@ -91,6 +91,21 @@ public class ShadeCharmInventoryTests
     }
 
     [Fact]
+    public void VoidHeartCanCoexistWithKingsoul()
+    {
+        var inventory = new ShadeCharmInventory();
+        inventory.GrantCharm(ShadeCharmId.Kingsoul);
+        inventory.GrantCharm(ShadeCharmId.VoidHeart);
+
+        inventory.NotchCapacity = 10;
+        Assert.True(inventory.TryEquip(ShadeCharmId.Kingsoul, out _));
+
+        var equipped = inventory.GetEquipped().ToArray();
+        Assert.Contains(ShadeCharmId.Kingsoul, equipped);
+        Assert.Equal(ShadeCharmId.VoidHeart, equipped[0]);
+    }
+
+    [Fact]
     public void VoidHeartCanBeUnequippedDuringDebugMode()
     {
         ShadeRuntime.Clear();
