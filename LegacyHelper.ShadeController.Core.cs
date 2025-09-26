@@ -2229,9 +2229,25 @@ public partial class LegacyHelper
                     bool canDamage = false;
                     try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
                     if (!canDamage) { LogShadeDamage(dh, col, false); return; }
+                    int dmg = GetDamageAmount(dh);
                     var hz = GetHazardType(dh);
-                    if (IsTerrainHazard(hz)) { LogShadeDamage(dh, col, canTakeDamage); OnShadeHitHazard(); return; }
-                    int dmg = 0; try { dmg = dh.damageDealt; } catch { }
+                    if (hz == GlobalEnums.HazardType.STEAM && dmg <= 0)
+                    {
+                        LogShadeDamage(dh, col, false);
+                        return;
+                    }
+                    if (IsTerrainHazard(hz))
+                    {
+                        if (dmg <= 0)
+                        {
+                            LogShadeDamage(dh, col, false);
+                            return;
+                        }
+
+                        LogShadeDamage(dh, col, canTakeDamage);
+                        OnShadeHitHazard();
+                        return;
+                    }
                     if (dmg > 0)
                     {
                         bool preventedByVoidHeart = IsVoidHeartEvading();
@@ -2618,15 +2634,23 @@ public partial class LegacyHelper
                         continue;
                     }
 
+                    int dmg = GetDamageAmount(dh);
                     var hz = GetHazardType(dh);
+                    if (hz == GlobalEnums.HazardType.STEAM && dmg <= 0)
+                    {
+                        continue;
+                    }
+
                     if (IsTerrainHazard(hz))
                     {
+                        if (dmg <= 0)
+                        {
+                            continue;
+                        }
+
                         return true;
                     }
 
-                    int dmg = 0;
-                    try { dmg = dh.damageDealt; }
-                    catch { }
                     if (dmg > 0)
                     {
                         return true;
@@ -2710,13 +2734,42 @@ public partial class LegacyHelper
                     bool canDamage = false;
                     try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
                     if (!canDamage) { LogShadeDamage(dh, c, false); continue; }
+                    int dmg = GetDamageAmount(dh);
                     var hz = GetHazardType(dh);
-                    if (IsTerrainHazard(hz)) { LogShadeDamage(dh, c, canTakeDamage); OnShadeHitHazard(); return; }
-                    int dmg = 0; try { dmg = dh.damageDealt; } catch { }
+                    if (hz == GlobalEnums.HazardType.STEAM && dmg <= 0)
+                    {
+                        LogShadeDamage(dh, c, false);
+                        continue;
+                    }
+                    if (IsTerrainHazard(hz))
+                    {
+                        if (dmg <= 0)
+                        {
+                            LogShadeDamage(dh, c, false);
+                            continue;
+                        }
+
+                        LogShadeDamage(dh, c, canTakeDamage);
+                        OnShadeHitHazard();
+                        return;
+                    }
                     if (dmg > 0) { LogShadeDamage(dh, c, canTakeDamage); OnShadeHitEnemy(dh); return; }
                     LogShadeDamage(dh, c, false);
                 }
             }
+        }
+
+        private static int GetDamageAmount(DamageHero dh)
+        {
+            if (!dh)
+            {
+                return 0;
+            }
+
+            try { return dh.damageDealt; }
+            catch { }
+
+            return 0;
         }
 
         private static GlobalEnums.HazardType GetHazardType(DamageHero dh)
@@ -2802,8 +2855,7 @@ public partial class LegacyHelper
         private void OnShadeHitEnemy(DamageHero dh)
         {
             if (hurtCooldown > 0f) return;
-            int dmg = 0;
-            try { if (dh != null) dmg = dh.damageDealt; } catch { }
+            int dmg = GetDamageAmount(dh);
             dmg = ApplyOvercharmPenalty(dmg);
             if (dmg <= 0)
             {

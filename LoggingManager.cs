@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using BepInEx.Logging;
 using UnityEngine;
 
 internal static class LoggingManager
@@ -13,13 +14,18 @@ internal static class LoggingManager
     }
 
     private static readonly Dictionary<string, DamageEntry> damage = new();
+    private static ManualLogSource consoleLogger;
     private static string logFile;
     private static bool wroteHitHeader;
     private static bool wroteBlockedHeader;
     private static bool initialized;
 
-    internal static void Initialize()
+    internal static void Initialize(ManualLogSource logger = null)
     {
+        if (logger != null)
+        {
+            consoleLogger = logger;
+        }
         if (initialized) return;
         initialized = true;
         try
@@ -33,6 +39,27 @@ internal static class LoggingManager
 
     internal static void LogShadeDamage(string source, bool succeeded)
     {
+        try
+        {
+            if (consoleLogger != null)
+            {
+                string message = succeeded
+                    ? $"Shade took damage from {source}."
+                    : $"Shade avoided damage from {source}.";
+                if (succeeded)
+                {
+                    consoleLogger.LogWarning(message);
+                }
+                else
+                {
+                    consoleLogger.LogInfo(message);
+                }
+            }
+        }
+        catch
+        {
+        }
+
         if (!ModConfig.Instance.logDamage) return;
         Initialize();
         if (!damage.TryGetValue(source, out var entry))

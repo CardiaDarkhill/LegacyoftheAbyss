@@ -59,7 +59,7 @@ public partial class LegacyHelper
         private float battleCheckTimer;
 
         private static readonly string[] IgnoreDamageTokens =
-            {"alert range", "attack range", "wake", "close range", "sight range", "terrain", "range", "physics pusher"};
+            {"alert range", "attack range", "wake", "close range", "sight range", "terrain", "range", "physics pusher", "bounce collider"};
 
         // Ranged attack
         public float projectileSpeed = 22f;
