@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using GlobalEnums;
 using HarmonyLib;
 using TeamCherry.Localization;
@@ -18,10 +19,15 @@ namespace LegacyoftheAbyss.Shade
         private static readonly FieldInfo? ShopOwnerTitleField = AccessTools.Field(typeof(ShopOwnerBase), "shopTitle");
         private static readonly FieldInfo? ShopItemPlayerDataBoolField = AccessTools.Field(typeof(ShopItem), "playerDataBoolName");
         private static readonly FieldInfo? ShopItemExtraPlayerDataBoolsField = AccessTools.Field(typeof(ShopItem), "setExtraPlayerDataBools");
+        private static readonly FieldInfo? SimpleShopItemDisplayIconField = AccessTools.Field(typeof(SimpleShopItemDisplay), "itemIcon");
+
+        private const float CharmShopIconScale = 0.65f;
 
         private readonly List<ShadeCharmPlacementDefinition> _activePlacements = new();
         private readonly Dictionary<SimpleShopMenuOwner, ShopStockInfo> _activeStock = new();
         private readonly Dictionary<ShopOwnerBase, ShopOwnerStockInfo> _activeOwnerStock = new();
+        private readonly Dictionary<ShopItem, ShopOwnerText> _ownerItemText = new();
+        private static readonly ConditionalWeakTable<SimpleShopItemDisplay, SimpleShopItemDisplayIconState> SimpleShopIconStates = new();
         private string _sceneName = string.Empty;
 
         internal ShopPlacementHandler()
@@ -39,6 +45,7 @@ namespace LegacyoftheAbyss.Shade
                 info.Dispose();
             }
             _activeOwnerStock.Clear();
+            _ownerItemText.Clear();
 
             if (placements == null || placements.Count == 0)
             {
@@ -170,6 +177,37 @@ namespace LegacyoftheAbyss.Shade
             }
 
             return true;
+        }
+
+        private void RegisterOwnerItemText(ShopItem? item, ShopOwnerText text)
+        {
+            if (item == null)
+            {
+                return;
+            }
+
+            _ownerItemText[item] = text;
+        }
+
+        private void UnregisterOwnerItemText(ShopItem? item)
+        {
+            if (item == null)
+            {
+                return;
+            }
+
+            _ownerItemText.Remove(item);
+        }
+
+        internal bool TryGetOwnerItemText(ShopItem? item, out ShopOwnerText text)
+        {
+            if (item != null && _ownerItemText.TryGetValue(item, out text))
+            {
+                return true;
+            }
+
+            text = default;
+            return false;
         }
 
         private void LogPlacementSkip(Component owner, ShadeCharmPlacementDefinition placement, string? reason)
@@ -646,6 +684,7 @@ namespace LegacyoftheAbyss.Shade
                     if (entry.Item != null)
                     {
                         result.Add(entry.Item);
+                        _handler.RegisterOwnerItemText(entry.Item, entry.Text);
                     }
                 }
 
@@ -674,20 +713,30 @@ namespace LegacyoftheAbyss.Shade
 
         private sealed class ShopOwnerItemEntry : IDisposable
         {
-            internal ShopOwnerItemEntry(ShopItem item, ShadeCharmSavedItem savedItem)
+            private readonly ShopPlacementHandler _handler;
+
+            internal ShopOwnerItemEntry(ShopPlacementHandler handler, ShopItem item, ShadeCharmSavedItem savedItem, ShopOwnerText text)
             {
+                _handler = handler;
                 Item = item;
                 SavedItem = savedItem;
+                Text = text;
+
+                handler?.RegisterOwnerItemText(item, text);
             }
 
             internal ShopItem Item { get; }
 
             internal ShadeCharmSavedItem SavedItem { get; }
 
+            internal ShopOwnerText Text { get; }
+
             public void Dispose()
             {
                 try
                 {
+                    _handler?.UnregisterOwnerItemText(Item);
+
                     if (SavedItem != null)
                     {
                         if (Application.isPlaying)
@@ -722,6 +771,29 @@ namespace LegacyoftheAbyss.Shade
                 {
                 }
             }
+        }
+
+        internal readonly struct ShopOwnerText
+        {
+            internal ShopOwnerText(string name, string description)
+            {
+                Name = string.IsNullOrWhiteSpace(name) ? string.Empty : name;
+                Description = string.IsNullOrWhiteSpace(description) ? string.Empty : description;
+            }
+
+            internal string Name { get; }
+
+            internal string Description { get; }
+        }
+
+        private sealed class SimpleShopItemDisplayIconState
+        {
+            internal SimpleShopItemDisplayIconState(Vector3 baseScale)
+            {
+                BaseScale = baseScale;
+            }
+
+            internal Vector3 BaseScale { get; }
         }
 
         private sealed class ShadeCharmShopItem : ISimpleShopItem
@@ -839,12 +911,14 @@ namespace LegacyoftheAbyss.Shade
 
                 var sprite = ShadeCharmSavedItem.ResolveCharmSprite(definition.CharmId, out _);
                 AccessTools.Field(typeof(ShopItem), "itemSprite").SetValue(item, sprite);
+                AccessTools.Field(typeof(ShopItem), "itemSpriteScale").SetValue(item, CharmShopIconScale);
 
                 AccessTools.Field(typeof(ShopItem), "currencyType").SetValue(item, CurrencyType.Money);
                 AccessTools.Field(typeof(ShopItem), "cost").SetValue(item, Math.Max(0, shopData.GeoCost ?? 0));
                 AccessTools.Field(typeof(ShopItem), "savedItem").SetValue(item, savedItem);
 
-                return new ShopOwnerItemEntry(item, savedItem);
+                var text = new ShopOwnerText(displayName, description);
+                return new ShopOwnerItemEntry(this, item, savedItem, text);
             }
             catch (Exception ex)
             {
@@ -882,6 +956,69 @@ namespace LegacyoftheAbyss.Shade
                 var stock = __result;
                 handler.AugmentStock(__instance, ref stock);
                 __result = stock;
+            }
+        }
+
+        [HarmonyPatch(typeof(ShopItem), nameof(ShopItem.DisplayName), MethodType.Getter)]
+        private static class ShopItem_get_DisplayName_Patch
+        {
+            private static void Postfix(ShopItem __instance, ref string __result)
+            {
+                var handler = Instance;
+                if (handler == null)
+                {
+                    return;
+                }
+
+                if (handler.TryGetOwnerItemText(__instance, out var text))
+                {
+                    __result = text.Name;
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(ShopItem), nameof(ShopItem.Description), MethodType.Getter)]
+        private static class ShopItem_get_Description_Patch
+        {
+            private static void Postfix(ShopItem __instance, ref string __result)
+            {
+                var handler = Instance;
+                if (handler == null)
+                {
+                    return;
+                }
+
+                if (handler.TryGetOwnerItemText(__instance, out var text))
+                {
+                    __result = text.Description;
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(SimpleShopItemDisplay), nameof(SimpleShopItemDisplay.SetItem))]
+        private static class SimpleShopItemDisplay_SetItem_Postfix
+        {
+            private static void Postfix(SimpleShopItemDisplay __instance, ISimpleShopItem item)
+            {
+                if (__instance == null)
+                {
+                    return;
+                }
+
+                if (SimpleShopItemDisplayIconField?.GetValue(__instance) is not SpriteRenderer iconRenderer || iconRenderer == null)
+                {
+                    return;
+                }
+
+                var state = SimpleShopIconStates.GetValue(__instance, display => new SimpleShopItemDisplayIconState(iconRenderer.transform.localScale));
+                Vector3 targetScale = state.BaseScale;
+
+                if (item is ShadeCharmShopItem)
+                {
+                    targetScale = state.BaseScale * CharmShopIconScale;
+                }
+
+                iconRenderer.transform.localScale = targetScale;
             }
         }
 
