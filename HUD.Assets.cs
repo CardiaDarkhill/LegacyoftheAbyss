@@ -31,6 +31,7 @@ public partial class SimpleHUD
             var overcharmBackdropPath = ModPaths.GetAssetPath("overcharm_backboard.png");
             maskSprite = LoadSprite(maskPath);
             if (maskSprite == null) maskSprite = FindSpriteInGame("select_game_HUD_0001_health");
+            hivebloodMaskSprite = CreateTintedSprite(maskSprite, hivebloodMaskColor);
             frameSprite = LoadSprite(framePath);
             if (frameSprite == null) frameSprite = FindSpriteInGame("select_game_HUD_0002_health_frame");
             slashFrames = LoadSpriteSheet(slashPath, 8, 8);
@@ -40,8 +41,86 @@ public partial class SimpleHUD
             {
                 overcharmBackdropSprite = ShadeCharmIconLoader.TryLoadIcon("overcharm_backboard", "overcharm_backboard.png");
             }
+            if (hivebloodMaskSprite == null)
+            {
+                var fallbackMask = BuildMaskSprite();
+                hivebloodMaskSprite = CreateTintedSprite(fallbackMask, hivebloodMaskColor);
+                if (fallbackMask != null)
+                {
+                    var fallbackTexture = fallbackMask.texture;
+                    if (fallbackTexture != null)
+                    {
+                        UnityEngine.Object.Destroy(fallbackTexture);
+                    }
+
+                    UnityEngine.Object.Destroy(fallbackMask);
+                }
+            }
         }
         catch { }
+    }
+
+    private Sprite CreateTintedSprite(Sprite source, Color tint)
+    {
+        if (source == null)
+        {
+            return null;
+        }
+
+        Texture2D tintedTexture = null;
+        try
+        {
+            var texture = source.texture;
+            if (texture == null)
+            {
+                return null;
+            }
+
+            var rect = source.textureRect;
+            int width = Mathf.Max(1, Mathf.RoundToInt(rect.width));
+            int height = Mathf.Max(1, Mathf.RoundToInt(rect.height));
+            int x = Mathf.RoundToInt(rect.x);
+            int y = Mathf.RoundToInt(rect.y);
+
+            Color[] pixels = texture.GetPixels(x, y, width, height);
+            if (pixels == null || pixels.Length == 0)
+            {
+                return null;
+            }
+
+            var tinted = new Color[pixels.Length];
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                var px = pixels[i];
+                tinted[i] = new Color(px.r * tint.r, px.g * tint.g, px.b * tint.b, px.a * tint.a);
+            }
+
+            tintedTexture = new Texture2D(width, height, TextureFormat.ARGB32, false);
+            tintedTexture.SetPixels(tinted);
+            tintedTexture.Apply();
+            tintedTexture.filterMode = FilterMode.Point;
+            tintedTexture.wrapMode = TextureWrapMode.Clamp;
+
+            var sprite = Sprite.Create(
+                tintedTexture,
+                new Rect(0f, 0f, width, height),
+                new Vector2(0.5f, 0.5f),
+                source.pixelsPerUnit);
+            if (sprite != null)
+            {
+                return sprite;
+            }
+        }
+        catch
+        {
+        }
+
+        if (tintedTexture != null)
+        {
+            UnityEngine.Object.Destroy(tintedTexture);
+        }
+
+        return null;
     }
 
     private Sprite LoadSprite(string path)

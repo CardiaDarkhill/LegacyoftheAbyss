@@ -234,12 +234,20 @@ public partial class SimpleHUD
             suppressNextDamageSound = false;
         }
 
+        bool useHivebloodSprite = hivebloodEquipped && !shadeOvercharmed && hivebloodMaskSprite != null;
+        Sprite normalMaskSprite = useHivebloodSprite && hivebloodMaskSprite != null
+            ? hivebloodMaskSprite
+            : maskSprite;
+
         Color filledColor = GetNormalMaskFilledColor();
         for (int i = 0; i < normalMax && i < maskImages.Length; i++)
         {
             var img = maskImages[i];
             if (img == null) continue;
-            img.sprite = maskSprite != null ? maskSprite : img.sprite;
+            if (normalMaskSprite != null)
+            {
+                img.sprite = normalMaskSprite;
+            }
             img.color = i < currentNormal ? filledColor : missingMaskColor;
         }
 
@@ -249,7 +257,10 @@ public partial class SimpleHUD
             if (index >= maskImages.Length) break;
             var img = maskImages[index];
             if (img == null) continue;
-            img.sprite = maskSprite != null ? maskSprite : img.sprite;
+            if (maskSprite != null)
+            {
+                img.sprite = maskSprite;
+            }
             bool filled = i < currentLifeblood;
             if (filled)
             {
@@ -351,8 +362,14 @@ public partial class SimpleHUD
         Vector2 baseSize = targetRect.sizeDelta;
         previewRect.sizeDelta = baseSize * scale;
 
-        previewImage.sprite = maskSprite != null ? maskSprite : targetImage.sprite;
-        previewImage.color = GetNormalMaskFilledColor();
+        Sprite previewSprite = hivebloodMaskSprite
+            ?? maskSprite
+            ?? targetImage.sprite;
+        if (previewSprite != null)
+        {
+            previewImage.sprite = previewSprite;
+        }
+        previewImage.color = hivebloodMaskColor;
         previewImage.enabled = true;
         var previewGO = previewImage.gameObject;
         if (!previewGO.activeSelf)

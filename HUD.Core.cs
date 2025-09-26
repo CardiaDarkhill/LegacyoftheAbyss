@@ -14,12 +14,13 @@ public partial class SimpleHUD : MonoBehaviour
     private Image[] maskImages;
     private readonly HashSet<Image> animatingMaskImages = new HashSet<Image>();
     private Sprite maskSprite;
+    private Sprite hivebloodMaskSprite;
     private readonly Color missingMaskColor = new Color(0.2f, 0.2f, 0.2f, 0.45f);
     private readonly Color overcharmMaskColor = Color.white;
     private readonly Color overcharmBackdropColor = new Color(0.85f, 0.25f, 0.25f, 0.1344f);
     private readonly Color overcharmBackdropSpriteColor = new Color(1f, 1f, 1f, 0.392f);
     private readonly Color lifebloodMaskColor = new Color(0.4f, 0.75f, 1f, 1f);
-    private readonly Color hivebloodMaskColor = new Color(1f, 0.58f, 0.2f, 1f);
+    private readonly Color hivebloodMaskColor = new Color(1f, 0.72f, 0.18f, 1f);
     private readonly Color lifebloodMissingColor = new Color(0.28f, 0.46f, 0.66f, 0.45f);
 
     // Soul orb state

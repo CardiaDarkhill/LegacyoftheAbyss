@@ -2569,6 +2569,25 @@ public partial class LegacyHelper
                     image.enabled = true;
                 }
             }
+
+            var spriteMasks = iconRoot.GetComponentsInChildren<SpriteMask>(true);
+            if (spriteMasks != null && spriteMasks.Length > 0)
+            {
+                foreach (var mask in spriteMasks)
+                {
+                    if (mask == null)
+                    {
+                        continue;
+                    }
+
+                    if (mask.sprite == sprite)
+                    {
+                        continue;
+                    }
+
+                    mask.sprite = sprite;
+                }
+            }
         }
 
         private static Sprite ResolveSprite(Sprite templateSprite, float fallbackPixelsPerUnit)
