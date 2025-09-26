@@ -1970,6 +1970,7 @@ public partial class LegacyHelper
         private static readonly MethodInfo IsLostInAbyssMethod = AccessTools.Method(typeof(GameMap), "IsLostInAbyssPreMap");
 
         private static GameObject shadeCompassIcon;
+        private static GameObject templateCompassIcon;
         private static Sprite shadeCompassSprite;
         private static bool loggedFailure;
 
@@ -2068,12 +2069,37 @@ public partial class LegacyHelper
 
         private static GameObject EnsureIcon(GameMap map)
         {
+            var template = CompassIconField?.GetValue(map) as GameObject;
+            if (template != null)
+            {
+                templateCompassIcon = template;
+            }
+
             if (shadeCompassIcon != null)
             {
+                if (CompassIconField != null)
+                {
+                    try
+                    {
+                        var activeIcon = CompassIconField.GetValue(map) as GameObject;
+                        if (activeIcon != shadeCompassIcon)
+                        {
+                            CompassIconField.SetValue(map, shadeCompassIcon);
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                if (templateCompassIcon != null && templateCompassIcon != shadeCompassIcon)
+                {
+                    try { templateCompassIcon.SetActive(false); } catch { }
+                }
+
                 return shadeCompassIcon;
             }
 
-            var template = CompassIconField?.GetValue(map) as GameObject;
             if (template == null)
             {
                 return null;
@@ -2104,17 +2130,14 @@ public partial class LegacyHelper
                         continue;
                     }
 
-                    if (templateSprite == null || renderer.sprite == templateSprite)
+                    renderer.sprite = sprite;
+                    if (templateRenderer != null)
                     {
-                        renderer.sprite = sprite;
-                        if (templateRenderer != null)
-                        {
-                            renderer.sortingLayerID = templateRenderer.sortingLayerID;
-                            renderer.sortingOrder = templateRenderer.sortingOrder;
-                            renderer.color = templateRenderer.color;
-                            renderer.flipX = templateRenderer.flipX;
-                            renderer.flipY = templateRenderer.flipY;
-                        }
+                        renderer.sortingLayerID = templateRenderer.sortingLayerID;
+                        renderer.sortingOrder = templateRenderer.sortingOrder;
+                        renderer.color = templateRenderer.color;
+                        renderer.flipX = templateRenderer.flipX;
+                        renderer.flipY = templateRenderer.flipY;
                     }
                 }
 
@@ -2125,6 +2148,15 @@ public partial class LegacyHelper
             }
 
             shadeCompassIcon = clone;
+            if (CompassIconField != null)
+            {
+                try { CompassIconField.SetValue(map, shadeCompassIcon); } catch { }
+            }
+
+            if (templateCompassIcon != null && templateCompassIcon != shadeCompassIcon)
+            {
+                try { templateCompassIcon.SetActive(false); } catch { }
+            }
             return shadeCompassIcon;
         }
 
