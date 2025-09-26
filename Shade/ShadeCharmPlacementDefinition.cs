@@ -68,8 +68,8 @@ namespace LegacyoftheAbyss.Shade
         [JsonProperty("bossDrop")]
         public ShadeCharmPlacementBossDropData? BossDrop { get; init; }
 
-        [JsonProperty("notchTargetCapacity")]
-        public int? NotchTargetCapacity { get; init; }
+        [JsonProperty("notchId")]
+        public string? NotchId { get; init; }
 
         [JsonProperty("notchIncrement")]
         public int? NotchIncrement { get; init; }

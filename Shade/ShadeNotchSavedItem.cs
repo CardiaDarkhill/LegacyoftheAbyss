@@ -9,20 +9,18 @@ namespace LegacyoftheAbyss.Shade
     {
         private const string NotificationKeyPrefix = "shade::notch_pickup::";
         private const string PopupName = "Charm Notch";
-        private const int MaxCapacity = 20;
-
         private static Sprite? s_defaultSprite;
 
-        private int _targetCapacity;
+        private string _notchId = string.Empty;
         private int _increment;
 
-        internal int TargetCapacity => _targetCapacity;
+        internal string NotchId => _notchId;
 
-        internal static ShadeNotchSavedItem Create(int targetCapacity, int increment)
+        internal static ShadeNotchSavedItem Create(string notchId, int increment)
         {
             var item = CreateInstance<ShadeNotchSavedItem>();
             item.hideFlags = HideFlags.HideAndDontSave;
-            item.Initialize(targetCapacity, increment);
+            item.Initialize(notchId, increment);
             return item;
         }
 
@@ -38,45 +36,37 @@ namespace LegacyoftheAbyss.Shade
         {
             try
             {
-                return ShadeRuntime.GetNotchCapacity() < _targetCapacity;
+                if (string.IsNullOrWhiteSpace(_notchId))
+                {
+                    return false;
+                }
+
+                return !ShadeRuntime.HasCollectedNotch(_notchId);
             }
             catch
             {
-                return true;
+                return false;
             }
         }
 
         public override void Get(bool showPopup = true)
         {
-            int current = 0;
             try
             {
-                current = ShadeRuntime.GetNotchCapacity();
+                if (string.IsNullOrWhiteSpace(_notchId))
+                {
+                    return;
+                }
+
+                int increment = Mathf.Max(1, _increment);
+                bool collected = ShadeRuntime.TryCollectNotch(_notchId, increment);
+                if (collected)
+                {
+                    TryQueueNotification();
+                }
             }
             catch
             {
-            }
-
-            if (current >= _targetCapacity)
-            {
-                return;
-            }
-
-            int increment = Mathf.Max(1, _increment);
-            int desired = Mathf.Clamp(Mathf.Max(_targetCapacity, current + increment), 0, MaxCapacity);
-
-            bool changed = false;
-            try
-            {
-                changed = ShadeRuntime.SetNotchCapacity(desired);
-            }
-            catch
-            {
-            }
-
-            if (changed)
-            {
-                TryQueueNotification(desired);
             }
         }
 
@@ -84,18 +74,21 @@ namespace LegacyoftheAbyss.Shade
 
         public override Sprite GetPopupIcon() => EnsureDefaultSprite();
 
-        private void Initialize(int targetCapacity, int increment)
+        private void Initialize(string notchId, int increment)
         {
-            _targetCapacity = Mathf.Clamp(targetCapacity, 0, MaxCapacity);
             _increment = Mathf.Max(1, increment);
-            name = $"ShadeNotch_Target{_targetCapacity}_SavedItem";
+            _notchId = (notchId ?? string.Empty).Trim();
+            name = string.IsNullOrEmpty(_notchId)
+                ? "ShadeNotch_SavedItem"
+                : $"ShadeNotch_{_notchId}_SavedItem";
         }
 
-        private void TryQueueNotification(int newCapacity)
+        private void TryQueueNotification()
         {
             try
             {
-                string key = $"{NotificationKeyPrefix}{_targetCapacity}";
+                string suffix = string.IsNullOrEmpty(_notchId) ? "unknown" : _notchId;
+                string key = $"{NotificationKeyPrefix}{suffix}";
                 ShadeRuntime.EnqueueNotification(key, PopupName, ShadeUnlockNotificationType.Ability, icon: EnsureDefaultSprite());
             }
             catch

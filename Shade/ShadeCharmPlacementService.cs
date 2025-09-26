@@ -157,7 +157,8 @@ namespace LegacyoftheAbyss.Shade
             {
                 return placement.ItemKind switch
                 {
-                    ShadeCharmPlacementItemKind.Notch => ShadeRuntime.GetNotchCapacity() >= Mathf.Max(0, placement.NotchTargetCapacity ?? 0),
+                    ShadeCharmPlacementItemKind.Notch => !string.IsNullOrWhiteSpace(placement.NotchId)
+                        && ShadeRuntime.HasCollectedNotch(placement.NotchId),
                     _ => ShadeRuntime.IsCharmCollected(placement.CharmId)
                 };
             }
@@ -176,7 +177,9 @@ namespace LegacyoftheAbyss.Shade
 
             return placement.ItemKind switch
             {
-                ShadeCharmPlacementItemKind.Notch => $"notch (target capacity {Mathf.Max(0, placement.NotchTargetCapacity ?? 0)})",
+                ShadeCharmPlacementItemKind.Notch => string.IsNullOrWhiteSpace(placement.NotchId)
+                    ? "notch"
+                    : $"notch '{placement.NotchId}'",
                 _ => $"charm {placement.CharmId}"
             };
         }

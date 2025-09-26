@@ -296,6 +296,35 @@ namespace LegacyoftheAbyss.Shade
             return changed;
         }
 
+        public static bool TryCollectNotch(string notchId, int increment)
+        {
+            if (string.IsNullOrWhiteSpace(notchId))
+            {
+                return false;
+            }
+
+            EnsureActiveSlot();
+            int sanitizedIncrement = Mathf.Max(1, increment);
+            bool collected = s_saveSlots.TryCollectNotch(s_activeSlot, notchId, sanitizedIncrement);
+            if (collected)
+            {
+                SyncInventoryFromActiveSlot();
+            }
+
+            return collected;
+        }
+
+        public static bool HasCollectedNotch(string notchId)
+        {
+            if (string.IsNullOrWhiteSpace(notchId))
+            {
+                return false;
+            }
+
+            EnsureActiveSlot();
+            return s_saveSlots.HasCollectedNotch(s_activeSlot, notchId);
+        }
+
         internal static void SyncActiveSlot(GameManager? gameManager)
         {
             if (gameManager == null)

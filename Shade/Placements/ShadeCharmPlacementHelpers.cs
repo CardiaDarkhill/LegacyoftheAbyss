@@ -121,7 +121,9 @@ namespace LegacyoftheAbyss.Shade
                     switch (placement.ItemKind)
                     {
                         case ShadeCharmPlacementItemKind.Notch:
-                            if (pickup.Item is ShadeNotchSavedItem notch && notch.TargetCapacity == Mathf.Max(0, placement.NotchTargetCapacity ?? 0))
+                            if (pickup.Item is ShadeNotchSavedItem notch &&
+                                !string.IsNullOrWhiteSpace(placement.NotchId) &&
+                                string.Equals(notch.NotchId, placement.NotchId, StringComparison.OrdinalIgnoreCase))
                             {
                                 return true;
                             }

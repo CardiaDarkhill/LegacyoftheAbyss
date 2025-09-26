@@ -331,6 +331,34 @@ namespace LegacyoftheAbyss.Shade
             return changed;
         }
 
+        public bool TryCollectNotch(int slot, string notchId, int increment)
+        {
+            if (!IsValidSlot(slot) || string.IsNullOrWhiteSpace(notchId))
+            {
+                return false;
+            }
+
+            var record = GetOrCreateRecord(slot);
+            int sanitizedIncrement = Math.Max(1, increment);
+            bool collected = record.State.TryCollectNotch(notchId, sanitizedIncrement);
+            if (collected)
+            {
+                PersistSlot(slot);
+            }
+
+            return collected;
+        }
+
+        public bool HasCollectedNotch(int slot, string notchId)
+        {
+            if (!IsValidSlot(slot) || string.IsNullOrWhiteSpace(notchId))
+            {
+                return false;
+            }
+
+            return _slots.TryGetValue(slot, out var record) && record.State.HasCollectedNotch(notchId);
+        }
+
         public bool MarkCharmCollected(int slot, ShadeCharmId charmId)
         {
             if (!IsValidSlot(slot))
@@ -741,6 +769,7 @@ namespace LegacyoftheAbyss.Shade
             bool stateEmpty = !record.State.HasData
                 && record.State.NotchCapacity <= 0
                 && (record.State.GetDiscoveredCharmIdsSnapshot()?.Count ?? 0) == 0
+                && (record.State.GetCollectedNotchIdsSnapshot()?.Count ?? 0) == 0
                 && record.State.GetEquippedCharmLoadouts().Count == 0;
 
             bool collectionsEmpty = record.CollectedCharms.Count == 0

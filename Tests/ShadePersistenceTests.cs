@@ -82,10 +82,21 @@ public class ShadePersistentStateTests
         Assert.False(state.SetNotchCapacity(0));
         Assert.True(state.SetNotchCapacity(3));
 
+        Assert.False(state.HasCollectedNotch("hornet_a"));
+        Assert.True(state.TryCollectNotch("hornet_a", 1));
+        Assert.True(state.HasCollectedNotch("hornet_a"));
+        Assert.Equal(4, state.NotchCapacity);
+        Assert.False(state.TryCollectNotch("hornet_a", 1));
+        Assert.True(state.TryCollectNotch("hornet_b", 2));
+        Assert.Equal(6, state.NotchCapacity);
+        Assert.Contains("hornet_a", state.GetCollectedNotchIdsSnapshot());
+        Assert.Contains("hornet_b", state.GetCollectedNotchIdsSnapshot());
+
         var clone = state.Clone();
         Assert.True(clone.HasDiscoveredCharm(7));
         Assert.Contains(7, clone.GetEquippedCharms(0));
-        Assert.Equal(3, clone.NotchCapacity);
+        Assert.True(clone.HasCollectedNotch("hornet_a"));
+        Assert.Equal(6, clone.NotchCapacity);
 
         clone.UnlockCharm(8);
         clone.EquipCharm(1, 8);
@@ -96,12 +107,13 @@ public class ShadePersistentStateTests
         Assert.False(state.HasDiscoveredCharm(8));
         Assert.Contains(7, state.GetEquippedCharms(0));
         Assert.Empty(state.GetEquippedCharms(1));
-        Assert.Equal(3, state.NotchCapacity);
+        Assert.Equal(6, state.NotchCapacity);
 
         state.Reset();
         Assert.Empty(state.DiscoveredCharmIds);
         Assert.Empty(state.GetEquippedCharms(0));
         Assert.Equal(0, state.NotchCapacity);
+        Assert.Empty(state.GetCollectedNotchIdsSnapshot());
     }
 }
 
@@ -250,6 +262,30 @@ public class ShadeSaveSlotRepositoryTests
     }
 
     [Fact]
+    public void NotchCollectionPersistsPerSlot()
+    {
+        WithRepository(repository =>
+        {
+            const string firstNotch = "hornet_a";
+            const string secondNotch = "hornet_b";
+
+            Assert.False(repository.HasCollectedNotch(0, firstNotch));
+            Assert.True(repository.TryCollectNotch(0, firstNotch, 1));
+            Assert.True(repository.HasCollectedNotch(0, firstNotch));
+            Assert.Equal(4, repository.GetNotchCapacity(0));
+
+            Assert.False(repository.TryCollectNotch(0, firstNotch, 1));
+            Assert.True(repository.TryCollectNotch(0, secondNotch, 2));
+            Assert.True(repository.HasCollectedNotch(0, secondNotch));
+            Assert.Equal(6, repository.GetNotchCapacity(0));
+
+            repository.ClearSlot(0);
+            Assert.False(repository.HasCollectedNotch(0, firstNotch));
+            Assert.Equal(0, repository.GetNotchCapacity(0));
+        });
+    }
+
+    [Fact]
     public void CharmCollectionStatePersistsPerSlot()
     {
         WithRepository(repository =>
@@ -298,6 +334,7 @@ public class ShadeSaveSlotRepositoryTests
         {
             var state = new ShadePersistentState();
             state.Capture(4, 8, 0, 0, 20, true);
+            state.TryCollectNotch("hornet_a", 2);
             state.SetNotchCapacity(5);
             state.UnlockCharm((int)ShadeCharmId.ShamanStone);
             state.EquipCharm(0, (int)ShadeCharmId.ShamanStone);
@@ -327,10 +364,13 @@ public class ShadeSaveSlotRepositoryTests
                 Assert.True(loaded.HasDiscoveredCharm((int)ShadeCharmId.ShamanStone));
                 Assert.Contains((int)ShadeCharmId.ShamanStone, loaded.GetEquippedCharms(0));
                 Assert.Equal(5, loaded.NotchCapacity);
+                Assert.Contains("hornet_a", loaded.GetCollectedNotchIdsSnapshot());
 
                 Assert.True(second.IsCharmCollected(1, ShadeCharmId.WaywardCompass));
                 Assert.Contains(ShadeCharmId.FragileHeart, second.GetBrokenCharms(1));
                 Assert.Contains(ShadeCharmId.QuickSlash, second.GetNewlyDiscoveredCharms(1));
+
+                Assert.True(second.HasCollectedNotch(1, "hornet_a"));
 
                 Assert.True(second.IsDebugUnlockActive(1));
                 var persistedSnapshot = second.GetDebugUnlockSnapshot(1);

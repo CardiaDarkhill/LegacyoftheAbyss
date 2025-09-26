@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 using GlobalSettings;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -80,7 +81,7 @@ namespace LegacyoftheAbyss.Shade
                 }
 
                 pickup.gameObject.name = placement.ItemKind == ShadeCharmPlacementItemKind.Notch
-                    ? $"ShadeNotchPickup_{Mathf.Max(0, placement.NotchTargetCapacity ?? 0)}"
+                    ? BuildNotchPickupName(placement.NotchId)
                     : $"ShadeCharmPickup_{placement.CharmId}";
                 pickup.transform.position = position;
                 pickup.transform.rotation = rotation;
@@ -121,17 +122,39 @@ namespace LegacyoftheAbyss.Shade
             switch (placement.ItemKind)
             {
                 case ShadeCharmPlacementItemKind.Notch:
-                    int targetCapacity = Mathf.Max(0, placement.NotchTargetCapacity ?? 0);
-                    if (targetCapacity <= 0)
+                    string notchId = (placement.NotchId ?? string.Empty).Trim();
+                    if (string.IsNullOrEmpty(notchId))
                     {
                         return null;
                     }
 
                     int increment = Mathf.Max(1, placement.NotchIncrement ?? 1);
-                    return ShadeNotchSavedItem.Create(targetCapacity, increment);
+                    return ShadeNotchSavedItem.Create(notchId, increment);
                 default:
                     return ShadeCharmSavedItem.Create(placement.CharmId);
             }
+        }
+
+        private static string BuildNotchPickupName(string? notchId)
+        {
+            if (string.IsNullOrWhiteSpace(notchId))
+            {
+                return "ShadeNotchPickup";
+            }
+
+            var builder = new StringBuilder();
+            foreach (char ch in notchId)
+            {
+                builder.Append(char.IsLetterOrDigit(ch) ? ch : '_');
+            }
+
+            string sanitized = builder.ToString().Trim('_');
+            if (string.IsNullOrEmpty(sanitized))
+            {
+                sanitized = "Notch";
+            }
+
+            return $"ShadeNotchPickup_{sanitized}";
         }
     }
 }
