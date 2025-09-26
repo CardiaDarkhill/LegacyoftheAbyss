@@ -15,7 +15,7 @@ namespace LegacyoftheAbyss.Tests
             var placements = Shade.ShadeCharmPlacementDatabase.GetPlacementsForScene("BoneBottom");
 
             Assert.NotNull(placements);
-            Assert.Equal(10, placements.Count);
+            Assert.Equal(11, placements.Count);
 
             var grubsong = placements.First(p => p.CharmId == Shade.ShadeCharmId.Grubsong);
             Assert.NotNull(grubsong.AnchorOffset);

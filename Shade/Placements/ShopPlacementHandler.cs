@@ -2,7 +2,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using GlobalEnums;
 using HarmonyLib;
+using TeamCherry.Localization;
 using UnityEngine;
 
 namespace LegacyoftheAbyss.Shade
@@ -13,6 +16,7 @@ namespace LegacyoftheAbyss.Shade
 
         private readonly List<ShadeCharmPlacementDefinition> _activePlacements = new();
         private readonly Dictionary<SimpleShopMenuOwner, ShopStockInfo> _activeStock = new();
+        private readonly Dictionary<ShopOwnerBase, ShopOwnerStockInfo> _activeOwnerStock = new();
         private string _sceneName = string.Empty;
 
         internal ShopPlacementHandler()
@@ -25,6 +29,11 @@ namespace LegacyoftheAbyss.Shade
             _sceneName = context.SceneName;
             _activePlacements.Clear();
             _activeStock.Clear();
+            foreach (var info in _activeOwnerStock.Values)
+            {
+                info.Dispose();
+            }
+            _activeOwnerStock.Clear();
 
             if (placements == null || placements.Count == 0)
             {
@@ -59,6 +68,11 @@ namespace LegacyoftheAbyss.Shade
             foreach (var placement in _activePlacements)
             {
                 if (!MatchesOwner(placement, owner))
+                {
+                    continue;
+                }
+
+                if (!MeetsShopConditions(placement))
                 {
                     continue;
                 }
@@ -150,7 +164,88 @@ namespace LegacyoftheAbyss.Shade
             return true;
         }
 
-        private static bool MatchesOwner(ShadeCharmPlacementDefinition placement, SimpleShopMenuOwner owner)
+        internal void AugmentStock(ShopOwnerBase owner, ref ShopItem[] stock)
+        {
+            if (owner == null)
+            {
+                return;
+            }
+
+            if (_activePlacements.Count == 0)
+            {
+                if (_activeOwnerStock.Remove(owner, out var stale))
+                {
+                    stale.Dispose();
+                }
+
+                return;
+            }
+
+            var matches = new List<ShadeCharmPlacementDefinition>();
+            foreach (var placement in _activePlacements)
+            {
+                if (!MatchesOwner(placement, owner))
+                {
+                    continue;
+                }
+
+                if (!MeetsShopConditions(placement))
+                {
+                    continue;
+                }
+
+                matches.Add(placement);
+            }
+
+            if (matches.Count == 0)
+            {
+                if (_activeOwnerStock.Remove(owner, out var stale))
+                {
+                    stale.Dispose();
+                }
+
+                return;
+            }
+
+            if (!_activeOwnerStock.TryGetValue(owner, out var info))
+            {
+                info = new ShopOwnerStockInfo(this);
+                _activeOwnerStock[owner] = info;
+            }
+
+            var items = info.ResolveItems(matches);
+            if (items.Count == 0)
+            {
+                if (_activeOwnerStock.Remove(owner, out var stale))
+                {
+                    stale.Dispose();
+                }
+
+                return;
+            }
+
+            int baseCount = stock?.Length ?? 0;
+            var combined = new ShopItem[baseCount + items.Count];
+            if (baseCount > 0 && stock != null)
+            {
+                Array.Copy(stock, combined, baseCount);
+            }
+
+            for (int i = 0; i < items.Count; i++)
+            {
+                combined[baseCount + i] = items[i];
+            }
+
+            stock = combined;
+
+            if (!info.HasLogged)
+            {
+                ShadeCharmPlacementService.LogInfo($"Injected {items.Count} charm shop item(s) for '{owner.name}' in scene '{_sceneName}'.");
+                info.HasLogged = true;
+            }
+        }
+
+        private static bool MatchesOwner(ShadeCharmPlacementDefinition placement, Component owner)
         {
             var shop = placement.Shop;
             if (shop == null)
@@ -175,10 +270,62 @@ namespace LegacyoftheAbyss.Shade
                 }
             }
 
-            if (string.IsNullOrWhiteSpace(shop.OwnerPath) && string.IsNullOrWhiteSpace(shop.OwnerName))
+            if (shop.OwnerNameContainsAll is { Length: > 0 })
             {
-                ShadeCharmPlacementService.LogWarning($"Shop placement for charm {placement.CharmId} in scene '{Instance?._sceneName}' does not specify an ownerPath or ownerName; skipping.");
+                string ownerName = owner.name ?? string.Empty;
+                foreach (string token in shop.OwnerNameContainsAll)
+                {
+                    if (string.IsNullOrWhiteSpace(token))
+                    {
+                        continue;
+                    }
+
+                    if (ownerName.IndexOf(token, StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(shop.OwnerPath) &&
+                string.IsNullOrWhiteSpace(shop.OwnerName) &&
+                (shop.OwnerNameContainsAll == null || shop.OwnerNameContainsAll.Length == 0))
+            {
+                ShadeCharmPlacementService.LogWarning($"Shop placement for charm {placement.CharmId} in scene '{Instance?._sceneName}' does not specify any owner matching data; skipping.");
                 return false;
+            }
+
+            return true;
+        }
+
+        private static bool MeetsShopConditions(ShadeCharmPlacementDefinition placement)
+        {
+            var shop = placement.Shop;
+            if (shop == null)
+            {
+                return true;
+            }
+
+            if (shop.RequireCollected is { Length: > 0 })
+            {
+                foreach (var required in shop.RequireCollected)
+                {
+                    if (!ShadeCharmPlacementService.IsCharmAlreadyCollected(required))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            if (shop.RequireNotCollected is { Length: > 0 })
+            {
+                foreach (var forbidden in shop.RequireNotCollected)
+                {
+                    if (ShadeCharmPlacementService.IsCharmAlreadyCollected(forbidden))
+                    {
+                        return false;
+                    }
+                }
             }
 
             return true;
@@ -195,6 +342,124 @@ namespace LegacyoftheAbyss.Shade
             internal int StartIndex { get; }
 
             internal List<ShadeCharmShopItem?> Items { get; }
+        }
+
+        private sealed class ShopOwnerStockInfo : IDisposable
+        {
+            private readonly ShopPlacementHandler _handler;
+            private readonly Dictionary<ShadeCharmPlacementDefinition, ShopOwnerItemEntry> _items = new();
+
+            internal ShopOwnerStockInfo(ShopPlacementHandler handler)
+            {
+                _handler = handler;
+            }
+
+            internal bool HasLogged { get; set; }
+
+            internal List<ShopItem> ResolveItems(IReadOnlyList<ShadeCharmPlacementDefinition> definitions)
+            {
+                var result = new List<ShopItem>(definitions.Count);
+                var remaining = new HashSet<ShadeCharmPlacementDefinition>(_items.Keys);
+
+                foreach (var definition in definitions)
+                {
+                    if (definition == null)
+                    {
+                        continue;
+                    }
+
+                    remaining.Remove(definition);
+
+                    if (!_items.TryGetValue(definition, out var entry) || entry == null)
+                    {
+                        entry = _handler.CreateOwnerItem(definition);
+                        if (entry == null)
+                        {
+                            continue;
+                        }
+
+                        _items[definition] = entry;
+                    }
+
+                    if (entry.Item != null)
+                    {
+                        result.Add(entry.Item);
+                    }
+                }
+
+                foreach (var stale in remaining)
+                {
+                    if (_items.TryGetValue(stale, out var entry))
+                    {
+                        entry.Dispose();
+                        _items.Remove(stale);
+                    }
+                }
+
+                return result;
+            }
+
+            public void Dispose()
+            {
+                foreach (var entry in _items.Values)
+                {
+                    entry.Dispose();
+                }
+
+                _items.Clear();
+            }
+        }
+
+        private sealed class ShopOwnerItemEntry : IDisposable
+        {
+            internal ShopOwnerItemEntry(ShopItem item, ShadeCharmSavedItem savedItem)
+            {
+                Item = item;
+                SavedItem = savedItem;
+            }
+
+            internal ShopItem Item { get; }
+
+            internal ShadeCharmSavedItem SavedItem { get; }
+
+            public void Dispose()
+            {
+                try
+                {
+                    if (SavedItem != null)
+                    {
+                        if (Application.isPlaying)
+                        {
+                            UnityEngine.Object.Destroy(SavedItem);
+                        }
+                        else
+                        {
+                            UnityEngine.Object.DestroyImmediate(SavedItem);
+                        }
+                    }
+                }
+                catch
+                {
+                }
+
+                try
+                {
+                    if (Item != null)
+                    {
+                        if (Application.isPlaying)
+                        {
+                            UnityEngine.Object.Destroy(Item);
+                        }
+                        else
+                        {
+                            UnityEngine.Object.DestroyImmediate(Item);
+                        }
+                    }
+                }
+                catch
+                {
+                }
+            }
         }
 
         private sealed class ShadeCharmShopItem : ISimpleShopItem
@@ -287,6 +552,45 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
+        private ShopOwnerItemEntry? CreateOwnerItem(ShadeCharmPlacementDefinition definition)
+        {
+            try
+            {
+                var shopData = definition.Shop ?? new ShadeCharmPlacementShopData();
+                var item = ShopItem.CreateTemp($"ShadeCharm_{definition.CharmId}_ShopItem");
+                item.hideFlags = HideFlags.HideAndDontSave;
+
+                ShadeCharmSavedItem savedItem = ShadeCharmSavedItem.Create(definition.CharmId);
+                savedItem.hideFlags = HideFlags.HideAndDontSave;
+
+                var definitionInventory = ShadeRuntime.Charms;
+                ShadeCharmDefinition? charmDefinition = definitionInventory?.GetDefinition(definition.CharmId);
+
+                string displayName = charmDefinition?.DisplayName ?? definition.CharmId.ToString();
+                string description = charmDefinition?.Description ?? string.Empty;
+                var localisedName = new LocalisedString("LegacyAbyss", displayName);
+                var localisedDescription = new LocalisedString("LegacyAbyss", description);
+
+                AccessTools.Field(typeof(ShopItem), "displayName").SetValue(item, localisedName);
+                AccessTools.Field(typeof(ShopItem), "description").SetValue(item, localisedDescription);
+                AccessTools.Field(typeof(ShopItem), "descriptionMultiple").SetValue(item, localisedDescription);
+
+                var sprite = ShadeCharmSavedItem.ResolveCharmSprite(definition.CharmId, out _);
+                AccessTools.Field(typeof(ShopItem), "itemSprite").SetValue(item, sprite);
+
+                AccessTools.Field(typeof(ShopItem), "currencyType").SetValue(item, CurrencyType.Money);
+                AccessTools.Field(typeof(ShopItem), "cost").SetValue(item, Math.Max(0, shopData.GeoCost ?? 0));
+                AccessTools.Field(typeof(ShopItem), "savedItem").SetValue(item, savedItem);
+
+                return new ShopOwnerItemEntry(item, savedItem);
+            }
+            catch (Exception ex)
+            {
+                ShadeCharmPlacementService.LogWarning($"Failed to create shop item for charm {definition.CharmId}: {ex}");
+                return null;
+            }
+        }
+
         [HarmonyPatch(typeof(SimpleShopMenu), nameof(SimpleShopMenu.SetStock))]
         private static class SimpleShopMenu_SetStock_Patch
         {
@@ -299,6 +603,23 @@ namespace LegacyoftheAbyss.Shade
                 }
 
                 handler.AugmentStock(newOwner, newShopItems);
+            }
+        }
+
+        [HarmonyPatch(typeof(ShopOwner), nameof(ShopOwner.Stock), MethodType.Getter)]
+        private static class ShopOwner_get_Stock_Patch
+        {
+            private static void Postfix(ShopOwner __instance, ref ShopItem[] __result)
+            {
+                var handler = Instance;
+                if (handler == null || __instance == null)
+                {
+                    return;
+                }
+
+                var stock = __result;
+                handler.AugmentStock(__instance, ref stock);
+                __result = stock;
             }
         }
 

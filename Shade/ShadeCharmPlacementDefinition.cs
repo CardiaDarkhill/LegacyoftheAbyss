@@ -69,13 +69,37 @@ namespace LegacyoftheAbyss.Shade
                 return false;
             }
 
-            if (!string.IsNullOrWhiteSpace(SceneName) &&
+            bool hasSceneName = !string.IsNullOrWhiteSpace(SceneName);
+            bool hasContains = SceneContainsAll != null && SceneContainsAll.Length > 0;
+
+            if (!hasSceneName && !hasContains)
+            {
+                if (SceneExcludesAny != null && SceneExcludesAny.Length > 0)
+                {
+                    foreach (string exclude in SceneExcludesAny)
+                    {
+                        if (string.IsNullOrWhiteSpace(exclude))
+                        {
+                            continue;
+                        }
+
+                        if (sceneName.IndexOf(exclude, StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            return false;
+                        }
+                    }
+                }
+
+                return true;
+            }
+
+            if (hasSceneName &&
                 string.Equals(SceneName, sceneName, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
 
-            if (SceneContainsAll != null && SceneContainsAll.Length > 0)
+            if (hasContains)
             {
                 bool containsAll = true;
                 foreach (string token in SceneContainsAll)
@@ -138,6 +162,9 @@ namespace LegacyoftheAbyss.Shade
         [JsonProperty("ownerName")]
         public string? OwnerName { get; init; }
 
+        [JsonProperty("ownerNameContainsAll")]
+        public string[]? OwnerNameContainsAll { get; init; }
+
         [JsonProperty("geoCost")]
         public int? GeoCost { get; init; }
 
@@ -146,6 +173,12 @@ namespace LegacyoftheAbyss.Shade
 
         [JsonProperty("closeOnPurchase")]
         public bool? CloseOnPurchase { get; init; }
+
+        [JsonProperty("requireCollected")]
+        public ShadeCharmId[]? RequireCollected { get; init; }
+
+        [JsonProperty("requireNotCollected")]
+        public ShadeCharmId[]? RequireNotCollected { get; init; }
     }
 
     internal sealed class ShadeCharmPlacementBossDropData
