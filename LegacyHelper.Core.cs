@@ -71,7 +71,7 @@ public partial class LegacyHelper : BaseUnityPlugin
     {
         Instance = this;
         ModConfig.Load();
-        LoggingManager.Initialize();
+        LoggingManager.Initialize(Logger);
         var harmony = new Harmony("com.legacyoftheabyss.helper");
         harmony.PatchAll();
 

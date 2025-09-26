@@ -101,8 +101,9 @@ namespace LegacyoftheAbyss.Shade
 
             if (hasContains)
             {
+                string[] requiredTokens = SceneContainsAll!;
                 bool containsAll = true;
-                foreach (string token in SceneContainsAll)
+                foreach (string token in requiredTokens)
                 {
                     if (string.IsNullOrWhiteSpace(token))
                     {
@@ -118,9 +119,9 @@ namespace LegacyoftheAbyss.Shade
 
                 if (containsAll)
                 {
-                    if (SceneExcludesAny != null && SceneExcludesAny.Length > 0)
+                    if (SceneExcludesAny is { Length: > 0 } excludedTokens)
                     {
-                        foreach (string exclude in SceneExcludesAny)
+                        foreach (string exclude in excludedTokens)
                         {
                             if (string.IsNullOrWhiteSpace(exclude))
                             {
