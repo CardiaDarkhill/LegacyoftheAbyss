@@ -4,7 +4,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using HarmonyLib;
 using InControl;
 using LegacyoftheAbyss.Shade;
@@ -1965,297 +1964,96 @@ public partial class LegacyHelper
     private static class ShadeCompassIconManager
     {
         private static readonly FieldInfo CompassIconField = AccessTools.Field(typeof(GameMap), "compassIcon");
-        private static readonly FieldInfo CurrentSceneField = AccessTools.Field(typeof(GameMap), "currentScene");
-        private static readonly FieldInfo CurrentSceneObjField = AccessTools.Field(typeof(GameMap), "currentSceneObj");
-        private static readonly FieldInfo CurrentScenePosField = AccessTools.Field(typeof(GameMap), "currentScenePos");
-        private static readonly FieldInfo CurrentSceneSizeField = AccessTools.Field(typeof(GameMap), "currentSceneSize");
-        private static readonly MethodInfo GetMapPositionMethod = AccessTools.Method(typeof(GameMap), "GetMapPosition", new[]
-        {
-            typeof(Vector2),
-            typeof(GameMapScene),
-            typeof(GameObject),
-            typeof(Vector2),
-            typeof(Vector2)
-        });
-        private static readonly MethodInfo IsLostInAbyssMethod = AccessTools.Method(typeof(GameMap), "IsLostInAbyssPreMap");
         private static readonly FieldInfo WideMapCompassIconField = AccessTools.Field(typeof(InventoryWideMap), "compassIcon");
-        private static readonly MethodInfo WideMapPositionIconMethod = AccessTools.Method(
-            typeof(InventoryWideMap),
-            "PositionIcon",
-            new[] { typeof(Transform), typeof(Vector2), typeof(bool), typeof(MapZone) });
-
-        private static GameObject shadeCompassIcon;
-        private static GameObject templateCompassIcon;
         private static Sprite shadeCompassSprite;
-        private static bool loggedFailure;
-        private static readonly ConditionalWeakTable<InventoryWideMap, WideMapIconState> wideMapIcons = new();
 
         internal static void Update(GameMap map)
         {
-            if (map == null)
+            if (map == null || CompassIconField == null)
             {
                 return;
             }
 
-            if (!ShouldDisplay(map))
-            {
-                HideIcon();
-                return;
-            }
-
-            var icon = EnsureIcon(map);
-            if (icon == null)
+            if (CompassIconField.GetValue(map) is not GameObject icon || icon == null)
             {
                 return;
             }
 
-            if (!TryGetMapPosition(map, out var mapPosition))
-            {
-                icon.SetActive(false);
-                return;
-            }
-
-            if (!icon.activeSelf)
-            {
-                icon.SetActive(true);
-            }
-
-            var local = icon.transform.localPosition;
-            icon.transform.localPosition = new Vector3(mapPosition.x, mapPosition.y, local.z);
-            loggedFailure = false;
+            ApplySprite(icon);
         }
 
-        private static void HideIcon()
+        internal static void UpdateWideMap(InventoryWideMap wideMap)
         {
-            if (shadeCompassIcon != null)
-            {
-                shadeCompassIcon.SetActive(false);
-            }
-        }
-
-        private static bool ShouldDisplay(GameMap map)
-        {
-            if (!ModConfig.Instance.shadeEnabled)
-            {
-                return false;
-            }
-
-            var inventory = ShadeRuntime.Charms;
-            if (inventory == null || !inventory.IsEquipped(ShadeCharmId.WaywardCompass))
-            {
-                return false;
-            }
-
-            if (!LegacyHelper.TryGetShadeController(out var controller) || controller == null)
-            {
-                return false;
-            }
-
-            if (!controller.gameObject || !controller.gameObject.activeInHierarchy)
-            {
-                return false;
-            }
-
-            if (!map.gameObject.activeInHierarchy)
-            {
-                return false;
-            }
-
-            if (IsLostInAbyssMethod != null)
-            {
-                try
-                {
-                    if (IsLostInAbyssMethod.Invoke(map, Array.Empty<object>()) is bool lost && lost)
-                    {
-                        return false;
-                    }
-                }
-                catch
-                {
-                }
-            }
-
-            return true;
-        }
-
-        private static GameObject EnsureIcon(GameMap map)
-        {
-            var template = CompassIconField?.GetValue(map) as GameObject;
-            if (template != null)
-            {
-                templateCompassIcon = template;
-            }
-
-            if (shadeCompassIcon != null)
-            {
-                if (CompassIconField != null)
-                {
-                    try
-                    {
-                        var activeIcon = CompassIconField.GetValue(map) as GameObject;
-                        if (activeIcon != shadeCompassIcon)
-                        {
-                            CompassIconField.SetValue(map, shadeCompassIcon);
-                        }
-                    }
-                    catch
-                    {
-                    }
-                }
-
-                if (templateCompassIcon != null && templateCompassIcon != shadeCompassIcon)
-                {
-                    try { templateCompassIcon.SetActive(false); } catch { }
-                }
-
-                return shadeCompassIcon;
-            }
-
-            if (template == null)
-            {
-                return null;
-            }
-
-            var parent = template.transform.parent;
-            var clone = UnityEngine.Object.Instantiate(template, parent);
-            clone.name = "ShadeCompassIcon";
-            clone.SetActive(false);
-
-            var templateRenderer = template.GetComponentInChildren<SpriteRenderer>(true);
-            ApplySpriteToClone(clone, template, templateRenderer);
-
-            shadeCompassIcon = clone;
-            if (CompassIconField != null)
-            {
-                try { CompassIconField.SetValue(map, shadeCompassIcon); } catch { }
-            }
-
-            if (templateCompassIcon != null && templateCompassIcon != shadeCompassIcon)
-            {
-                try { templateCompassIcon.SetActive(false); } catch { }
-            }
-            return shadeCompassIcon;
-        }
-
-        private static Transform EnsureWideMapIcon(InventoryWideMap wideMap)
-        {
-            if (wideMap == null)
-            {
-                return null;
-            }
-
-            Transform template = WideMapCompassIconField?.GetValue(wideMap) as Transform;
-            if (template == null)
-            {
-                return null;
-            }
-
-            var state = wideMapIcons.GetValue(wideMap, _ => new WideMapIconState());
-            if (state.Template != template)
-            {
-                state.Template = template;
-                state.ShadeIcon = null;
-            }
-
-            if (state.ShadeIcon == null || state.ShadeIcon.Equals(null))
-            {
-                var clone = UnityEngine.Object.Instantiate(template.gameObject, template.parent);
-                clone.name = "ShadeCompassIcon";
-                clone.SetActive(template.gameObject.activeSelf);
-
-                var templateRenderer = template.GetComponentInChildren<SpriteRenderer>(true);
-                ApplySpriteToClone(clone, template.gameObject, templateRenderer);
-
-                state.ShadeIcon = clone.transform;
-            }
-
-            if (WideMapCompassIconField != null)
-            {
-                try { WideMapCompassIconField.SetValue(wideMap, state.ShadeIcon); } catch { }
-            }
-
-            if (state.Template != null && state.ShadeIcon != null && state.Template.gameObject != state.ShadeIcon.gameObject)
-            {
-                try { state.Template.gameObject.SetActive(false); } catch { }
-            }
-
-            return state.ShadeIcon;
-        }
-
-        private static void ApplySpriteToClone(GameObject clone, GameObject template, SpriteRenderer templateRenderer)
-        {
-            if (clone == null || template == null)
+            if (wideMap == null || WideMapCompassIconField == null)
             {
                 return;
             }
 
+            if (WideMapCompassIconField.GetValue(wideMap) is not Transform icon || icon == null)
+            {
+                return;
+            }
+
+            ApplySprite(icon.gameObject);
+        }
+
+        private static void ApplySprite(GameObject iconRoot)
+        {
+            if (iconRoot == null)
+            {
+                return;
+            }
+
+            var templateRenderer = iconRoot.GetComponentInChildren<SpriteRenderer>(true);
             var sprite = ResolveSprite(templateRenderer);
             if (sprite == null)
             {
                 return;
             }
 
-            clone.layer = template.layer;
-
-            var cloneRenderers = clone.GetComponentsInChildren<SpriteRenderer>(true);
-            if (cloneRenderers != null && cloneRenderers.Length > 0)
+            var renderers = iconRoot.GetComponentsInChildren<SpriteRenderer>(true);
+            if (renderers != null && renderers.Length > 0)
             {
-                foreach (var renderer in cloneRenderers)
+                foreach (var renderer in renderers)
                 {
-                    if (renderer == null)
+                    if (renderer == null || renderer.sprite == sprite)
                     {
                         continue;
                     }
 
+                    var originalSprite = renderer.sprite;
                     renderer.sprite = sprite;
-                    if (templateRenderer != null)
+                    if (originalSprite != null)
                     {
-                        renderer.sortingLayerID = templateRenderer.sortingLayerID;
-                        renderer.sortingOrder = templateRenderer.sortingOrder;
-                        renderer.color = templateRenderer.color;
-                        renderer.flipX = templateRenderer.flipX;
-                        renderer.flipY = templateRenderer.flipY;
-                        renderer.sharedMaterial = templateRenderer.sharedMaterial;
+                        MatchScale(renderer.transform, originalSprite, sprite);
                     }
-                }
-
-                if (templateRenderer != null && templateRenderer.sprite != null)
-                {
-                    MatchScale(clone.transform, templateRenderer.sprite, sprite);
                 }
             }
             else
             {
-                var renderer = clone.GetComponent<SpriteRenderer>() ?? clone.AddComponent<SpriteRenderer>();
-                renderer.sprite = sprite;
-                if (templateRenderer != null)
+                var renderer = iconRoot.GetComponent<SpriteRenderer>() ?? iconRoot.AddComponent<SpriteRenderer>();
+                if (renderer.sprite != sprite)
                 {
-                    renderer.sortingLayerID = templateRenderer.sortingLayerID;
-                    renderer.sortingOrder = templateRenderer.sortingOrder;
-                    renderer.color = templateRenderer.color;
-                    renderer.flipX = templateRenderer.flipX;
-                    renderer.flipY = templateRenderer.flipY;
-                    renderer.sharedMaterial = templateRenderer.sharedMaterial;
-                    if (templateRenderer.sprite != null)
+                    var originalSprite = renderer.sprite;
+                    renderer.sprite = sprite;
+                    if (originalSprite != null)
                     {
-                        MatchScale(renderer.transform, templateRenderer.sprite, sprite);
+                        MatchScale(renderer.transform, originalSprite, sprite);
                     }
                 }
             }
 
-            var templateImages = template.GetComponentsInChildren<Image>(true);
-            var cloneImages = clone.GetComponentsInChildren<Image>(true);
-            Image imageTemplateReference = null;
-            if (templateImages != null && templateImages.Length > 0)
+            var images = iconRoot.GetComponentsInChildren<Image>(true);
+            if (images != null && images.Length > 0)
             {
-                imageTemplateReference = templateImages[0];
-            }
-
-            if (cloneImages != null && cloneImages.Length > 0)
-            {
-                foreach (var image in cloneImages)
+                foreach (var image in images)
                 {
                     if (image == null)
+                    {
+                        continue;
+                    }
+
+                    if (image.sprite == sprite && image.overrideSprite == sprite)
                     {
                         continue;
                     }
@@ -2263,12 +2061,6 @@ public partial class LegacyHelper
                     image.sprite = sprite;
                     image.overrideSprite = sprite;
                     image.enabled = true;
-                    if (imageTemplateReference != null)
-                    {
-                        image.color = imageTemplateReference.color;
-                        image.material = imageTemplateReference.material;
-                        image.preserveAspect = imageTemplateReference.preserveAspect;
-                    }
                 }
             }
         }
@@ -2279,6 +2071,9 @@ public partial class LegacyHelper
             {
                 return shadeCompassSprite;
             }
+
+            Sprite templateSprite = templateRenderer != null ? templateRenderer.sprite : null;
+            float pixelsPerUnit = templateSprite != null ? templateSprite.pixelsPerUnit : 100f;
 
             try
             {
@@ -2292,9 +2087,6 @@ public partial class LegacyHelper
                         {
                             texture.filterMode = FilterMode.Bilinear;
                             texture.wrapMode = TextureWrapMode.Clamp;
-                            float pixelsPerUnit = templateRenderer != null && templateRenderer.sprite != null
-                                ? templateRenderer.sprite.pixelsPerUnit
-                                : 100f;
                             shadeCompassSprite = Sprite.Create(
                                 texture,
                                 new Rect(0f, 0f, texture.width, texture.height),
@@ -2314,136 +2106,7 @@ public partial class LegacyHelper
             {
             }
 
-            return templateRenderer != null ? templateRenderer.sprite : null;
-        }
-
-        internal static void UpdateWideMap(InventoryWideMap wideMap)
-        {
-            if (wideMap == null)
-            {
-                return;
-            }
-
-            var gm = GameManager.instance != null ? GameManager.instance.gameMap : null;
-            if (gm == null)
-            {
-                return;
-            }
-
-            var icon = EnsureWideMapIcon(wideMap);
-            if (icon == null)
-            {
-                return;
-            }
-
-            if (!ShouldDisplay(gm))
-            {
-                try { icon.gameObject.SetActive(false); } catch { }
-                return;
-            }
-
-            try
-            {
-                gm.UpdateCurrentScene();
-            }
-            catch
-            {
-            }
-
-            MapZone zone;
-            Vector2 compassBounds;
-            try
-            {
-                compassBounds = gm.GetCompassPositionLocalBounds(out zone);
-            }
-            catch
-            {
-                try { icon.gameObject.SetActive(false); } catch { }
-                return;
-            }
-
-            if (WideMapPositionIconMethod != null)
-            {
-                try
-                {
-                    WideMapPositionIconMethod.Invoke(wideMap, new object[]
-                    {
-                        icon,
-                        compassBounds,
-                        true,
-                        zone
-                    });
-                }
-                catch
-                {
-                }
-            }
-        }
-
-        private static bool TryGetMapPosition(GameMap map, out Vector2 mapPosition)
-        {
-            mapPosition = default;
-
-            if (!LegacyHelper.TryGetShadeController(out var controller) || controller == null)
-            {
-                return false;
-            }
-
-            var shadeTransform = controller.transform;
-            if (shadeTransform == null)
-            {
-                return false;
-            }
-
-            var scene = CurrentSceneField?.GetValue(map) as GameMapScene;
-            var sceneObj = CurrentSceneObjField?.GetValue(map) as GameObject;
-            if (sceneObj == null)
-            {
-                return false;
-            }
-
-            Vector2 scenePos = CurrentScenePosField != null ? (Vector2)CurrentScenePosField.GetValue(map) : Vector2.zero;
-            Vector2 sceneSize = CurrentSceneSizeField != null ? (Vector2)CurrentSceneSizeField.GetValue(map) : Vector2.one;
-
-            if (GetMapPositionMethod == null)
-            {
-                return false;
-            }
-
-            Vector2 shadeScenePos = new Vector2(shadeTransform.position.x, shadeTransform.position.y);
-            try
-            {
-                var raw = (Vector2)GetMapPositionMethod.Invoke(map, new object[]
-                {
-                    shadeScenePos,
-                    scene,
-                    sceneObj,
-                    scenePos,
-                    sceneSize
-                });
-
-                if (float.IsNaN(raw.x) || float.IsNaN(raw.y) || float.IsInfinity(raw.x) || float.IsInfinity(raw.y))
-                {
-                    return false;
-                }
-
-                if (raw.x <= -900f || raw.y <= -900f)
-                {
-                    return false;
-                }
-
-                mapPosition = raw;
-                return true;
-            }
-            catch (Exception ex)
-            {
-                if (!loggedFailure && ModConfig.Instance.logGeneral)
-                {
-                    Instance?.Logger?.LogWarning($"Failed to position shade compass icon: {ex}");
-                    loggedFailure = true;
-                }
-                return false;
-            }
+            return templateSprite;
         }
 
         private static void MatchScale(Transform target, Sprite templateSprite, Sprite replacement)
@@ -2468,12 +2131,6 @@ public partial class LegacyHelper
             }
 
             target.localScale = scale;
-        }
-
-        private sealed class WideMapIconState
-        {
-            internal Transform Template;
-            internal Transform ShadeIcon;
         }
     }
 }
