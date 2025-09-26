@@ -13,6 +13,8 @@ namespace LegacyoftheAbyss.Shade
     internal sealed class ShadePersistentState
     {
         private const int MaxSpellProgress = 6;
+        private const int DefaultNotchCapacity = 3;
+        private const int MaxNotchCapacity = 20;
 
         public int CurrentHP { get; private set; } = -1;
         public int MaxHP { get; private set; } = -1;
@@ -25,9 +27,12 @@ namespace LegacyoftheAbyss.Shade
             = 0;
 
         private readonly HashSet<int> _discoveredCharmIds = new();
+        private readonly HashSet<string> _collectedNotchIds = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<int, HashSet<int>> _equippedCharmLoadouts = new();
 
         public IReadOnlyCollection<int> DiscoveredCharmIds => _discoveredCharmIds;
+
+        public IReadOnlyCollection<string> CollectedNotchIds => _collectedNotchIds;
 
         public int NotchCapacity { get; private set; }
             = 0;
@@ -50,6 +55,7 @@ namespace LegacyoftheAbyss.Shade
             };
 
             clone._discoveredCharmIds.UnionWith(_discoveredCharmIds);
+            clone._collectedNotchIds.UnionWith(_collectedNotchIds);
             foreach (var (loadoutId, charms) in _equippedCharmLoadouts)
             {
                 clone._equippedCharmLoadouts[loadoutId] = new HashSet<int>(charms);
@@ -146,6 +152,7 @@ namespace LegacyoftheAbyss.Shade
             SpellProgress = 0;
             NotchCapacity = 0;
             _discoveredCharmIds.Clear();
+            _collectedNotchIds.Clear();
             _equippedCharmLoadouts.Clear();
         }
 
@@ -169,6 +176,7 @@ namespace LegacyoftheAbyss.Shade
                 SpellProgress = SpellProgress,
                 NotchCapacity = NotchCapacity,
                 DiscoveredCharmIds = _discoveredCharmIds.ToArray(),
+                CollectedNotchIds = _collectedNotchIds.ToArray(),
                 EquippedCharmLoadouts = equipped
             };
         }
@@ -194,6 +202,19 @@ namespace LegacyoftheAbyss.Shade
 
             SetSpellProgress(snapshot.SpellProgress);
             SetNotchCapacity(snapshot.NotchCapacity);
+
+            if (snapshot.CollectedNotchIds != null)
+            {
+                foreach (var notchId in snapshot.CollectedNotchIds)
+                {
+                    if (string.IsNullOrWhiteSpace(notchId))
+                    {
+                        continue;
+                    }
+
+                    _collectedNotchIds.Add(notchId.Trim());
+                }
+            }
 
             if (snapshot.DiscoveredCharmIds != null)
             {
@@ -229,6 +250,8 @@ namespace LegacyoftheAbyss.Shade
                     }
                 }
             }
+
+            EnsureCapacityMatchesCollectedNotches();
         }
 
         internal struct ShadePersistentStateData
@@ -252,6 +275,8 @@ namespace LegacyoftheAbyss.Shade
             public int NotchCapacity { get; set; }
 
             public int[]? DiscoveredCharmIds { get; set; }
+
+            public string[]? CollectedNotchIds { get; set; }
 
             public Dictionary<int, int[]>? EquippedCharmLoadouts { get; set; }
         }
@@ -419,7 +444,7 @@ namespace LegacyoftheAbyss.Shade
 
         public bool SetNotchCapacity(int capacity)
         {
-            int sanitized = Mathf.Max(0, capacity);
+            int sanitized = Mathf.Clamp(capacity, 0, MaxNotchCapacity);
             if (sanitized == NotchCapacity)
             {
                 return false;
@@ -427,6 +452,64 @@ namespace LegacyoftheAbyss.Shade
 
             NotchCapacity = sanitized;
             return true;
+        }
+
+        public IReadOnlyCollection<string> GetCollectedNotchIdsSnapshot()
+        {
+            if (_collectedNotchIds.Count == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            return _collectedNotchIds.ToArray();
+        }
+
+        public bool HasCollectedNotch(string notchId)
+        {
+            if (string.IsNullOrWhiteSpace(notchId))
+            {
+                return false;
+            }
+
+            string sanitizedId = notchId.Trim();
+            return _collectedNotchIds.Contains(sanitizedId);
+        }
+
+        public bool TryCollectNotch(string notchId, int increment)
+        {
+            if (string.IsNullOrWhiteSpace(notchId))
+            {
+                return false;
+            }
+
+            string sanitizedId = notchId.Trim();
+            if (_collectedNotchIds.Contains(sanitizedId))
+            {
+                return false;
+            }
+
+            _collectedNotchIds.Add(sanitizedId);
+
+            int baseCapacity = NotchCapacity > 0 ? NotchCapacity : DefaultNotchCapacity;
+            int sanitizedIncrement = Mathf.Max(1, increment);
+            int desiredCapacity = Mathf.Clamp(baseCapacity + sanitizedIncrement, 0, MaxNotchCapacity);
+            SetNotchCapacity(desiredCapacity);
+
+            return true;
+        }
+
+        private void EnsureCapacityMatchesCollectedNotches()
+        {
+            if (_collectedNotchIds.Count == 0)
+            {
+                return;
+            }
+
+            int minimum = Mathf.Clamp(DefaultNotchCapacity + _collectedNotchIds.Count, 0, MaxNotchCapacity);
+            if (NotchCapacity < minimum)
+            {
+                SetNotchCapacity(minimum);
+            }
         }
     }
 }

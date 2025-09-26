@@ -101,20 +101,70 @@ namespace LegacyoftheAbyss.Shade
             return string.Join("/", stack);
         }
 
-        internal static bool PickupAlreadyPresent(ShadeCharmId charmId)
+        internal static bool PickupAlreadyPresent(ShadeCharmPlacementDefinition placement)
         {
-            try
-            {
-                var existing = UnityEngine.Object.FindObjectsByType<CollectableItemPickup>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-                return existing.Any(p => p != null && p.Item is ShadeCharmSavedItem item && item.CharmId == charmId);
-            }
-            catch
+            if (placement == null)
             {
                 return false;
             }
+
+            try
+            {
+                var existing = UnityEngine.Object.FindObjectsByType<CollectableItemPickup>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                foreach (var pickup in existing)
+                {
+                    if (pickup?.Item == null)
+                    {
+                        continue;
+                    }
+
+                    switch (placement.ItemKind)
+                    {
+                        case ShadeCharmPlacementItemKind.Notch:
+                            if (pickup.Item is ShadeNotchSavedItem notch &&
+                                !string.IsNullOrWhiteSpace(placement.NotchId) &&
+                                string.Equals(notch.NotchId, placement.NotchId, StringComparison.OrdinalIgnoreCase))
+                            {
+                                return true;
+                            }
+
+                            break;
+                        default:
+                            if (pickup.Item is ShadeCharmSavedItem charm && charm.CharmId == placement.CharmId)
+                            {
+                                return true;
+                            }
+
+                            break;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
         }
 
-        internal static void ApplyPickupVisuals(CollectableItemPickup pickup, Transform? heroTransform, ShadeCharmId charmId)
+        internal static void ApplyPickupVisuals(CollectableItemPickup pickup, Transform? heroTransform, ShadeCharmPlacementDefinition placement)
+        {
+            if (pickup == null || placement == null)
+            {
+                return;
+            }
+
+            switch (placement.ItemKind)
+            {
+                case ShadeCharmPlacementItemKind.Notch:
+                    ApplyNotchPickupVisuals(pickup, heroTransform);
+                    break;
+                default:
+                    ApplyCharmPickupVisuals(pickup, heroTransform, placement.CharmId);
+                    break;
+            }
+        }
+
+        private static void ApplyCharmPickupVisuals(CollectableItemPickup pickup, Transform? heroTransform, ShadeCharmId charmId)
         {
             try
             {
@@ -125,6 +175,31 @@ namespace LegacyoftheAbyss.Shade
                 }
 
                 var sprite = ShadeCharmSavedItem.ResolveCharmSprite(charmId, out var tint);
+                spriteRenderer.sprite = sprite;
+                spriteRenderer.color = tint;
+
+                if (heroTransform != null)
+                {
+                    spriteRenderer.sortingLayerID = TryGetHeroSortingLayer(heroTransform);
+                    spriteRenderer.sortingOrder = TryGetHeroSortingOrder(heroTransform) + 1;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private static void ApplyNotchPickupVisuals(CollectableItemPickup pickup, Transform? heroTransform)
+        {
+            try
+            {
+                var spriteRenderer = pickup.GetComponentInChildren<SpriteRenderer>();
+                if (spriteRenderer == null)
+                {
+                    return;
+                }
+
+                var sprite = ShadeNotchSavedItem.ResolveSprite(out var tint);
                 spriteRenderer.sprite = sprite;
                 spriteRenderer.color = tint;
 

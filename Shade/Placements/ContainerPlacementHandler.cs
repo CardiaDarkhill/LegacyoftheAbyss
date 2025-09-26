@@ -23,6 +23,12 @@ namespace LegacyoftheAbyss.Shade
 
         private static void TryPopulateContainer(in ShadeCharmPlacementContext context, ShadeCharmPlacementDefinition placement)
         {
+            if (placement.ItemKind != ShadeCharmPlacementItemKind.Charm)
+            {
+                ShadeCharmPlacementService.LogWarning($"Container placements do not support {ShadeCharmPlacementService.DescribePlacement(placement)}; skipping.");
+                return;
+            }
+
             var data = placement.Container;
             string? targetPath = data?.TargetPath ?? placement.AnchorPath;
 
@@ -66,7 +72,7 @@ namespace LegacyoftheAbyss.Shade
 
                 pickup.SetFling(placement.FlingPickup ?? false);
 
-                ShadeCharmPlacementHelpers.ApplyPickupVisuals(pickup, context.Hero, placement.CharmId);
+                ShadeCharmPlacementHelpers.ApplyPickupVisuals(pickup, context.Hero, placement);
             }
             catch (Exception ex)
             {

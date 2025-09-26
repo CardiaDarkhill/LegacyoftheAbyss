@@ -286,6 +286,68 @@
         "enemyNameContainsAll": ["Lost", "Garmond"]
       },
       "notes": "Fragile Strength dropped by Lost Garmond"
+      "sceneName": "Bone_19",
+      "placementKind": "Ground",
+      "itemKind": "Notch",
+      "notchId": "hornet_bone_19",
+      "worldPosition": { "x": 27.942, "y": 13.631, "z": 0.004 },
+      "notes": "Charm notch pickup near Hornet location (Bone_19)"
+    },
+    {
+      "sceneName": "Ant_21",
+      "placementKind": "Ground",
+      "itemKind": "Notch",
+      "notchId": "hornet_ant_21",
+      "worldPosition": { "x": 48.370, "y": 74.568, "z": 0.004 },
+      "notes": "Charm notch pickup near Hornet location (Ant_21)"
+    },
+    {
+      "sceneName": "Room_CrowCourt",
+      "placementKind": "Ground",
+      "itemKind": "Notch",
+      "notchId": "hornet_room_crowcourt",
+      "worldPosition": { "x": 25.215, "y": 57.568, "z": 0.004 },
+      "notes": "Charm notch pickup near Hornet location (Room_CrowCourt)"
+    },
+    {
+      "sceneName": "Shellwood_26",
+      "placementKind": "Ground",
+      "itemKind": "Notch",
+      "notchId": "hornet_shellwood_26",
+      "worldPosition": { "x": 28.005, "y": 81.568, "z": 0.004 },
+      "notes": "Charm notch pickup near Hornet location (Shellwood_26)"
+    },
+    {
+      "sceneName": "Coral_37",
+      "placementKind": "Ground",
+      "itemKind": "Notch",
+      "notchId": "hornet_coral_37",
+      "worldPosition": { "x": 19.147, "y": 5.568, "z": 0.004 },
+      "notes": "Charm notch pickup near Hornet location (Coral_37)"
+    },
+    {
+      "sceneName": "Peak_Mask_Maker",
+      "placementKind": "Ground",
+      "itemKind": "Notch",
+      "notchId": "hornet_peak_mask_maker",
+      "worldPosition": { "x": 19.205, "y": 6.568, "z": 0.004 },
+      "notes": "Charm notch pickup near Hornet location (Peak_Mask_Maker)"
+    },
+    {
+      "sceneName": "Ward_09",
+      "placementKind": "Ground",
+      "itemKind": "Notch",
+      "notchId": "hornet_ward_09",
+      "worldPosition": { "x": 53.996, "y": 4.568, "z": 0.004 },
+      "notes": "Charm notch pickup near Hornet location (Ward_09)"
+    },
+    {
+      "sceneName": "Arborium_03",
+      "placementKind": "Ground",
+      "itemKind": "Notch",
+      "notchId": "hornet_arborium_03",
+      "worldPosition": { "x": 12.362, "y": 97.569, "z": 0.004 },
+      "notes": "Charm notch pickup near Hornet location (Arborium_03)"
     }
   ]
 }

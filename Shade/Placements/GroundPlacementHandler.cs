@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 using GlobalSettings;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -25,7 +26,7 @@ namespace LegacyoftheAbyss.Shade
 
         private static void TrySpawnPickup(in ShadeCharmPlacementContext context, ShadeCharmPlacementDefinition placement)
         {
-            if (ShadeCharmPlacementHelpers.PickupAlreadyPresent(placement.CharmId))
+            if (ShadeCharmPlacementHelpers.PickupAlreadyPresent(placement))
             {
                 return;
             }
@@ -79,7 +80,9 @@ namespace LegacyoftheAbyss.Shade
                     return;
                 }
 
-                pickup.gameObject.name = $"ShadeCharmPickup_{placement.CharmId}";
+                pickup.gameObject.name = placement.ItemKind == ShadeCharmPlacementItemKind.Notch
+                    ? BuildNotchPickupName(placement.NotchId)
+                    : $"ShadeCharmPickup_{placement.CharmId}";
                 pickup.transform.position = position;
                 pickup.transform.rotation = rotation;
                 try
@@ -90,17 +93,68 @@ namespace LegacyoftheAbyss.Shade
                 {
                 }
 
-                pickup.SetItem(ShadeCharmSavedItem.Create(placement.CharmId));
-                pickup.SetPlayerDataBool(placement.PlayerDataBool ?? string.Empty);
+                var savedItem = CreateSavedItem(placement);
+                if (savedItem == null)
+                {
+                    UnityEngine.Object.Destroy(pickup.gameObject);
+                    ShadeCharmPlacementService.LogWarning($"Failed to create saved item for {ShadeCharmPlacementService.DescribePlacement(placement)} in scene '{context.SceneName}'.");
+                    return;
+                }
+
+                pickup.SetItem(savedItem);
+                if (!string.IsNullOrEmpty(placement.PlayerDataBool))
+                {
+                    pickup.SetPlayerDataBool(placement.PlayerDataBool);
+                }
                 pickup.SetFling(placement.FlingPickup ?? false);
 
-                ShadeCharmPlacementHelpers.ApplyPickupVisuals(pickup, context.Hero, placement.CharmId);
-                ShadeCharmPlacementService.LogInfo($"Spawned charm {placement.CharmId} pickup at {position} in scene '{context.SceneName}'.");
+                ShadeCharmPlacementHelpers.ApplyPickupVisuals(pickup, context.Hero, placement);
+                ShadeCharmPlacementService.LogInfo($"Spawned {ShadeCharmPlacementService.DescribePlacement(placement)} pickup at {position} in scene '{context.SceneName}'.");
             }
             catch (Exception ex)
             {
-                ShadeCharmPlacementService.LogWarning($"Failed to spawn charm {placement.CharmId} in scene '{context.SceneName}': {ex}");
+                ShadeCharmPlacementService.LogWarning($"Failed to spawn {ShadeCharmPlacementService.DescribePlacement(placement)} in scene '{context.SceneName}': {ex}");
             }
+        }
+
+        private static SavedItem? CreateSavedItem(ShadeCharmPlacementDefinition placement)
+        {
+            switch (placement.ItemKind)
+            {
+                case ShadeCharmPlacementItemKind.Notch:
+                    string notchId = (placement.NotchId ?? string.Empty).Trim();
+                    if (string.IsNullOrEmpty(notchId))
+                    {
+                        return null;
+                    }
+
+                    int increment = Mathf.Max(1, placement.NotchIncrement ?? 1);
+                    return ShadeNotchSavedItem.Create(notchId, increment);
+                default:
+                    return ShadeCharmSavedItem.Create(placement.CharmId);
+            }
+        }
+
+        private static string BuildNotchPickupName(string? notchId)
+        {
+            if (string.IsNullOrWhiteSpace(notchId))
+            {
+                return "ShadeNotchPickup";
+            }
+
+            var builder = new StringBuilder();
+            foreach (char ch in notchId)
+            {
+                builder.Append(char.IsLetterOrDigit(ch) ? ch : '_');
+            }
+
+            string sanitized = builder.ToString().Trim('_');
+            if (string.IsNullOrEmpty(sanitized))
+            {
+                sanitized = "Notch";
+            }
+
+            return $"ShadeNotchPickup_{sanitized}";
         }
     }
 }
