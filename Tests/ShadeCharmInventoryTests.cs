@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Linq;
 using LegacyoftheAbyss.Shade;
 using Xunit;
 
@@ -65,5 +66,93 @@ public class ShadeCharmInventoryTests
         Assert.Contains("notch", message, StringComparison.OrdinalIgnoreCase);
         Assert.False(inventory.IsEquipped(ShadeCharmId.WaywardCompass));
         Assert.Equal(0, inventory.UsedNotches);
+    }
+
+    [Fact]
+    public void VoidHeartAutomaticallyEquippedOutsideDebug()
+    {
+        var inventory = new ShadeCharmInventory();
+        inventory.GrantCharm(ShadeCharmId.VoidHeart);
+
+        var equipped = inventory.GetEquipped().ToArray();
+        Assert.Single(equipped);
+        Assert.Equal(ShadeCharmId.VoidHeart, equipped[0]);
+    }
+
+    [Fact]
+    public void VoidHeartCannotBeUnequippedOutsideDebug()
+    {
+        var inventory = new ShadeCharmInventory();
+        inventory.GrantCharm(ShadeCharmId.VoidHeart);
+
+        Assert.False(inventory.TryUnequip(ShadeCharmId.VoidHeart, out var message));
+        Assert.Contains("Void Heart", message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(ShadeCharmId.VoidHeart, inventory.GetEquipped());
+    }
+
+    [Fact]
+    public void VoidHeartCanCoexistWithKingsoul()
+    {
+        var inventory = new ShadeCharmInventory();
+        inventory.GrantCharm(ShadeCharmId.Kingsoul);
+        inventory.GrantCharm(ShadeCharmId.VoidHeart);
+
+        inventory.NotchCapacity = 10;
+        Assert.True(inventory.TryEquip(ShadeCharmId.Kingsoul, out _));
+
+        var equipped = inventory.GetEquipped().ToArray();
+        Assert.Contains(ShadeCharmId.Kingsoul, equipped);
+        Assert.Equal(ShadeCharmId.VoidHeart, equipped[0]);
+    }
+
+    [Fact]
+    public void VoidHeartCanBeUnequippedDuringDebugMode()
+    {
+        ShadeRuntime.Clear();
+        var inventory = ShadeRuntime.Charms;
+        inventory.ResetLoadout();
+        inventory.GrantCharm(ShadeCharmId.VoidHeart);
+
+        bool debugEnabled = ShadeRuntime.ToggleDebugUnlockAllCharms();
+
+        try
+        {
+            Assert.True(debugEnabled);
+            Assert.True(inventory.TryUnequip(ShadeCharmId.VoidHeart, out _));
+        }
+        finally
+        {
+            if (ShadeRuntime.IsDebugCharmModeActive())
+            {
+                ShadeRuntime.ToggleDebugUnlockAllCharms();
+            }
+
+            ShadeRuntime.Clear();
+        }
+    }
+
+    [Fact]
+    public void VoidHeartGrantedWhenEnteringSongTowerDestroyedScene()
+    {
+        ShadeRuntime.Clear();
+
+        try
+        {
+            var inventory = ShadeRuntime.Charms;
+            inventory.ResetLoadout();
+
+            Assert.False(inventory.IsOwned(ShadeCharmId.VoidHeart));
+            Assert.False(ShadeRuntime.IsCharmCollected(ShadeCharmId.VoidHeart));
+
+            ShadeRuntime.HandleSceneEntered("Song_Tower_Destroyed");
+
+            Assert.True(inventory.IsOwned(ShadeCharmId.VoidHeart));
+            Assert.True(ShadeRuntime.IsCharmCollected(ShadeCharmId.VoidHeart));
+            Assert.Contains(ShadeCharmId.VoidHeart, inventory.GetEquipped());
+        }
+        finally
+        {
+            ShadeRuntime.Clear();
+        }
     }
 }
