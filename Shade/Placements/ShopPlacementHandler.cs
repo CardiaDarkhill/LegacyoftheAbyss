@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using GlobalEnums;
 using HarmonyLib;
 using TeamCherry.Localization;
@@ -13,6 +14,8 @@ namespace LegacyoftheAbyss.Shade
     internal sealed class ShopPlacementHandler : IShadeCharmPlacementHandler
     {
         internal static ShopPlacementHandler? Instance { get; private set; }
+
+        private static readonly FieldInfo? ShopOwnerTitleField = AccessTools.Field(typeof(ShopOwnerBase), "shopTitle");
 
         private readonly List<ShadeCharmPlacementDefinition> _activePlacements = new();
         private readonly Dictionary<SimpleShopMenuOwner, ShopStockInfo> _activeStock = new();
@@ -272,7 +275,7 @@ namespace LegacyoftheAbyss.Shade
 
             if (shop.OwnerNameContainsAll is { Length: > 0 })
             {
-                string ownerName = owner.name ?? string.Empty;
+                string ownerTokens = BuildOwnerTokenString(owner);
                 foreach (string token in shop.OwnerNameContainsAll)
                 {
                     if (string.IsNullOrWhiteSpace(token))
@@ -280,7 +283,7 @@ namespace LegacyoftheAbyss.Shade
                         continue;
                     }
 
-                    if (ownerName.IndexOf(token, StringComparison.OrdinalIgnoreCase) < 0)
+                    if (ownerTokens.IndexOf(token, StringComparison.OrdinalIgnoreCase) < 0)
                     {
                         return false;
                     }
@@ -296,6 +299,64 @@ namespace LegacyoftheAbyss.Shade
             }
 
             return true;
+        }
+
+        private static string BuildOwnerTokenString(Component owner)
+        {
+            string ownerName = owner.name ?? string.Empty;
+            string typeName = owner.GetType().FullName ?? owner.GetType().Name;
+            string hierarchyPath = ShadeCharmPlacementHelpers.GetHierarchyPath(owner.transform) ?? string.Empty;
+            string sceneName = string.Empty;
+            string scenePath = string.Empty;
+
+            try
+            {
+                var scene = owner.gameObject.scene;
+                sceneName = scene.name ?? string.Empty;
+                scenePath = scene.path ?? string.Empty;
+            }
+            catch
+            {
+            }
+
+            string title = string.Empty;
+            try
+            {
+                if (owner is SimpleShopMenuOwner menuOwner)
+                {
+                    title = menuOwner.ShopTitle ?? string.Empty;
+                }
+                else if (ShopOwnerTitleField != null && owner is ShopOwnerBase)
+                {
+                    if (ShopOwnerTitleField.GetValue(owner) is LocalisedString localised)
+                    {
+                        title = $"{localised.Sheet}:{localised.Key}";
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            string rootName = string.Empty;
+            try
+            {
+                rootName = owner.transform?.root?.name ?? string.Empty;
+            }
+            catch
+            {
+            }
+
+            return string.Join("|", new[]
+            {
+                ownerName,
+                typeName,
+                hierarchyPath,
+                sceneName,
+                scenePath,
+                title,
+                rootName
+            }.Where(s => !string.IsNullOrWhiteSpace(s)));
         }
 
         private static bool MeetsShopConditions(ShadeCharmPlacementDefinition placement)
