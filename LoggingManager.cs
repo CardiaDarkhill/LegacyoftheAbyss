@@ -33,6 +33,28 @@ internal static class LoggingManager
 
     internal static void LogShadeDamage(string source, bool succeeded)
     {
+        try
+        {
+            var logger = LegacyHelper.Instance?.Logger;
+            if (logger != null)
+            {
+                string message = succeeded
+                    ? $"Shade took damage from {source}."
+                    : $"Shade avoided damage from {source}.";
+                if (succeeded)
+                {
+                    logger.LogWarning(message);
+                }
+                else
+                {
+                    logger.LogInfo(message);
+                }
+            }
+        }
+        catch
+        {
+        }
+
         if (!ModConfig.Instance.logDamage) return;
         Initialize();
         if (!damage.TryGetValue(source, out var entry))
