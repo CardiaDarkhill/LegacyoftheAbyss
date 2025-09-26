@@ -2001,13 +2001,7 @@ public partial class LegacyHelper
         private static bool attemptedImageConversionLookup;
         private static bool attemptedTextureLoadImageLookup;
 
-        private sealed class ShadeCompassIconMarker : MonoBehaviour
-        {
-            internal GameObject Template;
-            internal Transform TemplateTransform;
-        }
-
-        private static GameObject EnsureQuickMapIcon(GameMap map)
+        private static GameObject GetQuickMapIcon(GameMap map)
         {
             if (CompassIconField == null)
             {
@@ -2019,71 +2013,10 @@ public partial class LegacyHelper
                 return null;
             }
 
-            if (!icon.TryGetComponent(out ShadeCompassIconMarker marker))
-            {
-                var replacement = CreateQuickMapIcon(icon);
-                if (replacement != null)
-                {
-                    try
-                    {
-                        CompassIconField.SetValue(map, replacement);
-                    }
-                    catch
-                    {
-                    }
-                    return replacement;
-                }
-
-                return icon;
-            }
-
-            if (marker.Template != null && marker.Template.activeSelf)
-            {
-                marker.Template.SetActive(false);
-            }
-
             return icon;
         }
 
-        private static GameObject CreateQuickMapIcon(GameObject template)
-        {
-            if (template == null)
-            {
-                return null;
-            }
-
-            GameObject clone;
-            try
-            {
-                clone = UnityEngine.Object.Instantiate(template, template.transform.parent);
-            }
-            catch
-            {
-                return null;
-            }
-
-            clone.name = "ShadeCompassIcon";
-            clone.transform.localPosition = template.transform.localPosition;
-            clone.transform.localRotation = template.transform.localRotation;
-            clone.transform.localScale = template.transform.localScale;
-
-            DisableBehaviours(clone);
-
-            var marker = clone.AddComponent<ShadeCompassIconMarker>();
-            marker.Template = template;
-            marker.TemplateTransform = template.transform;
-
-            ApplySprite(clone);
-
-            if (template.activeSelf)
-            {
-                template.SetActive(false);
-            }
-
-            return clone;
-        }
-
-        private static Transform EnsureWideMapIcon(InventoryWideMap wideMap)
+        private static Transform GetWideMapIcon(InventoryWideMap wideMap)
         {
             if (WideMapCompassIconField == null)
             {
@@ -2095,102 +2028,7 @@ public partial class LegacyHelper
                 return null;
             }
 
-            if (!icon.TryGetComponent(out ShadeCompassIconMarker marker))
-            {
-                var replacement = CreateWideMapIcon(icon);
-                if (replacement != null)
-                {
-                    try
-                    {
-                        WideMapCompassIconField.SetValue(wideMap, replacement);
-                    }
-                    catch
-                    {
-                    }
-                    return replacement;
-                }
-
-                return icon;
-            }
-
-            if (marker.TemplateTransform != null && marker.TemplateTransform.gameObject.activeSelf)
-            {
-                marker.TemplateTransform.gameObject.SetActive(false);
-            }
-
             return icon;
-        }
-
-        private static Transform CreateWideMapIcon(Transform template)
-        {
-            if (template == null)
-            {
-                return null;
-            }
-
-            GameObject clone;
-            try
-            {
-                clone = UnityEngine.Object.Instantiate(template.gameObject, template.parent);
-            }
-            catch
-            {
-                return null;
-            }
-
-            clone.name = "ShadeCompassWideIcon";
-            var cloneTransform = clone.transform;
-            cloneTransform.localPosition = template.localPosition;
-            cloneTransform.localRotation = template.localRotation;
-            cloneTransform.localScale = template.localScale;
-
-            if (template is RectTransform templateRect && cloneTransform is RectTransform cloneRect)
-            {
-                cloneRect.anchorMin = templateRect.anchorMin;
-                cloneRect.anchorMax = templateRect.anchorMax;
-                cloneRect.pivot = templateRect.pivot;
-                cloneRect.sizeDelta = templateRect.sizeDelta;
-                cloneRect.anchoredPosition = templateRect.anchoredPosition;
-            }
-
-            DisableBehaviours(clone);
-
-            var marker = clone.AddComponent<ShadeCompassIconMarker>();
-            marker.Template = template.gameObject;
-            marker.TemplateTransform = template;
-
-            ApplySprite(clone);
-
-            if (template.gameObject.activeSelf)
-            {
-                template.gameObject.SetActive(false);
-            }
-
-            return cloneTransform;
-        }
-
-        private static void DisableBehaviours(GameObject root)
-        {
-            if (root == null)
-            {
-                return;
-            }
-
-            var behaviours = root.GetComponentsInChildren<Behaviour>(true);
-            foreach (var behaviour in behaviours)
-            {
-                if (behaviour == null)
-                {
-                    continue;
-                }
-
-                if (behaviour is Graphic || behaviour is Canvas || behaviour is CanvasGroup || behaviour is RectMask2D)
-                {
-                    continue;
-                }
-
-                behaviour.enabled = false;
-            }
         }
 
         private static Sprite GetTemplateSprite(GameObject iconRoot, out float pixelsPerUnit)
@@ -2199,19 +2037,6 @@ public partial class LegacyHelper
             if (iconRoot == null)
             {
                 return null;
-            }
-
-            GameObject source = null;
-            var marker = iconRoot.GetComponent<ShadeCompassIconMarker>();
-            if (marker != null)
-            {
-                source = marker.Template != null ? marker.Template : marker.TemplateTransform != null ? marker.TemplateTransform.gameObject : null;
-            }
-
-            var sprite = ExtractSprite(source, out pixelsPerUnit);
-            if (sprite != null)
-            {
-                return sprite;
             }
 
             return ExtractSprite(iconRoot, out pixelsPerUnit);
@@ -2253,7 +2078,7 @@ public partial class LegacyHelper
                 return;
             }
 
-            var icon = EnsureQuickMapIcon(map);
+            var icon = GetQuickMapIcon(map);
             if (icon == null)
             {
                 return;
@@ -2298,7 +2123,7 @@ public partial class LegacyHelper
                 return;
             }
 
-            var icon = EnsureWideMapIcon(wideMap);
+            var icon = GetWideMapIcon(wideMap);
             if (icon == null)
             {
                 return;
