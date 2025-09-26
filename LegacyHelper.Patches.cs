@@ -1964,8 +1964,37 @@ public partial class LegacyHelper
     private static class ShadeCompassIconManager
     {
         private static readonly FieldInfo CompassIconField = AccessTools.Field(typeof(GameMap), "compassIcon");
+        private static readonly FieldInfo DisplayingCompassField = AccessTools.Field(typeof(GameMap), "displayingCompass");
+        private static readonly FieldInfo CurrentSceneField = AccessTools.Field(typeof(GameMap), "currentScene");
+        private static readonly FieldInfo CurrentSceneObjField = AccessTools.Field(typeof(GameMap), "currentSceneObj");
+        private static readonly FieldInfo CurrentScenePosField = AccessTools.Field(typeof(GameMap), "currentScenePos");
+        private static readonly FieldInfo CurrentSceneSizeField = AccessTools.Field(typeof(GameMap), "currentSceneSize");
+        private static readonly FieldInfo CurrentSceneMapZoneField = AccessTools.Field(typeof(GameMap), "currentSceneMapZone");
+        private static readonly MethodInfo GetMapPositionMethod = AccessTools.Method(typeof(GameMap), "GetMapPosition", new[]
+        {
+            typeof(Vector2),
+            typeof(GameMapScene),
+            typeof(GameObject),
+            typeof(Vector2),
+            typeof(Vector2)
+        });
+        private static readonly MethodInfo GetPositionLocalBoundsMethod = AccessTools.Method(typeof(GameMap), "GetPositionLocalBounds", new[]
+        {
+            typeof(Vector2),
+            typeof(MapZone)
+        });
+        private static readonly MethodInfo IsLostInAbyssMethod = AccessTools.Method(typeof(GameMap), "IsLostInAbyssPreMap");
         private static readonly FieldInfo WideMapCompassIconField = AccessTools.Field(typeof(InventoryWideMap), "compassIcon");
+        private static readonly MethodInfo PositionWideMapIconMethod = AccessTools.Method(typeof(InventoryWideMap), "PositionIcon", new[]
+        {
+            typeof(Transform),
+            typeof(Vector2),
+            typeof(bool),
+            typeof(MapZone)
+        });
+
         private static Sprite shadeCompassSprite;
+        private static bool loggedFailure;
 
         internal static void Update(GameMap map)
         {
@@ -1979,7 +2008,35 @@ public partial class LegacyHelper
                 return;
             }
 
+            if (!ShouldDisplay(map))
+            {
+                return;
+            }
+
             ApplySprite(icon);
+
+            if (!TryGetMapPosition(map, out var mapPosition))
+            {
+                HideIcon(icon, map);
+                return;
+            }
+
+            try
+            {
+                DisplayingCompassField?.SetValue(map, true);
+            }
+            catch
+            {
+            }
+
+            if (!icon.activeSelf)
+            {
+                icon.SetActive(true);
+            }
+
+            var local = icon.transform.localPosition;
+            icon.transform.localPosition = new Vector3(mapPosition.x, mapPosition.y, local.z);
+            loggedFailure = false;
         }
 
         internal static void UpdateWideMap(InventoryWideMap wideMap)
@@ -1994,7 +2051,207 @@ public partial class LegacyHelper
                 return;
             }
 
+            var gameManager = GameManager.instance;
+            var map = gameManager != null ? gameManager.gameMap : null;
+            if (map == null || !ShouldDisplay(map))
+            {
+                return;
+            }
+
             ApplySprite(icon.gameObject);
+
+            if (!TryGetMapPosition(map, out var mapPosition))
+            {
+                icon.gameObject.SetActive(false);
+                return;
+            }
+
+            if (!TryGetLocalBounds(map, mapPosition, out var mapBounds, out var zone))
+            {
+                icon.gameObject.SetActive(false);
+                return;
+            }
+
+            if (PositionWideMapIconMethod != null)
+            {
+                try
+                {
+                    PositionWideMapIconMethod.Invoke(wideMap, new object[] { icon, mapBounds, true, zone });
+                    return;
+                }
+                catch
+                {
+                }
+            }
+
+            icon.gameObject.SetActive(true);
+        }
+
+        private static bool ShouldDisplay(GameMap map)
+        {
+            if (!ModConfig.Instance.shadeEnabled)
+            {
+                return false;
+            }
+
+            var inventory = ShadeRuntime.Charms;
+            if (inventory == null || !inventory.IsEquipped(ShadeCharmId.WaywardCompass))
+            {
+                return false;
+            }
+
+            if (!LegacyHelper.TryGetShadeController(out var controller) || controller == null)
+            {
+                return false;
+            }
+
+            if (!controller.gameObject || !controller.gameObject.activeInHierarchy)
+            {
+                return false;
+            }
+
+            if (!map.gameObject || !map.gameObject.activeInHierarchy)
+            {
+                return false;
+            }
+
+            if (IsLostInAbyssMethod != null)
+            {
+                try
+                {
+                    if (IsLostInAbyssMethod.Invoke(map, Array.Empty<object>()) is bool lost && lost)
+                    {
+                        return false;
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            return true;
+        }
+
+        private static bool TryGetMapPosition(GameMap map, out Vector2 mapPosition)
+        {
+            mapPosition = default;
+
+            if (!LegacyHelper.TryGetShadeController(out var controller) || controller == null)
+            {
+                return false;
+            }
+
+            var shadeTransform = controller.transform;
+            if (shadeTransform == null)
+            {
+                return false;
+            }
+
+            var scene = CurrentSceneField?.GetValue(map) as GameMapScene;
+            var sceneObj = CurrentSceneObjField?.GetValue(map) as GameObject;
+            if (sceneObj == null)
+            {
+                return false;
+            }
+
+            Vector2 scenePos = CurrentScenePosField != null ? (Vector2)CurrentScenePosField.GetValue(map) : Vector2.zero;
+            Vector2 sceneSize = CurrentSceneSizeField != null ? (Vector2)CurrentSceneSizeField.GetValue(map) : Vector2.one;
+
+            if (GetMapPositionMethod == null)
+            {
+                return false;
+            }
+
+            Vector2 shadeScenePos = new Vector2(shadeTransform.position.x, shadeTransform.position.y);
+            try
+            {
+                var raw = (Vector2)GetMapPositionMethod.Invoke(map, new object[]
+                {
+                    shadeScenePos,
+                    scene,
+                    sceneObj,
+                    scenePos,
+                    sceneSize
+                });
+
+                if (float.IsNaN(raw.x) || float.IsNaN(raw.y) || float.IsInfinity(raw.x) || float.IsInfinity(raw.y))
+                {
+                    return false;
+                }
+
+                if (raw.x <= -900f || raw.y <= -900f)
+                {
+                    return false;
+                }
+
+                mapPosition = raw;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                if (!loggedFailure && ModConfig.Instance.logGeneral)
+                {
+                    Instance?.Logger?.LogWarning($"Failed to position shade compass icon: {ex}");
+                    loggedFailure = true;
+                }
+                return false;
+            }
+        }
+
+        private static bool TryGetLocalBounds(GameMap map, Vector2 mapPosition, out Vector2 mapBounds, out MapZone zone)
+        {
+            mapBounds = default;
+            zone = MapZone.NONE;
+
+            if (GetPositionLocalBoundsMethod == null)
+            {
+                return false;
+            }
+
+            if (CurrentSceneMapZoneField != null)
+            {
+                try
+                {
+                    zone = (MapZone)CurrentSceneMapZoneField.GetValue(map);
+                }
+                catch
+                {
+                    zone = MapZone.NONE;
+                }
+            }
+
+            try
+            {
+                mapBounds = (Vector2)GetPositionLocalBoundsMethod.Invoke(map, new object[] { mapPosition, zone });
+
+                if (float.IsNaN(mapBounds.x) || float.IsNaN(mapBounds.y) ||
+                    float.IsInfinity(mapBounds.x) || float.IsInfinity(mapBounds.y))
+                {
+                    return false;
+                }
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void HideIcon(GameObject icon, GameMap map)
+        {
+            if (icon != null && icon.activeSelf)
+            {
+                icon.SetActive(false);
+            }
+
+            try
+            {
+                DisplayingCompassField?.SetValue(map, false);
+            }
+            catch
+            {
+            }
         }
 
         private static void ApplySprite(GameObject iconRoot)
