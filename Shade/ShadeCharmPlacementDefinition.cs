@@ -15,10 +15,19 @@ namespace LegacyoftheAbyss.Shade
         BossDrop
     }
 
+    internal enum ShadeCharmPlacementItemKind
+    {
+        Charm,
+        Notch
+    }
+
     internal sealed class ShadeCharmPlacementDefinition
     {
         [JsonProperty("charmId")]
         public ShadeCharmId CharmId { get; init; }
+
+        [JsonProperty("itemKind")]
+        public ShadeCharmPlacementItemKind ItemKind { get; init; } = ShadeCharmPlacementItemKind.Charm;
 
         [JsonProperty("sceneName")]
         public string? SceneName { get; init; }
@@ -58,6 +67,12 @@ namespace LegacyoftheAbyss.Shade
 
         [JsonProperty("bossDrop")]
         public ShadeCharmPlacementBossDropData? BossDrop { get; init; }
+
+        [JsonProperty("notchTargetCapacity")]
+        public int? NotchTargetCapacity { get; init; }
+
+        [JsonProperty("notchIncrement")]
+        public int? NotchIncrement { get; init; }
 
         [JsonProperty("notes")]
         public string? Notes { get; init; }

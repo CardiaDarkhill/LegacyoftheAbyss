@@ -29,6 +29,7 @@ namespace LegacyoftheAbyss.Shade
             };
             JsonSettings.Converters.Add(new StringEnumIgnoreCaseConverter<ShadeCharmPlacementKind>());
             JsonSettings.Converters.Add(new StringEnumIgnoreCaseConverter<ShadeCharmId>());
+            JsonSettings.Converters.Add(new StringEnumIgnoreCaseConverter<ShadeCharmPlacementItemKind>());
         }
 
         internal static void EnsureLoaded()

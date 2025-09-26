@@ -38,6 +38,12 @@ namespace LegacyoftheAbyss.Shade
                     continue;
                 }
 
+                if (placement.ItemKind != ShadeCharmPlacementItemKind.Charm)
+                {
+                    ShadeCharmPlacementService.LogWarning($"Boss drop placements do not support {ShadeCharmPlacementService.DescribePlacement(placement)}; skipping.");
+                    continue;
+                }
+
                 _activePlacements.Add(placement);
             }
         }

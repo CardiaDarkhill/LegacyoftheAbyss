@@ -57,15 +57,15 @@ namespace LegacyoftheAbyss.Shade
                     continue;
                 }
 
-                if (IsCharmAlreadyCollected(placement.CharmId))
+                if (IsPlacementAlreadySatisfied(placement))
                 {
-                    LogInfo($"Skipping charm {placement.CharmId} in scene '{sceneName}' because it is already collected.");
+                    LogInfo($"Skipping {DescribePlacement(placement)} in scene '{sceneName}' because it is already collected.");
                     continue;
                 }
 
                 if (!Handlers.TryGetValue(placement.PlacementKind, out var handler))
                 {
-                    LogWarning($"No handler registered for placement kind {placement.PlacementKind} (charm {placement.CharmId}).");
+                    LogWarning($"No handler registered for placement kind {placement.PlacementKind} ({DescribePlacement(placement)}).");
                     continue;
                 }
 
@@ -144,6 +144,41 @@ namespace LegacyoftheAbyss.Shade
             {
                 return false;
             }
+        }
+
+        internal static bool IsPlacementAlreadySatisfied(ShadeCharmPlacementDefinition placement)
+        {
+            if (placement == null)
+            {
+                return true;
+            }
+
+            try
+            {
+                return placement.ItemKind switch
+                {
+                    ShadeCharmPlacementItemKind.Notch => ShadeRuntime.GetNotchCapacity() >= Mathf.Max(0, placement.NotchTargetCapacity ?? 0),
+                    _ => ShadeRuntime.IsCharmCollected(placement.CharmId)
+                };
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        internal static string DescribePlacement(ShadeCharmPlacementDefinition placement)
+        {
+            if (placement == null)
+            {
+                return "placement";
+            }
+
+            return placement.ItemKind switch
+            {
+                ShadeCharmPlacementItemKind.Notch => $"notch (target capacity {Mathf.Max(0, placement.NotchTargetCapacity ?? 0)})",
+                _ => $"charm {placement.CharmId}"
+            };
         }
 
         internal static void LogInfo(string message)
