@@ -286,6 +286,8 @@
         "enemyNameContainsAll": ["Lost", "Garmond"]
       },
       "notes": "Fragile Strength dropped by Lost Garmond"
+     },
+    {   
       "sceneName": "Bone_19",
       "placementKind": "Ground",
       "itemKind": "Notch",
