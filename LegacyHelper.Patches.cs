@@ -1751,14 +1751,48 @@ public partial class LegacyHelper
     [HarmonyPatch(typeof(InputManager), "UpdateActiveDevice")]
     private class InputManager_UpdateActiveDevice_BlockShadeDevices
     {
+        private static readonly MethodInfo ActiveDeviceSetter = AccessTools.PropertySetter(typeof(InputManager), nameof(InputManager.ActiveDevice));
+        private static InputDevice previousActiveDevice = InputDevice.Null;
+
         private static void Prefix()
         {
             try
             {
                 InputDeviceBlocker.RefreshShadeDevices(InputHandler.UnsafeInstance);
+                previousActiveDevice = InputManager.ActiveDevice ?? InputDevice.Null;
             }
             catch
             {
+                previousActiveDevice = InputDevice.Null;
+            }
+        }
+
+        private static void Postfix()
+        {
+            try
+            {
+                if (!InputDeviceBlocker.ShouldBlockShadeDeviceInput())
+                    return;
+
+                var activeDevice = InputManager.ActiveDevice;
+                if (!InputDeviceBlocker.IsRestrictedDevice(activeDevice))
+                    return;
+
+                if (ActiveDeviceSetter == null)
+                    return;
+
+                var restoreDevice = previousActiveDevice ?? InputDevice.Null;
+                if (restoreDevice == activeDevice)
+                    return;
+
+                ActiveDeviceSetter.Invoke(null, new object[] { restoreDevice });
+            }
+            catch
+            {
+            }
+            finally
+            {
+                previousActiveDevice = InputDevice.Null;
             }
         }
     }
