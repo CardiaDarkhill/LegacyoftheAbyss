@@ -13,6 +13,9 @@ public partial class LegacyHelper
 {
     public partial class ShadeController : MonoBehaviour
     {
+        private GameObject aggroProxy;
+        private Collider2D aggroProxyCollider;
+
         private void Start()
         {
             SetupPhysics();
@@ -72,6 +75,7 @@ public partial class LegacyHelper
             // Ensure pogo target is present for Hornet downslash bounces
             // Add a dedicated pogo target with HitResponse so hero slashes can register even when OnlyDamageEnemies is true
             EnsurePogoTarget();
+            EnsureAggroProxyCollider();
             bool hasSavedState = LegacyHelper.HasSavedShadeState;
             int computedMax = -1;
             try
@@ -134,6 +138,79 @@ public partial class LegacyHelper
                     shadeSoul,
                     desiredDamageState,
                     baseShadeMaxHP);
+            }
+            catch
+            {
+            }
+
+            if (aggroProxyCollider)
+            {
+                aggroProxyCollider.enabled = false;
+            }
+        }
+
+        private void EnsureAggroProxyCollider()
+        {
+            try
+            {
+                int heroLayer = gameObject.layer;
+                try
+                {
+                    var hc = HeroController.instance;
+                    if (hc && hc.gameObject)
+                    {
+                        heroLayer = hc.gameObject.layer;
+                    }
+                }
+                catch
+                {
+                }
+
+                if (!aggroProxy)
+                {
+                    aggroProxy = new GameObject("ShadeAggroProxy");
+                    aggroProxy.transform.SetParent(transform, false);
+                }
+
+                aggroProxy.transform.localPosition = Vector3.zero;
+                aggroProxy.transform.localRotation = Quaternion.identity;
+                aggroProxy.transform.localScale = Vector3.one;
+                aggroProxy.layer = heroLayer;
+                aggroProxy.tag = "Untagged";
+
+                var proxyCollider = aggroProxy.GetComponent<CapsuleCollider2D>();
+                if (!proxyCollider)
+                {
+                    proxyCollider = aggroProxy.AddComponent<CapsuleCollider2D>();
+                }
+
+                proxyCollider.isTrigger = true;
+                proxyCollider.direction = CapsuleDirection2D.Vertical;
+
+                Vector2 size = new Vector2(0.9f, 1.4f);
+                Vector2 offset = Vector2.zero;
+                if (bodyCol is CapsuleCollider2D capsule)
+                {
+                    size = capsule.size;
+                    offset = capsule.offset;
+                }
+                else if (bodyCol is BoxCollider2D box)
+                {
+                    size = box.size;
+                    offset = box.offset;
+                }
+                else if (bodyCol)
+                {
+                    var bounds = bodyCol.bounds;
+                    size = bounds.size;
+                    offset = bounds.center - transform.position;
+                }
+
+                proxyCollider.size = size;
+                proxyCollider.offset = offset;
+                proxyCollider.enabled = !isInactive && isActiveAndEnabled;
+
+                aggroProxyCollider = proxyCollider;
             }
             catch
             {
@@ -740,6 +817,15 @@ public partial class LegacyHelper
             {
                 hurtCooldown = Mathf.Max(hurtCooldown, ReviveIFrameSeconds);
                 hazardCooldown = Mathf.Max(hazardCooldown, ReviveIFrameSeconds);
+            }
+            EnsureAggroProxyCollider();
+            if (aggroProxyCollider)
+            {
+                bool proxyActive = !isInactive && isActiveAndEnabled;
+                if (aggroProxyCollider.enabled != proxyActive)
+                {
+                    aggroProxyCollider.enabled = proxyActive;
+                }
             }
             wasInactive = isInactive;
 
