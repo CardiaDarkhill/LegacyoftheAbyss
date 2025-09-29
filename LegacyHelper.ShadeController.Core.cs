@@ -4038,7 +4038,7 @@ public partial class LegacyHelper
             }
         }
 
-        private sealed class AggroProxyTracker : MonoBehaviour, ITrackTriggerObject
+        internal sealed class AggroProxyTracker : MonoBehaviour, ITrackTriggerObject
         {
             private ShadeController owner;
             private Collider2D proxyCollider;
