@@ -13,6 +13,9 @@ public partial class LegacyHelper
 {
     public partial class ShadeController : MonoBehaviour
     {
+        private GameObject aggroProxy;
+        private Collider2D aggroProxyCollider;
+
         private void Start()
         {
             SetupPhysics();
@@ -72,6 +75,7 @@ public partial class LegacyHelper
             // Ensure pogo target is present for Hornet downslash bounces
             // Add a dedicated pogo target with HitResponse so hero slashes can register even when OnlyDamageEnemies is true
             EnsurePogoTarget();
+            EnsureAggroProxyCollider();
             bool hasSavedState = LegacyHelper.HasSavedShadeState;
             int computedMax = -1;
             try
@@ -134,6 +138,92 @@ public partial class LegacyHelper
                     shadeSoul,
                     desiredDamageState,
                     baseShadeMaxHP);
+            }
+            catch
+            {
+            }
+
+            if (aggroProxyCollider)
+            {
+                aggroProxyCollider.enabled = false;
+            }
+        }
+
+        private void EnsureAggroProxyCollider()
+        {
+            try
+            {
+                int heroLayer = gameObject.layer;
+                string heroTag = null;
+                try
+                {
+                    var hc = HeroController.instance;
+                    if (hc && hc.gameObject)
+                    {
+                        heroLayer = hc.gameObject.layer;
+                        heroTag = hc.gameObject.tag;
+                    }
+                }
+                catch
+                {
+                }
+
+                if (!aggroProxy)
+                {
+                    aggroProxy = new GameObject("ShadeAggroProxy");
+                    aggroProxy.transform.SetParent(transform, false);
+                }
+
+                aggroProxy.transform.localPosition = Vector3.zero;
+                aggroProxy.transform.localRotation = Quaternion.identity;
+                aggroProxy.transform.localScale = Vector3.one;
+                aggroProxy.layer = heroLayer;
+                if (string.IsNullOrEmpty(heroTag))
+                {
+                    heroTag = "Player";
+                }
+                aggroProxy.tag = heroTag;
+
+                var proxyCollider = aggroProxy.GetComponent<CapsuleCollider2D>();
+                if (!proxyCollider)
+                {
+                    proxyCollider = aggroProxy.AddComponent<CapsuleCollider2D>();
+                }
+
+                proxyCollider.isTrigger = true;
+                proxyCollider.direction = CapsuleDirection2D.Vertical;
+
+                Vector2 size = new Vector2(0.9f, 1.4f);
+                Vector2 offset = Vector2.zero;
+                if (bodyCol is CapsuleCollider2D capsule)
+                {
+                    size = capsule.size;
+                    offset = capsule.offset;
+                }
+                else if (bodyCol is BoxCollider2D box)
+                {
+                    size = box.size;
+                    offset = box.offset;
+                }
+                else if (bodyCol)
+                {
+                    var bounds = bodyCol.bounds;
+                    size = bounds.size;
+                    offset = bounds.center - transform.position;
+                }
+
+                proxyCollider.size = size;
+                proxyCollider.offset = offset;
+                proxyCollider.enabled = !isInactive && isActiveAndEnabled && !assistModeEnabled;
+
+                var tracker = aggroProxy.GetComponent<AggroProxyTracker>();
+                if (!tracker)
+                {
+                    tracker = aggroProxy.AddComponent<AggroProxyTracker>();
+                }
+                tracker.Attach(this, proxyCollider);
+
+                aggroProxyCollider = proxyCollider;
             }
             catch
             {
@@ -740,6 +830,15 @@ public partial class LegacyHelper
             {
                 hurtCooldown = Mathf.Max(hurtCooldown, ReviveIFrameSeconds);
                 hazardCooldown = Mathf.Max(hazardCooldown, ReviveIFrameSeconds);
+            }
+            EnsureAggroProxyCollider();
+            if (aggroProxyCollider)
+            {
+                bool proxyActive = !isInactive && isActiveAndEnabled && !assistModeEnabled;
+                if (aggroProxyCollider.enabled != proxyActive)
+                {
+                    aggroProxyCollider.enabled = proxyActive;
+                }
             }
             wasInactive = isInactive;
 
@@ -3936,6 +4035,71 @@ public partial class LegacyHelper
             {
                 isChannelingTeleport = false;
                 try { if (sr) { var c = sr.color; c.a = 0.9f; sr.color = c; } } catch { }
+            }
+        }
+
+        internal sealed class AggroProxyTracker : MonoBehaviour, ITrackTriggerObject
+        {
+            private ShadeController owner;
+            private Collider2D proxyCollider;
+
+            internal void Attach(ShadeController shade, Collider2D collider)
+            {
+                owner = shade;
+                proxyCollider = collider;
+            }
+
+            internal bool IsEligibleForAggro => owner != null && owner.IsAggroEligible;
+
+            internal bool TryGetOwner(out ShadeController shade)
+            {
+                shade = owner;
+                return shade != null;
+            }
+
+            internal bool TryGetTargetPoint(out Vector2 target)
+            {
+                target = transform.position;
+                if (!IsEligibleForAggro)
+                {
+                    return false;
+                }
+
+                if (!proxyCollider || !proxyCollider.enabled || !proxyCollider.gameObject.activeInHierarchy)
+                {
+                    return false;
+                }
+
+                try
+                {
+                    target = proxyCollider.bounds.center;
+                }
+                catch
+                {
+                    target = transform.position;
+                }
+
+                return true;
+            }
+
+            public void OnTrackTriggerEntered(TrackTriggerObjects enteredRange)
+            {
+                ShadeAggroTracker.NotifyEntered(this, enteredRange);
+            }
+
+            public void OnTrackTriggerExited(TrackTriggerObjects exitedRange)
+            {
+                ShadeAggroTracker.NotifyExited(this, exitedRange);
+            }
+
+            private void OnDisable()
+            {
+                ShadeAggroTracker.NotifyDisabled(this);
+            }
+
+            private void OnDestroy()
+            {
+                ShadeAggroTracker.NotifyDisabled(this);
             }
         }
 

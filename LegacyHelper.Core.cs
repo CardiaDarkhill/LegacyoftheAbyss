@@ -30,6 +30,28 @@ public partial class LegacyHelper : BaseUnityPlugin
 
     internal static LegacyHelper Instance { get; private set; }
 
+    internal static void LogInfo(string message)
+    {
+        try
+        {
+            Instance?.Logger?.LogInfo(message);
+        }
+        catch
+        {
+        }
+    }
+
+    internal static void LogWarning(string message)
+    {
+        try
+        {
+            Instance?.Logger?.LogWarning(message);
+        }
+        catch
+        {
+        }
+    }
+
     // Persist shade state across scene transitions
     internal static bool HasSavedShadeState => ShadeRuntime.PersistentState.HasData;
 
