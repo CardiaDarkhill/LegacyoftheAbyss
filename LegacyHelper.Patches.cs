@@ -4,6 +4,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using HarmonyLib;
 using InControl;
 using LegacyoftheAbyss.Shade;
@@ -62,6 +63,136 @@ public partial class LegacyHelper
             else
             {
                 try { hud.SetPlayerData(__instance.playerData); } catch { }
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(AlertRange), "FixedUpdate")]
+    internal static class AlertRange_FixedUpdate_Patch
+    {
+        private static readonly AccessTools.FieldRef<AlertRange, bool> HaveLineOfSightRef = AccessTools.FieldRefAccess<AlertRange, bool>("haveLineOfSight");
+        private static readonly AccessTools.FieldRef<AlertRange, bool> IsHeroInRangeRef = AccessTools.FieldRefAccess<AlertRange, bool>("isHeroInRange");
+        private static readonly AccessTools.FieldRef<AlertRange, AlertRange.LineOfSightChecks> LineOfSightModeRef = AccessTools.FieldRefAccess<AlertRange, AlertRange.LineOfSightChecks>("lineOfSight");
+        private static readonly AccessTools.FieldRef<AlertRange, Transform> InitialParentRef = AccessTools.FieldRefAccess<AlertRange, Transform>("initialParent");
+
+        private sealed class LogState
+        {
+            public bool Logged;
+        }
+
+        private static readonly List<ShadeAggroTracker.Target> TargetBuffer = new List<ShadeAggroTracker.Target>();
+        private static readonly ConditionalWeakTable<AlertRange, LogState> LoggedStates = new ConditionalWeakTable<AlertRange, LogState>();
+
+        private static void Postfix(AlertRange __instance)
+        {
+            try
+            {
+                if (__instance == null)
+                {
+                    return;
+                }
+
+                if (!ShadeAggroTracker.TryGetTargets(__instance, TargetBuffer) || TargetBuffer.Count == 0)
+                {
+                    return;
+                }
+
+                bool hadLineOfSight = HaveLineOfSightRef(__instance);
+                bool heroInRange = IsHeroInRangeRef(__instance);
+                bool proxiesGrantLineOfSight = false;
+
+                var mode = LineOfSightModeRef(__instance);
+                if (mode <= AlertRange.LineOfSightChecks.None)
+                {
+                    proxiesGrantLineOfSight = true;
+                }
+                else
+                {
+                    Transform originTransform = null;
+                    switch (mode)
+                    {
+                        case AlertRange.LineOfSightChecks.Self:
+                            originTransform = __instance.transform;
+                            break;
+                        case AlertRange.LineOfSightChecks.Parent:
+                            originTransform = __instance.transform.parent ?? InitialParentRef(__instance);
+                            break;
+                    }
+
+                    Vector2 origin = originTransform ? (Vector2)originTransform.position : (Vector2)__instance.transform.position;
+                    foreach (var target in TargetBuffer)
+                    {
+                        if (target.Shade == null || !target.Shade.IsAggroEligible)
+                        {
+                            continue;
+                        }
+
+                        if (!global::Helper.LineCast2DHit(origin, target.Position, 256, out _))
+                        {
+                            proxiesGrantLineOfSight = true;
+                            if (!hadLineOfSight)
+                            {
+                                var state = LoggedStates.GetOrCreateValue(__instance);
+                                if (!state.Logged && ModConfig.Instance.logShade)
+                                {
+                                    try
+                                    {
+                                        string owner = target.Shade != null ? target.Shade.gameObject.name : "Shade";
+                                        string rangeOwner = __instance.transform != null ? __instance.transform.root?.name ?? __instance.transform.name : __instance.name;
+                                        LegacyHelper.Instance?.Logger?.LogInfo($"Shade aggro granted line of sight for '{__instance.name}' on '{rangeOwner}' via shade '{owner}'.");
+                                    }
+                                    catch
+                                    {
+                                    }
+                                    state.Logged = true;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                if (!heroInRange)
+                {
+                    IsHeroInRangeRef(__instance) = true;
+                }
+
+                if (proxiesGrantLineOfSight)
+                {
+                    HaveLineOfSightRef(__instance) = true;
+                }
+                else
+                {
+                    var state = LoggedStates.GetOrCreateValue(__instance);
+                    state.Logged = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    LegacyHelper.Instance?.Logger?.LogWarning($"Shade aggro patch failed for '{__instance?.name}': {ex}");
+                }
+                catch
+                {
+                }
+            }
+            finally
+            {
+                TargetBuffer.Clear();
+            }
+        }
+
+        internal static void ResetLog(AlertRange range)
+        {
+            if (range == null)
+            {
+                return;
+            }
+
+            if (LoggedStates.TryGetValue(range, out var logState))
+            {
+                logState.Logged = false;
             }
         }
     }

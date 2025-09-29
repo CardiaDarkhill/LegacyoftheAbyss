@@ -188,6 +188,7 @@ public partial class LegacyHelper
 
         // Inactive state (at 0 HP)
         private bool isInactive;
+        internal bool IsAggroEligible => !isInactive && isActiveAndEnabled;
         private bool isDying;
         private Coroutine deathRoutine;
 
