@@ -46,7 +46,7 @@ internal static class ShadeAggroTracker
             try
             {
                 string owner = GetOwnerName(alertRange);
-                LegacyHelper.Instance?.Logger?.LogInfo($"Shade aggro proxy entered alert range '{alertRange.name}' ({owner}).");
+                LegacyHelper.LogInfo($"Shade aggro proxy entered alert range '{alertRange.name}' ({owner}).");
             }
             catch
             {
@@ -192,7 +192,7 @@ internal static class ShadeAggroTracker
             try
             {
                 string owner = GetOwnerName(range);
-                LegacyHelper.Instance?.Logger?.LogInfo($"Shade aggro proxy exited alert range '{range.name}' ({owner}).");
+                LegacyHelper.LogInfo($"Shade aggro proxy exited alert range '{range.name}' ({owner}).");
             }
             catch
             {
