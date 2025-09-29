@@ -67,6 +67,29 @@ public partial class LegacyHelper
         }
     }
 
+    [HarmonyPatch(typeof(TrackTriggerObjects), "OnTriggerEnter2D")]
+    private static class TrackTriggerObjects_OnTriggerEnter2D_Patch
+    {
+        private static bool Prefix(TrackTriggerObjects __instance, Collider2D collision)
+        {
+            if (__instance is CameraLockArea && collision)
+            {
+                try
+                {
+                    if (collision.GetComponent<ShadeController.AggroProxyTracker>() != null)
+                    {
+                        return false;
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            return true;
+        }
+    }
+
     [HarmonyPatch(typeof(AlertRange), "FixedUpdate")]
     internal static class AlertRange_FixedUpdate_Patch
     {
