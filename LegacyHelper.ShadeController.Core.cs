@@ -154,12 +154,14 @@ public partial class LegacyHelper
             try
             {
                 int heroLayer = gameObject.layer;
+                string heroTag = null;
                 try
                 {
                     var hc = HeroController.instance;
                     if (hc && hc.gameObject)
                     {
                         heroLayer = hc.gameObject.layer;
+                        heroTag = hc.gameObject.tag;
                     }
                 }
                 catch
@@ -176,7 +178,11 @@ public partial class LegacyHelper
                 aggroProxy.transform.localRotation = Quaternion.identity;
                 aggroProxy.transform.localScale = Vector3.one;
                 aggroProxy.layer = heroLayer;
-                aggroProxy.tag = "Untagged";
+                if (string.IsNullOrEmpty(heroTag))
+                {
+                    heroTag = "Player";
+                }
+                aggroProxy.tag = heroTag;
 
                 var proxyCollider = aggroProxy.GetComponent<CapsuleCollider2D>();
                 if (!proxyCollider)
