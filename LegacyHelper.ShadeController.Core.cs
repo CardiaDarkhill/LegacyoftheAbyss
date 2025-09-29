@@ -214,7 +214,7 @@ public partial class LegacyHelper
 
                 proxyCollider.size = size;
                 proxyCollider.offset = offset;
-                proxyCollider.enabled = !isInactive && isActiveAndEnabled;
+                proxyCollider.enabled = !isInactive && isActiveAndEnabled && !assistModeEnabled;
 
                 var tracker = aggroProxy.GetComponent<AggroProxyTracker>();
                 if (!tracker)
@@ -834,7 +834,7 @@ public partial class LegacyHelper
             EnsureAggroProxyCollider();
             if (aggroProxyCollider)
             {
-                bool proxyActive = !isInactive && isActiveAndEnabled;
+                bool proxyActive = !isInactive && isActiveAndEnabled && !assistModeEnabled;
                 if (aggroProxyCollider.enabled != proxyActive)
                 {
                     aggroProxyCollider.enabled = proxyActive;
