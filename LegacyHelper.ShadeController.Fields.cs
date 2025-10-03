@@ -34,6 +34,7 @@ public partial class LegacyHelper
         private float hardLeashTimer;
         private Rigidbody2D rb;
         private Collider2D bodyCol;
+        private AggroProxyTracker aggroProxyTracker;
         private int shadeMaxHP;
         private int shadeHP;
         private int shadeLifeblood;

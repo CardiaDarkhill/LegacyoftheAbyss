@@ -701,6 +701,11 @@ public partial class LegacyHelper
             "QuickMap"
         };
 
+        private static readonly Dictionary<InputDevice, bool> IgnoreDeviceCache = new();
+        private static int ignoreDeviceCacheFrame = -1;
+        private static int blockShadeCacheFrame = -1;
+        private static bool blockShadeCacheValue;
+
         private static void SetDeviceRestricted(InputDevice device, bool restrict)
         {
             if (device == null || device == InputDevice.Null)
@@ -766,33 +771,50 @@ public partial class LegacyHelper
             return false;
         }
 
+        private static void EnsureIgnoreDeviceCache()
+        {
+            int frame = Time.frameCount;
+            if (frame != ignoreDeviceCacheFrame)
+            {
+                IgnoreDeviceCache.Clear();
+                ignoreDeviceCacheFrame = frame;
+            }
+        }
+
         internal static bool ShouldBlockShadeDeviceInput()
         {
+            int frame = Time.frameCount;
+            if (frame == blockShadeCacheFrame)
+            {
+                return blockShadeCacheValue;
+            }
+
+            bool result;
             try
             {
                 var gm = MenuStateUtility.TryGetGameManager();
                 if (ReferenceEquals(gm, null))
                 {
-                    return false;
+                    result = false;
                 }
-
-                if (gm.GameState != GameState.PLAYING)
+                else if (gm.GameState != GameState.PLAYING)
                 {
-                    return false;
+                    result = false;
                 }
-
-                var ui = MenuStateUtility.TryGetUiManager(gm);
-                if (MenuStateUtility.IsMenuActive(gm, ui))
+                else
                 {
-                    return false;
+                    var ui = MenuStateUtility.TryGetUiManager(gm);
+                    result = !MenuStateUtility.IsMenuActive(gm, ui);
                 }
-
-                return true;
             }
             catch
             {
-                return false;
+                result = false;
             }
+
+            blockShadeCacheFrame = frame;
+            blockShadeCacheValue = result;
+            return result;
         }
 
         private static bool ShadeUsesAllControllers(ShadeInputConfig config, int targetIndex, int deviceCount)
@@ -854,6 +876,14 @@ public partial class LegacyHelper
 
         internal static bool ShouldIgnoreDevice(InputHandler handler, InputDevice device)
         {
+            EnsureIgnoreDeviceCache();
+
+            bool canCache = device != null && device != InputDevice.Null;
+            if (canCache && IgnoreDeviceCache.TryGetValue(device, out var cached))
+            {
+                return cached;
+            }
+
             bool restrict = false;
 
             try
@@ -896,6 +926,10 @@ public partial class LegacyHelper
             }
 
             SetDeviceRestricted(device, block);
+            if (canCache)
+            {
+                IgnoreDeviceCache[device] = block;
+            }
             return block;
         }
 

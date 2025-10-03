@@ -123,6 +123,7 @@ public partial class LegacyHelper
         {
             try
             {
+                try { aggroProxyTracker?.ForceExitTrackedRemaskers(); } catch { }
                 if (sceneProtectionSuppressingPersistence)
                 {
                     ExitPersistenceSuppression();
@@ -214,7 +215,6 @@ public partial class LegacyHelper
 
                 proxyCollider.size = size;
                 proxyCollider.offset = offset;
-                proxyCollider.enabled = !isInactive && isActiveAndEnabled && !assistModeEnabled;
 
                 var tracker = aggroProxy.GetComponent<AggroProxyTracker>();
                 if (!tracker)
@@ -223,7 +223,18 @@ public partial class LegacyHelper
                 }
                 tracker.Attach(this, proxyCollider);
 
+                aggroProxyTracker = tracker;
                 aggroProxyCollider = proxyCollider;
+
+                bool desiredActive = !isInactive && isActiveAndEnabled && !assistModeEnabled;
+                if (aggroProxyCollider.enabled != desiredActive)
+                {
+                    if (!desiredActive)
+                    {
+                        try { aggroProxyTracker?.ForceExitTrackedRemaskers(); } catch { }
+                    }
+                    aggroProxyCollider.enabled = desiredActive;
+                }
             }
             catch
             {
@@ -835,8 +846,13 @@ public partial class LegacyHelper
             if (aggroProxyCollider)
             {
                 bool proxyActive = !isInactive && isActiveAndEnabled && !assistModeEnabled;
-                if (aggroProxyCollider.enabled != proxyActive)
+                bool currentlyEnabled = aggroProxyCollider.enabled;
+                if (currentlyEnabled != proxyActive)
                 {
+                    if (!proxyActive)
+                    {
+                        try { aggroProxyTracker?.ForceExitTrackedRemaskers(); } catch { }
+                    }
                     aggroProxyCollider.enabled = proxyActive;
                 }
             }
@@ -4042,11 +4058,14 @@ public partial class LegacyHelper
         {
             private ShadeController owner;
             private Collider2D proxyCollider;
+            private readonly HashSet<Remasker> remaskersInside = new HashSet<Remasker>();
+            private static readonly List<Remasker> RemaskerBuffer = new List<Remasker>();
 
             internal void Attach(ShadeController shade, Collider2D collider)
             {
                 owner = shade;
                 proxyCollider = collider;
+                remaskersInside.Clear();
             }
 
             internal bool IsEligibleForAggro => owner != null && owner.IsAggroEligible;
@@ -4094,12 +4113,89 @@ public partial class LegacyHelper
 
             private void OnDisable()
             {
+                ForceExitTrackedRemaskers();
                 ShadeAggroTracker.NotifyDisabled(this);
             }
 
             private void OnDestroy()
             {
+                ForceExitTrackedRemaskers();
                 ShadeAggroTracker.NotifyDisabled(this);
+            }
+
+            private void OnTriggerEnter2D(Collider2D other)
+            {
+                TrackRemasker(other, entering: true);
+            }
+
+            private void OnTriggerExit2D(Collider2D other)
+            {
+                TrackRemasker(other, entering: false);
+            }
+
+            private void TrackRemasker(Collider2D other, bool entering)
+            {
+                if (!other)
+                {
+                    return;
+                }
+
+                Remasker remasker = null;
+                try
+                {
+                    remasker = other.GetComponent<Remasker>();
+                    if (!remasker)
+                    {
+                        remasker = other.GetComponentInParent<Remasker>();
+                    }
+                }
+                catch
+                {
+                    remasker = null;
+                }
+
+                if (!remasker)
+                {
+                    return;
+                }
+
+                if (entering)
+                {
+                    remaskersInside.Add(remasker);
+                }
+                else
+                {
+                    remaskersInside.Remove(remasker);
+                }
+            }
+
+            internal void ForceExitTrackedRemaskers()
+            {
+                if (remaskersInside.Count == 0)
+                {
+                    return;
+                }
+
+                RemaskerBuffer.Clear();
+                RemaskerBuffer.AddRange(remaskersInside);
+                foreach (var remasker in RemaskerBuffer)
+                {
+                    if (!remasker)
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        remasker.Exited(true);
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                RemaskerBuffer.Clear();
+                remaskersInside.Clear();
             }
         }
 
