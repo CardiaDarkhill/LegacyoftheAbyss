@@ -1,9 +1,0 @@
-{
-    "name": "LegacyoftheAbyss",
-    "version_number": "1.0.4",
-    "website_url": "https://github.com/thunderstore-io",
-    "description": "Legacy of the Abyss is a full co-op experience for Silksong. With a unique second playable character: The Shade!",
-    "dependencies": [
-        "BepInEx-BepInExPack_Silksong-5.4.2303"
-    ]
-}
