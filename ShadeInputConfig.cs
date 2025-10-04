@@ -491,7 +491,7 @@ public static class ShadeInput
 
         return option.type switch
         {
-            ShadeBindingOptionType.Key => option.key != KeyCode.None && Input.GetKey(option.key),
+            ShadeBindingOptionType.Key => option.key != KeyCode.None && (Input.GetKey(option.key) || LegacyHelper.RemotePlayBridge.IsKeyHeld(option.key)),
             ShadeBindingOptionType.Controller => GetControl(option, out var control) && control.IsPressed,
             _ => false
         };
@@ -506,7 +506,7 @@ public static class ShadeInput
 
         return option.type switch
         {
-            ShadeBindingOptionType.Key => option.key != KeyCode.None && Input.GetKeyDown(option.key),
+            ShadeBindingOptionType.Key => option.key != KeyCode.None && (Input.GetKeyDown(option.key) || LegacyHelper.RemotePlayBridge.WasKeyPressed(option.key)),
             ShadeBindingOptionType.Controller => GetControl(option, out var control) && control.WasPressed,
             _ => false
         };
@@ -524,7 +524,7 @@ public static class ShadeInput
 
         return option.type switch
         {
-            ShadeBindingOptionType.Key => option.key != KeyCode.None && Input.GetKey(option.key) ? 1f : 0f,
+            ShadeBindingOptionType.Key => option.key != KeyCode.None && (Input.GetKey(option.key) || LegacyHelper.RemotePlayBridge.IsKeyHeld(option.key)) ? 1f : 0f,
             ShadeBindingOptionType.Controller => GetControl(option, out var control) ? Mathf.Clamp01(Mathf.Abs(control.Value)) : 0f,
             _ => 0f
         };
@@ -617,7 +617,7 @@ public static class ShadeInput
         {
             if (code == KeyCode.None)
                 continue;
-            if (Input.GetKeyDown(code))
+            if (Input.GetKeyDown(code) || LegacyHelper.RemotePlayBridge.WasKeyPressed(code))
             {
                 key = code;
                 return true;
