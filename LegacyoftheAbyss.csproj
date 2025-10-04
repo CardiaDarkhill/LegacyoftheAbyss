@@ -26,6 +26,15 @@
     <Version>0.1.0</Version>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <DistributionVersion Condition="'$(DistributionVersion)' == ''">$(Version)</DistributionVersion>
+    <PackageBaseName Condition="'$(PackageBaseName)' == ''">$(AssemblyName)</PackageBaseName>
+    <PackageBaseName Condition="'$(PackageBaseName)' == ''">$(MSBuildProjectName)</PackageBaseName>
+    <ReleasePackagingRoot>$(MSBuildProjectDirectory)/obj/$(Configuration)</ReleasePackagingRoot>
+    <NexusPackageRoot>$(ReleasePackagingRoot)/Nexus/$(PackageBaseName)-$(DistributionVersion)</NexusPackageRoot>
+    <ThunderstorePackageRoot>$(ReleasePackagingRoot)/Thunderstore/$(PackageBaseName)-$(DistributionVersion)</ThunderstorePackageRoot>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="BepInEx.Analyzers" Version="1.0.8" PrivateAssets="all" />
     <PackageReference Include="BepInEx.Core" Version="5.4.21" />
@@ -72,5 +81,36 @@
       <MakeDir Directories="$(IntermediateOutputPath)/archive/Assets" />
       <Copy SourceFiles="@(ModAssets)" DestinationFolder="$(IntermediateOutputPath)/archive/Assets" />
       <ZipDirectory SourceDirectory="$(IntermediateOutputPath)/archive" DestinationFile="$(ExportFolder)/$(TargetName).zip" Overwrite="True"/>
+  </Target>
+
+  <Target Name="PrepareReleasePackages" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+    <ItemGroup>
+      <PluginBinary Include="$(TargetPath)" Condition="Exists('$(TargetPath)')" />
+      <PluginDeps Include="$(TargetDir)$(TargetName).deps.json" Condition="Exists('$(TargetDir)$(TargetName).deps.json')" />
+      <AssetFiles Include="Assets\**\*.*" />
+      <ThunderstoreStatic Include="BuildTemplates/Thunderstore/README.md" />
+      <ThunderstoreStatic Include="BuildTemplates/Thunderstore/icon.png" />
+    </ItemGroup>
+
+    <Message Text="Packaging Nexus and Thunderstore releases for version $(DistributionVersion)." Importance="High" />
+
+    <RemoveDir Directories="$(NexusPackageRoot)" Condition="Exists('$(NexusPackageRoot)')" />
+    <RemoveDir Directories="$(ThunderstorePackageRoot)" Condition="Exists('$(ThunderstorePackageRoot)')" />
+
+    <MakeDir Directories="$(NexusPackageRoot)/BepInEx/plugins" />
+    <Copy SourceFiles="@(PluginBinary)" DestinationFolder="$(NexusPackageRoot)/BepInEx/plugins" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(AssetFiles)" DestinationFiles="@(AssetFiles->'$(NexusPackageRoot)/BepInEx/plugins/Assets/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+
+    <MakeDir Directories="$(ThunderstorePackageRoot)" />
+    <Copy SourceFiles="@(PluginBinary)" DestinationFolder="$(ThunderstorePackageRoot)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(PluginDeps)" DestinationFolder="$(ThunderstorePackageRoot)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(ThunderstoreStatic)" DestinationFolder="$(ThunderstorePackageRoot)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(AssetFiles)" DestinationFiles="@(AssetFiles->'$(ThunderstorePackageRoot)/plugins/Assets/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+
+    <WriteLinesToFile
+      File="$(ThunderstorePackageRoot)/manifest.json"
+      Lines="$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)/BuildTemplates/Thunderstore/manifest.template.json').Replace('__VERSION__','$(DistributionVersion)'))"
+      Overwrite="true"
+      Encoding="utf-8" />
   </Target>
 </Project>
