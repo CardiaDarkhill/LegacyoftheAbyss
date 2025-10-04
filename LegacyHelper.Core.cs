@@ -94,6 +94,7 @@ public partial class LegacyHelper : BaseUnityPlugin
         Instance = this;
         ModConfig.Load();
         LoggingManager.Initialize(Logger);
+        RemotePlayBridge.Initialize();
         var harmony = new Harmony("com.legacyoftheabyss.helper");
         harmony.PatchAll();
 
@@ -112,6 +113,7 @@ public partial class LegacyHelper : BaseUnityPlugin
     private void Update()
     {
         LoggingManager.Update();
+        RemotePlayBridge.Update();
         HandleDebugInput();
         var ui = UnityEngine.Object.FindFirstObjectByType<UIManager>();
         if (ui == null)
@@ -193,6 +195,7 @@ public partial class LegacyHelper : BaseUnityPlugin
             Instance = null;
         }
 
+        RemotePlayBridge.Shutdown();
         LoggingManager.Flush();
         ModConfig.Save();
     }
