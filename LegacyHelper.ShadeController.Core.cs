@@ -4197,6 +4197,16 @@ public partial class LegacyHelper
                 RemaskerBuffer.Clear();
                 remaskersInside.Clear();
             }
+
+            internal void NotifyRemaskerIgnored(Remasker remasker)
+            {
+                if (!remasker)
+                {
+                    return;
+                }
+
+                remaskersInside.Remove(remasker);
+            }
         }
 
         private int GetHornetNailDamage()

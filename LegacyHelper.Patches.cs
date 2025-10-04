@@ -90,6 +90,62 @@ public partial class LegacyHelper
         }
     }
 
+    [HarmonyPatch(typeof(Remasker), "OnTriggerEnter2D")]
+    private static class Remasker_OnTriggerEnter2D_Patch
+    {
+        private static bool Prefix(Remasker __instance, Collider2D collision)
+        {
+            if (collision == null)
+            {
+                return true;
+            }
+
+            var tracker = collision.GetComponent<ShadeController.AggroProxyTracker>();
+            if (tracker == null)
+            {
+                return true;
+            }
+
+            try
+            {
+                tracker.NotifyRemaskerIgnored(__instance);
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(Remasker), "OnTriggerExit2D")]
+    private static class Remasker_OnTriggerExit2D_Patch
+    {
+        private static bool Prefix(Remasker __instance, Collider2D collision)
+        {
+            if (collision == null)
+            {
+                return true;
+            }
+
+            var tracker = collision.GetComponent<ShadeController.AggroProxyTracker>();
+            if (tracker == null)
+            {
+                return true;
+            }
+
+            try
+            {
+                tracker.NotifyRemaskerIgnored(__instance);
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+    }
+
     [HarmonyPatch(typeof(AlertRange), "FixedUpdate")]
     internal static class AlertRange_FixedUpdate_Patch
     {
