@@ -5,7 +5,7 @@
   },
   "projects": {
     "E:\\SteamProgram\\steamapps\\common\\Hollow Knight Silksong\\BepInEx\\plugins\\LegacyoftheAbyss\\LegacyoftheAbyss.csproj": {
-      "version": "0.1.0",
+      "version": "1.0.0",
       "restore": {
         "projectUniqueName": "E:\\SteamProgram\\steamapps\\common\\Hollow Knight Silksong\\BepInEx\\plugins\\LegacyoftheAbyss\\LegacyoftheAbyss.csproj",
         "projectName": "LegacyoftheAbyss",
