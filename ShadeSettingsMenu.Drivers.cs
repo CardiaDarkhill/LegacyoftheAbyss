@@ -1,0 +1,947 @@
+#nullable disable
+using System;
+using System.Collections;
+using System.Reflection;
+using System.Collections.Generic;
+using System.Globalization;
+using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.EventSystems;
+using Object = UnityEngine.Object;
+using BepInEx.Logging;
+using GlobalEnums;
+using LegacyoftheAbyss.Shade;
+
+public static partial class ShadeSettingsMenu
+{
+    private enum CancelTarget
+    {
+        PauseMenu,
+        ShadeMain
+    }
+
+    private class CancelRouter : MonoBehaviour, ICancelHandler
+    {
+        public CancelTarget target;
+
+        public void OnCancel(BaseEventData eventData)
+        {
+            eventData?.Use();
+            if (target == CancelTarget.ShadeMain)
+            {
+                ShowMainMenu();
+            }
+            else
+            {
+                var ui = builtFor ?? UIManager.instance;
+                if (ui != null)
+                {
+                    bool consumeToggle = activeScreen != null && activeScreen != mainScreen;
+                    HideImmediate(ui, consumeToggle);
+                }
+            }
+        }
+    }
+
+    internal static bool IsShowing => activeScreen != null && activeScreen.gameObject != null && activeScreen.gameObject.activeSelf;
+
+    private sealed class SliderMenuDriver : MonoBehaviour, IMoveHandler, ISubmitHandler
+    {
+        public Slider slider;
+        public bool wholeNumbers;
+
+        public void Initialize(Slider s, bool whole)
+        {
+            slider = s;
+            wholeNumbers = whole;
+        }
+
+        private void Step(float direction)
+        {
+            if (slider == null)
+                return;
+            float delta = wholeNumbers ? 1f : FractionalSliderStep;
+            float target = slider.value + delta * direction;
+            float snapped = SnapSliderValue(target, slider.minValue, slider.maxValue, wholeNumbers);
+            if (!Mathf.Approximately(snapped, slider.value))
+            {
+                slider.value = snapped;
+            }
+        }
+
+        public void OnMove(AxisEventData eventData)
+        {
+            if (slider == null || eventData == null)
+                return;
+            if (eventData.moveDir == MoveDirection.Left)
+            {
+                Step(-1f);
+                eventData.Use();
+            }
+            else if (eventData.moveDir == MoveDirection.Right)
+            {
+                Step(1f);
+                eventData.Use();
+            }
+        }
+
+        public void OnSubmit(BaseEventData eventData)
+        {
+            if (slider == null)
+                return;
+            Step(1f);
+            eventData?.Use();
+        }
+    }
+
+    private sealed class ToggleMenuDriver : MonoBehaviour, IMoveHandler, ISubmitHandler
+    {
+        public Toggle toggle;
+
+        public void Initialize(Toggle t)
+        {
+            toggle = t;
+        }
+
+        public void OnMove(AxisEventData eventData)
+        {
+            if (toggle == null || eventData == null)
+                return;
+            if (eventData.moveDir == MoveDirection.Left)
+            {
+                if (toggle.isOn)
+                    toggle.isOn = false;
+                eventData.Use();
+            }
+            else if (eventData.moveDir == MoveDirection.Right)
+            {
+                if (!toggle.isOn)
+                    toggle.isOn = true;
+                eventData.Use();
+            }
+        }
+
+        public void OnSubmit(BaseEventData eventData)
+        {
+            if (toggle == null)
+                return;
+            toggle.isOn = !toggle.isOn;
+            eventData?.Use();
+        }
+    }
+
+    private sealed class CharmButtonDriver : MonoBehaviour, ISelectHandler, ISubmitHandler
+    {
+        private CharmMenuController controller;
+        private ShadeCharmDefinition definition;
+        private MenuButton menuButton;
+        private Image iconImage;
+        private Text nameLabel;
+        private Text notchLabel;
+        private Text statusLabel;
+        private Sprite fallbackIcon;
+
+        public ShadeCharmId? CharmId => definition?.EnumId;
+
+        public void Initialize(CharmMenuController owner, ShadeCharmDefinition def, MenuButton button, Image icon, Text name, Text notch, Text status, Sprite fallback)
+        {
+            controller = owner;
+            definition = def;
+            menuButton = button;
+            iconImage = icon;
+            nameLabel = name;
+            notchLabel = notch;
+            statusLabel = status;
+            fallbackIcon = fallback;
+            controller?.RegisterCharmButton(this);
+            UpdateStaticContent();
+            Refresh();
+        }
+
+        private void UpdateStaticContent()
+        {
+            if (definition == null)
+                return;
+
+            if (nameLabel != null)
+                nameLabel.text = definition.DisplayName;
+
+            if (notchLabel != null)
+            {
+                int cost = Mathf.Max(0, definition.NotchCost);
+                notchLabel.text = cost == 1 ? "1 Notch" : $"{cost} Notches";
+            }
+
+            if (iconImage != null)
+            {
+                iconImage.sprite = definition.Icon ?? fallbackIcon;
+            }
+        }
+
+        public void Refresh()
+        {
+            if (definition == null)
+                return;
+
+            var inventory = ShadeRuntime.Charms;
+            var enumId = definition.EnumId;
+            bool owned = enumId.HasValue && (inventory?.IsOwned(enumId.Value) ?? false);
+            bool equipped = enumId.HasValue && (inventory?.IsEquipped(enumId.Value) ?? false);
+            bool broken = enumId.HasValue && (inventory?.IsBroken(enumId.Value) ?? false);
+            bool isNew = enumId.HasValue && (inventory?.IsNewlyDiscovered(enumId.Value) ?? false);
+
+            if (menuButton != null)
+                menuButton.interactable = owned && !broken;
+
+            if (iconImage != null)
+            {
+                iconImage.sprite = definition.Icon ?? fallbackIcon;
+            }
+
+            if (iconImage != null)
+            {
+                if (!owned)
+                {
+                    iconImage.color = new Color(0.3f, 0.3f, 0.3f, 1f);
+                }
+                else if (broken)
+                {
+                    iconImage.color = new Color(0.55f, 0.25f, 0.25f, 1f);
+                }
+                else
+                {
+                    iconImage.color = definition.Icon != null ? Color.white : definition.FallbackTint;
+                }
+            }
+
+            if (statusLabel != null)
+            {
+                if (broken)
+                {
+                    statusLabel.text = "Broken";
+                    statusLabel.color = new Color(0.83f, 0.35f, 0.35f, 1f);
+                }
+                else if (equipped)
+                {
+                    statusLabel.text = "Equipped";
+                    statusLabel.color = new Color(0.92f, 0.86f, 0.55f, 1f);
+                }
+                else if (!owned)
+                {
+                    statusLabel.text = "Locked";
+                    statusLabel.color = new Color(0.7f, 0.32f, 0.32f, 1f);
+                }
+                else if (isNew)
+                {
+                    statusLabel.text = "New";
+                    statusLabel.color = new Color(0.55f, 0.78f, 0.92f, 1f);
+                }
+                else
+                {
+                    statusLabel.text = string.Empty;
+                    statusLabel.color = Color.white;
+                }
+            }
+        }
+
+        public void OnSelect(BaseEventData eventData)
+        {
+            if (definition == null)
+                return;
+            if (definition.EnumId.HasValue)
+            {
+                controller?.HandleCharmSelected(definition.EnumId.Value);
+            }
+        }
+
+        public void OnSubmit(BaseEventData eventData)
+        {
+            if (definition == null)
+                return;
+            if (definition.EnumId.HasValue)
+            {
+                controller?.HandleCharmSubmit(definition.EnumId.Value);
+            }
+            eventData?.Use();
+        }
+
+        private void OnDestroy()
+        {
+            controller?.UnregisterCharmButton(this);
+        }
+    }
+
+    private sealed class CharmMenuController : MonoBehaviour
+    {
+        private readonly List<CharmButtonDriver> charmButtons = new();
+        private Text notchMeter;
+        private Text statusText;
+        private Text detailTitleText;
+        private Text detailDescriptionText;
+        private Text navigationHintText;
+        private MenuButton equipButton;
+        private MenuButton unequipButton;
+        private ShadeCharmId? selectedCharm;
+        private string pendingStatusMessage = string.Empty;
+
+        public void Initialize(Text notch, Text status, Text title, Text description, Text navigation, MenuButton equip, MenuButton unequip)
+        {
+            notchMeter = notch;
+            statusText = status;
+            detailTitleText = title;
+            detailDescriptionText = description;
+            navigationHintText = navigation;
+            equipButton = equip;
+            unequipButton = unequip;
+
+            if (navigationHintText != null)
+            {
+                navigationHintText.text = "Use arrow keys or the left stick to move between charms. Press Enter/A to equip, Backspace/X to unequip, and Esc/B to return to the pause menu. QA: Equip a charm, confirm the notch meter updates, then back out cleanly.";
+            }
+
+            if (equipButton != null)
+            {
+                equipButton.OnSubmitPressed.RemoveAllListeners();
+                equipButton.OnSubmitPressed.AddListener(HandleEquipPressed);
+            }
+
+            if (unequipButton != null)
+            {
+                unequipButton.OnSubmitPressed.RemoveAllListeners();
+                unequipButton.OnSubmitPressed.AddListener(HandleUnequipPressed);
+            }
+
+            RefreshAll();
+        }
+
+        public void RegisterCharmButton(CharmButtonDriver driver)
+        {
+            if (driver != null && !charmButtons.Contains(driver))
+                charmButtons.Add(driver);
+        }
+
+        public void UnregisterCharmButton(CharmButtonDriver driver)
+        {
+            if (driver == null)
+                return;
+            charmButtons.Remove(driver);
+        }
+
+        public void HandleScreenShown()
+        {
+            RefreshAll();
+        }
+
+        public void RefreshAll()
+        {
+            for (int i = charmButtons.Count - 1; i >= 0; i--)
+            {
+                if (charmButtons[i] == null)
+                {
+                    charmButtons.RemoveAt(i);
+                    continue;
+                }
+                charmButtons[i].Refresh();
+            }
+
+            UpdateNotchMeter();
+            UpdateActionState();
+            UpdateDetailPanel();
+        }
+
+        public void HandleCharmSelected(ShadeCharmId id)
+        {
+            selectedCharm = id;
+            var inventory = ShadeRuntime.Charms;
+            if (inventory != null && inventory.MarkCharmSeen(id))
+            {
+                foreach (var driver in charmButtons)
+                {
+                    driver?.Refresh();
+                }
+            }
+            UpdateActionState();
+            UpdateDetailPanel();
+        }
+
+        public void HandleCharmSubmit(ShadeCharmId id)
+        {
+            var inventory = ShadeRuntime.Charms;
+            if (inventory == null)
+            {
+                pendingStatusMessage = "Charm inventory not ready.";
+                UpdateStatusText(pendingStatusMessage);
+                return;
+            }
+
+            if (!ShadeRuntime.IsHornetRestingAtBench())
+            {
+                pendingStatusMessage = ShadeRuntime.BenchLockedMessage;
+                RefreshAll();
+                return;
+            }
+
+            if (inventory.TryToggle(id, out var message))
+            {
+                pendingStatusMessage = message;
+                selectedCharm = id;
+                LegacyHelper.RequestShadeLoadoutRecompute();
+            }
+            else
+            {
+                pendingStatusMessage = string.IsNullOrEmpty(message) ? "Unable to change charm." : message;
+                RefreshAll();
+            }
+        }
+
+        public void HandleEquipPressed()
+        {
+            var inventory = ShadeRuntime.Charms;
+            if (inventory == null)
+            {
+                pendingStatusMessage = "Charm inventory not ready.";
+                RefreshAll();
+                return;
+            }
+
+            if (!ShadeRuntime.IsHornetRestingAtBench())
+            {
+                pendingStatusMessage = ShadeRuntime.BenchLockedMessage;
+                RefreshAll();
+                return;
+            }
+
+            if (!selectedCharm.HasValue)
+            {
+                pendingStatusMessage = "Select a charm to equip.";
+                RefreshAll();
+                return;
+            }
+
+            if (inventory.TryEquip(selectedCharm.Value, out var message))
+            {
+                pendingStatusMessage = message;
+                LegacyHelper.RequestShadeLoadoutRecompute();
+            }
+            else
+            {
+                pendingStatusMessage = string.IsNullOrEmpty(message) ? "Unable to equip charm." : message;
+                RefreshAll();
+            }
+        }
+
+        public void HandleUnequipPressed()
+        {
+            var inventory = ShadeRuntime.Charms;
+            if (inventory == null)
+            {
+                pendingStatusMessage = "Charm inventory not ready.";
+                RefreshAll();
+                return;
+            }
+
+            if (!ShadeRuntime.IsHornetRestingAtBench())
+            {
+                pendingStatusMessage = ShadeRuntime.BenchLockedMessage;
+                RefreshAll();
+                return;
+            }
+
+            if (!selectedCharm.HasValue)
+            {
+                pendingStatusMessage = "Select a charm to unequip.";
+                RefreshAll();
+                return;
+            }
+
+            if (inventory.TryUnequip(selectedCharm.Value, out var message))
+            {
+                pendingStatusMessage = message;
+                LegacyHelper.RequestShadeLoadoutRecompute();
+            }
+            else
+            {
+                pendingStatusMessage = string.IsNullOrEmpty(message) ? "Unable to unequip charm." : message;
+                RefreshAll();
+            }
+        }
+
+        private void UpdateNotchMeter()
+        {
+            if (notchMeter == null)
+                return;
+            var inventory = ShadeRuntime.Charms;
+            if (inventory == null)
+            {
+                notchMeter.text = "Charm inventory unavailable.";
+                return;
+            }
+
+            string status = $"Notches Used: {inventory.UsedNotches}/{inventory.NotchCapacity}";
+            if (inventory.IsOvercharmed)
+            {
+                status = $"Overcharmed! {status}";
+            }
+
+            notchMeter.text = status;
+        }
+
+        private void UpdateDetailPanel()
+        {
+            var inventory = ShadeRuntime.Charms;
+            if (inventory == null)
+            {
+                SetDetailTexts("Charms", "Charm inventory data not yet ready.");
+                UpdateStatusText("Charm data unavailable.");
+                return;
+            }
+
+            if (!selectedCharm.HasValue)
+            {
+                foreach (var driver in charmButtons)
+                {
+                    if (driver != null)
+                    {
+                        selectedCharm = driver.CharmId;
+                        break;
+                    }
+                }
+            }
+
+            string fallbackStatus = "Select a charm to view details.";
+
+            if (selectedCharm.HasValue)
+            {
+                var def = inventory.GetDefinition(selectedCharm.Value);
+                SetDetailTexts(def.DisplayName, def.Description);
+                if (!inventory.IsOwned(selectedCharm.Value))
+                    fallbackStatus = "This charm has not been unlocked yet.";
+                else if (inventory.IsBroken(selectedCharm.Value))
+                    fallbackStatus = "This charm is broken. Rest at a bench to repair it before equipping.";
+                else if (inventory.IsEquipped(selectedCharm.Value))
+                    fallbackStatus = "Charm equipped. Unequip to free notches for other charms.";
+                else if (def.NotchCost > 0 && inventory.UsedNotches + def.NotchCost > inventory.NotchCapacity)
+                {
+                    fallbackStatus = inventory.IsOvercharmed
+                        ? "Shade is overcharmed. Unequip a charm first."
+                        : "Equip to add this charm to your shade's loadout.";
+                }
+                else
+                    fallbackStatus = "Equip to add this charm to your shade's loadout.";
+            }
+            else
+            {
+                SetDetailTexts("Charms", "Select a charm to view its description and equip requirements.");
+            }
+
+            if (inventory.IsOvercharmed && (fallbackStatus == null || fallbackStatus.IndexOf("overcharm", StringComparison.OrdinalIgnoreCase) < 0))
+            {
+                fallbackStatus = "Shade is overcharmed. " + fallbackStatus;
+            }
+
+            if (!ShadeRuntime.IsHornetRestingAtBench())
+            {
+                fallbackStatus = ShadeRuntime.BenchLockedMessage;
+            }
+
+            UpdateStatusText(fallbackStatus);
+        }
+
+        private void SetDetailTexts(string title, string description)
+        {
+            if (detailTitleText != null)
+                detailTitleText.text = title;
+            if (detailDescriptionText != null)
+                detailDescriptionText.text = description;
+        }
+
+        private void UpdateActionState()
+        {
+            var inventory = ShadeRuntime.Charms;
+            bool canEquip = false;
+            bool canUnequip = false;
+            bool atBench = ShadeRuntime.IsHornetRestingAtBench();
+
+            if (inventory != null && selectedCharm.HasValue)
+            {
+                var def = inventory.GetDefinition(selectedCharm.Value);
+                bool owned = inventory.IsOwned(selectedCharm.Value);
+                bool equipped = inventory.IsEquipped(selectedCharm.Value);
+                bool broken = inventory.IsBroken(selectedCharm.Value);
+                if (atBench)
+                {
+                    canUnequip = equipped;
+                    canEquip = owned && !equipped && !broken;
+                }
+            }
+
+            if (equipButton != null)
+                equipButton.interactable = canEquip && atBench;
+            if (unequipButton != null)
+                unequipButton.interactable = canUnequip && atBench;
+        }
+
+        private void UpdateStatusText(string fallback)
+        {
+            if (statusText == null)
+                return;
+
+            if (!string.IsNullOrEmpty(pendingStatusMessage))
+            {
+                statusText.text = pendingStatusMessage;
+                pendingStatusMessage = string.Empty;
+            }
+            else
+            {
+                statusText.text = fallback;
+            }
+        }
+    }
+
+    private sealed class BindingMenuDriver : MonoBehaviour
+    {
+        private MenuButton button;
+        private ShadeAction action;
+        private bool secondary;
+        private string labelPrefix;
+        private Text uiText;
+        private Component tmpTextComponent;
+        private PropertyInfo tmpTextProperty;
+        private bool capturing;
+
+        public void Initialize(MenuButton menuButton, ShadeAction targetAction, bool isSecondary, string label)
+        {
+            button = menuButton;
+            action = targetAction;
+            secondary = isSecondary;
+            labelPrefix = label;
+            uiText = button.GetComponentInChildren<Text>(true);
+            var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
+            if (tmpType != null)
+            {
+                tmpTextComponent = button.GetComponentInChildren(tmpType, true);
+                tmpTextProperty = tmpType.GetProperty("text");
+            }
+
+            button.OnSubmitPressed.RemoveAllListeners();
+            button.OnSubmitPressed.AddListener(BeginCapture);
+            RegisterBindingDriver(this);
+            UpdateLabel();
+        }
+
+        public void UpdateLabel()
+        {
+            string bindingText = ShadeInput.DescribeBindingOption(ShadeInput.GetBindingOption(action, secondary));
+            SetButtonText($"{labelPrefix}: {bindingText}");
+        }
+
+        private void SetButtonText(string value)
+        {
+            if (uiText != null)
+            {
+                uiText.text = value;
+                return;
+            }
+            if (tmpTextComponent != null && tmpTextProperty != null)
+            {
+                tmpTextProperty.SetValue(tmpTextComponent, value);
+            }
+        }
+
+        private void BeginCapture()
+        {
+            if (!capturing)
+                StartCoroutine(CaptureRoutine());
+        }
+
+        private System.Collections.IEnumerator CaptureRoutine()
+        {
+            capturing = true;
+            SetButtonText($"{labelPrefix}: Press a binding... (Esc cancels, Backspace clears)");
+            while (true)
+            {
+                yield return null;
+                if (Input.GetKeyDown(KeyCode.Escape))
+                    break;
+                if (Input.GetKeyDown(KeyCode.Backspace) || Input.GetKeyDown(KeyCode.Delete))
+                {
+                    ShadeInput.SetBindingOption(action, secondary, ShadeBindingOption.None());
+                    ModConfig.Save();
+                    NotifyBindingChanged();
+                    break;
+                }
+                if (ShadeInput.TryCaptureKey(out var key))
+                {
+                    ShadeInput.SetBindingOption(action, secondary, ShadeBindingOption.FromKey(key));
+                    ModConfig.Save();
+                    NotifyBindingChanged();
+                    break;
+                }
+                if (ShadeInput.TryCaptureControl(out var control, out int deviceIndex))
+                {
+                    ShadeInput.SetBindingOption(action, secondary, ShadeBindingOption.FromControl(control, deviceIndex));
+                    ShadeInput.EnsureControllerIndex(deviceIndex);
+                    ModConfig.Save();
+                    NotifyBindingChanged();
+                    break;
+                }
+            }
+            capturing = false;
+            UpdateLabel();
+        }
+
+        private void OnDestroy()
+        {
+            UnregisterBindingDriver(this);
+        }
+    }
+
+    private sealed class ShadeToggleDriver : MonoBehaviour
+    {
+        private MenuButton button;
+        private Text uiText;
+        private Component tmpTextComponent;
+        private PropertyInfo tmpTextProperty;
+
+        public void Initialize(MenuButton menuButton)
+        {
+            button = menuButton;
+            uiText = button.GetComponentInChildren<Text>(true);
+            var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
+            if (tmpType != null)
+            {
+                tmpTextComponent = button.GetComponentInChildren(tmpType, true);
+                tmpTextProperty = tmpType.GetProperty("text");
+            }
+
+            button.OnSubmitPressed.RemoveAllListeners();
+            button.OnSubmitPressed.AddListener(ToggleShade);
+            shadeToggleDriver = this;
+            UpdateLabel();
+        }
+
+        private void OnEnable()
+        {
+            if (shadeToggleDriver == null)
+                shadeToggleDriver = this;
+            UpdateLabel();
+        }
+
+        public void UpdateLabel()
+        {
+            SetButtonText(GetShadeToggleLabel());
+        }
+
+        private void ToggleShade()
+        {
+            LegacyHelper.SetShadeEnabled(!ModConfig.Instance.shadeEnabled);
+        }
+
+        private void SetButtonText(string value)
+        {
+            if (uiText != null)
+            {
+                uiText.text = value;
+                return;
+            }
+
+            if (tmpTextComponent != null && tmpTextProperty != null)
+            {
+                tmpTextProperty.SetValue(tmpTextComponent, value);
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (shadeToggleDriver == this)
+                shadeToggleDriver = null;
+        }
+    }
+
+    private static void RegisterBindingDriver(BindingMenuDriver driver)
+    {
+        if (driver != null && !bindingDrivers.Contains(driver))
+            bindingDrivers.Add(driver);
+    }
+
+    private static void UnregisterBindingDriver(BindingMenuDriver driver)
+    {
+        if (driver == null)
+            return;
+        bindingDrivers.Remove(driver);
+    }
+
+    internal static void NotifyBindingChanged()
+    {
+        for (int i = bindingDrivers.Count - 1; i >= 0; i--)
+        {
+            var driver = bindingDrivers[i];
+            if (driver == null)
+            {
+                bindingDrivers.RemoveAt(i);
+                continue;
+            }
+            driver.UpdateLabel();
+        }
+    }
+
+    internal static void NotifyShadeToggleChanged()
+    {
+        shadeToggleDriver?.UpdateLabel();
+    }
+
+    internal static void NotifyCharmLoadoutChanged()
+    {
+        charmsController?.RefreshAll();
+    }
+
+    private static void ApplyDefaultPreset()
+    {
+        ShadeInput.Config.ResetToDefaults();
+        HornetInput.ApplyControllerDefaults();
+        ModConfig.Save();
+        NotifyBindingChanged();
+    }
+
+    private static void ApplyDualControllerPresetOption()
+    {
+        ShadeInput.Config.ApplyDualControllerPreset();
+        HornetInput.ApplyControllerDefaults();
+        ModConfig.Save();
+        NotifyBindingChanged();
+    }
+
+    private static void ApplyKeyboardOnlyPresetOption()
+    {
+        ShadeInput.Config.ApplyKeyboardOnlyPreset();
+        HornetInput.ApplyKeyboardDefaults(true);
+        ModConfig.Save();
+        NotifyBindingChanged();
+    }
+
+    private static void ApplyShadeControllerPresetOption()
+    {
+        ShadeInput.Config.ApplyShadeControllerPreset();
+        HornetInput.ApplyKeyboardDefaults(true);
+        ModConfig.Save();
+        NotifyBindingChanged();
+    }
+
+    private sealed class RowHighlightDriver : MonoBehaviour, ISelectHandler, IDeselectHandler, IPointerEnterHandler, IPointerExitHandler
+    {
+        public GameObject highlight;
+        private readonly List<Animator> animators = new();
+        private static readonly int ShowTrigger = Animator.StringToHash("show");
+        private static readonly int HideTrigger = Animator.StringToHash("hide");
+
+        public void Initialize(GameObject highlightGo, IEnumerable<Animator> highlightAnimators)
+        {
+            highlight = highlightGo;
+            animators.Clear();
+            if (highlightAnimators != null)
+            {
+                foreach (var animator in highlightAnimators)
+                {
+                    if (animator != null)
+                        animators.Add(animator);
+                }
+            }
+            SetActive(false, true);
+        }
+
+        private void SetActive(bool active, bool instant = false)
+        {
+            bool useFallback = highlight != null && animators.Count == 0;
+            if (useFallback && highlight.activeSelf != active)
+                highlight.SetActive(active);
+
+            if (animators.Count == 0)
+                return;
+
+            foreach (var animator in animators)
+            {
+                if (animator == null)
+                    continue;
+                try
+                {
+                    if (active)
+                    {
+                        animator.ResetTrigger(HideTrigger);
+                        animator.SetTrigger(ShowTrigger);
+                    }
+                    else
+                    {
+                        animator.ResetTrigger(ShowTrigger);
+                        animator.SetTrigger(HideTrigger);
+                    }
+                    if (instant)
+                        animator.Update(0f);
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        public void OnSelect(BaseEventData eventData)
+        {
+            SetActive(true);
+        }
+
+        public void OnDeselect(BaseEventData eventData)
+        {
+            SetActive(false);
+        }
+
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != gameObject)
+                EventSystem.current.SetSelectedGameObject(gameObject);
+            SetActive(true);
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject == gameObject)
+                return;
+            SetActive(false);
+        }
+
+        private void OnDisable()
+        {
+            SetActive(false, true);
+        }
+    }
+
+    private sealed class MenuFocusDriver : MonoBehaviour
+    {
+        public MenuScreen screen;
+
+        private void Update()
+        {
+            if (screen == null || !screen.gameObject.activeInHierarchy)
+                return;
+
+            var eventSystem = EventSystem.current;
+            if (eventSystem == null)
+                return;
+
+            var current = eventSystem.currentSelectedGameObject;
+            if (current != null && current.transform.IsChildOf(screen.transform))
+                return;
+
+            var highlight = GetPreferredHighlight(screen);
+            if (highlight == null)
+                return;
+
+            var selectable = highlight.GetFirstInteractable();
+            if (selectable == null)
+                return;
+
+            eventSystem.SetSelectedGameObject(selectable.gameObject);
+            UIManager.HighlightSelectableNoSound(selectable);
+        }
+    }
+
+}
+#nullable restore
