@@ -18,6 +18,8 @@ refactor. Treat this as a living document — update it as work gets done or pri
   where. Along the way, discovered `ShadeInventoryPane.cs` was hiding two extra top-level
   types (`SimpleCanvasNestedFadeGroup`, `ShadeInventoryPaneIntegration`) that got pulled out
   into their own file.
+- **Skin selector (feature 2 below).** Shipped with 7 alternate skins plus a refreshed
+  default set. See "Skin system" below for the on-disk convention.
 
 **Deliberately deferred, not started:**
 - **Multi-shade architecture groundwork.** `ShadeRuntime`, `ShadePersistentState`,
@@ -47,11 +49,47 @@ re-test against the unmodified code):**
 
 1. **Graphical layering fix** and **optional gravity toggle** — both fast, contained, no
    architectural dependency on anything else. Good to do together or in either order.
-2. **Skin selector**
+2. ~~**Skin selector**~~ — done, see "Skin system" below.
 3. **Shade fury attack** (4th spell)
 4. **Multi-shade architecture groundwork** (deferred item above) → then **Additional shades**
 5. **Radiance boss fight** — prototype as a standalone arena/enemy first, wire into the
    Hornet-memory cutscene only once the fight itself is confirmed fun.
+
+## Skin system
+
+Shipped. Structure on disk:
+
+- `Assets/Knight_Shade_Sprites/*.png` — the built-in ("Default Shade") set, and the fallback
+  for every other skin.
+- `Assets/Knight_Shade_Sprites/Skins/<Skin Name>/` — one folder per alternate skin. A skin
+  only needs the sheets it actually changes; anything it omits resolves back to the built-in
+  set. That is why e.g. `Cozy Shade` ships 7 files and `Grimmchild Phase 3` ships all 16.
+- `Assets/Knight_Shade_Sprites/Skins/skins.json` — optional. Sets menu order and display
+  names. Folders missing from it are still discovered and appended alphabetically, so a
+  drop-in skin folder needs no config edit at all.
+
+Code:
+
+- `Shade/ShadeSkinManager.cs` discovers skins and owns `ResolveSpritePath` (skin folder →
+  built-in fallback). `Shade/ShadeSkinDefinition.cs` is the record type.
+- `LegacyHelper.ShadeController.Core.cs::LoadShadeSprites` is still the single sprite-load
+  path — it now resolves every sheet through `ShadeSkinManager`. Keep it that way; adding a
+  second load site would break skin switching.
+- `ReloadSkinSprites` swaps sheets on a live Shade and frees the outgoing skin's textures on
+  a short delay (in-flight spell VFX hold those arrays). Entry point is
+  `LegacyHelper.SetShadeSkin`.
+- UI is `ShadeSettingsMenu.Skins.cs` — a "Skins" screen off the shade settings menu with a
+  preview column and one row per skin.
+- Selection persists as `shadeSkin` in `ModConfig`. An unknown/deleted id falls back to
+  Default rather than erroring.
+
+**Note on frame counts:** every sheet's frame count is still hardcoded in `LoadShadeSprites`
+(idle 9, float 6, …). All shipped skins match those dimensions exactly. A skin with a
+different frame count would need per-skin metadata, which does not exist yet.
+
+**Known adjacent leak, pre-existing and untouched:** `ShadeController` never frees its sprite
+textures on destroy, so toggling the Shade off/on re-decodes ~20 MB each time. The new skin
+swap path does free them; the destroy path still does not.
 
 ## Planned features — feasibility notes
 
@@ -65,11 +103,10 @@ representative scenes' sorting layer setup and Hornet's own renderer relative to
 effects, then give the Shade its own explicit sorting layer instead of "Hornet's layer + 1",
 and add whatever `Light2D`-compatible material Hornet's renderer uses.
 
-**2. Skin selector** (Easy–moderate). Sprites already load from flat PNGs on disk at
-runtime (`HUD.Assets.cs`), not baked into the DLL. Mostly: define a skin-folder convention
-under `Assets/`, add a `selectedSkin` field to `ModConfig`, and centralize the sprite-load
-paths in `HUD.Assets.cs` to resolve through the selected skin. Audit first that every place
-loading a Shade sprite goes through one lookup path rather than being hardcoded individually.
+**2. Skin selector** — **done.** See "Skin system" above. (The audit called for here came back
+clean: `LegacyHelper.ShadeController.Core.cs::LoadShadeSprites` was already the only place
+Shade sheets were loaded, so centralizing was a one-function change. Note the sprites load
+there, not in `HUD.Assets.cs` as this entry originally guessed — that file handles HUD art.)
 
 **3. Optional gravity** (Easy). The Shade's `Rigidbody2D` already runs with `gravityScale = 0f`
 and fully custom float/knockback code (now in `LegacyHelper.ShadeController.Movement.cs`).

@@ -411,9 +411,11 @@ public partial class LegacyHelper
 
         private void LoadShadeSprites()
         {
+            loadedSpriteTextures.Clear();
+            loadedSkinId = ShadeSkinManager.SelectedSkinId;
             try
             {
-                string SpritePath(string fileName) => ModPaths.GetAssetPath("Knight_Shade_Sprites", fileName);
+                string SpritePath(string fileName) => ShadeSkinManager.ResolveSpritePath(fileName);
                 idleAnimFrames = LoadSpriteStrip(SpritePath("Shade_Idle_Sheet.png"), 9);
                 floatAnimFrames = LoadSpriteStrip(SpritePath("Shade_Float_Sheet.png"), 6);
                 vengefulAnimFrames = LoadSpriteStrip(SpritePath("Vengeful_Spirit_Sheet.png"), 2);
@@ -459,6 +461,61 @@ public partial class LegacyHelper
             }
         }
 
+        /// <summary>
+        /// Reloads every sheet through the currently selected skin. Safe to call while the
+        /// Shade is alive; the previous skin's textures are released once any in-flight VFX
+        /// still holding them have had a chance to finish.
+        /// </summary>
+        internal void ReloadSkinSprites()
+        {
+            if (string.Equals(loadedSkinId, ShadeSkinManager.SelectedSkinId, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            var previousTextures = new List<Texture2D>(loadedSpriteTextures);
+            LoadShadeSprites();
+
+            // Drop the cached array reference so HandleAnimation re-seeds from the new sheets.
+            currentAnimFrames = null;
+            animFrameIndex = 0;
+            animTimer = 0f;
+            if (sr != null)
+            {
+                if (isInactive && inactiveSprite != null)
+                    sr.sprite = inactiveSprite;
+                else if (idleAnimFrames != null && idleAnimFrames.Length > 0)
+                    sr.sprite = idleAnimFrames[0];
+                else if (inactiveSprite != null)
+                    sr.sprite = inactiveSprite;
+            }
+            if (inactivePulseSr != null)
+                inactivePulseSr.sprite = inactiveSprite;
+
+            if (previousTextures.Count > 0)
+            {
+                if (isActiveAndEnabled)
+                    StartCoroutine(ReleaseTexturesAfterDelay(previousTextures, RetiredSkinTextureLifetime));
+                else
+                    ReleaseTextures(previousTextures);
+            }
+        }
+
+        private IEnumerator ReleaseTexturesAfterDelay(List<Texture2D> textures, float delay)
+        {
+            yield return new WaitForSecondsRealtime(delay);
+            ReleaseTextures(textures);
+        }
+
+        private static void ReleaseTextures(List<Texture2D> textures)
+        {
+            if (textures == null) return;
+            foreach (var tex in textures)
+            {
+                if (tex != null)
+                    UnityEngine.Object.Destroy(tex);
+            }
+            textures.Clear();
+        }
+
         private Sprite[] LoadSpriteStrip(string path, int frames = 0)
         {
             if (!File.Exists(path)) return System.Array.Empty<Sprite>();
@@ -466,6 +523,7 @@ public partial class LegacyHelper
             var tex = new Texture2D(2, 2, TextureFormat.ARGB32, false);
             TryLoadImage(tex, bytes);
             tex.filterMode = FilterMode.Point;
+            loadedSpriteTextures.Add(tex);
             int cols = frames > 0 ? frames : Mathf.Max(1, tex.width / tex.height);
             int frameWidth = tex.width / cols;
             int frameHeight = tex.height;

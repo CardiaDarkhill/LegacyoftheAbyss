@@ -22,6 +22,7 @@ public static partial class ShadeSettingsMenu
     private static MenuScreen controlsScreen;
     private static MenuScreen loggingScreen;
     private static MenuScreen charmsScreen;
+    private static MenuScreen skinsScreen;
     private static MenuScreen activeScreen;
     private static readonly List<MenuScreen> allScreens = new();
     private static readonly Dictionary<MenuScreen, MenuSelectable> screenFirstSelectables = new();
@@ -98,6 +99,7 @@ public static partial class ShadeSettingsMenu
     private static Sprite fallbackCheckSprite;
     private static Sprite fallbackCharmSprite;
     private static CharmMenuController charmsController;
+    private static SkinMenuController skinsController;
 
     private static void LogMenu(LogLevel level, string message)
     {

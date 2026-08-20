@@ -1,0 +1,12 @@
+{
+  "//": "Optional. Controls the order and display names of the skins listed after 'Default Shade' in the Skins menu. Folders not listed here are still picked up automatically and appended alphabetically.",
+  "skins": [
+    { "id": "Low Horn", "displayName": "Low Horn" },
+    { "id": "High Horn", "displayName": "High Horn" },
+    { "id": "3 Horn", "displayName": "Three Horn" },
+    { "id": "4 Horn", "displayName": "Four Horn" },
+    { "id": "Cozy Shade", "displayName": "Cozy Shade" },
+    { "id": "Grimmchild Phase 2", "displayName": "Grimmchild II" },
+    { "id": "Grimmchild Phase 3", "displayName": "Grimmchild III" }
+  ]
+}

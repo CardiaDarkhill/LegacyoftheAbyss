@@ -2,6 +2,7 @@ using InControl;
 using UnityEngine;
 using Xunit;
 
+[Collection(ModConfigCollection.Name)]
 public class ModConfigTests
 {
     [Fact]

@@ -149,6 +149,7 @@ public static partial class ShadeSettingsMenu
         {
             charmsScreen = null;
         }
+        skinsScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
         controlsScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
         loggingScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
 
@@ -173,6 +174,13 @@ public static partial class ShadeSettingsMenu
             InitializeScreen(charmsScreen);
             allScreens.Add(charmsScreen);
         }
+        if (skinsScreen != null)
+        {
+            skinsScreen.gameObject.name = "ShadeSettingsSkins";
+            skinsScreen.gameObject.SetActive(false);
+            InitializeScreen(skinsScreen);
+            allScreens.Add(skinsScreen);
+        }
         if (controlsScreen != null)
         {
             controlsScreen.gameObject.name = "ShadeSettingsControls";
@@ -194,6 +202,7 @@ public static partial class ShadeSettingsMenu
         BuildDifficultyMenu(ui, difficultyScreen, sliderTemplate, buttonTemplate);
         if (IncludeLegacyCharmMenu && charmsScreen != null)
             BuildCharmsMenu(ui, charmsScreen, buttonTemplate);
+        BuildSkinsMenu(ui, skinsScreen, buttonTemplate);
         BuildControlsMenu(ui, controlsScreen, buttonTemplate);
         BuildLoggingMenu(ui, loggingScreen, toggleTemplate, buttonTemplate);
 

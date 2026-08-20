@@ -101,6 +101,11 @@ public partial class LegacyHelper
         private Sprite inactiveSprite;
         private SpriteRenderer inactivePulseSr;
         private Sprite[] currentAnimFrames;
+        // Every texture decoded by LoadSpriteStrip for the skin currently in use, so a skin
+        // switch can free the outgoing set instead of leaking ~20 MB per swap.
+        private readonly List<Texture2D> loadedSpriteTextures = new List<Texture2D>();
+        private string loadedSkinId;
+        private const float RetiredSkinTextureLifetime = 3f;
         private int animFrameIndex;
         private float animTimer;
         private Coroutine spawnRoutine;

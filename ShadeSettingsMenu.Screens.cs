@@ -29,6 +29,8 @@ public static partial class ShadeSettingsMenu
         loggingScreen = null;
         charmsScreen = null;
         charmsController = null;
+        skinsScreen = null;
+        skinsController = null;
         activeScreen = null;
         screen = null;
         templateSource = null;
@@ -420,6 +422,11 @@ public static partial class ShadeSettingsMenu
         if (charmsScreen != null)
         {
             var s = CreateMenuButton(content, buttonTemplate, "Charms", () => ShowScreen(charmsScreen), CancelTarget.PauseMenu);
+            if (s != null) selectables.Add(s);
+        }
+        if (skinsScreen != null)
+        {
+            var s = CreateMenuButton(content, buttonTemplate, "Skins", () => ShowScreen(skinsScreen), CancelTarget.PauseMenu);
             if (s != null) selectables.Add(s);
         }
         if (controlsScreen != null)
@@ -1070,6 +1077,11 @@ public static partial class ShadeSettingsMenu
         else if (target == charmsScreen)
         {
             charmsController?.HandleScreenShown();
+        }
+        else if (target == skinsScreen)
+        {
+            consumeNextToggle = false;
+            skinsController?.HandleScreenShown();
         }
         else if (target != null && target != mainScreen)
         {

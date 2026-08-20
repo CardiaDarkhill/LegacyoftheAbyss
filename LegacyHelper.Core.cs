@@ -347,6 +347,35 @@ public partial class LegacyHelper : BaseUnityPlugin
         ModConfig.Save();
     }
 
+    /// <summary>
+    /// Applies <paramref name="skinId"/> and refreshes the live Shade's sprites in place, so the
+    /// change is visible as soon as the pause menu closes.
+    /// </summary>
+    internal static void SetShadeSkin(string skinId)
+    {
+        if (!ShadeSkinManager.SelectSkin(skinId))
+        {
+            return;
+        }
+
+        RefreshShadeSkin();
+    }
+
+    internal static void RefreshShadeSkin()
+    {
+        try
+        {
+            if (helper != null)
+            {
+                var controller = helper.GetComponent<ShadeController>();
+                controller?.ReloadSkinSprites();
+            }
+        }
+        catch
+        {
+        }
+    }
+
     internal static void RequestShadeLoadoutRecompute()
     {
         try

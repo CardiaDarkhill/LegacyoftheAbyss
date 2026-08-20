@@ -35,6 +35,7 @@
 
 ## Asset & logging paths
 - `ModConfig` resolves assets relative to the compiled assembly location. In development it will fall back to this repository's `Assets/` directory, so ensure any new runtime assets live here.
+- Shade sprite sheets live in `Assets/Knight_Shade_Sprites/`. Alternate skins go in `Assets/Knight_Shade_Sprites/Skins/<Skin Name>/` and only need the sheets they override — `ShadeSkinManager.ResolveSpritePath` falls back to the built-in set for anything missing. `Skins/skins.json` optionally controls menu order and display names. All sheet loading must stay routed through `LoadShadeSprites` in `LegacyHelper.ShadeController.Core.cs` or skin switching will silently stop working for the new sheet.
 - Logs are written under `Assets/logs/` by `LoggingManager`. Clean up this folder before committing if you run the mod locally.
 
 ## Additional tips

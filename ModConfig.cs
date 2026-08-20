@@ -98,6 +98,7 @@ public class ModConfig
     public float shadeUnlockPopupDelaySeconds = 0.75f;
     public float shadeUnlockPopupDurationSeconds = 3.5f;
     public bool shadeEnabled = true;
+    public string shadeSkin = "Default";
     public bool hornetKeyboardEnabled = false;
     public bool hornetControllerEnabled = true;
     public float hornetDamageMultiplier = 1f;
@@ -134,6 +135,10 @@ public class ModConfig
             }
 
             instance.shadeInput ??= ShadeInputConfig.CreateDefault();
+            if (string.IsNullOrWhiteSpace(instance.shadeSkin))
+            {
+                instance.shadeSkin = "Default";
+            }
         }
         catch
         {
