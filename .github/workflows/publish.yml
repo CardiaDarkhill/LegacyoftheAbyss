@@ -1,0 +1,88 @@
+name: Publish Release
+
+# Manual trigger only — nothing publishes from a normal push or tag.
+# Usage: GitHub → Actions tab → "Publish Release" → Run workflow → enter version → Run.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 1.5.0) — passed to dotnet build as -p:Version'
+        required: true
+        type: string
+      publish_nexus:
+        description: 'Upload to Nexus Mods'
+        required: true
+        type: boolean
+        default: true
+      publish_thunderstore:
+        description: 'Publish to Thunderstore'
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  build-and-publish:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '7.0.x'
+
+      - name: Build Release packages
+        run: dotnet build -c Release -p:Version=${{ inputs.version }}
+
+      # ---- Nexus Mods -----------------------------------------------------
+      - name: Zip Nexus package
+        if: ${{ inputs.publish_nexus }}
+        shell: pwsh
+        run: |
+          $src = "obj/Release/Nexus/LegacyoftheAbyss-${{ inputs.version }}"
+          $dest = "LegacyoftheAbyss-Nexus-${{ inputs.version }}.zip"
+          if (-not (Test-Path $src)) { throw "Expected package folder not found: $src" }
+          Compress-Archive -Path "$src/*" -DestinationPath $dest -Force
+          echo "NEXUS_ZIP=$dest" >> $env:GITHUB_ENV
+
+      # NOTE: verify these `with:` input names against
+      # https://github.com/Nexus-Mods/upload-action#readme before the first real run —
+      # the beta API/action may have changed since this was written. Values below are
+      # this project's best read of the README, not a verified-working config.
+      - name: Upload to Nexus Mods
+        if: ${{ inputs.publish_nexus }}
+        uses: Nexus-Mods/upload-action@v1
+        with:
+          api_key: ${{ secrets.NEXUS_API_KEY }}
+          game_domain: ${{ vars.NEXUS_GAME_DOMAIN }}
+          mod_id: ${{ vars.NEXUS_MOD_ID }}
+          file_id: ${{ vars.NEXUS_FILE_ID }}
+          filename: ${{ env.NEXUS_ZIP }}
+          version: ${{ inputs.version }}
+
+      # ---- Thunderstore -----------------------------------------------------
+      - name: Install tcli
+        if: ${{ inputs.publish_thunderstore }}
+        run: dotnet tool install -g tcli
+
+      - name: tcli build
+        if: ${{ inputs.publish_thunderstore }}
+        run: tcli build
+        env:
+          TCLI_AUTH_TOKEN: ${{ secrets.TCLI_AUTH_TOKEN }}
+
+      - name: tcli publish
+        if: ${{ inputs.publish_thunderstore }}
+        run: tcli publish
+        env:
+          TCLI_AUTH_TOKEN: ${{ secrets.TCLI_AUTH_TOKEN }}
+
+      - name: Upload build artifacts (backup / manual fallback)
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-packages-${{ inputs.version }}
+          path: |
+            obj/Release/Nexus/**
+            obj/Release/Thunderstore/**
+          retention-days: 30
