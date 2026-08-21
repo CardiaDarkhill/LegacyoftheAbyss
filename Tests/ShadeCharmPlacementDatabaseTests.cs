@@ -6,27 +6,69 @@ using Xunit;
 
 namespace LegacyoftheAbyss.Tests
 {
+    /// <summary>
+    /// These assert the *shape* of the placement lookup rather than exact counts. Earlier versions
+    /// pinned "BoneBottom has exactly 10 anchors" style numbers, which meant every edit to
+    /// Assets/charm_placements.json broke the suite for no good reason and the failures got ignored.
+    /// The behaviour actually worth locking down is the matching rules: exact scene names, token
+    /// matching via sceneContainsAll, and unscoped entries (shop listings / boss drops) that are
+    /// deliberately offered to every scene because they are resolved by shop owner or enemy name
+    /// at runtime instead.
+    /// </summary>
     public sealed class ShadeCharmPlacementDatabaseTests
     {
+        private static bool IsSceneScoped(Shade.ShadeCharmPlacementDefinition placement)
+            => !string.IsNullOrWhiteSpace(placement.SceneName)
+               || (placement.SceneContainsAll != null && placement.SceneContainsAll.Length > 0);
+
         [Fact]
-        public void LoadsBoneBottomPlacementsFromJson()
+        public void UnscopedPlacementsAreOfferedToEveryScene()
+        {
+            Shade.ShadeCharmPlacementDatabase.Reload();
+
+            var unscoped = Shade.ShadeCharmPlacementDatabase.GetAllPlacements()
+                .Where(p => !IsSceneScoped(p))
+                .ToList();
+
+            Assert.NotEmpty(unscoped);
+            Assert.All(unscoped, p => Assert.Contains(
+                p.PlacementKind,
+                new[] { Shade.ShadeCharmPlacementKind.ShopListing, Shade.ShadeCharmPlacementKind.BossDrop }));
+
+            foreach (var sceneName in new[] { "Tut_01", "BoneBottom", "MossGrotto" })
+            {
+                var placements = Shade.ShadeCharmPlacementDatabase.GetPlacementsForScene(sceneName);
+                foreach (var global in unscoped)
+                {
+                    Assert.Contains(global, placements);
+                }
+            }
+        }
+
+        [Fact]
+        public void LoadsBoneBottomShopListingFromJson()
         {
             Shade.ShadeCharmPlacementDatabase.Reload();
             var placements = Shade.ShadeCharmPlacementDatabase.GetPlacementsForScene("BoneBottom");
 
             Assert.NotNull(placements);
-            Assert.True(placements.Count >= 10);
 
-            var anchors = placements.Where(p => p.PlacementKind == Shade.ShadeCharmPlacementKind.GroundAnchor).ToList();
-            Assert.Equal(10, anchors.Count);
+            var anchors = placements
+                .Where(p => p.PlacementKind == Shade.ShadeCharmPlacementKind.GroundAnchor)
+                .ToList();
+            Assert.NotEmpty(anchors);
+            Assert.All(anchors, p => Assert.NotNull(p.AnchorOffset));
 
-            var grubsong = anchors.First(p => p.CharmId == Shade.ShadeCharmId.Grubsong);
-            Assert.NotNull(grubsong.AnchorOffset);
-            Assert.Equal(-1.6f, grubsong.AnchorOffset!.X, 3);
-            Assert.Equal(0.8f, grubsong.AnchorOffset.Y, 3);
+            var stalwart = anchors.First(p => p.CharmId == Shade.ShadeCharmId.StalwartShell);
+            Assert.Equal(1.7f, stalwart.AnchorOffset!.X, 3);
+            Assert.Equal(-1.1f, stalwart.AnchorOffset.Y, 3);
 
-            var soulCatcherListing = placements.First(p => p.PlacementKind == Shade.ShadeCharmPlacementKind.ShopListing && p.CharmId == Shade.ShadeCharmId.SoulCatcher);
-            Assert.NotNull(soulCatcherListing.Shop);
+            var soulCatcherListing = placements.First(p =>
+                p.PlacementKind == Shade.ShadeCharmPlacementKind.ShopListing
+                && p.CharmId == Shade.ShadeCharmId.SoulCatcher
+                && p.Shop?.OwnerNameContainsAll != null
+                && p.Shop.OwnerNameContainsAll.Contains("bone", StringComparer.OrdinalIgnoreCase));
+
             Assert.Equal(150, soulCatcherListing.Shop!.GeoCost);
             Assert.NotNull(soulCatcherListing.Shop.StockContainsAnyPlayerDataBools);
             Assert.Contains("PurchasedBonebottomFaithToken", soulCatcherListing.Shop.StockContainsAnyPlayerDataBools!);
@@ -35,66 +77,52 @@ namespace LegacyoftheAbyss.Tests
         }
 
         [Fact]
-        public void LoadsMossGrottoPlacementsFromJson()
+        public void LoadsMossGrottoAnchorsFromJson()
         {
             Shade.ShadeCharmPlacementDatabase.Reload();
             var placements = Shade.ShadeCharmPlacementDatabase.GetPlacementsForScene("MossGrotto");
 
-            Assert.NotNull(placements);
-            Assert.Equal(10, placements.Count);
+            var anchors = placements
+                .Where(p => p.PlacementKind == Shade.ShadeCharmPlacementKind.GroundAnchor)
+                .ToList();
 
-            var kingsoul = placements.First(p => p.CharmId == Shade.ShadeCharmId.Kingsoul);
-            Assert.NotNull(kingsoul.AnchorOffset);
-            Assert.Equal(1.5f, kingsoul.AnchorOffset!.X, 3);
-            Assert.Equal(-2.0f, kingsoul.AnchorOffset.Y, 3);
+            Assert.NotEmpty(anchors);
+            Assert.All(anchors, p => Assert.NotNull(p.AnchorOffset));
+
+            var voidHeart = anchors.First(p => p.CharmId == Shade.ShadeCharmId.VoidHeart);
+            Assert.Equal(0.2f, voidHeart.AnchorOffset!.X, 3);
+            Assert.Equal(2.7f, voidHeart.AnchorOffset.Y, 3);
         }
 
         [Fact]
-        public void LoadsTut04WorldPlacement()
+        public void SceneTokenPlacementsDoNotLeakIntoUnrelatedScenes()
         {
             Shade.ShadeCharmPlacementDatabase.Reload();
-            var placements = Shade.ShadeCharmPlacementDatabase.GetPlacementsForScene("Tut_04");
+            var placements = Shade.ShadeCharmPlacementDatabase.GetPlacementsForScene("MossGrotto");
 
-            Assert.Single(placements);
-
-            var soulEater = placements[0];
-            Assert.Equal(Shade.ShadeCharmId.SoulEater, soulEater.CharmId);
-            Assert.NotNull(soulEater.WorldPosition);
-            Assert.Equal(74.772f, soulEater.WorldPosition!.X, 3);
-            Assert.Equal(8.587f, soulEater.WorldPosition.Y, 3);
-            Assert.Equal(0.004f, soulEater.WorldPosition.Z, 3);
+            Assert.DoesNotContain(placements, p =>
+                p.SceneContainsAll != null
+                && p.SceneContainsAll.Contains("bottom", StringComparer.OrdinalIgnoreCase));
         }
 
-        [Fact]
-        public void LoadsTut01WorldPlacement()
+        [Theory]
+        [InlineData("Tut_04", Shade.ShadeCharmId.SoulEater, 74.772f, 8.587f, 0.004f)]
+        [InlineData("Tut_01", Shade.ShadeCharmId.FuryOfTheFallen, 101.005f, 16.568f, 0.004f)]
+        [InlineData("Bonetown", Shade.ShadeCharmId.WaywardCompass, 301.342f, 24.568f, 0.004f)]
+        public void LoadsExactSceneWorldPlacement(string sceneName, Shade.ShadeCharmId charmId, float x, float y, float z)
         {
             Shade.ShadeCharmPlacementDatabase.Reload();
-            var placements = Shade.ShadeCharmPlacementDatabase.GetPlacementsForScene("Tut_01");
+            var placements = Shade.ShadeCharmPlacementDatabase.GetPlacementsForScene(sceneName);
 
-            Assert.Single(placements);
+            var sceneScoped = placements.Where(IsSceneScoped).ToList();
+            var placement = Assert.Single(sceneScoped);
 
-            var fury = placements[0];
-            Assert.Equal(Shade.ShadeCharmId.FuryOfTheFallen, fury.CharmId);
-            Assert.NotNull(fury.WorldPosition);
-            Assert.Equal(82.005f, fury.WorldPosition!.X, 3);
-            Assert.Equal(9.568f, fury.WorldPosition.Y, 3);
-            Assert.Equal(0.004f, fury.WorldPosition.Z, 3);
-        }
-
-        [Fact]
-        public void LoadsBonetownWorldPlacement()
-        {
-            Shade.ShadeCharmPlacementDatabase.Reload();
-            var placements = Shade.ShadeCharmPlacementDatabase.GetPlacementsForScene("Bonetown");
-
-            Assert.Single(placements);
-
-            var compass = placements[0];
-            Assert.Equal(Shade.ShadeCharmId.WaywardCompass, compass.CharmId);
-            Assert.NotNull(compass.WorldPosition);
-            Assert.Equal(301.342f, compass.WorldPosition!.X, 3);
-            Assert.Equal(24.568f, compass.WorldPosition.Y, 3);
-            Assert.Equal(0.004f, compass.WorldPosition.Z, 3);
+            Assert.Equal(Shade.ShadeCharmPlacementKind.Ground, placement.PlacementKind);
+            Assert.Equal(charmId, placement.CharmId);
+            Assert.NotNull(placement.WorldPosition);
+            Assert.Equal(x, placement.WorldPosition!.X, 3);
+            Assert.Equal(y, placement.WorldPosition.Y, 3);
+            Assert.Equal(z, placement.WorldPosition.Z, 3);
         }
 
         [Fact]

@@ -199,6 +199,21 @@ public partial class LegacyHelper
                         try { aggroProxyTracker?.ForceExitTrackedRemaskers(); } catch { }
                     }
                     aggroProxyCollider.enabled = proxyActive;
+
+                    // "Enemies are ignoring the shade" has three possible causes and they are
+                    // indistinguishable in-game, so name which one it is.
+                    try
+                    {
+                        if (ModConfig.Instance.logShade)
+                        {
+                            LegacyHelper.LogInfo(proxyActive
+                                ? "Shade aggro proxy enabled."
+                                : FormattableString.Invariant($"Shade aggro proxy disabled (inactive={isInactive}, enabled={isActiveAndEnabled}, assistMode={assistModeEnabled})."));
+                        }
+                    }
+                    catch
+                    {
+                    }
                 }
             }
             wasInactive = isInactive;

@@ -31,6 +31,19 @@
     <UnityRuntimeLib Include="$(SilksongManagedDir)\UnityEngine.TextRenderingModule.dll" />
     <UnityRuntimeLib Include="$(SilksongManagedDir)\UnityEngine.UI.dll" />
     <UnityRuntimeLib Include="$(SilksongManagedDir)\UnityEngine.UIModule.dll" />
+    <!--
+    Assembly-CSharp types the tests touch (ShadeRuntime -> GameManager/UIManager/PlayerData,
+    RestBenchHelper, the charm/scene lookups) drag these in transitively at *runtime* only, so a
+    missing entry here does not fail the build - it surfaces as a FileNotFoundException the moment
+    a test first JITs the method that needs it. Keep this list in sync when new game types get used.
+    -->
+    <UnityRuntimeLib Include="$(SilksongManagedDir)\Unity.ResourceManager.dll" />
+    <UnityRuntimeLib Include="$(SilksongManagedDir)\Unity.Addressables.dll" />
+    <UnityRuntimeLib Include="$(SilksongManagedDir)\TeamCherry.SharedUtils.dll" />
+    <UnityRuntimeLib Include="$(SilksongManagedDir)\TeamCherry.Localization.dll" />
+    <UnityRuntimeLib Include="$(SilksongManagedDir)\TeamCherry.NestedFadeGroup.dll" />
+    <UnityRuntimeLib Include="$(SilksongManagedDir)\UnityEngine.AssetBundleModule.dll" />
+    <UnityRuntimeLib Include="$(SilksongManagedDir)\UnityEngine.SharedInternalsModule.dll" />
   </ItemGroup>
 
   <Target Name="CopyUnityRuntimeLibs" AfterTargets="Build" Condition="'@(UnityRuntimeLib)' != ''">

@@ -148,6 +148,68 @@ public partial class LegacyHelper
             {
                 aggroProxyCollider.enabled = false;
             }
+
+            // Sprite sheets are decoded per ShadeController instance (LoadSpriteStrip -> new
+            // Texture2D), and nothing else owns them. Without this the textures survived every
+            // destroy, so toggling the Shade off and on - or any path that respawns the controller,
+            // including every scene change - leaked the whole set and re-decoded a fresh copy.
+            //
+            // The release is handed to LegacyHelper rather than done here. Object.Destroy's delay
+            // overload is driven by the engine's delayed-call queue, which is torn down with the
+            // scene, so a shade destroyed *as part of a scene unload* had its pending texture
+            // destroys dropped on the floor - which is exactly the case that leaks most often.
+            // LegacyHelper is the BepInEx plugin behaviour and outlives every scene, so its
+            // coroutine always gets to run.
+            ReleaseTexturesDeferred();
+        }
+
+        /// <summary>
+        /// Hands every sheet texture and sprite this controller decoded to the plugin's release
+        /// queue and drops the references that pointed at them.
+        /// </summary>
+        private void ReleaseTexturesDeferred()
+        {
+            try
+            {
+                LegacyHelper.RetireShadeSpriteAssets(
+                    loadedSpriteTextures,
+                    new[]
+                    {
+                        idleAnimFrames, floatAnimFrames, vengefulAnimFrames, shadeSoulAnimFrames,
+                        fireballCastAnimFrames, quakeCastAnimFrames, shriekCastAnimFrames,
+                        abyssShriekAnimFrames, howlingWraithsAnimFrames, deathAnimFrames,
+                        descendAnimFrames, descendAuraAnimFrames, dDiveSlamAnimFrames,
+                        dDarkSlamAnimFrames, dDarkBurstAnimFrames, baldurShellFocusAnimFrames,
+                        inactiveSprite != null ? new[] { inactiveSprite } : null
+                    },
+                    RetiredSkinTextureLifetime);
+            }
+            catch
+            {
+            }
+            finally
+            {
+                loadedSpriteTextures.Clear();
+                loadedSkinId = null;
+                idleAnimFrames = System.Array.Empty<Sprite>();
+                floatAnimFrames = System.Array.Empty<Sprite>();
+                vengefulAnimFrames = System.Array.Empty<Sprite>();
+                shadeSoulAnimFrames = System.Array.Empty<Sprite>();
+                fireballCastAnimFrames = System.Array.Empty<Sprite>();
+                quakeCastAnimFrames = System.Array.Empty<Sprite>();
+                shriekCastAnimFrames = System.Array.Empty<Sprite>();
+                abyssShriekAnimFrames = System.Array.Empty<Sprite>();
+                howlingWraithsAnimFrames = System.Array.Empty<Sprite>();
+                deathAnimFrames = System.Array.Empty<Sprite>();
+                descendAnimFrames = System.Array.Empty<Sprite>();
+                descendAuraAnimFrames = System.Array.Empty<Sprite>();
+                dDiveSlamAnimFrames = System.Array.Empty<Sprite>();
+                dDarkSlamAnimFrames = System.Array.Empty<Sprite>();
+                dDarkBurstAnimFrames = System.Array.Empty<Sprite>();
+                baldurShellFocusAnimFrames = System.Array.Empty<Sprite>();
+                inactiveSprite = null;
+                currentAnimFrames = null;
+            }
         }
 
         private void EnsureAggroProxyCollider()
@@ -471,6 +533,15 @@ public partial class LegacyHelper
                 return;
 
             var previousTextures = new List<Texture2D>(loadedSpriteTextures);
+            var previousSprites = new[]
+            {
+                idleAnimFrames, floatAnimFrames, vengefulAnimFrames, shadeSoulAnimFrames,
+                fireballCastAnimFrames, quakeCastAnimFrames, shriekCastAnimFrames,
+                abyssShriekAnimFrames, howlingWraithsAnimFrames, deathAnimFrames,
+                descendAnimFrames, descendAuraAnimFrames, dDiveSlamAnimFrames,
+                dDarkSlamAnimFrames, dDarkBurstAnimFrames, baldurShellFocusAnimFrames,
+                inactiveSprite != null ? new[] { inactiveSprite } : null
+            };
             LoadShadeSprites();
 
             // Drop the cached array reference so HandleAnimation re-seeds from the new sheets.
@@ -491,28 +562,10 @@ public partial class LegacyHelper
 
             if (previousTextures.Count > 0)
             {
-                if (isActiveAndEnabled)
-                    StartCoroutine(ReleaseTexturesAfterDelay(previousTextures, RetiredSkinTextureLifetime));
-                else
-                    ReleaseTextures(previousTextures);
+                // Same persistent queue the destroy path uses, so a skin swap immediately followed
+                // by a scene change cannot drop the pending release.
+                LegacyHelper.RetireShadeSpriteAssets(previousTextures, previousSprites, RetiredSkinTextureLifetime);
             }
-        }
-
-        private IEnumerator ReleaseTexturesAfterDelay(List<Texture2D> textures, float delay)
-        {
-            yield return new WaitForSecondsRealtime(delay);
-            ReleaseTextures(textures);
-        }
-
-        private static void ReleaseTextures(List<Texture2D> textures)
-        {
-            if (textures == null) return;
-            foreach (var tex in textures)
-            {
-                if (tex != null)
-                    UnityEngine.Object.Destroy(tex);
-            }
-            textures.Clear();
         }
 
         private Sprite[] LoadSpriteStrip(string path, int frames = 0)
@@ -610,7 +663,10 @@ public partial class LegacyHelper
                 if (t != null)
                 {
                     var m = t.GetMethod("LoadImage", BindingFlags.Public | BindingFlags.Static, null, new System.Type[] { typeof(Texture2D), typeof(byte[]), typeof(bool) }, null);
-                    if (m != null) { m.Invoke(null, new object[] { tex, bytes, false }); return true; }
+                    // markNonReadable: true - nothing reads these pixels back after Sprite.Create,
+                    // and keeping them readable holds a full second copy of every sheet in managed
+                    // memory for the lifetime of the texture.
+                    if (m != null) { m.Invoke(null, new object[] { tex, bytes, true }); return true; }
                 }
             }
             catch { }

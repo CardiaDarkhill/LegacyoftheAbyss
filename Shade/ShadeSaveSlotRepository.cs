@@ -617,9 +617,12 @@ namespace LegacyoftheAbyss.Shade
 
         private static string DetermineStorageRoot(string? storageRoot)
         {
+            // ModPaths.UserData, not ModPaths.Assets: slot files are player progress and must live
+            // outside the versioned plugin folder that mod managers wipe on update. ModPaths handles
+            // migrating any slots left behind at the old location.
             if (string.IsNullOrWhiteSpace(storageRoot))
             {
-                return ModPaths.Assets;
+                return ModPaths.UserData;
             }
 
             try
@@ -628,7 +631,7 @@ namespace LegacyoftheAbyss.Shade
             }
             catch
             {
-                return ModPaths.Assets;
+                return ModPaths.UserData;
             }
         }
 

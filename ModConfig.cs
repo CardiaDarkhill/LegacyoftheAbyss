@@ -6,11 +6,139 @@ using UnityEngine;
 
 internal static class ModPaths
 {
+    /// <summary>
+    /// Environment override for the user-data folder, mainly so a portable/dev setup can point the
+    /// mod at a scratch directory. Ignored when unset or blank.
+    /// </summary>
+    private const string UserDataOverrideVariable = "LEGACYOFTHEABYSS_DATA";
+
+    private const string UserDataFolderName = "LegacyoftheAbyss";
+
     internal static readonly string Root = Path.GetDirectoryName(typeof(ModPaths).Assembly.Location) ?? Directory.GetCurrentDirectory();
     internal static readonly string Assets = Path.Combine(Root, "Assets");
     internal static readonly string Logs = Path.Combine(Assets, "logs");
-    internal static readonly string Config = Path.Combine(Assets, "config.json");
+
+    /// <summary>
+    /// Where everything the *player* owns lives - config and shade save slots.
+    /// <para>
+    /// This deliberately is not <see cref="Assets"/>. Thunderstore-style managers (r2modman, the
+    /// Thunderstore app) update a mod by deleting and re-extracting its whole package folder, so
+    /// anything written next to the plugin DLL is destroyed on every update - which is exactly how
+    /// shade progression kept disappearing. <c>BepInEx/config/</c> is owned by the loader rather
+    /// than by any package, survives mod updates and reinstalls, and is a flat folder the player
+    /// can copy to another machine by hand.
+    /// </para>
+    /// </summary>
+    internal static readonly string UserData = ResolveUserDataRoot();
+
+    internal static readonly string Config = Path.Combine(UserData, "config.json");
+
     private static readonly string CleanupRoot = Path.GetFullPath(Path.Combine(Root, "..", "LegacyCleanup"));
+
+    private static string ResolveUserDataRoot()
+    {
+        string resolved = ResolveUserDataRootCore();
+
+        try
+        {
+            Directory.CreateDirectory(resolved);
+        }
+        catch
+        {
+        }
+
+        MigrateLegacyUserData(resolved);
+        return resolved;
+    }
+
+    private static string ResolveUserDataRootCore()
+    {
+        try
+        {
+            string? overridePath = Environment.GetEnvironmentVariable(UserDataOverrideVariable);
+            if (!string.IsNullOrWhiteSpace(overridePath))
+            {
+                return Path.GetFullPath(overridePath);
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            string configPath = BepInEx.Paths.ConfigPath;
+            if (!string.IsNullOrWhiteSpace(configPath))
+            {
+                return Path.Combine(configPath, UserDataFolderName);
+            }
+        }
+        catch
+        {
+            // BepInEx.Paths is only populated by the loader; unit tests run without it.
+        }
+
+        // Fall back to walking up for a BepInEx folder, in case the loader statics are unavailable
+        // but the on-disk layout is the usual one.
+        try
+        {
+            var directory = new DirectoryInfo(Root);
+            while (directory != null)
+            {
+                if (string.Equals(directory.Name, "BepInEx", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Path.Combine(directory.FullName, "config", UserDataFolderName);
+                }
+
+                directory = directory.Parent;
+            }
+        }
+        catch
+        {
+        }
+
+        // Last resort: the old in-package location. Not update-safe, but better than not saving.
+        return Assets;
+    }
+
+    /// <summary>
+    /// One-time pickup of a save that predates the move out of the plugin folder. Copies rather than
+    /// moves - the originals are about to be deleted by the next mod update anyway, and leaving them
+    /// in place means a botched migration is recoverable. Never overwrites an existing destination
+    /// file, so this is a no-op on every run after the first.
+    /// </summary>
+    private static void MigrateLegacyUserData(string destinationRoot)
+    {
+        try
+        {
+            if (string.Equals(Path.GetFullPath(destinationRoot), Path.GetFullPath(Assets), StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (!Directory.Exists(Assets))
+            {
+                return;
+            }
+
+            foreach (string pattern in new[] { "config.json", "shade_slot_*.json" })
+            {
+                foreach (string source in Directory.GetFiles(Assets, pattern))
+                {
+                    string destination = Path.Combine(destinationRoot, Path.GetFileName(source));
+                    if (File.Exists(destination))
+                    {
+                        continue;
+                    }
+
+                    File.Copy(source, destination);
+                }
+            }
+        }
+        catch
+        {
+        }
+    }
 
     private static IEnumerable<string> GetAssetSearchRoots()
     {

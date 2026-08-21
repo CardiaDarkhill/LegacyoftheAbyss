@@ -2,150 +2,157 @@ using System;
 using System.Reflection;
 using System.Runtime.Serialization;
 using GlobalEnums;
-using UnityEngine;
-using UnityEngine.EventSystems;
 using Xunit;
 
+/// <summary>
+/// Covers the "should a shade-owned device be kept away from Hornet's actions?" decision.
+/// <para>
+/// Scope note: anything that needs a live Unity player loop is deliberately out. Constructing a
+/// <c>UIManager</c> runs a static initializer that calls <c>Animator.StringToHash</c>, and
+/// <c>new GameObject(...)</c> / <c>Time.timeScale</c> are extern calls into the engine - all of
+/// them throw <c>SecurityException: ECall methods must be packaged into a system module</c> in a
+/// plain test host. The uiState/menuState half of the decision is therefore covered through
+/// <see cref="MenuStateUtility.IsMenuStateName"/>, which is where the actual classification lives.
+/// </para>
+/// </summary>
+[Collection(ShadeRuntimeCollection.Name)]
 public class InputDeviceBlockerTests
 {
     [Fact]
-    public void AllowsShadeControllerInMenuStates()
+    public void BlocksShadeDeviceDuringOrdinaryGameplay()
     {
-        using (var environment = new InputBlockerEnvironment())
-        {
-            environment.SetUiState(UIState.PLAYING);
-            environment.ClearMenuState();
-            environment.SetPaused(false);
-            environment.SetInventoryOpen(false);
-            Assert.True(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
+        using var environment = new InputBlockerEnvironment();
 
-            environment.SetPaused(true);
-            Assert.False(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
+        environment.SetGameState(GameState.PLAYING);
+        environment.SetPaused(false);
+        environment.SetInventoryOpen(false);
 
-            environment.SetPaused(false);
-            environment.SetUiState(UIState.PLAYING);
-            Assert.True(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
+        Assert.True(LegacyHelper.InputDeviceBlocker.EvaluateShouldBlockShadeDeviceInput());
+    }
 
-            environment.SetInventoryOpen(true);
-            Assert.False(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
+    [Fact]
+    public void AllowsShadeDeviceWhilePaused()
+    {
+        using var environment = new InputBlockerEnvironment();
 
-            environment.SetInventoryOpen(false);
-            environment.SetUiState(UIState.PLAYING);
-            Assert.True(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
+        environment.SetGameState(GameState.PLAYING);
+        environment.SetInventoryOpen(false);
+        environment.SetPaused(true);
 
-            environment.SetMenuState(MainMenuState.PAUSE_MENU);
-            Assert.False(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
+        Assert.False(LegacyHelper.InputDeviceBlocker.EvaluateShouldBlockShadeDeviceInput());
+    }
 
-            environment.ClearMenuState();
-            environment.SetUiState("inventory_overlay");
-            Assert.False(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
+    [Fact]
+    public void AllowsShadeDeviceWhileInventoryIsOpen()
+    {
+        using var environment = new InputBlockerEnvironment();
 
-            environment.SetUiState("MapScreen");
-            Assert.False(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
+        environment.SetGameState(GameState.PLAYING);
+        environment.SetPaused(false);
+        environment.SetInventoryOpen(true);
 
-            environment.SetPaused(false);
-            environment.SetInventoryOpen(false);
-            environment.ClearMenuState();
-            environment.SetUiState(UIState.PLAYING);
+        Assert.False(LegacyHelper.InputDeviceBlocker.EvaluateShouldBlockShadeDeviceInput());
+    }
 
-            var eventSystemObject = new GameObject("EventSystem", typeof(EventSystem));
-            try
-            {
-                var canvasObject = new GameObject("Canvas", typeof(Canvas));
-                try
-                {
-                    var selection = new GameObject("Selection");
-                    selection.transform.SetParent(canvasObject.transform, false);
-                    EventSystem.current?.SetSelectedGameObject(selection);
+    [Theory]
+    [InlineData(GameState.CUTSCENE)]
+    [InlineData(GameState.PAUSED)]
+    [InlineData(GameState.MAIN_MENU)]
+    [InlineData(GameState.LOADING)]
+    public void AllowsShadeDeviceOutsideActiveGameplay(GameState state)
+    {
+        using var environment = new InputBlockerEnvironment();
 
-                    Assert.False(LegacyHelper.InputDeviceBlocker.ShouldBlockShadeDeviceInput());
+        environment.SetPaused(false);
+        environment.SetInventoryOpen(false);
+        environment.SetGameState(state);
 
-                    UnityEngine.Object.DestroyImmediate(selection);
-                }
-                finally
-                {
-                    UnityEngine.Object.DestroyImmediate(canvasObject);
-                }
-            }
-            finally
-            {
-                if (EventSystem.current != null)
-                {
-                    EventSystem.current.SetSelectedGameObject(null);
-                }
-                UnityEngine.Object.DestroyImmediate(eventSystemObject);
-            }
-        }
+        Assert.False(LegacyHelper.InputDeviceBlocker.EvaluateShouldBlockShadeDeviceInput());
+    }
+
+    [Theory]
+    [InlineData("PAUSE_MENU")]
+    [InlineData("inventory_overlay")]
+    [InlineData("MapScreen")]
+    [InlineData("JOURNAL")]
+    [InlineData("SHOP")]
+    [InlineData("OPTIONS_MENU")]
+    public void MenuStateNamesAreTreatedAsMenus(string stateName)
+    {
+        Assert.True(MenuStateUtility.IsMenuStateName(stateName));
+    }
+
+    [Theory]
+    [InlineData("PLAYING")]
+    [InlineData("GAMEPLAY")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void GameplayStateNamesAreNotTreatedAsMenus(string stateName)
+    {
+        Assert.False(MenuStateUtility.IsMenuStateName(stateName));
+    }
+
+    /// <summary>
+    /// Pause and the inventory shortcuts have to survive the shade owning a controller, otherwise
+    /// the player cannot open the pause menu from that pad at all (the shade's device never becomes
+    /// InControl's ActiveDevice during gameplay, so HeroActions only ever polls Hornet's device).
+    /// These names must match <c>HeroActions</c> exactly - the set is compared ordinally.
+    /// </summary>
+    [Theory]
+    [InlineData("Pause")]
+    [InlineData("openInventory")]
+    [InlineData("openInventoryMap")]
+    [InlineData("openInventoryJournal")]
+    [InlineData("openInventoryTools")]
+    [InlineData("openInventoryQuests")]
+    [InlineData("Quick Map")]
+    public void AllowedHeroActionNamesMatchHeroActions(string actionName)
+    {
+        Assert.Contains(actionName, LegacyHelper.InputDeviceBlocker.AllowedHeroActionNames);
+    }
+
+    [Theory]
+    [InlineData("Jump")]
+    [InlineData("Attack")]
+    [InlineData("Dash")]
+    [InlineData("Cast")]
+    public void GameplayHeroActionNamesAreNotAllowed(string actionName)
+    {
+        Assert.DoesNotContain(actionName, LegacyHelper.InputDeviceBlocker.AllowedHeroActionNames);
     }
 
     private sealed class InputBlockerEnvironment : IDisposable
     {
         private readonly object originalGameManager;
-        private readonly object originalUiManager;
         private readonly object originalPlayerData;
-        private readonly float originalTimeScale;
         private readonly GameManager gm;
-        private readonly TestUIManager ui;
         private readonly PlayerData playerData;
 
         internal InputBlockerEnvironment()
         {
             originalGameManager = GetStaticField(typeof(GameManager), "_instance");
-            originalUiManager = GetStaticField(typeof(UIManager), "_instance");
             originalPlayerData = GetStaticField(typeof(PlayerData), "_instance");
-            originalTimeScale = Time.timeScale;
 
             gm = (GameManager)FormatterServices.GetUninitializedObject(typeof(GameManager));
-            ui = (TestUIManager)FormatterServices.GetUninitializedObject(typeof(TestUIManager));
             playerData = (PlayerData)FormatterServices.GetUninitializedObject(typeof(PlayerData));
 
             SetProperty(gm, "GameState", GameState.PLAYING);
-            SetProperty(gm, "ui", ui);
             playerData.isInventoryOpen = false;
 
             SetStaticField(typeof(GameManager), "_instance", gm);
-            SetStaticField(typeof(UIManager), "_instance", ui);
             SetStaticField(typeof(PlayerData), "_instance", playerData);
-
-            Time.timeScale = 1f;
         }
 
-        internal void SetUiState(UIState state)
-        {
-            ui.uiState = state;
-        }
+        internal void SetGameState(GameState state) => SetProperty(gm, "GameState", state);
 
-        internal void SetUiState(string stateName)
-        {
-            ui.uiState = stateName;
-        }
+        internal void SetPaused(bool value) => gm.isPaused = value;
 
-        internal void SetMenuState(object state)
-        {
-            ui.menuState = state;
-        }
-
-        internal void ClearMenuState()
-        {
-            ui.menuState = null;
-        }
-
-        internal void SetPaused(bool value)
-        {
-            gm.isPaused = value;
-        }
-
-        internal void SetInventoryOpen(bool value)
-        {
-            playerData.isInventoryOpen = value;
-        }
+        internal void SetInventoryOpen(bool value) => playerData.isInventoryOpen = value;
 
         public void Dispose()
         {
             SetStaticField(typeof(GameManager), "_instance", originalGameManager);
-            SetStaticField(typeof(UIManager), "_instance", originalUiManager);
             SetStaticField(typeof(PlayerData), "_instance", originalPlayerData);
-            Time.timeScale = originalTimeScale;
         }
 
         private static object GetStaticField(Type type, string name)
@@ -169,12 +176,6 @@ public class InputDeviceBlockerTests
 
             var property = target.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             property?.SetValue(target, value, null);
-        }
-
-        private sealed class TestUIManager : UIManager
-        {
-            public new object uiState;
-            public new object menuState;
         }
     }
 }

@@ -814,62 +814,76 @@ internal static class ShadeInventoryPaneIntegration
 
         var newList = panes.ToList();
 
-        int insertIndex = -1;
-
-        for (int i = 0; i < panes.Length; i++)
-        {
-            var existing = panes[i];
-            if (!existing)
-            {
-                continue;
-            }
-
-            string typeName = existing.GetType().Name;
-            if (!string.IsNullOrEmpty(typeName) &&
-                typeName.Contains("Crest", StringComparison.OrdinalIgnoreCase))
-            {
-                insertIndex = i + 1;
-                break;
-            }
-        }
-
-        if (insertIndex < 0)
-        {
-            for (int i = 0; i < panes.Length; i++)
-            {
-                var existing = panes[i];
-                if (!existing)
-                {
-                    continue;
-                }
-
-                string name = existing.gameObject != null ? existing.gameObject.name : existing.name;
-                string typeName = existing.GetType().Name;
-                bool matchesName = !string.IsNullOrEmpty(name) &&
-                    (name.Contains("Charm", StringComparison.OrdinalIgnoreCase) ||
-                     name.Contains("Tool", StringComparison.OrdinalIgnoreCase));
-                bool matchesType = !string.IsNullOrEmpty(typeName) &&
-                    (typeName.Contains("Charm", StringComparison.OrdinalIgnoreCase) ||
-                     typeName.Contains("Tool", StringComparison.OrdinalIgnoreCase));
-
-                if (matchesName || matchesType)
-                {
-                    insertIndex = i + 1;
-                    break;
-                }
-            }
-        }
-
-        if (insertIndex < 0)
-        {
-            insertIndex = newList.Count;
-        }
-
-        insertIndex = Mathf.Clamp(insertIndex, 0, newList.Count);
-        newList.Insert(insertIndex, shadePane);
+        // The shade pane MUST go on the end.
+        //
+        // InventoryPaneList.panes is an ArrayForEnum array: position i in the array *is*
+        // InventoryPaneList.PaneTypes value i, and the base game relies on that identity all over
+        // the place - GetPane(PaneTypes) indexes the array directly, InventoryPaneInput writes
+        // (int)PaneTypes into the "Target Pane Index" FSM variable which SetCurrentInventoryPane
+        // feeds straight to SetCurrentPane(index, ...), and ListenForInventoryShortcut compares a
+        // PaneTypes value against the FSM's array-space "Current Pane Num".
+        //
+        // Inserting mid-list (this used to drop the shade pane in just after Tools/Crests) shifts
+        // every later pane up one, so each of those numeric lookups silently resolves to the wrong
+        // pane: "open journal" landed on Quests, "open map" landed on Journal, and so on. Appending
+        // keeps indices 0..4 aligned with the enum and parks the shade at an index the enum never
+        // names, so nothing base-game addresses it numerically. It stays reachable by cycling
+        // left/right, which is the only way it was ever reachable anyway - no shortcut binds to it.
+        newList.Add(shadePane);
         PanesField(paneList) = newList.ToArray();
         RefreshPaneListDisplay(paneList, newList);
-        ShadeInventoryPane.LogMenuEvent($"Shade pane inserted at index {insertIndex}; total panes={newList.Count}");
+        ShadeInventoryPane.LogMenuEvent($"Shade pane appended at index {newList.Count - 1}; total panes={newList.Count}");
+        LogPaneLayout(newList);
+    }
+
+    private static string? s_loggedPaneLayout;
+
+    /// <summary>
+    /// Dumps the final pane order once per distinct layout, at Info level rather than behind the
+    /// logMenu flag.
+    /// <para>
+    /// Position <c>i</c> in <c>InventoryPaneList.panes</c> is <c>PaneTypes</c> value <c>i</c>, and the
+    /// base game addresses panes by that number from several places at once - the shortcut FSM's
+    /// hardcoded indices (Tools 1, Quests 2, Journal 3, Map 4), <c>GetPane(PaneTypes)</c>, and the
+    /// <c>Target Pane Index</c> variable <c>InventoryPaneInput</c> writes. If a shortcut opens the
+    /// wrong tab, this line is the fastest way to see whether the array actually lines up with the
+    /// enum, without guessing from in-game behaviour.
+    /// </para>
+    /// </summary>
+    private static void LogPaneLayout(List<InventoryPane> panes)
+    {
+        try
+        {
+            if (panes == null)
+            {
+                return;
+            }
+
+            var builder = new System.Text.StringBuilder("Inventory pane layout:");
+            for (int i = 0; i < panes.Count; i++)
+            {
+                var pane = panes[i];
+                string name = pane == null
+                    ? "<null>"
+                    : (pane.gameObject != null ? pane.gameObject.name : pane.name);
+                string typeName = pane == null ? "-" : pane.GetType().Name;
+                bool available = false;
+                try { available = pane != null && pane.IsAvailable; } catch { available = false; }
+                builder.Append(FormattableString.Invariant($" [{i}]{name}({typeName}){(available ? string.Empty : "*locked")}"));
+            }
+
+            string layout = builder.ToString();
+            if (string.Equals(layout, s_loggedPaneLayout, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            s_loggedPaneLayout = layout;
+            LegacyHelper.LogInfo(layout);
+        }
+        catch
+        {
+        }
     }
 
     private static bool TryGetBool(FieldInfo? field, InventoryPaneInput input, bool defaultValue)
@@ -1249,6 +1263,154 @@ internal static class ShadeInventoryPaneIntegration
         if (captureFocus)
         {
             TrackCapturedInput(shadePane, input);
+        }
+    }
+
+    /// <summary>
+    /// Jumps straight from whichever real pane <paramref name="sourceInput"/> belongs to over to the
+    /// appended Shade tab, using the exact same <see cref="InventoryPaneList.SetCurrentPane"/> call
+    /// the base game's own shortcut keys use - so the transition sound, tween and pane-list highlight
+    /// all behave identically to a native shortcut press.
+    /// <para>
+    /// Deliberately restricted to switching *while the inventory is already open*: the Shade has no
+    /// named <c>PaneTypes</c> value of its own, and the closed-state shortcut listener
+    /// (<c>ListenForInventoryShortcut</c>) throws <c>ArgumentOutOfRangeException</c> for any
+    /// <c>PaneTypes</c> value it doesn't recognize - injecting a synthetic one to open-from-closed
+    /// would risk hard-crashing that FSM. Restricting to the already-open case sidesteps that action
+    /// entirely and only touches <see cref="InventoryPaneList.SetCurrentPane"/>, which is exercised
+    /// (and logged) by every other shortcut already.
+    /// </para>
+    /// <para>
+    /// <c>SetCurrentPane</c> alone is not the whole picture, though - it's only what the *content*
+    /// swap runs through. The "Inventory Control" PlayMaker FSM tracks its own idea of the current
+    /// pane in three variables ("Current Pane", "Current Pane Num", "Prev Pane"), and every native
+    /// shortcut goes through <c>SetCurrentInventoryPane</c>, which keeps those in sync as a side
+    /// effect. A bare <c>SetCurrentPane</c> call leaves them pointing at whatever was open before -
+    /// invisible until the player next presses LB/RB, which read "Current Pane" via
+    /// <c>SetNextInventoryPane</c> and start cycling from the stale pane instead of the Shade tab.
+    /// This replicates <c>SetCurrentInventoryPane</c>'s own variable bookkeeping so LB/RB (and
+    /// anything else keyed off those FSM variables) stay in sync with what's actually on screen.
+    /// </para>
+    /// </summary>
+    internal static bool TryJumpToShadeTab(InventoryPaneInput sourceInput)
+    {
+        if (sourceInput == null || PaneListField == null)
+        {
+            return false;
+        }
+
+        InventoryPaneList.PaneTypes paneControl;
+        try
+        {
+            paneControl = PaneControlField(sourceInput);
+        }
+        catch
+        {
+            return false;
+        }
+
+        // PaneTypes.None is what every shade-owned InventoryPaneInput is configured with (see
+        // ApplyShadeInputSettings) - excluding it means this only fires from the currently-displayed
+        // *real* pane's own input component, never from the Shade's own always-active phantom one.
+        if (paneControl == InventoryPaneList.PaneTypes.None)
+        {
+            return false;
+        }
+
+        InventoryPaneList? paneList;
+        try
+        {
+            paneList = PaneListField.GetValue(sourceInput) as InventoryPaneList;
+        }
+        catch
+        {
+            paneList = null;
+        }
+
+        if (paneList == null)
+        {
+            return false;
+        }
+
+        var panes = PanesField(paneList);
+        if (panes == null)
+        {
+            return false;
+        }
+
+        InventoryPane? shadePane = null;
+        foreach (var candidate in panes)
+        {
+            if (candidate != null && candidate.TryGetComponent<ShadeInventoryPane>(out _))
+            {
+                shadePane = candidate;
+                break;
+            }
+        }
+
+        if (shadePane == null)
+        {
+            return false;
+        }
+
+        InventoryPane? currentPane;
+        try
+        {
+            currentPane = paneList.GetPane(paneControl);
+        }
+        catch
+        {
+            currentPane = null;
+        }
+
+        if (currentPane == null || ReferenceEquals(currentPane, shadePane))
+        {
+            return false;
+        }
+
+        if (ModConfig.Instance.logMenu)
+        {
+            try
+            {
+                LegacyHelper.LogInfo(FormattableString.Invariant(
+                    $"TryJumpToShadeTab: source={sourceInput.gameObject?.name} paneControl={paneControl} currentPane={currentPane.gameObject?.name}"));
+            }
+            catch
+            {
+            }
+        }
+
+        var fsm = PlayMakerFSM.FindFsmOnGameObject(paneList.gameObject, "Inventory Control");
+        var currentPaneVar = fsm?.FsmVariables.FindFsmGameObject("Current Pane");
+        var currentPaneNumVar = fsm?.FsmVariables.FindFsmInt("Current Pane Num");
+        var prevPaneVar = fsm?.FsmVariables.FindFsmGameObject("Prev Pane");
+
+        try
+        {
+            var previousGameObject = currentPaneVar?.Value;
+            if (prevPaneVar != null)
+            {
+                prevPaneVar.Value = previousGameObject;
+            }
+
+            int shadeIndex = paneList.GetPaneIndex(shadePane);
+            paneList.SetCurrentPane(shadeIndex, currentPane);
+
+            if (currentPaneVar != null)
+            {
+                currentPaneVar.Value = shadePane.gameObject;
+            }
+
+            if (currentPaneNumVar != null)
+            {
+                currentPaneNumVar.Value = shadeIndex;
+            }
+
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 

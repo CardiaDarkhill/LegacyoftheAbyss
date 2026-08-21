@@ -15,6 +15,133 @@ using GlobalEnums;
 
 public partial class LegacyHelper
 {
+    /// <summary>
+    /// Keeps the Shade out of SlideSurface's trigger volumes.
+    /// <para>
+    /// SlideSurface assumes the only thing that can enter it is Hornet. <c>OnTriggerEnter2D</c>
+    /// unconditionally flips <c>isHeroInside</c> and bumps the static <c>_heroInsideCount</c>, then
+    /// assigns <c>hc = collision.GetComponent&lt;HeroController&gt;()</c> and bails when that is
+    /// null - so a non-Hornet entrant overwrites the cached hero reference with null while leaving
+    /// the surface's "hero is here" bookkeeping switched on. The next follow tick calls
+    /// <c>UpdateFacing()</c>, which dereferences <c>this.hc.cState</c>, and the frame dies with a
+    /// NullReferenceException. <c>OnTriggerExit2D</c> has the mirror problem: the Shade leaving
+    /// clears <c>isHeroInside</c> even though Hornet is still standing on the slide.
+    /// </para>
+    /// <para>
+    /// The Shade floats with gravityScale 0 and has no business sliding, and the base game already
+    /// intends to ignore non-hero entrants - it just does the ignoring too late. Dropping the
+    /// callbacks before they touch any state is the whole fix.
+    /// </para>
+    /// </summary>
+    [HarmonyPatch(typeof(SlideSurface))]
+    private class SlideSurface_Triggers_IgnoreShade
+    {
+        private static IEnumerable<MethodBase> TargetMethods()
+        {
+            foreach (string name in new[] { "OnTriggerEnter2D", "OnTriggerStay2D", "OnTriggerExit2D" })
+            {
+                var method = AccessTools.Method(typeof(SlideSurface), name, new[] { typeof(Collider2D) });
+                if (method != null)
+                {
+                    yield return method;
+                }
+            }
+        }
+
+        private static bool Prefix(Collider2D collision)
+        {
+            try
+            {
+                if (collision != null && collision.GetComponentInParent<ShadeController>() != null)
+                {
+                    return false;
+                }
+            }
+            catch
+            {
+            }
+
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Keeps the Shade from being counted as an occupant of regions that ask "is the hero in here?".
+    /// <para>
+    /// The Shade carries a child "ShadeAggroProxy" that deliberately copies Hornet's layer and tag so
+    /// enemies notice it, and <see cref="TrackTriggerObjects"/> filters entrants on exactly those two
+    /// things - so the proxy is indistinguishable from Hornet to every region derived from it.
+    /// </para>
+    /// <para>
+    /// The hook is <c>IsCounted</c> rather than the trigger callbacks on purpose. Updraft lift is not
+    /// driven by <c>WindRegion</c> at all; it is an FSM that polls <c>CheckTrackTriggerCount</c> -&gt;
+    /// <c>TrackTriggerObjects.InsideCount</c> and calls <c>HeroController.EnterUpdraft</c> /
+    /// <c>ExitUpdraft</c>. <c>InsideCount</c> is the only thing that filters through <c>IsCounted</c>,
+    /// so excluding the Shade here makes the FSM fire EXIT the moment Hornet leaves, wherever the
+    /// Shade happens to be. The same getter backs <c>IsInside</c>, which the rest of the game uses for
+    /// bench work ranges, breakable ranges, pickup triggers, camera shake, music, frost and driftfly
+    /// dispersal - all of them "is Hornet here?" questions the Shade should not be answering.
+    /// </para>
+    /// <para>
+    /// Crucially this leaves <c>insideGameObjects</c> and the <c>OnTrackTriggerEntered</c> callback
+    /// untouched, so the aggro proxy still registers with every range exactly as before. An earlier
+    /// attempt prefixed <c>OnTriggerEnter2D</c> to drop Shade colliders outright; that stopped enemies
+    /// noticing the Shade, and it never fixed the updraft either, because the region types it filtered
+    /// on were not the ones the updraft actually uses.
+    /// </para>
+    /// </summary>
+    [HarmonyPatch]
+    internal static class TrackTriggerObjects_IsCounted_IgnoreShade
+    {
+        private static IEnumerable<MethodBase> TargetMethods()
+        {
+            // IsCounted is virtual and TrackTriggerObjectsLineOfSight overrides it, so patching the
+            // base alone would miss every line-of-sight range.
+            foreach (var type in new[] { typeof(TrackTriggerObjects), typeof(TrackTriggerObjectsLineOfSight) })
+            {
+                var method = AccessTools.DeclaredMethod(type, "IsCounted", new[] { typeof(GameObject) });
+                if (method != null)
+                {
+                    yield return method;
+                }
+            }
+        }
+
+        private static void Postfix(TrackTriggerObjects __instance, GameObject obj, ref bool __result)
+        {
+            try
+            {
+                if (!__result || __instance == null || obj == null)
+                {
+                    return;
+                }
+
+                if (CountsTheShade(__instance.GetType()))
+                {
+                    return;
+                }
+
+                if (obj.GetComponentInParent<ShadeController>() == null)
+                {
+                    return;
+                }
+
+                __result = false;
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>
+        /// Ranges that must keep counting the Shade. Enemy aggro is the entire reason the proxy
+        /// exists, and some enemy FSMs read their alert range through <c>CheckTrackTriggerCount</c>,
+        /// so excluding the Shade there would make it invisible to them.
+        /// </summary>
+        internal static bool CountsTheShade(Type regionType)
+            => regionType != null && typeof(AlertRange).IsAssignableFrom(regionType);
+    }
+
     [HarmonyPatch(typeof(GameManager), "BeginScene")]
     private class GameManager_BeginScene_Patch
     {
@@ -466,6 +593,72 @@ public partial class LegacyHelper
         }
     }
 
+    /// <summary>
+    /// Traces every numeric pane request while <c>logMenu</c> is on.
+    /// <para>
+    /// Pane switching runs through three separate numeric paths - the shortcut FSM's hardcoded
+    /// indices (Tools 1, Quests 2, Journal 3, Map 4), the <c>Target Pane Index</c> variable
+    /// <c>InventoryPaneInput</c> writes while the inventory is open, and <c>-1</c> meaning "reopen
+    /// whatever was last shown". A wrong tab looks identical from the player's side no matter which
+    /// path produced it, so log the index that came in and the pane that came out.
+    /// </para>
+    /// </summary>
+    [HarmonyPatch(typeof(InventoryPaneList), nameof(InventoryPaneList.SetCurrentPane))]
+    private class InventoryPaneList_SetCurrentPane_Trace
+    {
+        private static void Postfix(InventoryPaneList __instance, int index, InventoryPane __result)
+        {
+            try
+            {
+                if (!ModConfig.Instance.logMenu)
+                {
+                    return;
+                }
+
+                string resolved = __result == null
+                    ? "<null>"
+                    : (__result.gameObject != null ? __result.gameObject.name : __result.name);
+                int resolvedIndex = -1;
+                try { resolvedIndex = __instance != null && __result != null ? __instance.GetPaneIndex(__result) : -1; }
+                catch { resolvedIndex = -1; }
+
+                LegacyHelper.LogInfo(FormattableString.Invariant(
+                    $"SetCurrentPane(requested={index}) -> [{resolvedIndex}] {resolved}"));
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    /// <summary>
+    /// Key 6 - the slot immediately after the K&amp;M inventory shortcuts (1=Inv, 2=Tools, 3=Quests,
+    /// 4=Journal, 5=Map; see HornetInput.cs) - jumps straight to the Shade's charm tab from any other
+    /// open pane. There is no base-game <c>PaneTypes</c> value for the Shade pane to hang a "real"
+    /// shortcut off of, so this runs entirely outside the FSM-driven shortcut system; see
+    /// <see cref="ShadeInventoryPaneIntegration.TryJumpToShadeTab"/> for why it only works once the
+    /// inventory is already open.
+    /// </summary>
+    [HarmonyPatch(typeof(InventoryPaneInput), "Update")]
+    private class InventoryPaneInput_Update_ShadeTabShortcut
+    {
+        private static void Postfix(InventoryPaneInput __instance)
+        {
+            try
+            {
+                if (__instance == null || !Input.GetKeyDown(KeyCode.Alpha6))
+                {
+                    return;
+                }
+
+                ShadeInventoryPaneIntegration.TryJumpToShadeTab(__instance);
+            }
+            catch
+            {
+            }
+        }
+    }
+
     [HarmonyPatch(typeof(InventoryPaneInput), "PressSubmit")]
     private class InventoryPaneInput_PressSubmit_Shade
     {
@@ -705,6 +898,9 @@ public partial class LegacyHelper
     {
         private static readonly HashSet<InputDevice> restrictedShadeDevices = new();
         private static readonly List<InputDevice> cleanupList = new();
+        // Names must match HeroActions.CreatePlayerAction(...) exactly; the lookup is ordinal.
+        // "Quick Map" in particular is two words there - the old "QuickMap" spelling silently
+        // matched nothing, so the quick-map bind was blocked along with everything else.
         private static readonly HashSet<string> AllowedHeroActions = new(StringComparer.Ordinal)
         {
             "Pause",
@@ -713,8 +909,14 @@ public partial class LegacyHelper
             "openInventoryJournal",
             "openInventoryTools",
             "openInventoryQuests",
-            "QuickMap"
+            "Quick Map"
         };
+
+        /// <summary>
+        /// Hero actions a shade-owned device is still allowed to drive. Pause and the menu-open
+        /// binds belong to the player, not to whichever entity a pad happens to be assigned to.
+        /// </summary>
+        internal static IReadOnlyCollection<string> AllowedHeroActionNames => AllowedHeroActions;
 
         private static readonly Dictionary<InputDevice, bool> IgnoreDeviceCache = new();
         private static int ignoreDeviceCacheFrame = -1;
@@ -798,38 +1000,107 @@ public partial class LegacyHelper
 
         internal static bool ShouldBlockShadeDeviceInput()
         {
-            int frame = Time.frameCount;
+            int frame;
+            try
+            {
+                frame = Time.frameCount;
+            }
+            catch
+            {
+                // No Unity player loop (unit tests): skip the per-frame cache entirely.
+                return EvaluateShouldBlockShadeDeviceInput();
+            }
+
             if (frame == blockShadeCacheFrame)
             {
                 return blockShadeCacheValue;
             }
 
-            bool result;
+            bool result = EvaluateShouldBlockShadeDeviceInput();
+
+            blockShadeCacheFrame = frame;
+            blockShadeCacheValue = result;
+            return result;
+        }
+
+        /// <summary>
+        /// The uncached decision: is the game in ordinary gameplay (so a shade-owned device must not
+        /// drive Hornet), or is a menu/pause surface up (so it must)? Split out from the per-frame
+        /// cache above so it can be exercised without a Unity player loop.
+        /// </summary>
+        internal static bool EvaluateShouldBlockShadeDeviceInput()
+        {
             try
             {
                 var gm = MenuStateUtility.TryGetGameManager();
                 if (ReferenceEquals(gm, null))
                 {
-                    result = false;
+                    return false;
                 }
-                else if (gm.GameState != GameState.PLAYING)
+
+                if (gm.GameState != GameState.PLAYING)
                 {
-                    result = false;
+                    return false;
                 }
-                else
+
+                var ui = MenuStateUtility.TryGetUiManager(gm);
+                return !MenuStateUtility.IsMenuActive(gm, ui);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// True when <paramref name="device"/> is currently driving one of <see cref="AllowedHeroActions"/>.
+        /// <para>
+        /// InControl only ever polls <c>InputManager.ActiveDevice</c> for a <c>PlayerActionSet</c>
+        /// (<c>PlayerActionSet.Update</c> -> <c>FindActiveDevice</c>), and this mod deliberately
+        /// keeps a shade-owned pad from becoming the active device during gameplay. The side effect
+        /// was that Start on the shade's controller never reached <c>HeroActions.Pause</c> at all,
+        /// so that pad could not pause the game. Letting the frame through when - and only when - an
+        /// allowed action is actually being pressed restores pause/menu access without handing the
+        /// pad any gameplay control: <c>PlayerAction_Update_BlockShadeGameplay</c> still nulls the
+        /// device for every action outside the allow-list.
+        /// </para>
+        /// </summary>
+        internal static bool IsDrivingAllowedHeroAction(InputDevice device)
+        {
+            if (device == null || device == InputDevice.Null)
+                return false;
+
+            try
+            {
+                var actions = InputHandler.UnsafeInstance?.inputActions;
+                if (actions == null)
+                    return false;
+
+                foreach (var action in actions.Actions)
                 {
-                    var ui = MenuStateUtility.TryGetUiManager(gm);
-                    result = !MenuStateUtility.IsMenuActive(gm, ui);
+                    if (action == null || !AllowedHeroActions.Contains(action.Name))
+                        continue;
+
+                    var bindings = action.Bindings;
+                    if (bindings == null)
+                        continue;
+
+                    for (int i = 0; i < bindings.Count; i++)
+                    {
+                        var binding = bindings[i];
+                        if (binding == null || binding.BindingSourceType != BindingSourceType.DeviceBindingSource)
+                            continue;
+
+                        if (binding.GetState(device))
+                            return true;
+                    }
                 }
             }
             catch
             {
-                result = false;
             }
 
-            blockShadeCacheFrame = frame;
-            blockShadeCacheValue = result;
-            return result;
+            return false;
         }
 
         private static bool ShadeUsesAllControllers(ShadeInputConfig config, int targetIndex, int deviceCount)
@@ -1979,6 +2250,11 @@ public partial class LegacyHelper
 
                 var activeDevice = InputManager.ActiveDevice;
                 if (!InputDeviceBlocker.IsRestrictedDevice(activeDevice))
+                    return;
+
+                // Pause / open-inventory / quick-map are never assignable away from the player, so
+                // leave the shade's pad active for the frame it is pressing one of them.
+                if (InputDeviceBlocker.IsDrivingAllowedHeroAction(activeDevice))
                     return;
 
                 if (ActiveDeviceSetter == null)

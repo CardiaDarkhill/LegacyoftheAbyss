@@ -18,5 +18,14 @@
   <PropertyGroup>
     <BaseOutputPath>$(MSBuildThisFileDirectory)..\..\..\LegacyoftheAbyss-DevBuild\bin\$(MSBuildProjectName)\</BaseOutputPath>
     <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)..\..\..\LegacyoftheAbyss-DevBuild\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+
+    <!--
+    Redirecting BaseOutputPath/BaseIntermediateOutputPath also moves the default item excludes
+    that MSBuild derives from them, so a *leftover* bin/ or obj/ from before the redirect (or from
+    an IDE/tool that ignores it) is no longer excluded from the compile glob. When that happens the
+    stale generated AssemblyInfo.cs/PluginInfo.cs get compiled a second time and the build dies with
+    CS0579 "Duplicate ...Attribute". Exclude the in-tree paths explicitly so stale folders are inert.
+    -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);bin\**;obj\**</DefaultItemExcludes>
   </PropertyGroup>
 </Project>

@@ -117,14 +117,18 @@ namespace LegacyoftheAbyss.Shade
                 }
             }
 
-            if (sanitizedBaseMax <= 0 && sanitizedMax > 0)
-            {
-                sanitizedBaseMax = sanitizedMax;
-            }
-
             if (sanitizedMax <= 0 && sanitizedLifebloodMax <= 0)
             {
                 sanitizedMax = 1;
+            }
+
+            // Must run *after* the floor above: when the floor bumps a zeroed-out max HP back to 1,
+            // the base max still needs to follow it, otherwise the shade is restored with
+            // MaxHP == 1 / BaseMaxHP == 0 and every charm recalculation derived from the base
+            // starts from nothing.
+            if (sanitizedBaseMax <= 0 && sanitizedMax > 0)
+            {
+                sanitizedBaseMax = sanitizedMax;
             }
 
             MaxHP = sanitizedMax;

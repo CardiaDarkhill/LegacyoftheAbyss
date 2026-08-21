@@ -393,6 +393,7 @@ public class ShadeSaveSlotRepositoryTests
     }
 }
 
+[Collection(ShadeRuntimeCollection.Name)]
 public class ShadeRuntimeDebugTests
 {
     [Fact]

@@ -1,5 +1,7 @@
 #nullable disable
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using BepInEx;
 using HarmonyLib;
@@ -241,6 +243,154 @@ public partial class LegacyHelper : BaseUnityPlugin
             ShadeCharmPlacer.PopulateScene(sceneName, gm.hero_ctrl.transform);
         }
         catch { }
+    }
+
+    /// <summary>
+    /// Retires a Shade's decoded sprite sheets: destroys the sprites first, then the textures they
+    /// were cut from, after a short grace period.
+    /// <para>
+    /// This lives on the plugin rather than on ShadeController for one reason - lifetime.
+    /// <c>Object.Destroy(obj, delay)</c> and any coroutine started on the Shade are both bound to
+    /// things that die with the scene, so a Shade destroyed as part of a scene unload had its pending
+    /// texture destroys silently dropped. That is the common case, not the rare one: the Shade is
+    /// respawned on every scene change, so each transition leaked a full sheet set. LegacyHelper is
+    /// the BepInEx plugin behaviour and survives scene loads, so its coroutine always gets to finish.
+    /// </para>
+    /// <para>
+    /// The grace period is there because VFX the Shade spawned - projectiles, slam auras - can outlive
+    /// it by a moment and are still drawing these sprites.
+    /// </para>
+    /// </summary>
+    internal static void RetireShadeSpriteAssets(List<Texture2D> textures, IEnumerable<Sprite[]> spriteGroups, float delay)
+    {
+        var retiredTextures = new List<Texture2D>();
+        if (textures != null)
+        {
+            foreach (var texture in textures)
+            {
+                if (texture != null)
+                {
+                    retiredTextures.Add(texture);
+                }
+            }
+        }
+
+        var retiredSprites = new List<Sprite>();
+        if (spriteGroups != null)
+        {
+            foreach (var group in spriteGroups)
+            {
+                if (group == null)
+                {
+                    continue;
+                }
+
+                foreach (var sprite in group)
+                {
+                    if (sprite != null)
+                    {
+                        retiredSprites.Add(sprite);
+                    }
+                }
+            }
+        }
+
+        if (retiredTextures.Count == 0 && retiredSprites.Count == 0)
+        {
+            return;
+        }
+
+        var host = Instance;
+        if (host == null)
+        {
+            // No plugin behaviour to run the coroutine on: better to free immediately than to leak.
+            DestroyRetiredShadeSpriteAssets(retiredTextures, retiredSprites);
+            return;
+        }
+
+        try
+        {
+            host.StartCoroutine(RetireShadeSpriteAssetsRoutine(retiredTextures, retiredSprites, delay));
+        }
+        catch
+        {
+            DestroyRetiredShadeSpriteAssets(retiredTextures, retiredSprites);
+        }
+    }
+
+    private static IEnumerator RetireShadeSpriteAssetsRoutine(List<Texture2D> textures, List<Sprite> sprites, float delay)
+    {
+        if (delay > 0f)
+        {
+            yield return new WaitForSecondsRealtime(delay);
+        }
+
+        DestroyRetiredShadeSpriteAssets(textures, sprites);
+    }
+
+    private static void DestroyRetiredShadeSpriteAssets(List<Texture2D> textures, List<Sprite> sprites)
+    {
+        int destroyedSprites = 0;
+        int destroyedTextures = 0;
+
+        // Sprites first: each one holds a reference to its source texture.
+        if (sprites != null)
+        {
+            foreach (var sprite in sprites)
+            {
+                if (sprite == null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    UnityEngine.Object.Destroy(sprite);
+                    destroyedSprites++;
+                }
+                catch
+                {
+                }
+            }
+
+            sprites.Clear();
+        }
+
+        if (textures != null)
+        {
+            foreach (var texture in textures)
+            {
+                if (texture == null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    UnityEngine.Object.Destroy(texture);
+                    destroyedTextures++;
+                }
+                catch
+                {
+                }
+            }
+
+            textures.Clear();
+        }
+
+        if (destroyedTextures > 0 || destroyedSprites > 0)
+        {
+            try
+            {
+                if (ModConfig.Instance.logShade)
+                {
+                    Instance?.Logger?.LogInfo($"Released retired shade art: {destroyedTextures} textures, {destroyedSprites} sprites.");
+                }
+            }
+            catch
+            {
+            }
+        }
     }
 
     private static void DestroyShadeInstance()

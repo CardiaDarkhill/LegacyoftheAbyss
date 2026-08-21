@@ -1,6 +1,7 @@
 using LegacyoftheAbyss.Shade;
 using Xunit;
 
+[Collection(ShadeRuntimeCollection.Name)]
 public class ShadeNotificationTests
 {
     public ShadeNotificationTests()

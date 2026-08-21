@@ -5,6 +5,7 @@ using System.Linq;
 using LegacyoftheAbyss.Shade;
 using Xunit;
 
+[Collection(ShadeRuntimeCollection.Name)]
 public class ShadeCharmInventoryTests
 {
     [Fact]
@@ -20,7 +21,7 @@ public class ShadeCharmInventoryTests
         Assert.Equal(inventory.OvercharmAttemptThreshold, inventory.RemainingOvercharmAttempts);
 
         Assert.False(inventory.TryEquip(ShadeCharmId.SoulCatcher, out var firstAttempt));
-        Assert.Contains("resists", firstAttempt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("notches", firstAttempt, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(inventory.OvercharmAttemptThreshold - 1, inventory.RemainingOvercharmAttempts);
 
         Assert.False(inventory.TryEquip(ShadeCharmId.SoulCatcher, out _));
@@ -108,6 +109,7 @@ public class ShadeCharmInventoryTests
     [Fact]
     public void VoidHeartCanBeUnequippedDuringDebugMode()
     {
+        ShadeRuntime.SaveSlots.ResetAll();
         ShadeRuntime.Clear();
         var inventory = ShadeRuntime.Charms;
         inventory.ResetLoadout();
@@ -134,6 +136,10 @@ public class ShadeCharmInventoryTests
     [Fact]
     public void VoidHeartGrantedWhenEnteringSongTowerDestroyedScene()
     {
+        // The collected-charm set lives in the save-slot repository, which ShadeRuntime.Clear()
+        // deliberately leaves alone - without this reset the charm is already collected from an
+        // earlier test and TryCollectCharm reports "nothing new".
+        ShadeRuntime.SaveSlots.ResetAll();
         ShadeRuntime.Clear();
 
         try

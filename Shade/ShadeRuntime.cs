@@ -35,6 +35,7 @@ namespace LegacyoftheAbyss.Shade
         private static bool s_hasActiveSlot;
         private static CharmInventorySnapshot? s_debugCharmSnapshot;
         private static bool s_debugUnlockAllCharmsActive;
+        private static bool s_syncingInventoryFromSlot;
 
         private static readonly (int Progress, string Key, string Message)[] s_spellMilestones = new[]
         {
@@ -671,7 +672,14 @@ namespace LegacyoftheAbyss.Shade
 
         private static void HandleCharmInventoryChanged()
         {
-            EnsureActiveSlot();
+            // Re-entrancy guard: this fires from inside ShadeCharmInventory while the inventory is
+            // being loaded *from* the slot, and writing straight back is at best redundant.
+            if (s_syncingInventoryFromSlot)
+            {
+                return;
+            }
+
+            EnsureActiveSlotForInventoryWrite();
 
             if (!s_debugUnlockAllCharmsActive)
             {
@@ -679,6 +687,26 @@ namespace LegacyoftheAbyss.Shade
             }
 
             LegacyHelper.RequestShadeLoadoutRecompute();
+        }
+
+        /// <summary>
+        /// Claims the default slot for a write that is already in flight, without re-reading the
+        /// slot first. The plain <see cref="EnsureActiveSlot"/> path syncs the inventory *from* the
+        /// slot, which - when the very first charm/notch mutation of a session is what established
+        /// the slot - overwrote the change that raised the notification and then persisted the stale
+        /// value back to disk. The caller here is mid-mutation, so the in-memory inventory is the
+        /// newer of the two and the slot is what needs updating.
+        /// </summary>
+        private static void EnsureActiveSlotForInventoryWrite()
+        {
+            if (s_hasActiveSlot)
+            {
+                return;
+            }
+
+            s_activeSlot = 0;
+            s_hasActiveSlot = true;
+            s_saveSlots.GetOrCreateSlot(s_activeSlot);
         }
 
         private static void SyncInventoryFromActiveSlot()
@@ -695,8 +723,19 @@ namespace LegacyoftheAbyss.Shade
             var newlyDiscovered = s_saveSlots.GetNewlyDiscoveredCharms(s_activeSlot);
             int notchCapacity = s_saveSlots.GetNotchCapacity(s_activeSlot);
 
-            s_charmInventory.LoadState(owned, equipped, broken, notchCapacity, newlyDiscovered);
-            ApplySavedDebugUnlockState();
+            bool previouslySyncing = s_syncingInventoryFromSlot;
+            s_syncingInventoryFromSlot = true;
+            try
+            {
+                s_charmInventory.LoadState(owned, equipped, broken, notchCapacity, newlyDiscovered);
+                ApplySavedDebugUnlockState();
+            }
+            finally
+            {
+                s_syncingInventoryFromSlot = previouslySyncing;
+            }
+
+            LegacyHelper.RequestShadeLoadoutRecompute();
         }
 
         private static void ApplySavedDebugUnlockState()
