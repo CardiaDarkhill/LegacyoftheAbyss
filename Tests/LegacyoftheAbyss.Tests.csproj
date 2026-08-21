@@ -37,6 +37,9 @@
     missing entry here does not fail the build - it surfaces as a FileNotFoundException the moment
     a test first JITs the method that needs it. Keep this list in sync when new game types get used.
     -->
+    <!-- Needed by EnemyAiActionSelectionTests, which reflects over Assembly-CSharp's PlayMaker
+         action types; without it every one of them fails to load and the scan silently finds none. -->
+    <UnityRuntimeLib Include="$(SilksongManagedDir)\PlayMaker.dll" />
     <UnityRuntimeLib Include="$(SilksongManagedDir)\Unity.ResourceManager.dll" />
     <UnityRuntimeLib Include="$(SilksongManagedDir)\Unity.Addressables.dll" />
     <UnityRuntimeLib Include="$(SilksongManagedDir)\TeamCherry.SharedUtils.dll" />

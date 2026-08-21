@@ -56,6 +56,73 @@ public static class HornetInput
         }
     }
 
+    private static bool loggedDeviceSnapshot;
+
+    /// <summary>
+    /// One-shot dump, at Info, of what the attached pads actually expose and what the two actions
+    /// that matter for menus are bound to.
+    /// <para>
+    /// Every round of "the pad can't pause / can't open the inventory" has turned on a fact about one
+    /// of those two things - a binding wiped by <c>ClearBindings</c>, or a control the pad does not
+    /// have (an XInput pad exposes <c>View</c> and <c>Menu</c>, and none of <c>Back</c>,
+    /// <c>Select</c>, <c>Start</c> or <c>Options</c>). Printing both once removes the guesswork from
+    /// the next one.
+    /// </para>
+    /// </summary>
+    internal static void LogDeviceSnapshotOnce(HeroActions? actions)
+    {
+        if (loggedDeviceSnapshot || actions == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var devices = InputManager.Devices;
+            if (devices == null || devices.Count == 0)
+            {
+                // No pad yet; try again on a later EnsureBindings rather than logging "none".
+                return;
+            }
+
+            loggedDeviceSnapshot = true;
+
+            InputControlType[] interesting =
+            {
+                InputControlType.View, InputControlType.Menu, InputControlType.Back,
+                InputControlType.Select, InputControlType.Start, InputControlType.Options,
+                InputControlType.TouchPadButton, InputControlType.Minus
+            };
+
+            for (int i = 0; i < devices.Count; i++)
+            {
+                var device = devices[i];
+                if (device == null || device == InputDevice.Null)
+                {
+                    continue;
+                }
+
+                var present = new System.Collections.Generic.List<string>();
+                foreach (var control in interesting)
+                {
+                    if (device.HasControl(control))
+                    {
+                        present.Add(control.ToString());
+                    }
+                }
+
+                LegacyHelper.LogInfo($"[HornetInput] Device[{i}] '{device.Name}' menu controls: " +
+                    (present.Count == 0 ? "<none>" : string.Join(", ", present)));
+            }
+
+            LogBindings("Pause", actions.Pause);
+            LogBindings("OpenInventory", actions.OpenInventory);
+        }
+        catch
+        {
+        }
+    }
+
     /// <summary>
     /// Resolves the game's InputHandler, preferring the singleton and falling back through
     /// GameManager and finally a scene scan. Shared with ShadeInventoryPane, which had a
@@ -183,6 +250,37 @@ public static class HornetInput
     /// calling this repeatedly (every <c>OnUpdateHeroActions</c>) does not accumulate duplicates.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Every control any supported pad uses for "open inventory", bound as a set rather than picked
+    /// per platform.
+    /// <para>
+    /// <c>InputHandler.MapControllerButtons</c> binds exactly one of these per <c>GamepadType</c> -
+    /// <c>Back</c> for a 360 pad, <c>View</c>+<c>Back</c> for Xbox One/Series, <c>TouchPadButton</c>
+    /// for PS4/PS5, <c>Minus</c> for Switch, <c>Select</c> for PS3 and unknown pads - and
+    /// <see cref="ApplyLeftSideLayout"/> destroys whichever it picked, because binding Key1 to
+    /// <c>OpenInventory</c> goes through <c>ClearBindings()</c> first. The Shade's replacement used to
+    /// re-add only <c>Back</c> and <c>Select</c>, which meant that on an Xbox One pad - whose button
+    /// is <c>View</c> - the Shade's controller had no working inventory binding at all after the
+    /// keyboard preset was applied. Hence "the Shade can't open the inventory on controller",
+    /// unaccompanied by any log line, because there was genuinely nothing to fire.
+    /// </para>
+    /// <para>
+    /// Binding all of them is safe and cheaper than detecting the pad: a control the device does not
+    /// have simply never reads as pressed (<c>InputDevice.GetControl</c> returns
+    /// <c>InputControl.Null</c>), and <c>AddBinding</c> no-ops on an equal binding that is already
+    /// present. Note such a binding is invisible in <c>PlayerAction.Bindings</c> for the same reason -
+    /// see <c>InputDeviceBlocker.IsDrivingAllowedHeroAction</c>, which is why nothing reads that list.
+    /// </para>
+    /// </summary>
+    private static readonly InputControlType[] ShadeInventoryControls =
+    {
+        InputControlType.View,
+        InputControlType.Back,
+        InputControlType.Select,
+        InputControlType.TouchPadButton,
+        InputControlType.Minus
+    };
+
     internal static void EnsureShadeInventoryBindings(HeroActions? actions)
     {
         if (actions == null)
@@ -197,8 +295,10 @@ public static class HornetInput
             if (cfg.hornetKeyboardEnabled)
             {
                 // Hornet's on keyboard, so the controller (if any) is free for the Shade.
-                actions.OpenInventory?.AddBinding(new DeviceBindingSource(InputControlType.Back));
-                actions.OpenInventory?.AddBinding(new DeviceBindingSource(InputControlType.Select));
+                foreach (var control in ShadeInventoryControls)
+                {
+                    actions.OpenInventory?.AddBinding(new DeviceBindingSource(control));
+                }
             }
             else
             {

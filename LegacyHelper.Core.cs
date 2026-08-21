@@ -109,6 +109,10 @@ public partial class LegacyHelper : BaseUnityPlugin
         var harmony = new Harmony("com.legacyoftheabyss.helper");
         harmony.PatchAll();
 
+        // After PatchAll, never inside it - see the remarks on EnemyAiRetargeting. A throw from this
+        // one must not be able to cost the rest of the mod its patches.
+        EnemyAiRetargeting.Apply(harmony);
+
         SceneManager.sceneLoaded += (scene, mode) =>
         {
             foreach (var go in scene.GetRootGameObjects())

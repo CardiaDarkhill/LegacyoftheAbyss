@@ -33,6 +33,14 @@ public static partial class ShadeSettingsMenu
     private static MenuScreen activeScreen;
     private static readonly List<MenuScreen> allScreens = new();
     private static readonly Dictionary<MenuScreen, MenuSelectable> screenFirstSelectables = new();
+
+    /// <summary>
+    /// Where the player was on each screen the last time they left it, so backing out of a sub-menu
+    /// returns the highlight to the row that opened it instead of snapping to the top of the list.
+    /// See <c>ShowScreen</c> for why this has to exist rather than leaning on the screen's own
+    /// <c>MenuButtonList</c>.
+    /// </summary>
+    private static readonly Dictionary<MenuScreen, MenuSelectable> screenLastSelectables = new();
     private static GameObject templateSource;
     private static bool templateSourceWasActive;
     private static bool pauseMenuWasActive;

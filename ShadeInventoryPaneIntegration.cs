@@ -687,6 +687,85 @@ internal static class ShadeInventoryPaneIntegration
         }
     }
 
+    /// <summary>
+    /// Keeps the Shade pane a <i>sibling</i> of the real panes rather than letting it end up nested
+    /// inside one of them.
+    /// <para>
+    /// The parent is derived from the template pane, via
+    /// <c>ShadeInventoryPane.ResolveTemplateRootRectTransform</c>. When a pane's own transform is not
+    /// a <c>RectTransform</c> that resolver walks into the pane's children looking for one, so
+    /// <c>templateRect.parent</c> can land <i>inside</i> the template pane instead of beside it.
+    /// A Shade pane parented there inherits that pane's active state: the inventory FSM deactivates
+    /// the pane you came from at the end of its transition (roughly a second later, after
+    /// <c>Tween Panes</c> and <c>Pane Final Pos</c>), and the Shade pane goes inactive along with it -
+    /// producing an <c>OnDisable</c> with no matching <c>PaneEnd</c>, from that one source pane only.
+    /// </para>
+    /// <para>
+    /// Walking up to the first ancestor that is not itself a pane (or inside one) is a no-op when the
+    /// resolved parent was already the panes' shared container, so this costs nothing in the healthy
+    /// case.
+    /// </para>
+    /// </summary>
+    private static Transform? ResolvePaneSiblingParent(Transform? candidate, InventoryPane templatePane, InventoryPane[] panes)
+    {
+        if (candidate == null || templatePane == null)
+        {
+            return candidate;
+        }
+
+        try
+        {
+            Transform? node = candidate;
+            while (node != null && IsInsideAnyPane(node, panes))
+            {
+                node = node.parent;
+            }
+
+            if (node != null && node != candidate)
+            {
+                ShadeInventoryPane.LogMenuEvent(FormattableString.Invariant(
+                    $"Shade pane parent moved out of '{candidate.name}' to '{node.name}' to keep it a sibling of the real panes"));
+                return node;
+            }
+        }
+        catch
+        {
+        }
+
+        return candidate;
+    }
+
+    private static bool IsInsideAnyPane(Transform node, InventoryPane[] panes)
+    {
+        if (node == null || panes == null)
+        {
+            return false;
+        }
+
+        foreach (var pane in panes)
+        {
+            if (pane == null || pane is ShadeInventoryPane)
+            {
+                continue;
+            }
+
+            var paneTransform = pane.transform;
+            if (paneTransform == null)
+            {
+                continue;
+            }
+
+            // node == paneTransform means "the panes' container" was resolved as the pane itself,
+            // which is just as wrong as being one of its descendants.
+            if (node == paneTransform || node.IsChildOf(paneTransform))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     internal static void EnsurePane(InventoryPaneList paneList)
     {
         if (paneList == null)
@@ -752,6 +831,8 @@ internal static class ShadeInventoryPaneIntegration
         {
             parent = templatePane.transform.parent;
         }
+
+        parent = ResolvePaneSiblingParent(parent, templatePane, panes);
 
         if (existingShade != null)
         {
@@ -969,7 +1050,29 @@ internal static class ShadeInventoryPaneIntegration
         }
     }
 
-    private static void ApplyShadeInputSettings(InventoryPaneInput input)
+    /// <summary>
+    /// Points <paramref name="input"/> at the Shade pane's input conventions.
+    /// <para>
+    /// <paramref name="isLocal"/> gates the one setting that must <b>not</b> be applied to a borrowed
+    /// input: <c>paneControl</c>. That field is what <c>InventoryPaneInput.Update</c> switches on to
+    /// tell "the player pressed *this* pane's own shortcut, so close the inventory" from "the player
+    /// pressed a *different* pane's shortcut, so switch to it" - and its
+    /// <c>PaneTypes.None</c> case means <i>every</i> shortcut is treated as this pane's own, i.e.
+    /// unconditionally cancel. Writing None onto the real panes' inputs (which is what this used to
+    /// do to every input it captured) therefore left a live trap: if the restore that was supposed to
+    /// put each pane's own value back ever failed to run - and an unexplained extra enable/disable
+    /// cycle on the Shade pane meant it sometimes didn't - all six inventory shortcuts closed the
+    /// inventory instead of switching tabs, on every tab, for the rest of the session.
+    /// </para>
+    /// <para>
+    /// Nothing needed that write. Submit/Direction routing to the Shade goes through the <c>pane</c>
+    /// field (see the <c>PressSubmit</c>/<c>PressDirection</c> patches, which resolve the pane, not
+    /// the pane control), so a borrowed input keeps working for the Shade with its own
+    /// <c>paneControl</c> left exactly as its pane shipped it - and a missed restore can no longer
+    /// break anything, because there is nothing to restore.
+    /// </para>
+    /// </summary>
+    private static void ApplyShadeInputSettings(InventoryPaneInput input, bool isLocal)
     {
         if (input == null)
         {
@@ -987,8 +1090,12 @@ internal static class ShadeInventoryPaneIntegration
         {
         }
 
-        if (PaneControlField != null)
+        if (isLocal && PaneControlField != null)
         {
+            // The Shade has no PaneTypes value of its own, so its own input component stays None.
+            // TryJumpToShadeTab uses that as the "this is the Shade's own phantom input, not a real
+            // pane's" marker, and TryHandleShadeTabPaneShortcut covers the shortcut handling that
+            // None would otherwise turn into a cancel.
             try { PaneControlField(input) = InventoryPaneList.PaneTypes.None; }
             catch { }
         }
@@ -1022,11 +1129,6 @@ internal static class ShadeInventoryPaneIntegration
 
     private static void RestoreSingleInput(ShadeInventoryPane? shadePane, InventoryPaneInput? input)
     {
-        if (shadePane == null)
-        {
-            return;
-        }
-
         if (input == null)
         {
             return;
@@ -1036,6 +1138,26 @@ internal static class ShadeInventoryPaneIntegration
         {
             if (OriginalInputBindings.TryGetValue(input, out var snapshot))
             {
+                if (ModConfig.Instance.logMenu)
+                {
+                    try
+                    {
+                        InventoryPaneList.PaneTypes live = InventoryPaneList.PaneTypes.None;
+                        if (PaneControlField != null)
+                        {
+                            try { live = PaneControlField(input); }
+                            catch { }
+                        }
+
+                        string restoredPane = snapshot.Pane != null ? snapshot.Pane.name : "<null>";
+                        LegacyHelper.LogInfo(FormattableString.Invariant(
+                            $"RestoreSingleInput {input.gameObject?.name}: paneControl {live} -> {snapshot.PaneControl}, pane -> {restoredPane}, enabled -> {snapshot.Enabled}"));
+                    }
+                    catch
+                    {
+                    }
+                }
+
                 if (PaneField != null)
                 {
                     try { PaneField.SetValue(input, snapshot.Pane); }
@@ -1075,7 +1197,10 @@ internal static class ShadeInventoryPaneIntegration
         {
         }
 
-        shadePane.UnregisterBoundInput(input);
+        if (shadePane != null)
+        {
+            shadePane.UnregisterBoundInput(input);
+        }
     }
 
     internal static void RestoreInputBindings(ShadeInventoryPane shadePane)
@@ -1085,25 +1210,67 @@ internal static class ShadeInventoryPaneIntegration
             return;
         }
 
-        if (!CapturedInputs.TryGetValue(shadePane, out var inputs) || inputs.Count == 0)
+        if (CapturedInputs.TryGetValue(shadePane, out var inputs) && inputs.Count > 0)
         {
-            shadePane.ClearBoundInputs();
+            foreach (var input in new List<InventoryPaneInput>(inputs))
+            {
+                RestoreSingleInput(shadePane, input);
+            }
+        }
+
+        CapturedInputs.Remove(shadePane);
+        shadePane.ClearBoundInputs();
+        RestoreOrphanedInputs();
+    }
+
+    /// <summary>
+    /// Puts back any input that still holds a snapshot but is no longer tracked against a live Shade
+    /// pane.
+    /// <para>
+    /// <see cref="CapturedInputs"/> is per-pane bookkeeping that can be dropped without the matching
+    /// restore ever running - <see cref="BindInput"/> used to clear it outright when re-capturing,
+    /// and a Shade pane destroyed out from under it takes its entry with it. Every input orphaned
+    /// that way keeps the Shade's settings and its <c>pane</c> pointing at a pane that is no longer
+    /// showing. <see cref="OriginalInputBindings"/> still holds the truth for each of them, so once
+    /// no Shade pane is holding a capture at all, anything left in there is by definition a leak and
+    /// can be restored unconditionally.
+    /// </para>
+    /// </summary>
+    private static void RestoreOrphanedInputs()
+    {
+        if (OriginalInputBindings.Count == 0)
+        {
             return;
         }
 
-        var toRestore = new List<InventoryPaneInput>(inputs);
-        foreach (var input in toRestore)
+        foreach (var tracked in CapturedInputs.Values)
         {
-            RestoreSingleInput(shadePane, input);
-            inputs.Remove(input);
+            if (tracked != null && tracked.Count > 0)
+            {
+                // Another Shade pane still legitimately owns captures; leave everything alone.
+                return;
+            }
         }
 
-        if (inputs.Count == 0)
+        var orphaned = new List<InventoryPaneInput>(OriginalInputBindings.Keys);
+        if (ModConfig.Instance.logMenu)
         {
-            CapturedInputs.Remove(shadePane);
+            try
+            {
+                LegacyHelper.LogInfo(FormattableString.Invariant(
+                    $"RestoreOrphanedInputs: {orphaned.Count} input(s) still held a snapshot after restore"));
+            }
+            catch
+            {
+            }
         }
 
-        shadePane.ClearBoundInputs();
+        foreach (var input in orphaned)
+        {
+            RestoreSingleInput(null, input);
+        }
+
+        OriginalInputBindings.Clear();
     }
 
     internal static void BindInput(ShadeInventoryPane shadePane, InventoryPaneList paneList, bool captureFocus)
@@ -1117,8 +1284,12 @@ internal static class ShadeInventoryPaneIntegration
 
         if (captureFocus)
         {
-            CapturedInputs.Remove(shadePane);
-            shadePane.ClearBoundInputs();
+            // Unwind the previous capture properly rather than just forgetting it. Re-capturing runs
+            // routinely - PaneStart's SetActive(true) fires OnEnable, which binds, and then PaneStart
+            // itself binds again - and dropping the tracked set without restoring left those inputs
+            // holding Shade settings that nothing would ever put back. Restoring first also makes the
+            // snapshot taken below a snapshot of the pane's *own* values, not of the Shade's.
+            RestoreInputBindings(shadePane);
         }
 
         try
@@ -1231,7 +1402,7 @@ internal static class ShadeInventoryPaneIntegration
 
         if (captureFocus || isLocal)
         {
-            ApplyShadeInputSettings(input);
+            ApplyShadeInputSettings(input, isLocal);
         }
 
         if (shadePane != null && PaneField != null)
@@ -1308,6 +1479,16 @@ internal static class ShadeInventoryPaneIntegration
             return false;
         }
 
+        // Key 6 on the Shade tab closes the inventory, the same way pressing any real tab's own
+        // shortcut a second time does. That symmetry matters more than usual here: the Shade's own
+        // keys are otherwise all spoken for - TryHandleShadeTabPaneShortcut turns 1-5 into tab
+        // switches - so without this a Shade-on-keyboard player has no key of their own that gets
+        // them back out.
+        if (ShadeInventoryPane.ActivePane != null)
+        {
+            return TryCloseInventory(sourceInput);
+        }
+
         InventoryPaneList.PaneTypes paneControl;
         try
         {
@@ -1318,10 +1499,17 @@ internal static class ShadeInventoryPaneIntegration
             return false;
         }
 
-        // PaneTypes.None is what every shade-owned InventoryPaneInput is configured with (see
-        // ApplyShadeInputSettings) - excluding it means this only fires from the currently-displayed
-        // *real* pane's own input component, never from the Shade's own always-active phantom one.
+        // PaneTypes.None marks the Shade's own always-active phantom input (see
+        // ApplyShadeInputSettings) as well as any pane-list-level input that never owned a tab.
+        // Excluding it means this only fires from the currently-displayed *real* pane's own input.
         if (paneControl == InventoryPaneList.PaneTypes.None)
+        {
+            return false;
+        }
+
+        // Borrowed inputs keep their own paneControl now, so paneControl alone no longer proves this
+        // input isn't one the Shade has taken over.
+        if (TryGetShadePane(sourceInput) != null)
         {
             return false;
         }
@@ -1405,6 +1593,156 @@ internal static class ShadeInventoryPaneIntegration
 
             targetPaneIndexVar.Value = shadeIndex;
             fsm.SendEvent("MOVE PANE TO");
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Handles the five native inventory shortcuts for an input that is currently routed to the
+    /// Shade pane, returning true when the caller should skip <c>InventoryPaneInput.Update</c> for
+    /// this frame.
+    /// <para>
+    /// The Shade has no <c>PaneTypes</c> value, so its input component's <c>paneControl</c> has to
+    /// stay <c>None</c> - and <c>None</c> is the case <c>InventoryPaneInput.Update</c> reads as "the
+    /// player pressed this pane's own shortcut", which it answers with <c>PressCancel()</c>. Left
+    /// alone that means every one of keys 1-5 closes the whole inventory while the Shade tab is up,
+    /// instead of switching to the tab that was asked for. Doing the switch here, the same way the
+    /// native code does it for any other pane (write "Target Pane Index", send "MOVE PANE TO"),
+    /// gives the Shade tab the same shortcut behaviour every real tab has.
+    /// </para>
+    /// <para>
+    /// Requests for a pane that is missing or locked deliberately fall through to the native path,
+    /// which closes the inventory - that is what the base game does for an unavailable pane too.
+    /// </para>
+    /// </summary>
+    internal static bool TryHandleShadeTabPaneShortcut(InventoryPaneInput input)
+    {
+        if (input == null || PaneListField == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            if (InventoryPaneInput.IsInputBlocked || CheatManager.IsOpen)
+            {
+                return false;
+            }
+
+            var actions = HornetInput.FindHandler()?.inputActions;
+            if (actions == null)
+            {
+                return false;
+            }
+
+            var pressed = InventoryPaneInput.GetInventoryInputPressed(actions);
+            if (pressed == InventoryPaneList.PaneTypes.None)
+            {
+                return false;
+            }
+
+            var paneList = PaneListField.GetValue(input) as InventoryPaneList;
+            if (paneList == null)
+            {
+                return false;
+            }
+
+            var target = paneList.GetPane(pressed);
+            if (target == null || !target.IsAvailable)
+            {
+                return false;
+            }
+
+            var fsm = PlayMakerFSM.FindFsmOnGameObject(paneList.gameObject, "Inventory Control");
+            var targetPaneIndexVar = fsm?.FsmVariables.FindFsmInt("Target Pane Index");
+            if (fsm == null || targetPaneIndexVar == null)
+            {
+                return false;
+            }
+
+            if (ModConfig.Instance.logMenu)
+            {
+                try
+                {
+                    LegacyHelper.LogInfo(FormattableString.Invariant(
+                        $"TryHandleShadeTabPaneShortcut: routing {pressed} away from the Shade tab's cancel path"));
+                }
+                catch
+                {
+                }
+            }
+
+            targetPaneIndexVar.Value = (int)pressed;
+            fsm.SendEvent("MOVE PANE TO");
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static int lastInventoryCloseFrame = -1;
+
+    /// <summary>
+    /// Closes the inventory through the game's own route: the "Inventory Control" FSM's <c>Opened</c>
+    /// state answers its <c>ListenForInventoryShortcut</c> with a <c>CLOSE</c> event, which is exactly
+    /// what pressing the current pane's own shortcut produces natively.
+    /// <para>
+    /// Deliberately not routed through <c>InventoryPaneInput.PressCancel</c>: that sends "UI CANCEL"
+    /// to FSMs on its <i>own</i> GameObject, and the Shade pane is a GameObject this mod created, with
+    /// no FSM on it to receive anything.
+    /// </para>
+    /// <para>
+    /// Frame-stamped because the Key 6 handler is a postfix on <c>InventoryPaneInput.Update</c> and
+    /// more than one input component can run in the same frame; without it a single press would send
+    /// <c>CLOSE</c> several times.
+    /// </para>
+    /// </summary>
+    private static bool TryCloseInventory(InventoryPaneInput sourceInput)
+    {
+        if (sourceInput == null || PaneListField == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            int frame = Time.frameCount;
+            if (frame == lastInventoryCloseFrame)
+            {
+                return true;
+            }
+
+            var paneList = PaneListField.GetValue(sourceInput) as InventoryPaneList;
+            if (paneList == null)
+            {
+                return false;
+            }
+
+            var fsm = PlayMakerFSM.FindFsmOnGameObject(paneList.gameObject, "Inventory Control");
+            if (fsm == null)
+            {
+                return false;
+            }
+
+            lastInventoryCloseFrame = frame;
+            if (ModConfig.Instance.logMenu)
+            {
+                try
+                {
+                    LegacyHelper.LogInfo("Key 6 pressed on the Shade tab: closing the inventory");
+                }
+                catch
+                {
+                }
+            }
+
+            fsm.SendEvent("CLOSE");
             return true;
         }
         catch

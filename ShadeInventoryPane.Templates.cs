@@ -599,6 +599,16 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
 
     private void OnDisable()
     {
+        // A pane that is still the pane list's current pane has no business being deactivated - the
+        // FSM only ever does that to the pane you just left, and PaneEnd would have run first. When
+        // it happens anyway (bug 4a: only when the Shade tab was entered from Inv), the cause is an
+        // ancestor going inactive and taking this object with it, so name the ancestor rather than
+        // just recording that it happened.
+        if (IsPaneActive)
+        {
+            LogUnexpectedDeactivation();
+        }
+
         ShadeInventoryPaneIntegration.RestoreInputBindings(this);
         UnregisterInputHandlers();
         UpdateInventoryBinding(false);
@@ -614,6 +624,34 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         }
         loggedInactiveHierarchyProcessing = false;
         LogMenuEvent("OnDisable");
+    }
+
+    /// <summary>
+    /// Dumps this pane's ancestor chain with each link's own <c>activeSelf</c>. The first ancestor
+    /// reading <c>False</c> is what actually deactivated this object; if every ancestor reads
+    /// <c>True</c>, something called <c>SetActive(false)</c> on the pane itself instead.
+    /// </summary>
+    private void LogUnexpectedDeactivation()
+    {
+        try
+        {
+            var builder = new System.Text.StringBuilder("Shade pane deactivated while still the current pane. Ancestors:");
+            Transform node = transform;
+            while (node != null)
+            {
+                builder.Append(FormattableString.Invariant($" {node.name}(activeSelf={node.gameObject.activeSelf})"));
+                node = node.parent;
+                if (node != null)
+                {
+                    builder.Append(" <-");
+                }
+            }
+
+            LegacyHelper.LogInfo(builder.ToString());
+        }
+        catch
+        {
+        }
     }
 
     private void OnDestroy()

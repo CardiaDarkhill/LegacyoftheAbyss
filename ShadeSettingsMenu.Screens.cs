@@ -23,6 +23,7 @@ public static partial class ShadeSettingsMenu
         }
         allScreens.Clear();
         screenFirstSelectables.Clear();
+        screenLastSelectables.Clear();
         mainScreen = null;
         difficultyScreen = null;
         controlsScreen = null;
@@ -238,6 +239,130 @@ public static partial class ShadeSettingsMenu
         if (ms.backButton != null)
             return ms.backButton;
         return null;
+    }
+
+    /// <summary>
+    /// Whether "put the highlight back where the player left it" applies to <paramref name="ms"/>.
+    /// <para>
+    /// The skins screen is excluded on purpose: <c>SkinMenuController.RefreshButtons</c> keeps that
+    /// screen's entry in <see cref="screenFirstSelectables"/> pointed at whatever skin is currently
+    /// equipped, so re-entering it lands on the active pick rather than on the last row browsed.
+    /// That is a deliberate behaviour, and remembering a position would quietly undo it.
+    /// </para>
+    /// </summary>
+    private static bool TracksLastSelection(MenuScreen ms)
+    {
+        return ms != null && !ReferenceEquals(ms, skinsScreen);
+    }
+
+    /// <summary>
+    /// Records where the highlight currently sits on <paramref name="ms"/>, so the next
+    /// <see cref="ShowScreen"/> of that screen can put it back.
+    /// </summary>
+    private static void RememberSelection(MenuScreen ms)
+    {
+        if (ms == null || !TracksLastSelection(ms))
+            return;
+
+        var current = EventSystem.current;
+        var selectedGo = current != null ? current.currentSelectedGameObject : null;
+        if (selectedGo == null)
+            return;
+
+        var selectable = selectedGo.GetComponentInParent<MenuSelectable>();
+        if (selectable == null)
+            return;
+
+        // Only remember a selection that actually lives on this screen - the EventSystem's selection
+        // can still be pointing at whatever was highlighted before this screen existed.
+        if (!selectable.transform.IsChildOf(ms.transform))
+            return;
+
+        // The Back button is a way out, not a position - returning to it would be as wrong as
+        // returning to the top of the list. MenuButtonList makes the same exclusion for its own
+        // lastSelected.
+        if (ms.backButton != null && ReferenceEquals(selectable, ms.backButton))
+            return;
+
+        screenLastSelectables[ms] = selectable;
+    }
+
+    /// <summary>
+    /// The row to highlight when <paramref name="ms"/> is shown: wherever the player left it, or the
+    /// screen's first row the first time it opens.
+    /// </summary>
+    private static MenuSelectable GetRestoreHighlight(MenuScreen ms)
+    {
+        if (ms == null)
+            return null;
+        if (TracksLastSelection(ms) &&
+            screenLastSelectables.TryGetValue(ms, out var remembered) &&
+            remembered != null &&
+            remembered.interactable &&
+            IsSelectableLiveUnder(remembered, ms))
+        {
+            return remembered;
+        }
+
+        screenLastSelectables.Remove(ms);
+        return GetPreferredHighlight(ms);
+    }
+
+    /// <summary>
+    /// True when <paramref name="selectable"/> is still a live row of <paramref name="ms"/>.
+    /// <para>
+    /// Deliberately walks <c>activeSelf</c> up to the screen rather than reading
+    /// <c>activeInHierarchy</c>: this is called while the screen itself is still deactivated - that
+    /// is the whole point, the answer has to be known before the screen goes live - so
+    /// <c>activeInHierarchy</c> is false for every row on it and would reject them all.
+    /// </para>
+    /// </summary>
+    private static bool IsSelectableLiveUnder(MenuSelectable selectable, MenuScreen ms)
+    {
+        if (selectable == null || ms == null)
+            return false;
+
+        var node = selectable.transform;
+        while (node != null && node != ms.transform)
+        {
+            if (!node.gameObject.activeSelf)
+                return false;
+            node = node.parent;
+        }
+
+        return node == ms.transform;
+    }
+
+    /// <summary>
+    /// Keeps the screen's own <c>MenuButtonList.lastSelected</c> in step with
+    /// <see cref="screenLastSelectables"/>.
+    /// <para>
+    /// Both mechanisms fire on the same activation and each one overwrites the other's highlight:
+    /// <c>MenuButtonList.OnEnable</c> starts a <c>SelectDelayed</c> coroutine for whatever it
+    /// remembers, and <see cref="ShowScreen"/> highlights its own choice straight afterwards. That
+    /// race is the visible bug - the correct row appears for a frame and is then replaced by the top
+    /// of the list. Writing the same answer into both means it no longer matters which one lands
+    /// last.
+    /// </para>
+    /// </summary>
+    private static void SyncButtonListSelection(MenuScreen ms, MenuSelectable selectable)
+    {
+        if (ms == null || selectable == null)
+            return;
+
+        try
+        {
+            var mbl = ms.GetComponent<MenuButtonList>();
+            if (mbl == null)
+                return;
+
+            var field = typeof(MenuButtonList).GetField("lastSelected", BindingFlags.NonPublic | BindingFlags.Instance);
+            field?.SetValue(mbl, selectable);
+        }
+        catch (Exception ex)
+        {
+            LogMenuDebug($"Could not sync MenuButtonList selection: {ex.Message}");
+        }
     }
 
     private static MenuSelectable CreateMenuButton(Transform parent, MenuButton template, string label, System.Action onSubmit, CancelTarget cancelTarget)
@@ -1441,8 +1566,19 @@ public static partial class ShadeSettingsMenu
         if (target == null)
             return;
         EnsureBaseMenusHidden();
+
+        // Capture where the player was on the outgoing screen before anything is deactivated - once
+        // the screen is off, the EventSystem's selection is gone and there is nothing left to read.
+        RememberSelection(activeScreen);
+
         target.transform.SetAsLastSibling();
         var previous = activeScreen;
+
+        // Decide the highlight and hand it to the screen's MenuButtonList *before* activating it, so
+        // the DoSelect its OnEnable kicks off already agrees with what this method is about to set.
+        var highlight = GetRestoreHighlight(target);
+        SyncButtonListSelection(target, highlight);
+
         foreach (var ms in allScreens)
         {
             if (ms == null)
@@ -1470,7 +1606,14 @@ public static partial class ShadeSettingsMenu
         {
             consumeNextToggle = false;
         }
-        var highlight = GetPreferredHighlight(target);
+        // The controllers above (charms/skins) can rebuild their rows on show, which can retire the
+        // selectable chosen before activation; re-resolve rather than highlighting a dead row.
+        if (highlight == null || !highlight.gameObject.activeInHierarchy)
+        {
+            highlight = GetRestoreHighlight(target);
+            SyncButtonListSelection(target, highlight);
+        }
+
         if (highlight != null)
         {
             if (EventSystem.current != null)

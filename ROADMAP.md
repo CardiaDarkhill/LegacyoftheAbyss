@@ -7,82 +7,81 @@ and `REFACTOR_NOTES.md` are the record of what was done and when.
 ## Status as of this writing
 
 Refactor/split, skin selector, save-data relocation, the Key1-5 keybind fix, the updraft/aggro
-region-exclusion fix, the SlideSurface crash fix, the sprite-texture leak fix, and the test-suite
-cleanup (93 passing, 0 failing) are all shipped and confirmed. See git log for details on any of
-these if needed.
+region-exclusion fix, the SlideSurface crash fix, the sprite-texture leak fix, the Shade-device
+menu/pause input fixes, the sub-menu highlight fix, the Shade charm-tab fixes, and the test-suite
+cleanup are all shipped and confirmed. See git log for details on any of these if needed. The suite
+currently sits at 125 passing, 0 failing.
 
 ## Known bugs — feasibility notes
 
-**1. Shade-owned device needs a control preset re-applied every session before it can open menus or
-pause.** Confirmed still broken after the most recent fix attempt. What's been ruled out: the
-bindings themselves. `HornetInput.EnsureShadeInventoryBindings` now runs automatically from
-`MenuInputBridge.EnsureBindings` (fires at `InputHandler.OnAwake` and on every
-`OnUpdateHeroActions`), not only from a preset-button click, and logging confirmed the Shade's
-`OpenInventory` binding (Key1 on keyboard, or Back/Select on controller, depending on which device is
-free) is genuinely present immediately after boot. The bindings existing isn't enough - something
-else, downstream of "does a binding exist," is what actually starts working only after a preset is
-re-applied that session. `InputDeviceBlocker.ShouldBlockShadeDeviceInput`/`IsRestrictedDevice`/
-`RefreshShadeDevices` are the next things to instrument - logging their return values from the very
-first frame after boot, before any preset click, compared to their values right after one, should
-show what's actually different. Note this also affects Pause specifically, which has nothing to do
-with the Shade's `OpenInventory` binding at all (it's a native, always-present binding) - so whatever
-this is, it's likely something shared and lower-level than the inventory-open path, not specific to
-either.
+**1. Bench behavior cluster — built, needs a live pass and probably some tuning.** Implemented as the
+single flag the entry called for: `ShadeController.HornetControlsLocked()` (bench via
+`PlayerData.atBench`, scripted control loss via `HeroController.controlReqlinquished` /
+`!acceptingInput`, excluding pause and inventory). Three consumers read it — `HandleDockedMovement`
+parks the Shade behind Hornet and matches her facing outside hit-stun, the combat gate in `Update`
+stops focus/fire/nail/spells, and `SimpleHUD.UpdatePauseFade` hides the Shade HUD. HUD hiding is done
+and confirmed. Still wanted: sit at a bench and check where the Shade actually parks —
+`dockOffsetX`/`dockOffsetY`/`dockApproachSpeed` on `ShadeController` are the knobs.
 
-**2. Bench behavior cluster** (Moderate, one connected fix). Three symptoms, one missing piece: there
-is currently no "Hornet's controls are locked" hook that the Shade's movement state machine listens
-to - a grep of `LegacyHelper.ShadeController.Movement.cs` turns up no bench, sitting, or cutscene
-handling at all, confirming this was never built rather than regressed. Needs: (a) detect the same
-state the game uses for "Hornet is sitting at a bench" / "Hornet is in a cutscene" (`RestBenchHelper` /
-`HeroController`'s input-locked state in the decompiled reference are the likely hooks), (b) drive the
-Shade into a "dock at Hornet's side, face her direction, stop accepting movement input" state whenever
-that's true (outside hit-stun), and (c) route the Shade's HUD visibility and its ability to open
-charms/map/etc off the same flag - hide HUD when Hornet's menu is open, keep menu-open input alive
-regardless of which device (Hornet's or Shade's) is bound to it. Worth building as one flag and wiring
-three consumers to it rather than three separate patches.
+**2. Enemies don't redirect their attention to the Shade — targeting built, alerting is the next
+gap.** The old note said this meant rewriting target resolution in each of the 184 files referencing
+`HeroController.instance`. That was the wrong read: almost none of those are enemies locating the
+player, they are things done *to* the hero (damage, cState, invulnerability, input blocking), and not
+one of the 53 PlayMaker actions among them is a "find the hero" action.
 
-**3. Janky sub-menu back-out highlight.** Symptom is a one-frame flash of the correct selection before
-it jumps to the top item - classic "selection gets reset on pane rebuild, then restored one frame
-late" ordering bug. Likely a case of the pane-open code selecting a default item before the
-"return to here" selection is applied, or an `OnEnable`/`Start` ordering issue. Worth checking whether
-it's related to entry 5 below (the Shade-tab capture/restore mechanism) before assuming it's isolated.
+Enemy AI is PlayMaker-driven, and the actions that move an enemy toward something are one tagged set:
+`ActionCategory("Enemy AI")`, 63 types, of which 36 name their target in a public `FsmGameObject`
+field alongside an `FsmOwnerDefault` for the enemy itself — `ChaseObject*`, `FaceObject*`,
+`DistanceFly*`, `FireAtTarget`, `GetAngleToTarget2D`. `LegacyHelper.EnemyAiRetargeting` borrows that
+field for the duration of each call when the target is Hornet and `ShadeAggroTargeting` says the Shade
+is the better target (per-enemy latched decisions, re-examined every 0.75s, 20% hysteresis, 30-unit
+cap). `ModConfig.shadeEnemyTargetingEnabled` turns it off. Tests: `ShadeAggroTargetingTests` for the
+comparison, `EnemyAiActionSelectionTests` reflecting over the real game assembly so a game update that
+renames the category or changes the field type fails loudly instead of silently patching nothing.
 
-**4. `SlideSurface.UpdateFacing` NullReferenceException in Mount Fae — fix shipped, never confirmed
-live.** The mechanism was diagnosed from decompiled source rather than a real repro (see git log for
-the full trace), and the fix has had no contradicting reports since, but nobody has actually stood in
-Mount Fae with the fixed build watching for the crash. Worth a five-minute confirmation pass next time
-someone's in that area, then this entry can go.
+**The remaining gap is alerting, not targeting, and it is the more important half.** Live evidence: an
+enemy whose ranges the Shade demonstrably enters and exits (`Shade aggro proxy entered alert range
+'Far Range' (Enemy States)`) still walks past it in a passive state, and no retargeting ever fires —
+because the enemy never reaches a state that chases anything.
 
-**5. Shade charm-tab access has two related, deferred bugs sharing one root cause.** (a) Jumping to
-the Shade tab specifically *from Inv* (not from Tools/Quests/Journal/Map, whether via the Key 6
-shortcut or by cycling with LB/RB) makes the Shade pane vanish again after about a second - log
-evidence shows the Shade pane's GameObject going through an extra, unprompted `OnEnable`→`PaneStart`→
-`OnDisable`→`PaneEnd` cycle that doesn't happen from other source panes. (b) Once the Shade tab has
-been reached at all in a session - by any path - every one of the 6 inventory shortcuts closes the
-whole inventory instead of switching panes, for the rest of that session, regardless of which tab is
-open or which key is pressed. Mechanism for (b): reaching the Shade tab makes
-`ShadeInventoryPaneIntegration.BindInput` set every *other* real pane's own `InventoryPaneInput.
-paneControl` to `None` too (needed so the Shade can intercept Submit/Direction while its tab is
-showing), and that's supposed to be restored via `RestoreInputBindings` when the Shade tab is left;
-`paneControl == None` is exactly what makes the native `InventoryPaneInput.Update()` switch treat
-*every* shortcut as "this pane's own key was pressed" and unconditionally cancel. (a) is the leading
-suspect for why the restore in (b) sometimes doesn't complete cleanly, since it's an unexpected extra
-enable/disable cycle exactly where the capture/restore bookkeeping lives - but this isn't confirmed,
-and needs logging inside `RestoreInputBindings`/`RestoreSingleInput` specifically (what `paneControl`
-each snapshot captured, whether `OriginalInputBindings` still holds an entry for each input by the
-time restore runs) rather than another guess. Fix (a) first and retest (b) before assuming they need
-separate work.
+The cause is one layer below `AlertRange`. `TrackTriggerObjects` only admits an object into
+`insideGameObjects` if it passes the range's `ignoreLayers` / `tagIncludeList` / `tagExcludeList`, and
+the Shade's aggro proxy does not, so `InsideCount` is 0, `IsInside` is false, and
+`GetClosestInside` / `GetClosestInsideLineOfSight` return nothing. `AlertRange_FixedUpdate_Patch`
+already works around this for `AlertRange.IsHeroInRange()` specifically, by forcing `isHeroInRange` and
+`haveLineOfSight` — but an FSM that instead asks "how many things are in this range" or "what is the
+closest thing in this range" sees an empty range and stays unalerted.
 
-**6. Enemies don't redirect their attention to the Shade - architectural, needs a scoping decision.**
-Aggro *registration* works correctly (confirmed via live log: `Shade aggro proxy entered/exited alert
-range` fires as expected) - the gap is in *target selection* once alerted. Checked how common this is
-across the decompiled base game: the generic "find nearest object in range" API
-(`TrackTriggerObjects.GetClosestInside`) has exactly one reference in the entire codebase - its own
-declaring file - versus 184 files that reference `HeroController.instance` directly. So this isn't a
-quick fix or a regression from anything in this project; it's how the base game's enemy AI is built.
-Making enemies actually attack the Shade (not just notice it) means rewriting target resolution in
-each individual enemy script that hardcodes the hero reference - a large, standalone project, not a
-bug fix. Needs a decision on whether to pursue it at all before any code gets written.
+Next step, and it mirrors the `AlertRange` patch that already works: patch `TrackTriggerObjects`'s
+`InsideCount` / `IsInside` / `GetClosestInside` / `GetClosestInsideLineOfSight` to account for a
+registered Shade proxy. That is one class, and `ShadeAggroTracker` already knows which proxies are
+inside which ranges. Worth doing on its own and verifying before anything else is stacked on top.
+
+Also not attempted: enemies whose AI is hand-written C# rather than FSM-driven (`Walker`, `Chaser` and
+similar); attacks that resolve `HeroController.instance` at the moment of firing; and any aggro
+stickiness beyond distance, so an enemy will not stay on the Shade because the Shade hit it.
+
+**3. Controller menu/pause input — regression under investigation.** Reported after the enemy-AI work
+landed: the Xbox pad's Menu button stopped pausing entirely, and Hornet-on-controller could no longer
+open the inventory with View. Both are allow-listed hero actions, both broke together, and both are
+native behaviours the mod should be leaving alone.
+
+Ruled out by inspection: the extra controls added to `OpenInventory` in
+`HornetInput.ShadeInventoryControls`. An XInput pad exposes only `View` and `Menu` (see
+`InControl.XInputDevice`) — `Back`, `Select`, `Start`, `Options`, `TouchPadButton` and `Minus` are not
+mapped on it at all, so binding them is inert.
+
+The leading suspect is `PatchAll()` aborting. It is all-or-nothing: one patch class that throws while
+being applied takes down every class it had not reached yet, silently, presenting as unrelated
+features breaking at once. `EnemyAiRetargeting` resolves ~100 methods by reflection and was by far the
+likeliest to throw, so it no longer carries `[HarmonyPatch]` and is applied by
+`EnemyAiRetargeting.Apply` *after* `PatchAll`, one method at a time, each in its own try/catch. Its
+startup line reports how many were patched and how many failed.
+
+`HornetInput.LogDeviceSnapshotOnce` now dumps, once at Info, which menu controls each attached pad
+actually exposes and what `Pause` and `OpenInventory` are bound to — the two facts every round of this
+has turned on. If the regression survives, that snapshot plus the retargeting count line should
+identify it without another round of guessing.
 
 ## Planned features — feasibility notes
 
@@ -96,16 +95,12 @@ representative scenes' sorting layer setup and Hornet's own renderer relative to
 effects, then give the Shade its own explicit sorting layer instead of "Hornet's layer + 1",
 and add whatever `Light2D`-compatible material Hornet's renderer uses.
 
-**2. Skin selector** — **done.** See "Skin system" above. (The audit called for here came back
-clean: `LegacyHelper.ShadeController.Core.cs::LoadShadeSprites` was already the only place
-Shade sheets were loaded, so centralizing was a one-function change. Note the sprites load
-there, not in `HUD.Assets.cs` as this entry originally guessed — that file handles HUD art.)
-
-**3. Optional gravity** (Easy). The Shade's `Rigidbody2D` already runs with `gravityScale = 0f`
+**3. Optional gravity** (Easy-Medium). The Shade's `Rigidbody2D` already runs with `gravityScale = 0f`
 and fully custom float/knockback code (now in `LegacyHelper.ShadeController.Movement.cs`).
 Making gravity optional is close to flipping `gravityScale` based on a config bool and adding
 a grounded/fall state to the existing movement state machine — not building physics from
-scratch. Budget as quick-and-dirty per the original ask.
+scratch. We will need to update the Shades movement logic here to match with the Knight's 
+movement mechanics from the first Hollow Knight game.
 
 **4. Additional shades (up to 3)** — see item 10, "Multiplayer (up to three Shades)", below;
 kept as its own numbered entry there since it's the biggest single feature on this list.
@@ -140,7 +135,7 @@ the in-game Shade sprites so it doesn't look inconsistent next to Hornet's highe
 Worth a quick visual A/B before committing to the global change, since some players may prefer
 the crisp pixel look.
 
-**9. Dynamic camera option** (Moderate–hard). Depends on how item 3 in "Known bugs" (Shade
+**9. Dynamic camera option** (Moderate–hard). Depends on how item 1 in "Known bugs" (Shade
 docking at Hornet's side during locked-control states) lands, since that's the same
 Shade-follows-Hornet binding this option would need to loosen outside boss fights/gauntlets.
 Implementation is a config-gated camera-target blend (midpoint of Hornet and Shade positions)

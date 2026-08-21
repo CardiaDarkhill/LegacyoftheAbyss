@@ -244,7 +244,14 @@ public partial class SimpleHUD : MonoBehaviour
             return;
 
         bool menuActive = ShouldTreatAsMenu();
-        float target = menuActive ? 0.35f : 1f;
+
+        // Fully hidden, not dimmed, whenever any menu surface is up (inventory, crests, charms, map,
+        // pause) - the earlier dim-to-0.35 left the masks and soul orb sitting over the top of the
+        // pane art. Same treatment while Hornet's controls are locked, which is the third consumer of
+        // that flag alongside the Shade's movement state machine and its combat gate: at a bench or
+        // in a cutscene the game takes its own HUD away and the Shade's has no business staying up.
+        bool controlsLocked = ShouldHideForLockedControls();
+        float target = (menuActive || controlsLocked) ? 0f : 1f;
         float current = canvasGroup.alpha;
         if (!Mathf.Approximately(current, target))
         {
@@ -260,6 +267,18 @@ public partial class SimpleHUD : MonoBehaviour
         try
         {
             return MenuStateUtility.IsMenuActive();
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private bool ShouldHideForLockedControls()
+    {
+        try
+        {
+            return LegacyHelper.ShadeController.HornetControlsLocked();
         }
         catch
         {

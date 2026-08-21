@@ -18,6 +18,7 @@ public partial class LegacyHelper
 
         private void Start()
         {
+            ActiveInstance = this;
             SetupPhysics();
             if (hornetTransform == null)
             {
@@ -121,6 +122,11 @@ public partial class LegacyHelper
 
         private void OnDestroy()
         {
+            if (ReferenceEquals(ActiveInstance, this))
+            {
+                ActiveInstance = null;
+            }
+
             try
             {
                 try { aggroProxyTracker?.ForceExitTrackedRemaskers(); } catch { }

@@ -223,9 +223,29 @@ public partial class LegacyHelper
             CheckSprintUnlock();
             AdjustLeashForCamera();
 
+            // Recomputed once a frame and read by FixedUpdate, the combat gate below, and SimpleHUD.
+            bool wasControlsLocked = hornetControlsLocked;
+            hornetControlsLocked = HornetControlsLocked();
+            if (hornetControlsLocked && !wasControlsLocked)
+            {
+                // Entering the locked state mid-action: drop whatever the Shade was doing rather than
+                // leaving a focus or a channel running through a cutscene.
+                CancelFocus();
+                isCastingSpell = false;
+                isChannelingTeleport = false;
+                teleportChannelTimer = 0f;
+            }
+
             CaptureMovementInput();
+            if (hornetControlsLocked)
+            {
+                capturedMoveInput = Vector2.zero;
+                capturedHorizontalInput = 0f;
+                capturedSprintHeld = false;
+            }
+
             // Allow starting focus even when not casting other spells; focusing itself sets isCastingSpell
-            if (!inHardLeash && !isChannelingTeleport && !isInactive && damageStaggerTimer <= 0f)
+            if (!hornetControlsLocked && !inHardLeash && !isChannelingTeleport && !isInactive && damageStaggerTimer <= 0f)
             {
                 HandleFocus();
                 if (!isCastingSpell)
@@ -332,6 +352,113 @@ public partial class LegacyHelper
             {
                 return false;
             }
+        }
+
+        /// <summary>
+        /// True while Hornet's own controls are taken away from the player by the game - sitting at a
+        /// bench, or any scripted sequence that relinquishes control (cutscenes, transitions, wake-up
+        /// animations).
+        /// <para>
+        /// Deliberately excludes the pause menu and the inventory: <c>acceptingInput</c> is false for
+        /// those too (<c>HeroController.PauseInput</c>), but they are not the state this is for - the
+        /// Shade stays under player control while a menu is open, which is how its own charm tab is
+        /// reachable at all. <c>HeroController.IsPaused()</c> is exactly "paused or inventory open",
+        /// so subtracting it leaves the scripted-control cases.
+        /// </para>
+        /// <para>
+        /// Exposed statically for <c>SimpleHUD</c>, which hides the Shade's HUD off the same flag
+        /// rather than deciding "is this a cutscene?" for itself.
+        /// </para>
+        /// </summary>
+        internal static bool HornetControlsLocked()
+        {
+            try
+            {
+                // Both accessors are the "give me whatever is already there" variants on purpose.
+                // GameManager.instance logs an error and HeroController.instance runs a scene scan
+                // when nothing is registered - neither is wanted from a per-frame check, and both are
+                // extern calls that make this untestable outside a Unity player loop.
+                var gm = MenuStateUtility.TryGetGameManager();
+                var pd = !ReferenceEquals(gm, null) ? gm.playerData : null;
+                if (!ReferenceEquals(pd, null) && pd.atBench)
+                {
+                    return true;
+                }
+
+                var hc = HeroController.UnsafeInstance;
+                if (ReferenceEquals(hc, null))
+                {
+                    return false;
+                }
+
+                if (hc.controlReqlinquished)
+                {
+                    return true;
+                }
+
+                return !hc.acceptingInput && !hc.IsPaused();
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Which way Hornet is facing, in the Shade's own facing convention (1 = right).
+        /// </summary>
+        private static int GetHornetFacing(int fallback)
+        {
+            try
+            {
+                var hc = HeroController.UnsafeInstance;
+                if (hc != null)
+                {
+                    return hc.cState.facingRight ? 1 : -1;
+                }
+            }
+            catch
+            {
+            }
+
+            return fallback;
+        }
+
+        /// <summary>
+        /// Parks the Shade beside Hornet and matches her facing, ignoring movement input entirely.
+        /// Used while <see cref="HornetControlsLocked"/> is true so the Shade doesn't drift around
+        /// mid-cutscene or wander off while Hornet is sat on a bench.
+        /// </summary>
+        private void HandleDockedMovement(float deltaTime)
+        {
+            isSprinting = false;
+            sprintDashTimer = 0f;
+            inHardLeash = false;
+            hardLeashTimer = 0f;
+
+            int hornetFacing = GetHornetFacing(facing);
+            Vector3 hornetWorld = hornetTransform.position;
+
+            // Dock behind Hornet rather than in front of her, so the Shade never covers whatever the
+            // cutscene or bench interaction is actually showing.
+            Vector2 target = new Vector2(hornetWorld.x - hornetFacing * dockOffsetX, hornetWorld.y + dockOffsetY);
+            Vector2 current = rb ? rb.position : (Vector2)transform.position;
+            Vector2 next = Vector2.MoveTowards(current, target, dockApproachSpeed * deltaTime);
+
+            if (rb)
+            {
+                rb.linearVelocity = Vector2.zero;
+                rb.MovePosition(next);
+            }
+            else
+            {
+                transform.position = next;
+            }
+
+            lastMoveDelta = next - current;
+
+            facing = hornetFacing;
+            if (sr != null) sr.flipX = (facing == 1);
         }
 
         private static bool HornetIsDowned()
@@ -505,6 +632,14 @@ public partial class LegacyHelper
 
         private void HandleMovementAndFacing(float deltaTime)
         {
+            // Hit-stun and knockback still win, so a hit landed just as a cutscene starts still reads
+            // as a hit rather than the Shade sliding calmly into place.
+            if (hornetControlsLocked && damageStaggerTimer <= 0f && knockbackTimer <= 0f)
+            {
+                HandleDockedMovement(deltaTime);
+                return;
+            }
+
             bool blockForFocus = isFocusing && !allowFocusMovement;
             bool blockForOtherSpells = isCastingSpell && !isFocusing;
             if (blockForFocus || blockForOtherSpells)

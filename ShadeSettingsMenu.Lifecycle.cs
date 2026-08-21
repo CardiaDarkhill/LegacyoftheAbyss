@@ -40,6 +40,7 @@ public static partial class ShadeSettingsMenu
         builtFor = ui;
         lastBuiltDebugKeysEnabled = debugKeysEnabled;
         screenFirstSelectables.Clear();
+        screenLastSelectables.Clear();
         allScreens.Clear();
         activeScreen = null;
 

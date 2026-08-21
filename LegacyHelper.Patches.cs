@@ -642,6 +642,66 @@ public partial class LegacyHelper
     [HarmonyPatch(typeof(InventoryPaneInput), "Update")]
     private class InventoryPaneInput_Update_ShadeTabShortcut
     {
+        /// <summary>
+        /// Handles the two ways an <c>InventoryPaneInput</c> routed to the Shade pane misbehaves.
+        /// <para>
+        /// If the Shade tab is <i>not</i> currently showing, the input is stale and is made inert.
+        /// The Shade's own input component carries <c>paneControl = None</c> (it has no
+        /// <c>PaneTypes</c> value of its own), and <c>None</c> is the case
+        /// <c>InventoryPaneInput.Update</c> reads as "the player pressed this pane's own shortcut" -
+        /// answered with <c>PressCancel()</c>. So for as long as that component keeps running after
+        /// its tab has been left, every one of the inventory shortcuts closes the whole inventory,
+        /// on every tab, for the rest of the session. That is bug 4b, and it needs the component to
+        /// still be updating - which means its GameObject was left active. Rather than depend on
+        /// working out why, refuse to process input for a pane that is not on screen: an input that
+        /// belongs to a hidden pane has nothing legitimate to do either way.
+        /// </para>
+        /// <para>
+        /// If the Shade tab <i>is</i> showing, keys 1-5 switch tabs instead of closing the inventory -
+        /// see <see cref="ShadeInventoryPaneIntegration.TryHandleShadeTabPaneShortcut"/>.
+        /// </para>
+        /// </summary>
+        private static bool Prefix(InventoryPaneInput __instance)
+        {
+            try
+            {
+                if (__instance == null)
+                {
+                    return true;
+                }
+
+                var shadePane = ShadeInventoryPaneIntegration.TryGetShadePane(__instance);
+                if (shadePane == null)
+                {
+                    return true;
+                }
+
+                if (!shadePane.IsPaneActive || !ReferenceEquals(ShadeInventoryPane.ActivePane, shadePane))
+                {
+                    if (ModConfig.Instance.logMenu)
+                    {
+                        try
+                        {
+                            LegacyHelper.LogInfo(FormattableString.Invariant(
+                                $"Ignoring input on '{__instance.gameObject?.name}': routed to the Shade pane but its tab is not showing"));
+                        }
+                        catch
+                        {
+                        }
+                    }
+
+                    return false;
+                }
+
+                return !ShadeInventoryPaneIntegration.TryHandleShadeTabPaneShortcut(__instance);
+            }
+            catch
+            {
+            }
+
+            return true;
+        }
+
         private static void Postfix(InventoryPaneInput __instance)
         {
             try
@@ -652,6 +712,41 @@ public partial class LegacyHelper
                 }
 
                 ShadeInventoryPaneIntegration.TryJumpToShadeTab(__instance);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    /// <summary>
+    /// Names whatever closes the inventory. <c>PressCancel</c> is the single path by which an
+    /// inventory shortcut ends up closing the whole inventory instead of switching tabs (bug 4b), and
+    /// the component it fires on is the only thing that identifies the culprit - the resulting
+    /// "UI CANCEL" event is anonymous by the time anything else sees it.
+    /// </summary>
+    [HarmonyPatch(typeof(InventoryPaneInput), "PressCancel")]
+    private class InventoryPaneInput_PressCancel_Trace
+    {
+        private static readonly AccessTools.FieldRef<InventoryPaneInput, InventoryPaneList.PaneTypes> PaneControlField =
+            AccessTools.FieldRefAccess<InventoryPaneInput, InventoryPaneList.PaneTypes>("paneControl");
+
+        private static void Prefix(InventoryPaneInput __instance)
+        {
+            try
+            {
+                if (__instance == null || !ModConfig.Instance.logMenu)
+                {
+                    return;
+                }
+
+                InventoryPaneList.PaneTypes paneControl = InventoryPaneList.PaneTypes.None;
+                try { paneControl = PaneControlField(__instance); }
+                catch { }
+
+                bool boundToShade = ShadeInventoryPaneIntegration.TryGetShadePane(__instance) != null;
+                LegacyHelper.LogInfo(FormattableString.Invariant(
+                    $"PressCancel from '{__instance.gameObject?.name}' (paneControl={paneControl}, boundToShade={boundToShade}, shadeTabShowing={ShadeInventoryPane.ActivePane != null})"));
             }
             catch
             {
@@ -1064,6 +1159,33 @@ public partial class LegacyHelper
         /// pad any gameplay control: <c>PlayerAction_Update_BlockShadeGameplay</c> still nulls the
         /// device for every action outside the allow-list.
         /// </para>
+        /// <para>
+        /// Reads <c>UnfilteredBindings</c>, never <c>Bindings</c>. <c>PlayerAction.Bindings</c> is
+        /// InControl's <i>visible</i> binding list: a binding only lands there if its <c>IsValid</c>
+        /// was true at the moment it was added, and the list is only recomputed when the action's
+        /// <c>Device</c> changes. For a <c>DeviceBindingSource</c>, <c>IsValid</c> is
+        /// <c>BoundTo.Device.HasControl(control) || Utility.TargetIsStandard(control)</c> - and
+        /// <c>TargetIsStandard</c> only covers the stick/dpad/Action1-12 range, so every control this
+        /// allow-list actually cares about (Back=100, Select=102, Options=104, Menu=106, i.e. the
+        /// pause and inventory-open buttons) fails it. On a fresh boot <c>InputManager.ActiveDevice</c>
+        /// is <c>InputDevice.Null</c>, so <c>HeroActions.Device</c> is null, so those bindings are
+        /// invisible in <c>Bindings</c>.
+        /// </para>
+        /// <para>
+        /// That produced a hard deadlock, and it is the whole of the "needs a preset re-applied every
+        /// session" bug: the shade's pad is only allowed to become the active device while it is
+        /// driving an allowed action, but the check for that could not see the allowed action's
+        /// binding until the pad had already been the active device once. Re-applying a preset broke
+        /// the cycle only incidentally - it happens from an open menu, where blocking is off, so the
+        /// pad becomes <c>ActiveDevice</c>, which refreshes the visible list, and the revert in
+        /// <c>InputManager_UpdateActiveDevice_BlockShadeDevices</c> can then never un-stick it
+        /// (its <c>previousActiveDevice</c> is by then the pad itself). Nothing about the preset's
+        /// bindings mattered, which is why re-adding bindings never fixed it.
+        /// </para>
+        /// <para>
+        /// <c>GetState(device)</c> resolves against the device passed in, not against
+        /// <c>BoundTo.Device</c>, so evaluating the unfiltered list is correct as well as sufficient.
+        /// </para>
         /// </summary>
         internal static bool IsDrivingAllowedHeroAction(InputDevice device)
         {
@@ -1081,7 +1203,7 @@ public partial class LegacyHelper
                     if (action == null || !AllowedHeroActions.Contains(action.Name))
                         continue;
 
-                    var bindings = action.Bindings;
+                    var bindings = action.UnfilteredBindings;
                     if (bindings == null)
                         continue;
 
@@ -1101,6 +1223,90 @@ public partial class LegacyHelper
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// True when <paramref name="device"/> is holding down one of <paramref name="action"/>'s own
+        /// device bindings right now.
+        /// <para>
+        /// Reads <c>UnfilteredBindings</c> for the reason spelled out on
+        /// <see cref="IsDrivingAllowedHeroAction"/>: the menu/pause controls are all outside
+        /// InControl's "standard" range, so they are absent from the visible <c>Bindings</c> list
+        /// whenever the action's current device does not physically have them - which includes every
+        /// frame before any device has become active at all.
+        /// </para>
+        /// <para>
+        /// Only real <see cref="DeviceBindingSource"/>s count. The mod's own
+        /// <c>ShadeMenuBindingSourceBase</c> bindings report a device binding source type but ignore
+        /// the device they are handed entirely, so treating one as evidence that <i>this</i> device
+        /// is pressed would be wrong.
+        /// </para>
+        /// </summary>
+        internal static bool IsDeviceDrivingAction(PlayerAction action, InputDevice device)
+        {
+            if (action == null || device == null || device == InputDevice.Null)
+                return false;
+
+            try
+            {
+                var bindings = action.UnfilteredBindings;
+                if (bindings == null)
+                    return false;
+
+                for (int i = 0; i < bindings.Count; i++)
+                {
+                    if (bindings[i] is DeviceBindingSource deviceBinding && deviceBinding.GetState(device))
+                        return true;
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Any attached device currently pressing one of <paramref name="action"/>'s own buttons, or
+        /// null. Only ever called for <see cref="AllowedHeroActions"/>.
+        /// <para>
+        /// Deliberately does not ask which entity owns the device. That is the point of the
+        /// allow-list: pause, the inventory-open binds and quick-map belong to the player, not to
+        /// whichever entity a pad happens to be assigned to, so "some pad is pressing the pause
+        /// button" is all this needs to know. Filtering by the shade's configured controller index
+        /// first (which this used to do) added two assumptions that were not worth carrying - that
+        /// <c>shadeInput.controllerDeviceIndex</c> lines up with the device's position in
+        /// <c>InputManager.Devices</c>, and that the shade is configured for a controller at all -
+        /// and either being wrong silently produced exactly the reported symptom of the pad not being
+        /// able to open anything.
+        /// </para>
+        /// </summary>
+        internal static InputDevice FindDeviceDrivingAllowedAction(PlayerAction action)
+        {
+            if (action == null)
+                return null;
+
+            try
+            {
+                var devices = InputManager.Devices;
+                if (devices == null || devices.Count == 0)
+                    return null;
+
+                for (int i = 0; i < devices.Count; i++)
+                {
+                    var device = devices[i];
+                    if (device == null || device == InputDevice.Null || device.IsUnknown)
+                        continue;
+
+                    if (IsDeviceDrivingAction(action, device))
+                        return device;
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
         }
 
         private static bool ShadeUsesAllControllers(ShadeInputConfig config, int targetIndex, int deviceCount)
@@ -1396,6 +1602,7 @@ public partial class LegacyHelper
             // both at InputHandler.OnAwake and on every OnUpdateHeroActions event after, which is what
             // makes it actually automatic.
             HornetInput.EnsureShadeInventoryBindings(actions);
+            HornetInput.LogDeviceSnapshotOnce(actions);
         }
 
         private static void AddBinding(PlayerAction action, ShadeMenuBindingSourceBase binding)
@@ -1502,6 +1709,26 @@ public partial class LegacyHelper
             try
             {
                 return MenuStateUtility.IsMenuActive();
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// True while the inventory surfaces (inventory, tools, quests, journal, map, and the Shade's
+        /// charm tab) are up, as distinct from the pause/options menus that
+        /// <see cref="IsMenuActive"/> also covers. The number keys mean "switch tab" there and
+        /// nothing anywhere else, which is the distinction <see cref="ShadeKeyboardBackBinding"/>
+        /// needs.
+        /// </summary>
+        private static bool IsInventoryOpen()
+        {
+            try
+            {
+                var playerData = MenuStateUtility.TryGetPlayerData();
+                return !ReferenceEquals(playerData, null) && playerData.isInventoryOpen;
             }
             catch
             {
@@ -2006,6 +2233,27 @@ public partial class LegacyHelper
             protected override string SourceDeviceName => "Shade Controller";
         }
 
+        /// <summary>
+        /// Lets the Shade's keyboard back out of menus, by making its inventory keys drive
+        /// <c>MenuCancel</c>. The Shade's player has no other cancel key of their own.
+        /// <para>
+        /// Explicitly inert while the inventory itself is open, and that exclusion is the whole of
+        /// bug 4b. <c>ComputeValue</c> fires on <i>any</i> of the five inventory keys, and
+        /// <c>InventoryPaneInput.Update</c> tests <c>MenuActions.Cancel</c> in its very first switch -
+        /// before it ever reaches the shortcut handling - so with this binding live every number key
+        /// closed the whole inventory instead of switching tabs, on every tab. It looked like it was
+        /// caused by having visited the Shade tab, and it looked like it was about <c>paneControl</c>;
+        /// it was neither. It tracked <c>hornetControllerEnabled</c>, which is what
+        /// <see cref="HornetControllerBindingsEnabled"/> below reads: true exactly when the Shade owns
+        /// the keyboard, which is the configuration the bug showed up in.
+        /// </para>
+        /// <para>
+        /// Inside the inventory the number keys already have a job - native pane switching, and
+        /// closing when you press the current pane's own key - and the Shade holds real bindings on
+        /// all five of them, so nothing is lost by standing down here. Every other menu surface
+        /// (pause, options) leaves those keys unused, so cancel remains the right meaning there.
+        /// </para>
+        /// </summary>
         private sealed class ShadeKeyboardBackBinding : ShadeMenuBindingSourceBase
         {
             public ShadeKeyboardBackBinding(int id) : base(id)
@@ -2019,7 +2267,7 @@ public partial class LegacyHelper
 
             protected override bool ShouldActivate()
             {
-                return IsMenuActive() && HornetControllerBindingsEnabled();
+                return IsMenuActive() && HornetControllerBindingsEnabled() && !IsInventoryOpen();
             }
 
             protected override BindingSourceType SourceType => BindingSourceType.DeviceBindingSource;
@@ -2215,16 +2463,55 @@ public partial class LegacyHelper
         {
             try
             {
-                if (device == null || device == InputDevice.Null)
-                    return;
                 if (__instance == null)
                     return;
-                if (__instance.Owner is HeroActions && InputDeviceBlocker.IsRestrictedDevice(device) && InputDeviceBlocker.ShouldBlockShadeDeviceInput())
+                if (!(__instance.Owner is HeroActions))
+                    return;
+
+                if (InputDeviceBlocker.AllowsHeroAction(__instance))
                 {
-                    if (!InputDeviceBlocker.AllowsHeroAction(__instance))
+                    // Pause, the inventory-open binds and quick-map belong to the player, not to
+                    // whichever entity owns the pad. InControl hands a PlayerActionSet exactly one
+                    // device - InputManager.ActiveDevice - and this mod deliberately keeps a
+                    // shade-owned pad out of that slot during gameplay, so those actions never saw
+                    // the pad at all. Rather than fighting over the active-device slot (which
+                    // reliably breaks input for whoever else is on a controller), hand the pad
+                    // straight to this one action, on the frames it is actually pressing one of that
+                    // action's own buttons.
+                    bool incumbentIsPressing = device != null
+                        && device != InputDevice.Null
+                        && InputDeviceBlocker.IsDeviceDrivingAction(__instance, device);
+
+                    if (!incumbentIsPressing)
                     {
-                        device = InputDevice.Null;
+                        var pressingDevice = InputDeviceBlocker.FindDeviceDrivingAllowedAction(__instance);
+                        if (pressingDevice != null)
+                        {
+                            device = pressingDevice;
+
+                            if (ModConfig.Instance.logMenu)
+                            {
+                                try
+                                {
+                                    LegacyHelper.LogInfo(FormattableString.Invariant(
+                                        $"Handed '{pressingDevice.Name}' to hero action '{__instance.Name}' (it was pressing one of that action's buttons)"));
+                                }
+                                catch
+                                {
+                                }
+                            }
+                        }
                     }
+
+                    return;
+                }
+
+                if (device == null || device == InputDevice.Null)
+                    return;
+
+                if (InputDeviceBlocker.IsRestrictedDevice(device) && InputDeviceBlocker.ShouldBlockShadeDeviceInput())
+                {
+                    device = InputDevice.Null;
                 }
             }
             catch
@@ -2237,6 +2524,22 @@ public partial class LegacyHelper
     private class InputManager_UpdateActiveDevice_BlockShadeDevices
     {
         private static readonly MethodInfo ActiveDeviceSetter = AccessTools.PropertySetter(typeof(InputManager), nameof(InputManager.ActiveDevice));
+
+        /// <summary>
+        /// Where the postfix puts <c>InputManager.ActiveDevice</c> back to when a shade-owned pad
+        /// grabs it during gameplay: simply whatever it was a frame ago.
+        /// <para>
+        /// An attempt to make this "the last device that was not shade-owned" instead - so the pad
+        /// could not stay pinned as the active device once it had been active for two frames running
+        /// - has been tried and reverted. It reduces to forcing <c>ActiveDevice</c> to
+        /// <c>InputDevice.Null</c> on every gameplay frame whenever the only pad present is
+        /// shade-owned, and since InControl feeds a <c>PlayerActionSet</c> exactly one device, that
+        /// kills controller input for Hornet as well. Whatever replaces the stickiness has to leave
+        /// <c>ActiveDevice</c> alone; see the device substitution in
+        /// <see cref="PlayerAction_Update_BlockShadeGameplay"/>, which is how the shade's pad reaches
+        /// the menu actions without this having to hand it the active-device slot at all.
+        /// </para>
+        /// </summary>
         private static InputDevice previousActiveDevice = InputDevice.Null;
 
         private static void Prefix()

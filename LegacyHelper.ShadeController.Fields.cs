@@ -32,6 +32,17 @@ public partial class LegacyHelper
         public float hardLeashTimeout = 2.5f;
         private bool inHardLeash;
         private float hardLeashTimer;
+
+        // Bench / cutscene docking. One flag, three consumers - the movement state machine below,
+        // the Shade HUD (SimpleHUD reads ShadeController.HornetControlsLocked), and the combat gate
+        // in Update. See HornetControlsLocked for what actually sets it.
+        private bool hornetControlsLocked;
+        /// <summary>How far to Hornet's side the Shade docks while her controls are locked.</summary>
+        public float dockOffsetX = 1.6f;
+        /// <summary>Vertical offset of the docked position, so the Shade floats rather than stands.</summary>
+        public float dockOffsetY = 0.9f;
+        /// <summary>Approach speed toward the docked position, in units/second.</summary>
+        public float dockApproachSpeed = 12f;
         private Rigidbody2D rb;
         private Collider2D bodyCol;
         private AggroProxyTracker aggroProxyTracker;
@@ -195,6 +206,13 @@ public partial class LegacyHelper
         // Inactive state (at 0 HP)
         private bool isInactive;
         internal bool IsAggroEligible => !isInactive && isActiveAndEnabled && !assistModeEnabled;
+
+        /// <summary>
+        /// The Shade currently in the scene, or null. Maintained by <c>Start</c>/<c>OnDestroy</c> so
+        /// per-frame callers (notably <see cref="ShadeAggroTargeting"/>, which runs off enemy AI
+        /// actions) don't have to scan the scene to find it.
+        /// </summary>
+        internal static ShadeController ActiveInstance { get; private set; }
         private bool isDying;
         private Coroutine deathRoutine;
 

@@ -229,6 +229,9 @@ public class ModConfig
     public float shadeUnlockPopupDelaySeconds = 0.75f;
     public float shadeUnlockPopupDurationSeconds = 3.5f;
     public bool shadeEnabled = true;
+    // Lets alerted enemies chase/face/shoot the Shade instead of Hornet when it is the nearer
+    // target. See LegacyHelper.EnemyAiRetargeting for how, and ShadeAggroTargeting for when.
+    public bool shadeEnemyTargetingEnabled = true;
     public string shadeSkin = "Default";
     public bool hornetKeyboardEnabled = false;
     public bool hornetControllerEnabled = true;
