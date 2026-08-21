@@ -74,6 +74,40 @@ worth a quick check against
 <https://thunderstore.io/c/hollow-knight-silksong/p/silksong_modding/BepInExPack_Silksong/>
 next time you notice the dependency failing to resolve for someone.
 
+`thunderstore.toml`, once generated locally via `tcli init`, still had several of tcli's
+default placeholder values unedited — easy to miss, since `tcli init` doesn't warn you which
+fields need changing. Fixed:
+
+- `[[build.copy]] source` literally said `LegacyoftheAbyss-<version>/` — that was my shorthand
+  in this doc for "insert the real version," not something tcli understands, and it would never
+  have matched a real folder. Replaced with a `__VERSION_PLACEHOLDER__` token that
+  `publish.yml`'s new "Inject version into thunderstore.toml" step substitutes with the real
+  version at build time (I couldn't confirm from tcli's docs whether `[[build.copy]]` supports
+  templating a version in directly, so this sidesteps that uncertainty rather than guessing).
+- `[package.dependencies]` had tcli's example `AuthorName-PackageName = "0.0.1"` — replaced
+  with the real BepInEx dependency, matching `manifest.template.json`.
+- `[publish.categories]` had `riskofrain2 = [...]` (a different game's example, not this one) —
+  changed the key to `hollow-knight-silksong`. Left the category list itself empty since I
+  couldn't verify Silksong's exact valid category slugs from here — check the sidebar filters
+  on <https://thunderstore.io/c/hollow-knight-silksong/> for real slugs if you want to add any;
+  an empty list is valid (uncategorized).
+- `description`, `websiteUrl`, `versionNumber` — were still tcli's generic placeholders;
+  set to match the real description/repo URL, and `versionNumber` gets overwritten by the
+  same injection step above at build time.
+- `[build] icon`/`readme` pointed at placeholder `./icon.png` / `./README.md` files that
+  `tcli init` generated at the repo root (a generic default icon, and literally
+  "# AuthorName-PackageName / Example mod description"). Repointed both at the real files in
+  `BuildTemplates/Thunderstore/` instead. I also couldn't verify whether `[[build.copy]]` runs
+  before or after `[build]` icon/readme are placed, so pointing directly at the real assets
+  sidesteps that ordering question rather than relying on the copy step to overwrite the
+  placeholders (or not).
+
+**Before your first real publish:** run `tcli build` locally (not `tcli publish` — build only,
+no upload) after substituting a real version number for `__VERSION_PLACEHOLDER__` by hand, then
+open the resulting zip in `./build/` and check `manifest.json`, `README.md`, and `icon.png`
+inside are the real ones, not placeholders. That's the one thing I couldn't verify from outside
+an actual tcli run, and it's cheap to check before trusting the automated pipeline.
+
 ## Manual fallback
 
 Everything above is optional convenience — the manual path from before still works exactly
