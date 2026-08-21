@@ -1,207 +1,88 @@
 # Roadmap — Legacy of the Abyss
 
-Treat this as a living document — update it as work gets done or priorities change.
+Treat this as a living document — update it as work gets done or priorities change. This is a to-do
+list, not a changelog: finished work is removed rather than kept as a checked-off entry. Git history
+and `REFACTOR_NOTES.md` are the record of what was done and when.
 
 ## Status as of this writing
 
-**Done:**
-- Codebase read-through and feasibility assessment for a refactor + performance pass plus
-  six planned features (see "Planned features" below).
-- File-splitting refactor, first pass: `ShadeInventoryPane.cs` (was 8,407 lines),
-  `ShadeSettingsMenu.cs` (was 3,552 lines), and `LegacyHelper.ShadeController.Core.cs`
-  (was 4,234 lines) split into 17 files total along thematic seams, each a `partial` slice
-  of the original class. No logic changes — pure code movement, verified by exact line
-  coverage and brace-balance checks before commit, then confirmed with a real
-  `dotnet build -c Release`. See `REFACTOR_NOTES.md` in the repo root for exactly what moved
-  where. Along the way, discovered `ShadeInventoryPane.cs` was hiding two extra top-level
-  types (`SimpleCanvasNestedFadeGroup`, `ShadeInventoryPaneIntegration`) that got pulled out
-  into their own file.
-- **Skin selector (feature 2 below).** Shipped with 7 alternate skins plus a refreshed
-  default set. See "Skin system" below for the on-disk convention.
-
-**Test suite — green as of this pass.** 93 passing, 0 failing (was 15 failing of 46). What the
-cleanup turned up, in order of discovery:
-- `dotnet test` did not even build: leftover in-tree `bin/`/`obj/` folders from before the output
-  redirection were no longer covered by MSBuild's derived default excludes, so their stale generated
-  `AssemblyInfo.cs` compiled a second time (`CS0579 Duplicate ...Attribute`). `Directory.Build.props`
-  now excludes `bin/**;obj/**` explicitly.
-- The `FileNotFoundException` cluster was the missing `<UnityRuntimeLib>` entries as diagnosed;
-  `Unity.ResourceManager`, `Unity.Addressables`, `TeamCherry.SharedUtils`, `TeamCherry.Localization`,
-  `TeamCherry.NestedFadeGroup` and two UnityEngine modules are now copied beside the test binaries.
-- `CaptureClampsValues` was a **real** bug: `Capture` synced `BaseMaxHP` to `MaxHP` *before* the
-  floor that bumps a zeroed-out `MaxHP` to 1, so a fully-zeroed capture persisted
-  `MaxHP == 1 / BaseMaxHP == 0`. Reordered.
-- `ShadeCharmPlacementDatabaseTests` were stale, not broken — pinned to counts and coordinates from
-  an older `charm_placements.json`. Rewritten to assert the matching *rules* (exact scene names,
-  `sceneContainsAll` tokens, unscoped shop/boss-drop entries offered to every scene) instead of data
-  that legitimately churns.
-- `TryEquipRequiresOvercharmAttemptsBeforeExceedingCapacity` asserted copy that was deliberately
-  changed in `53fae78` ("Shade resists overcharming..." → "Not enough notches available."). Test updated.
-- Once the DLLs were present, two further **real** bugs surfaced underneath.
-  `HandleCharmInventoryChanged` called `EnsureActiveSlot()`, which re-entrantly synced the inventory
-  *from* the slot and so discarded the very mutation that raised the notification — then persisted
-  the stale value back to disk. Split into a write-path slot claim plus a re-entrancy guard. Test
-  isolation was also missing: `ShadeRuntime` is a process-wide singleton and the classes touching it
-  ran in parallel, so results depended on ordering. Added a non-parallel `ShadeRuntimeCollection` and
-  explicit `SaveSlots.ResetAll()` where tests need a clean slot.
-- `InputDeviceBlockerTests` could never have passed outside Unity: `Time.timeScale`,
-  `new GameObject(...)` and `UIManager`'s static initializer (`Animator.StringToHash`) are all extern
-  engine calls. The blocker's decision is now split into an uncached
-  `EvaluateShouldBlockShadeDeviceInput()` that the tests drive directly, with the ui/menu-state
-  classification covered through `MenuStateUtility.IsMenuStateName`.
+Refactor/split, skin selector, save-data relocation, the Key1-5 keybind fix, the updraft/aggro
+region-exclusion fix, the SlideSurface crash fix, the sprite-texture leak fix, and the test-suite
+cleanup (93 passing, 0 failing) are all shipped and confirmed. See git log for details on any of
+these if needed.
 
 ## Known bugs — feasibility notes
 
-**1. Save-data persistence across Thunderstore updates** — **fixed.** `ModPaths.UserData` now
-resolves to `BepInEx/config/LegacyoftheAbyss/` (via `BepInEx.Paths.ConfigPath`, falling back to
-walking up for a `BepInEx` folder, then to the old `Assets` location as a last resort), and both
-`ModPaths.Config` and `ShadeSaveSlotRepository`'s default storage root point at it. A one-time
-migration copies any `config.json` / `shade_slot_*.json` left in the old `Assets/` folder on first
-run, never overwriting an existing destination file and never deleting the originals. The folder is
-flat and copyable, per the bonus ask; `LEGACYOFTHEABYSS_DATA` overrides the location if set.
-Original diagnosis, for reference: every save artifact was written under `ModPaths.Assets`, i.e.
-inside `BepInEx/plugins/LegacyoftheAbyss/`, because `ModPaths.Root` is the plugin DLL's own folder.
-Thunderstore-style mod managers (r2modman, the Thunderstore App) install updates by deleting and
-replacing the whole package folder, which took the save data with it; a manual Nexus install
-typically only overwrites the files the new zip contains, so extras survived by accident.
+**1. Shade-owned device needs a control preset re-applied every session before it can open menus or
+pause.** Confirmed still broken after the most recent fix attempt. What's been ruled out: the
+bindings themselves. `HornetInput.EnsureShadeInventoryBindings` now runs automatically from
+`MenuInputBridge.EnsureBindings` (fires at `InputHandler.OnAwake` and on every
+`OnUpdateHeroActions`), not only from a preset-button click, and logging confirmed the Shade's
+`OpenInventory` binding (Key1 on keyboard, or Back/Select on controller, depending on which device is
+free) is genuinely present immediately after boot. The bindings existing isn't enough - something
+else, downstream of "does a binding exist," is what actually starts working only after a preset is
+re-applied that session. `InputDeviceBlocker.ShouldBlockShadeDeviceInput`/`IsRestrictedDevice`/
+`RefreshShadeDevices` are the next things to instrument - logging their return values from the very
+first frame after boot, before any preset click, compared to their values right after one, should
+show what's actually different. Note this also affects Pause specifically, which has nothing to do
+with the Shade's `OpenInventory` binding at all (it's a native, always-present binding) - so whatever
+this is, it's likely something shared and lower-level than the inventory-open path, not specific to
+either.
 
-**2. Inventory-pane tab-index mismatch** — **fixed, root cause was not what it looked like.**
-Appending the Shade pane (rather than inserting mid-list) was correct and necessary work — confirmed
-in-game via the pane-layout dump (`[0]Inv [1]Tools [2]Quests [3]Journal [4]Map [5]ShadeInventoryPane`)
-and a full trace of every `SetCurrentPane(requested=N) -> [N] name` call, which resolved correctly on
-every single press. That ruled out the array and the native pane-switch code entirely, meaning the
-actual bug had to be upstream of `SetCurrentPane` — in which `PaneTypes` value a keypress produces in
-the first place, not in how that value gets resolved.
+**2. Bench behavior cluster** (Moderate, one connected fix). Three symptoms, one missing piece: there
+is currently no "Hornet's controls are locked" hook that the Shade's movement state machine listens
+to - a grep of `LegacyHelper.ShadeController.Movement.cs` turns up no bench, sitting, or cutscene
+handling at all, confirming this was never built rather than regressed. Needs: (a) detect the same
+state the game uses for "Hornet is sitting at a bench" / "Hornet is in a cutscene" (`RestBenchHelper` /
+`HeroController`'s input-locked state in the decompiled reference are the likely hooks), (b) drive the
+Shade into a "dock at Hornet's side, face her direction, stop accepting movement input" state whenever
+that's true (outside hit-stun), and (c) route the Shade's HUD visibility and its ability to open
+charms/map/etc off the same flag - hide HUD when Hornet's menu is open, keep menu-open input alive
+regardless of which device (Hornet's or Shade's) is bound to it. Worth building as one flag and wiring
+three consumers to it rather than three separate patches.
 
-It was `HornetInput.cs`, this mod's own "left-side keyboard layout" default preset, applied when a
-player picks a keyboard binding preset in the settings menu. Its number-key table was
-`Key1->Inv, Key2->Map, Key3->Journal, Key4->Tools, Key5->Quests`, which does not match
-`InventoryPaneList.PaneTypes` order (`Inv, Tools, Quests, Journal, Map`) — i.e. does not match the
-left-to-right order the tabs actually appear in. A player pressing "2" expecting the 2nd visible tab
-(Tools) got Map instead. The traced request sequence from the first five presses of a test session —
-`0, 4, 3, 1, 2` — is an exact, unmistakable match for that binding table in order, about as close to
-a smoking gun as this kind of bug gets. Reordered to
-`Key1->Inv, Key2->Tools, Key3->Quests, Key4->Journal, Key5->Map`, matching the tab order exactly.
+**3. Janky sub-menu back-out highlight.** Symptom is a one-frame flash of the correct selection before
+it jumps to the top item - classic "selection gets reset on pane rebuild, then restored one frame
+late" ordering bug. Likely a case of the pane-open code selecting a default item before the
+"return to here" selection is applied, or an `OnEnable`/`Start` ordering issue. Worth checking whether
+it's related to entry 5 below (the Shade-tab capture/restore mechanism) before assuming it's isolated.
 
-Two things worth flagging: this bug is **entirely unrelated** to the pane-array append fix above —
-it would have reproduced with zero Shade pane and zero changes to `ShadeInventoryPaneIntegration.cs`,
-since it lives purely in which `HeroActions` field gets bound to which key. And **the fix requires the
-player to re-pick a keyboard preset from the mod's settings menu** after updating — the previous
-(wrong) key assignments are already written into the game's own `gameSettings` and InControl bindings
-and persist across launches; redeploying the DLL alone does not retroactively fix bindings already
-saved to disk.
+**4. `SlideSurface.UpdateFacing` NullReferenceException in Mount Fae — fix shipped, never confirmed
+live.** The mechanism was diagnosed from decompiled source rather than a real repro (see git log for
+the full trace), and the fix has had no contradicting reports since, but nobody has actually stood in
+Mount Fae with the fixed build watching for the crash. Worth a five-minute confirmation pass next time
+someone's in that area, then this entry can go.
 
-Separately, "the 1 key always opens the tab you were previously looking at" is not a bug: pressing the
-generic "open inventory" key while the inventory is closed reopens whichever pane was last viewed,
-matching how the base game's own inventory-open button has always worked (comparable to Hollow
-Knight 1's Tab key). Key 1 was never part of the scrambled mapping either way.
+**5. Shade charm-tab access has two related, deferred bugs sharing one root cause.** (a) Jumping to
+the Shade tab specifically *from Inv* (not from Tools/Quests/Journal/Map, whether via the Key 6
+shortcut or by cycling with LB/RB) makes the Shade pane vanish again after about a second - log
+evidence shows the Shade pane's GameObject going through an extra, unprompted `OnEnable`→`PaneStart`→
+`OnDisable`→`PaneEnd` cycle that doesn't happen from other source panes. (b) Once the Shade tab has
+been reached at all in a session - by any path - every one of the 6 inventory shortcuts closes the
+whole inventory instead of switching panes, for the rest of that session, regardless of which tab is
+open or which key is pressed. Mechanism for (b): reaching the Shade tab makes
+`ShadeInventoryPaneIntegration.BindInput` set every *other* real pane's own `InventoryPaneInput.
+paneControl` to `None` too (needed so the Shade can intercept Submit/Direction while its tab is
+showing), and that's supposed to be restored via `RestoreInputBindings` when the Shade tab is left;
+`paneControl == None` is exactly what makes the native `InventoryPaneInput.Update()` switch treat
+*every* shortcut as "this pane's own key was pressed" and unconditionally cancel. (a) is the leading
+suspect for why the restore in (b) sometimes doesn't complete cleanly, since it's an unexpected extra
+enable/disable cycle exactly where the capture/restore bookkeeping lives - but this isn't confirmed,
+and needs logging inside `RestoreInputBindings`/`RestoreSingleInput` specifically (what `paneControl`
+each snapshot captured, whether `OriginalInputBindings` still holds an entry for each input by the
+time restore runs) rather than another guess. Fix (a) first and retest (b) before assuming they need
+separate work.
 
-**3. Bench behavior cluster** (Moderate, one connected fix). Three symptoms, one missing piece:
-there is currently no "Hornet's controls are locked" hook that the Shade's movement state
-machine listens to — a grep of `LegacyHelper.ShadeController.Movement.cs` turns up no bench,
-sitting, or cutscene handling at all, confirming this was never built rather than regressed.
-Needs: (a) detect the same state the game uses for "Hornet is sitting at a bench" /
-"Hornet is in a cutscene" (`RestBenchHelper` / `HeroController`'s input-locked state in the
-decompiled reference are the likely hooks), (b) drive the Shade into a "dock at Hornet's
-side, face her direction, stop accepting movement input" state whenever that's true (outside
-hit-stun), and (c) route the Shade's HUD visibility and its ability to open charms/map/etc
-off the same flag — hide HUD when Hornet's menu is open, keep menu-open input alive
-regardless of which device (Hornet's or Shade's) is bound to it. Worth building as one flag
-and wiring three consumers to it rather than three separate patches.
-
-**4. Shade can't pause the game** — **fixed.** Traced as suggested, and it was not the allow-list
-check itself. InControl only ever polls `InputManager.ActiveDevice` for a `PlayerActionSet`
-(`PlayerActionSet.Update` → `FindActiveDevice`), and
-`InputManager_UpdateActiveDevice_BlockShadeDevices` deliberately reverts the active device whenever a
-Shade-owned pad tries to claim it during gameplay — so `HeroActions.Pause` never saw that pad at all,
-and the `AllowedHeroActions` whitelist was dead code in practice. The postfix now leaves the pad
-active for any frame in which it is actually driving one of the allowed actions
-(`InputDeviceBlocker.IsDrivingAllowedHeroAction`, evaluated against the real `PlayerAction.Bindings`),
-while `PlayerAction_Update_BlockShadeGameplay` keeps nulling the device for everything else. Also
-fixed a plain typo in that whitelist: the quick-map action is named `"Quick Map"` in `HeroActions`,
-not `"QuickMap"`, so the ordinal lookup had silently been matching nothing and blocking quick-map
-along with the gameplay actions. Keyboard was never affected — `KeyBindingSource.GetState` ignores
-the active device, so Escape always worked.
-
-**5. Janky sub-menu back-out highlight** (Easy once 2 and 4 are done). Symptom is a
-one-frame flash of the correct selection before it jumps to the top item — classic "selection
-gets reset on pane rebuild, then restored one frame late" ordering bug. Likely a case of the
-pane-open code selecting a default item before the "return to here" selection is applied, or
-an `OnEnable`/`Start` ordering issue in whatever handles the Shade-pane back-out path added
-alongside bug 2. Cheap to fix once the surrounding input-routing code is already open for 2/4.
-
-**6. `SlideSurface.UpdateFacing` NullReferenceException in Mount Fae** — **fix shipped, not yet
-confirmed** (no crash observed in testing, but the original crash was never reproduced either, so
-absence of the crash proves little). `SlideSurface.OnTriggerEnter2D` flips `isHeroInside` and bumps
-the static `_heroInsideCount` *before* it checks who entered, then does
-`this.hc = collision.GetComponent<HeroController>()` and bails when that comes back null — so a
-non-Hornet entrant overwrites the cached hero reference with null while leaving the surface's
-"hero is here" bookkeeping switched on. The next follow tick calls `UpdateFacing()`, which
-dereferences `this.hc.cState`, and the frame dies. `OnTriggerExit2D` has the mirror problem: it calls
-`HeroNotInside()` unconditionally, so the Shade leaving clears the flag while Hornet is still on the
-slide. All three trigger callbacks now drop Shade-owned colliders before they touch any state.
-
-**7. Updraft affects Hornet based on the Shade's position** — **re-fixed after a wrong first
-attempt.** The shared-flag diagnosis in the original entry was right; the component named in it was
-not, and neither was the first fix.
-
-Mechanism, confirmed from the FSM dump rather than guessed: updraft lift is not `EnemyUpdraftRegion`
-(that bails immediately on anything without a `PlayMakerFSM`, so the Shade never reaches it) and it is
-not `WindRegion` either (that only sets `cState.inWindRegion`, which drives lean animation). It is a
-PlayMaker FSM on the updraft object that polls `CheckTrackTriggerCount` →
-`TrackTriggerObjects.InsideCount` every fixed update and calls `HeroController.EnterUpdraft` /
-`ExitUpdraft`. `TrackTriggerObjects` filters entrants purely on layer and tag, and the Shade's
-`ShadeAggroProxy` child deliberately copies Hornet's layer *and* tag so enemies notice it — so the
-Shade counts as an occupant, the count never reaches zero while it is inside, and EXIT never fires
-however far away Hornet walks.
-
-The fix hooks `TrackTriggerObjects.IsCounted` (and the `TrackTriggerObjectsLineOfSight` override),
-which is the only filter `InsideCount` applies. Shade-owned objects stop being counted, so the FSM
-fires EXIT the moment Hornet leaves. The same getter backs `IsInside`, which the rest of the game uses
-for bench work ranges, breakable ranges, pickup triggers, camera shake, music, frost and driftfly
-dispersal — all "is Hornet here?" questions the Shade should not answer.
-
-**`AlertRange` is explicitly exempt**, because some enemy FSMs read their alert range through the same
-`CheckTrackTriggerCount` action. `Tests/ShadeRegionExclusionTests.cs` pins that exemption.
-
-**What the first attempt got wrong, and why it matters:** it prefixed
-`TrackTriggerObjects.OnTriggerEnter2D` to drop Shade colliders outright, filtered by a list of named
-Hornet-state region types (`WindRegion`, `FrostRegion`, `CameraLockArea`, ...). That list was derived
-from reading the region classes rather than from tracing the actual symptom, and it did not contain
-the plain `TrackTriggerObjects` the updraft uses — so the updraft was never fixed. It also stopped
-enemies noticing the Shade, which the type list should have prevented and did not. Hooking `IsCounted`
-instead leaves `insideGameObjects` and the `OnTrackTriggerEntered` callback completely untouched, so
-aggro registration cannot be affected by construction rather than by a filter that has to be correct.
-
-**8. Fix existing test failures + generate more tests** — **first half done**; see the test-suite
-entry under "Status as of this writing" for the full breakdown. Suite is green at 91 passing. New
-coverage added alongside the fixes: pause/menu routing (`InputDeviceBlockerTests`, including a guard
-that the allow-list action names match `HeroActions` exactly — that is what caught the `"QuickMap"`
-typo) and region exclusion (`ShadeRegionExclusionTests`).
-
-**Still outstanding:** coverage for the bench-lock work (bug 3), which is not built yet. Note the
-hard ceiling this suite runs into — anything reaching a Unity extern (`Time.*`, `new GameObject`,
-`UIManager`'s static initializer) throws `SecurityException: ECall methods must be packaged into a
-system module` in a plain test host, so testable logic has to be split out of the Unity-facing code
-deliberately, as `EvaluateShouldBlockShadeDeviceInput` and `IsHeroStateRegionType` now are.
-
-**9. Sprite-texture leak on destroy** — **first fix was insufficient; revised.** The first attempt
-called `Object.Destroy(tex, RetiredSkinTextureLifetime)` from `ShadeController.OnDestroy`. Memory kept
-climbing, and the likely reason is lifetime: Unity's delayed-destroy queue is torn down with the
-scene, so a Shade destroyed *as part of a scene unload* had its pending texture destroys dropped —
-and since the Shade is respawned on every scene change, that is the common path, not the rare one.
-The same applies to `ReloadSkinSprites`, which started its release coroutine on the Shade itself.
-
-Both paths now hand the work to `LegacyHelper.RetireShadeSpriteAssets`, which runs on the BepInEx
-plugin behaviour and therefore survives scene loads. Three other things changed while it was open:
-the `Sprite` objects cut from each sheet are now destroyed too (roughly seventy per Shade, and each
-holds a reference to its source texture); sheets are loaded with `markNonReadable: true`, which drops
-the CPU-side copy Unity otherwise keeps for the texture's whole lifetime and roughly halves resident
-sheet memory; and the release logs a texture/sprite count behind `logShade`, so it is possible to tell
-"the release never ran" from "the release ran and memory still climbs".
-
-If it still climbs with that log firing, the leak is not the sheets and the next step is a profiler
-capture rather than more guessing.
+**6. Enemies don't redirect their attention to the Shade - architectural, needs a scoping decision.**
+Aggro *registration* works correctly (confirmed via live log: `Shade aggro proxy entered/exited alert
+range` fires as expected) - the gap is in *target selection* once alerted. Checked how common this is
+across the decompiled base game: the generic "find nearest object in range" API
+(`TrackTriggerObjects.GetClosestInside`) has exactly one reference in the entire codebase - its own
+declaring file - versus 184 files that reference `HeroController.instance` directly. So this isn't a
+quick fix or a regression from anything in this project; it's how the base game's enemy AI is built.
+Making enemies actually attack the Shade (not just notice it) means rewriting target resolution in
+each individual enemy script that hardcodes the hero reference - a large, standalone project, not a
+bug fix. Needs a decision on whether to pursue it at all before any code gets written.
 
 ## Planned features — feasibility notes
 

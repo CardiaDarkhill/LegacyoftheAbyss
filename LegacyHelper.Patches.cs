@@ -1385,6 +1385,17 @@ public partial class LegacyHelper
             AddBinding(actions.MenuCancel, new ShadeKeyboardBackBinding(KeyboardCancelBindingId));
             AddBinding(actions.OpenInventory, new ShadeControllerInventoryBinding(ControllerInventoryBindingId));
             AddBinding(actions.MenuSubmit, new ShadeKeyboardConfirmBinding(KeyboardConfirmBindingId));
+
+            // Belongs here, not only in HornetInput.ApplyKeyboardDefaults/ApplyControllerDefaults:
+            // those two only ever run when a player explicitly clicks a preset button in the mod's
+            // settings menu, never automatically. A fresh game launch loads Hornet's own bindings
+            // (keyboard vs controller) correctly from persisted settings without either of those
+            // methods ever running - but the *Shade's* extra binding on the inventory-open actions
+            // lived only inside them, so on a fresh boot the Shade's device had no way to open the
+            // inventory at all until the player re-clicked a preset this session. EnsureBindings runs
+            // both at InputHandler.OnAwake and on every OnUpdateHeroActions event after, which is what
+            // makes it actually automatic.
+            HornetInput.EnsureShadeInventoryBindings(actions);
         }
 
         private static void AddBinding(PlayerAction action, ShadeMenuBindingSourceBase binding)
@@ -2254,7 +2265,26 @@ public partial class LegacyHelper
 
                 // Pause / open-inventory / quick-map are never assignable away from the player, so
                 // leave the shade's pad active for the frame it is pressing one of them.
-                if (InputDeviceBlocker.IsDrivingAllowedHeroAction(activeDevice))
+                bool allowed = InputDeviceBlocker.IsDrivingAllowedHeroAction(activeDevice);
+
+                // Diagnostic: only log the *allowed* case. A restricted (shade-owned) device becomes
+                // InputManager.ActiveDevice - and this postfix runs - on every frame the player is
+                // driving the Shade with that device at all (e.g. normal stick movement), so logging
+                // every occurrence floods the console with routine, uninteresting "allowed=False"
+                // lines. What actually answers "can the shade's device open the inventory" is whether
+                // this ever flips to true while Select/Back is being pressed.
+                if (allowed && ModConfig.Instance.logMenu)
+                {
+                    try
+                    {
+                        LegacyHelper.LogInfo("[InputDeviceBlocker] Restricted device allowed through this frame (driving an allowed hero action).");
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                if (allowed)
                     return;
 
                 if (ActiveDeviceSetter == null)

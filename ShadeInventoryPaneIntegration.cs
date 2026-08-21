@@ -1268,28 +1268,37 @@ internal static class ShadeInventoryPaneIntegration
 
     /// <summary>
     /// Jumps straight from whichever real pane <paramref name="sourceInput"/> belongs to over to the
-    /// appended Shade tab, using the exact same <see cref="InventoryPaneList.SetCurrentPane"/> call
-    /// the base game's own shortcut keys use - so the transition sound, tween and pane-list highlight
-    /// all behave identically to a native shortcut press.
+    /// appended Shade tab.
     /// <para>
-    /// Deliberately restricted to switching *while the inventory is already open*: the Shade has no
-    /// named <c>PaneTypes</c> value of its own, and the closed-state shortcut listener
-    /// (<c>ListenForInventoryShortcut</c>) throws <c>ArgumentOutOfRangeException</c> for any
-    /// <c>PaneTypes</c> value it doesn't recognize - injecting a synthetic one to open-from-closed
-    /// would risk hard-crashing that FSM. Restricting to the already-open case sidesteps that action
-    /// entirely and only touches <see cref="InventoryPaneList.SetCurrentPane"/>, which is exercised
-    /// (and logged) by every other shortcut already.
+    /// Two earlier versions of this got the mechanism wrong. The first called
+    /// <see cref="InventoryPaneList.SetCurrentPane"/> directly - correct for swapping *content*, but
+    /// it bypasses the "Inventory Control" PlayMaker FSM's own idea of the current pane entirely.
+    /// That FSM tracks three variables ("Current Pane", "Current Pane Num", "Prev Pane"), which
+    /// <c>SetNextInventoryPane</c> (driving LB/RB pane cycling) reads directly - a bare
+    /// <c>SetCurrentPane</c> call leaves them stale, so the next LB/RB press cycled from wherever the
+    /// player was *before* jumping to the Shade tab, not from the Shade tab itself.
     /// </para>
     /// <para>
-    /// <c>SetCurrentPane</c> alone is not the whole picture, though - it's only what the *content*
-    /// swap runs through. The "Inventory Control" PlayMaker FSM tracks its own idea of the current
-    /// pane in three variables ("Current Pane", "Current Pane Num", "Prev Pane"), and every native
-    /// shortcut goes through <c>SetCurrentInventoryPane</c>, which keeps those in sync as a side
-    /// effect. A bare <c>SetCurrentPane</c> call leaves them pointing at whatever was open before -
-    /// invisible until the player next presses LB/RB, which read "Current Pane" via
-    /// <c>SetNextInventoryPane</c> and start cycling from the stale pane instead of the Shade tab.
-    /// This replicates <c>SetCurrentInventoryPane</c>'s own variable bookkeeping so LB/RB (and
-    /// anything else keyed off those FSM variables) stay in sync with what's actually on screen.
+    /// The second version fixed that by hand-syncing those three variables to match
+    /// <c>SetCurrentInventoryPane</c>'s own bookkeeping - which fixed LB/RB, but the pane the player
+    /// left never actually disappeared, superimposed under the Shade pane's content on every tab, not
+    /// just Map. The reason: <c>SetCurrentPane</c>'s C# body only handles the *content* swap
+    /// (<c>PaneEnd()</c> / <c>PaneStart()</c>). The actual show/hide of the outgoing pane's own
+    /// GameObject runs through a *separate* FSM sequence ("Fade Panes"), which only runs when the FSM
+    /// is actually driven into it - which calling <c>SetCurrentPane</c> straight from C# never does,
+    /// no matter how faithfully the tracking variables are kept in sync afterward.
+    /// </para>
+    /// <para>
+    /// This version doesn't touch <c>SetCurrentPane</c> at all. It replicates exactly what
+    /// <see cref="InventoryPaneInput.Update"/>'s own open-state shortcut handling does for every real
+    /// shortcut (2-5) once the inventory is already open: set the FSM's "Target Pane Index" int
+    /// variable and send it the "MOVE PANE TO" event, letting the FSM drive its own full sequence
+    /// (content swap, tracking variables, *and* the Fade Panes visual teardown) exactly as a native
+    /// shortcut press would. "Target Pane Index" is a plain int - unlike the closed-state
+    /// <c>ListenForInventoryShortcut</c> action (which switches on a named <c>PaneTypes</c> enum and
+    /// throws for anything it doesn't recognize, which is why this still only works once the
+    /// inventory is already open), nothing here needs the Shade to have a named <c>PaneTypes</c>
+    /// value of its own.
     /// </para>
     /// </summary>
     internal static bool TryJumpToShadeTab(InventoryPaneInput sourceInput)
@@ -1353,6 +1362,9 @@ internal static class ShadeInventoryPaneIntegration
             return false;
         }
 
+        // Sanity check only - the FSM path below doesn't need currentPane itself, but bailing out
+        // when we're already showing the Shade tab (or can't resolve the current pane at all) avoids
+        // sending a no-op "MOVE PANE TO" and its transition sound for nothing.
         InventoryPane? currentPane;
         try
         {
@@ -1368,44 +1380,31 @@ internal static class ShadeInventoryPaneIntegration
             return false;
         }
 
+        int shadeIndex = paneList.GetPaneIndex(shadePane);
+
         if (ModConfig.Instance.logMenu)
         {
             try
             {
                 LegacyHelper.LogInfo(FormattableString.Invariant(
-                    $"TryJumpToShadeTab: source={sourceInput.gameObject?.name} paneControl={paneControl} currentPane={currentPane.gameObject?.name}"));
+                    $"TryJumpToShadeTab: source={sourceInput.gameObject?.name} paneControl={paneControl} currentPane={currentPane.gameObject?.name} shadeIndex={shadeIndex}"));
             }
             catch
             {
             }
         }
 
-        var fsm = PlayMakerFSM.FindFsmOnGameObject(paneList.gameObject, "Inventory Control");
-        var currentPaneVar = fsm?.FsmVariables.FindFsmGameObject("Current Pane");
-        var currentPaneNumVar = fsm?.FsmVariables.FindFsmInt("Current Pane Num");
-        var prevPaneVar = fsm?.FsmVariables.FindFsmGameObject("Prev Pane");
-
         try
         {
-            var previousGameObject = currentPaneVar?.Value;
-            if (prevPaneVar != null)
+            var fsm = PlayMakerFSM.FindFsmOnGameObject(paneList.gameObject, "Inventory Control");
+            var targetPaneIndexVar = fsm?.FsmVariables.FindFsmInt("Target Pane Index");
+            if (fsm == null || targetPaneIndexVar == null)
             {
-                prevPaneVar.Value = previousGameObject;
+                return false;
             }
 
-            int shadeIndex = paneList.GetPaneIndex(shadePane);
-            paneList.SetCurrentPane(shadeIndex, currentPane);
-
-            if (currentPaneVar != null)
-            {
-                currentPaneVar.Value = shadePane.gameObject;
-            }
-
-            if (currentPaneNumVar != null)
-            {
-                currentPaneNumVar.Value = shadeIndex;
-            }
-
+            targetPaneIndexVar.Value = shadeIndex;
+            fsm.SendEvent("MOVE PANE TO");
             return true;
         }
         catch

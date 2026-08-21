@@ -9,6 +9,17 @@ public static class HornetInput
     /// report that the Shade-side inventory-open bindings this file adds went missing again after
     /// re-applying a preset from the settings menu; the mechanism for that was never confirmed, so
     /// this replaces guessing with a direct dump of what's actually bound after each preset call.
+    /// <para>
+    /// Deliberately reads <see cref="PlayerAction.UnfilteredBindings"/>, not the public
+    /// <c>Bindings</c> property. <c>Bindings</c> only surfaces bindings whose <c>IsValid</c> came
+    /// back true *at the moment they were added* - for a <see cref="DeviceBindingSource"/> that means
+    /// <c>action.Device.HasControl(...)</c>, checked against whatever device happened to be the
+    /// action's current one right then, which need not be the controller the binding is actually
+    /// meant for. A binding that fails that check is still added to the list
+    /// <c>PlayerAction.UpdateBindings</c> actually evaluates every frame - it just never shows up in
+    /// <c>Bindings</c>. The first version of this diagnostic used <c>Bindings</c> and could easily
+    /// have reported "not there" for a binding that was working fine all along.
+    /// </para>
     /// </summary>
     private static void LogBindings(string label, PlayerAction action)
     {
@@ -20,7 +31,7 @@ public static class HornetInput
         try
         {
             var parts = new System.Collections.Generic.List<string>();
-            foreach (var binding in action.Bindings)
+            foreach (var binding in action.UnfilteredBindings)
             {
                 if (binding == null)
                 {
@@ -122,13 +133,15 @@ public static class HornetInput
 
         try
         {
-            // Hornet is moving to the controller, which frees the keyboard for the Shade -- but
-            // ResetDefaultControllerButtonBindings() below only rebuilds the *controller* side of
-            // the 5 inventory-open actions explicitly; their keyboard side is restored from
-            // whatever gm.gameSettings currently holds (InputHandler.MapKeyboardLayoutFromGameSettings,
-            // called internally). Writing our Key1-5 order into those settings first is what makes
-            // the Shade's keyboard shortcuts survive the switch, without touching the controller
-            // binding that same call is about to add for Hornet.
+            handler.ResetDefaultControllerButtonBindings();
+
+            // Best-effort only, for whatever UI reads these labels directly (e.g. a native rebind
+            // screen). InputHandler.MapKeyboardLayoutFromGameSettings (called internally by the reset
+            // above) is *supposed* to restore the keyboard side of the 5 inventory-open actions from
+            // these same settings, but confirmed via logging that it doesn't actually pick this up -
+            // seeding it and reading it back off the same object showed the correct value, yet the
+            // resulting action still ended up with zero keyboard bindings. Not chasing that further:
+            // EnsureShadeInventoryBindings below adds the real, functional keyboard binding directly.
             var gm = GameManager.instance;
             var settings = gm != null ? gm.gameSettings : null;
             if (settings != null)
@@ -141,9 +154,61 @@ public static class HornetInput
                 try { settings.SaveKeyboardSettings(); } catch { }
             }
 
-            handler.ResetDefaultControllerButtonBindings();
-
+            EnsureShadeInventoryBindings(handler.inputActions);
             LogBindings("ApplyControllerDefaults: OpenInventory", handler.inputActions?.OpenInventory);
+        }
+        catch
+        {
+        }
+    }
+
+    /// <summary>
+    /// Idempotently ensures whichever device Hornet is *not* currently using has a working binding
+    /// on the 5 inventory-open actions, for the Shade. Deliberately does not touch Hornet's own
+    /// bindings at all - unlike <see cref="ApplyKeyboardDefaults"/>/<see cref="ApplyControllerDefaults"/>,
+    /// which only ever run from an explicit preset-button click in the mod's settings menu, this is
+    /// meant to be called from somewhere that runs automatically (see the call in
+    /// <c>LegacyHelper.MenuInputBridge.EnsureBindings</c>, which fires both at
+    /// <c>InputHandler.OnAwake</c> and on every subsequent <c>InputHandler.OnUpdateHeroActions</c>).
+    /// <para>
+    /// Without this, a fresh game launch that loads a persisted "Hornet on keyboard" (or controller)
+    /// config correctly restores Hornet's own bindings through the base game's own settings-load path
+    /// - but the Shade's *extra* binding on these same actions only ever lived inside the two preset
+    /// methods above, so on a fresh boot the Shade's device had no way to open the inventory at all
+    /// until the player re-clicked a preset that session.
+    /// </para>
+    /// <para>
+    /// <c>PlayerAction.AddBinding</c> already no-ops when an equal binding is already present
+    /// (<c>BindingSource.Equals</c> compares by value - the key or control, not by reference), so
+    /// calling this repeatedly (every <c>OnUpdateHeroActions</c>) does not accumulate duplicates.
+    /// </para>
+    /// </summary>
+    internal static void EnsureShadeInventoryBindings(HeroActions? actions)
+    {
+        if (actions == null)
+            return;
+
+        try
+        {
+            var cfg = ModConfig.Instance;
+            if (cfg == null)
+                return;
+
+            if (cfg.hornetKeyboardEnabled)
+            {
+                // Hornet's on keyboard, so the controller (if any) is free for the Shade.
+                actions.OpenInventory?.AddBinding(new DeviceBindingSource(InputControlType.Back));
+                actions.OpenInventory?.AddBinding(new DeviceBindingSource(InputControlType.Select));
+            }
+            else
+            {
+                // Hornet's on controller (or neither device is claimed yet), so the keyboard is free.
+                actions.OpenInventory?.AddBinding(new KeyBindingSource(new[] { Key.Key1 }));
+                actions.OpenInventoryTools?.AddBinding(new KeyBindingSource(new[] { Key.Key2 }));
+                actions.OpenInventoryQuests?.AddBinding(new KeyBindingSource(new[] { Key.Key3 }));
+                actions.OpenInventoryJournal?.AddBinding(new KeyBindingSource(new[] { Key.Key4 }));
+                actions.OpenInventoryMap?.AddBinding(new KeyBindingSource(new[] { Key.Key5 }));
+            }
         }
         catch
         {
@@ -218,18 +283,8 @@ public static class HornetInput
 
         // The controller is fully free for the Shade in this preset (Hornet is on keyboard, and
         // hornetControllerEnabled was just set false above), but Bind()'s ClearBindings() just wiped
-        // whatever controller binding OpenInventory had. Restore one -- Back/Select are the same
-        // buttons GetShadeControllerBackValue() already reads elsewhere in this mod, so this matches
-        // the button a player on that controller would instinctively try.
-        try
-        {
-            actions.OpenInventory.AddBinding(new DeviceBindingSource(InputControlType.Back));
-            actions.OpenInventory.AddBinding(new DeviceBindingSource(InputControlType.Select));
-        }
-        catch
-        {
-        }
-
+        // whatever controller binding OpenInventory had. Restore one.
+        EnsureShadeInventoryBindings(actions);
         LogBindings("ApplyKeyboardDefaults: OpenInventory", actions.OpenInventory);
     }
 }
