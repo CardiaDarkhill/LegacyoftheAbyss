@@ -17,6 +17,10 @@
     </RestoreAdditionalProjectSources>
 	  <!--Allow access of private members at runtime.-->
 	<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!--Catch dead code, redundant allocations and unnecessary reflection at build time.
+        Individual rule severities live in .editorconfig.-->
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -83,7 +87,35 @@
       <ZipDirectory SourceDirectory="$(IntermediateOutputPath)/archive" DestinationFile="$(ExportFolder)/$(TargetName).zip" Overwrite="True"/>
   </Target>
 
-  <Target Name="PrepareReleasePackages" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+  <!--
+  Local dev convenience only — distinct from CopyMod above. CopyMod deploys into a
+  self-contained BepInEx/plugins/<name>/ subfolder, which is the portable layout a real
+  end-user following the README/Thunderstore instructions expects. This target instead copies
+  flat, directly into BepInEx/plugins/, one level above this project — the layout this
+  particular local install has historically used, where the shipped Assets/ (and this
+  install's save data) sit alongside the dll rather than in this repo's own Assets/ folder.
+  Opt-in via a property so a plain `dotnet build` never touches the live game folder by
+  accident. Usage: dotnet build -c Release -p:DeployLocalDevBuild=true
+  -->
+  <Target Name="DeployLocalDevBuild" AfterTargets="Build" Condition="'$(DeployLocalDevBuild)' == 'true'">
+      <ItemGroup>
+          <LocalDevBinaries Include="$(TargetPath)" />
+          <LocalDevBinaries Include="$(TargetDir)$(TargetName).pdb" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
+      </ItemGroup>
+      <Copy SourceFiles="@(LocalDevBinaries)" DestinationFolder="$(MSBuildProjectDirectory)\.." SkipUnchangedFiles="false" />
+      <Message Text="Deployed local dev build to $(MSBuildProjectDirectory)\.." Importance="High" />
+  </Target>
+
+  <!--
+  Opt-in only: unlike CopyMod, this target had no gate beyond Configuration==Release, so every
+  plain `dotnet build -c Release` (including test/verification builds) silently staged a fresh,
+  independently-loadable copy of the plugin under obj/Release/Nexus and obj/Release/Thunderstore.
+  Since obj/ sits inside the live BepInEx/plugins tree, BepInEx's recursive plugin scan picked
+  these up as genuine duplicates and (because the BepInPlugin version string below never changes)
+  had no reliable way to prefer the actual latest build over a stale one. Pass
+  -p:CreateDistributionPackages=true when you actually want to cut a release.
+  -->
+  <Target Name="PrepareReleasePackages" AfterTargets="Build" Condition="'$(Configuration)' == 'Release' AND '$(CreateDistributionPackages)' == 'true'">
     <ItemGroup>
       <PluginBinary Include="$(TargetPath)" Condition="Exists('$(TargetPath)')" />
       <PluginDeps Include="$(TargetDir)$(TargetName).deps.json" Condition="Exists('$(TargetDir)$(TargetName).deps.json')" />

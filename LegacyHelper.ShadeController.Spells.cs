@@ -309,40 +309,6 @@ public partial class LegacyHelper
             return Mathf.Max(1, dmg);
         }
 
-        private void SpawnAoE(string name, Vector3 worldPos, float radius, int damage, float lifeSeconds)
-        {
-            var go = new GameObject(name);
-            go.transform.position = worldPos;
-            go.tag = "Hero Spell";
-            int spellLayer = LayerMask.NameToLayer("Hero Spell");
-            int atkLayer = LayerMask.NameToLayer("Hero Attack");
-            if (spellLayer >= 0) go.layer = spellLayer; else if (atkLayer >= 0) go.layer = atkLayer;
-
-            var col = go.AddComponent<CircleCollider2D>();
-            col.isTrigger = true;
-            col.radius = radius;
-
-            var aoe = go.AddComponent<ShadeAoE>();
-            aoe.ConfigureDamage(damage, applyDamageMultiplier: false);
-            aoe.hornetRoot = hornetTransform;
-            aoe.lifeSeconds = lifeSeconds;
-
-            // Optional visual hint
-            try
-            {
-                var sr2 = go.AddComponent<SpriteRenderer>();
-                sr2.sprite = MakeDotSprite();
-                var c = new Color(0f, 0f, 0f, 0.25f);
-                sr2.color = c;
-                sr2.sortingLayerID = sr ? sr.sortingLayerID : 0;
-                sr2.sortingOrder = sr ? (sr.sortingOrder - 1) : -1;
-                go.transform.localScale = Vector3.one * (radius * 2.2f);
-            }
-            catch { }
-
-            IgnoreHornetForCollider(col);
-        }
-
         private void IgnoreHornetForCollider(Collider2D col)
         {
             try

@@ -267,11 +267,10 @@ public partial class LegacyHelper
             equippedCharms.AddRange(charmSnapshot.Definitions);
 
             var currentDefinitions = charmSnapshot.Definitions;
-            HashSet<ShadeCharmDefinition> currentSet = null;
             ShadeCharmDefinition[] removedCharms = Array.Empty<ShadeCharmDefinition>();
             if (previousEquipped.Length > 0)
             {
-                currentSet = currentSet ?? new HashSet<ShadeCharmDefinition>(currentDefinitions);
+                var currentSet = new HashSet<ShadeCharmDefinition>(currentDefinitions);
                 removedCharms = previousEquipped
                     .Where(charm => charm != null && !currentSet.Contains(charm))
                     .ToArray();

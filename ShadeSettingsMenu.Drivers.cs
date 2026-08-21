@@ -943,5 +943,97 @@ public static partial class ShadeSettingsMenu
         }
     }
 
+    /// <summary>
+    /// Keeps whatever is currently keyboard/controller-focused inside <see cref="content"/>
+    /// scrolled into view within <see cref="viewport"/>. Needed because the Controls screen's
+    /// binding list can be taller than the screen (see BuildControlsMenu) -- without this,
+    /// navigating to a row below the fold would move focus there with no visual feedback.
+    /// Scrolls through the ScrollRect's own API (not by poking content.anchoredPosition
+    /// directly) so the visible scrollbar handle stays in sync with keyboard/controller nav,
+    /// not just mouse dragging.
+    /// </summary>
+    /// <summary>
+    /// Re-runs a navigation-wiring action once, after Unity's own deferred Start() call on
+    /// this GameObject has had a chance to run.
+    ///
+    /// MenuButtonList.Start() unconditionally calls its own SetupActive(), which -- for any
+    /// selectable left in Navigation.Mode.Explicit -- overwrites selectOnUp/selectOnDown
+    /// with "the previous/next entry in its flat entries array", regardless of what those
+    /// were set to beforehand. It never touches selectOnLeft/selectOnRight. Since
+    /// BuildControlsMenu's own SetupButtonList call to SetupActive() runs while every
+    /// selectable is still in Automatic mode (so that first call is a no-op for Up/Down),
+    /// the *next* call -- Unity's own deferred Start(), which fires later, after this
+    /// GameObject/screen has actually gone active -- is the one that clobbers whatever
+    /// explicit 2D grid was configured. LateUpdate is guaranteed by Unity to run after every
+    /// Start()/Update() that fired this frame, so reapplying there reliably wins.
+    /// </summary>
+    private sealed class DeferredNavigationReapplyDriver : MonoBehaviour
+    {
+        public System.Action Reapply;
+        private bool applied;
+
+        private void LateUpdate()
+        {
+            if (applied)
+                return;
+            applied = true;
+            try
+            {
+                Reapply?.Invoke();
+            }
+            finally
+            {
+                Destroy(this);
+            }
+        }
+    }
+
+    private sealed class ScrollIntoViewDriver : MonoBehaviour
+    {
+        public ScrollRect scrollRect;
+        public RectTransform viewport;
+        public RectTransform content;
+
+        private void Update()
+        {
+            if (scrollRect == null || viewport == null || content == null)
+                return;
+
+            var eventSystem = EventSystem.current;
+            var selected = eventSystem != null ? eventSystem.currentSelectedGameObject : null;
+            if (selected == null)
+                return;
+
+            var selectedRect = selected.transform as RectTransform;
+            if (selectedRect == null || !selectedRect.IsChildOf(content))
+                return;
+
+            float maxScroll = Mathf.Max(0f, content.rect.height - viewport.rect.height);
+            if (maxScroll <= 0f)
+                return;
+
+            var bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(viewport, selectedRect);
+            var viewportRect = viewport.rect;
+
+            // Positive when the focused row currently sticks out past that edge of the
+            // viewport -- i.e. how far we'd need to shift content to just clear it.
+            float topOverflow = bounds.max.y - viewportRect.yMax;
+            float bottomOverflow = viewportRect.yMin - bounds.min.y;
+            if (topOverflow <= 0f && bottomOverflow <= 0f)
+                return;
+
+            float targetY = content.anchoredPosition.y;
+            if (topOverflow > 0f)
+                targetY -= topOverflow;
+            else
+                targetY += bottomOverflow;
+
+            targetY = Mathf.Clamp(targetY, 0f, maxScroll);
+            // verticalNormalizedPosition: 1 = scrolled to top (anchoredPosition.y == 0),
+            // 0 = scrolled to bottom (anchoredPosition.y == maxScroll).
+            scrollRect.verticalNormalizedPosition = 1f - (targetY / maxScroll);
+        }
+    }
+
 }
 #nullable restore

@@ -463,12 +463,12 @@ internal static class MenuStateUtility
             return false;
         }
 
-        return stateName.IndexOf("PAUSE", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               stateName.IndexOf("MENU", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               stateName.IndexOf("INVENTORY", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               stateName.IndexOf("MAP", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               stateName.IndexOf("JOURNAL", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               stateName.IndexOf("SHOP", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               stateName.IndexOf("OPTION", StringComparison.OrdinalIgnoreCase) >= 0;
+        return stateName.Contains("PAUSE", StringComparison.OrdinalIgnoreCase) ||
+               stateName.Contains("MENU", StringComparison.OrdinalIgnoreCase) ||
+               stateName.Contains("INVENTORY", StringComparison.OrdinalIgnoreCase) ||
+               stateName.Contains("MAP", StringComparison.OrdinalIgnoreCase) ||
+               stateName.Contains("JOURNAL", StringComparison.OrdinalIgnoreCase) ||
+               stateName.Contains("SHOP", StringComparison.OrdinalIgnoreCase) ||
+               stateName.Contains("OPTION", StringComparison.OrdinalIgnoreCase);
     }
 }

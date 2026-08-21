@@ -13,6 +13,16 @@ public partial class LegacyHelper
 {
     public partial class ShadeController : MonoBehaviour
     {
+        // Resolved once. GetHazardType runs inside CheckHazardOverlap's per-frame collider loop,
+        // where a name-keyed Type.GetField lookup per call is pure waste.
+        private static readonly FieldInfo s_damageHeroHazardTypeField =
+            typeof(DamageHero).GetField("hazardType", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+        // Reusable buffers for the per-frame overlap test; Overlap fills the array in place.
+        // Per-instance rather than static so concurrent shades can't share a buffer.
+        private readonly Collider2D[] overlapResults = new Collider2D[16];
+        private ContactFilter2D overlapFilter = new ContactFilter2D { useTriggers = true };
+
         private void SetupPhysics()
         {
             rb = GetComponent<Rigidbody2D>();
@@ -86,32 +96,89 @@ public partial class LegacyHelper
             catch { }
         }
 
+        // Physics2D.IgnoreCollision state is persistent, so a pair only needs setting once.
+        // Without this the two refresh passes re-applied every pair on a 0.5s/1s timer,
+        // which in a busy arena is hundreds of interop calls per second that change nothing.
+        private readonly HashSet<long> ignoredColliderPairs = new HashSet<long>();
+        private Collider2D[] cachedOwnColliders;
+        private static int s_heroAttackLayer = -1;
+        private readonly List<Collider2D> colliderScratch = new List<Collider2D>();
+
+        private static long PairKey(Collider2D a, Collider2D b)
+        {
+            int x = a.GetInstanceID();
+            int y = b.GetInstanceID();
+            if (x > y) (x, y) = (y, x);
+            return ((long)x << 32) | (uint)y;
+        }
+
+        private bool TryIgnorePair(Collider2D a, Collider2D b)
+        {
+            long key = PairKey(a, b);
+            if (!ignoredColliderPairs.Add(key)) return false;
+            Physics2D.IgnoreCollision(a, b, true);
+            return true;
+        }
+
+        /// <summary>
+        /// Colliders on the shade itself. Re-resolved only when the cache is empty or a
+        /// cached entry has been destroyed.
+        /// </summary>
+        private Collider2D[] GetOwnColliders()
+        {
+            if (cachedOwnColliders != null && cachedOwnColliders.Length > 0)
+            {
+                bool stale = false;
+                foreach (var c in cachedOwnColliders)
+                {
+                    if (!c) { stale = true; break; }
+                }
+                if (!stale) return cachedOwnColliders;
+            }
+
+            cachedOwnColliders = GetComponentsInChildren<Collider2D>(true);
+            return cachedOwnColliders;
+        }
+
+        /// <summary>
+        /// Clears the memo when the world changes underneath us -- collider instances from
+        /// the previous scene are gone and their ignore state went with them.
+        /// </summary>
+        private void ResetCollisionIgnoreMemo()
+        {
+            ignoredColliderPairs.Clear();
+            cachedOwnColliders = null;
+        }
+
         private void RefreshCollisionIgnores()
         {
             try
             {
-                var myCols = GetComponentsInChildren<Collider2D>(true);
+                var myCols = GetOwnColliders();
                 if (myCols == null || myCols.Length == 0) return;
 
                 // Ignore physical collisions with enemies (objects with HealthManager) but keep triggers for damage/hazards
-                HealthManager[] enemies = null;
+                HealthManager[] enemies;
                 try
                 {
                     enemies = UnityEngine.Object.FindObjectsByType<HealthManager>(
                         FindObjectsInactive.Exclude,
                         FindObjectsSortMode.None);
                 }
-                catch { enemies = null; }
-                if (enemies != null)
+                catch { return; }
+                if (enemies == null) return;
+
+                foreach (var hm in enemies)
                 {
-                    foreach (var hm in enemies)
+                    if (!hm) continue;
+                    colliderScratch.Clear();
+                    hm.GetComponentsInChildren(true, colliderScratch);
+                    foreach (var ec in colliderScratch)
                     {
-                        if (!hm) continue;
-                        var cols = hm.GetComponentsInChildren<Collider2D>(true);
-                        foreach (var ec in cols)
+                        if (!ec || ec.isTrigger) continue; // don't ignore triggers to still receive hazard/damage events
+                        foreach (var mc in myCols)
                         {
-                            if (!ec || ec.isTrigger) continue; // don't ignore triggers to still receive hazard/damage events
-                            foreach (var mc in myCols) if (mc) Physics2D.IgnoreCollision(mc, ec, true);
+                            if (mc) TryIgnorePair(mc, ec);
                         }
                     }
                 }
@@ -125,21 +192,30 @@ public partial class LegacyHelper
             {
                 var hc = HeroController.instance;
                 if (!hc) return;
-                var myCols = GetComponentsInChildren<Collider2D>(true);
-                var hornetCols = hc.transform.root.GetComponentsInChildren<Collider2D>(true);
-                int heroAttackLayer = LayerMask.NameToLayer("Hero Attack");
+
+                var myCols = GetOwnColliders();
+                if (myCols == null || myCols.Length == 0) return;
+
+                colliderScratch.Clear();
+                hc.transform.root.GetComponentsInChildren(true, colliderScratch);
+
+                if (s_heroAttackLayer < 0) s_heroAttackLayer = LayerMask.NameToLayer("Hero Attack");
+
                 foreach (var mc in myCols)
                 {
-                    if (!mc) continue;
-                    foreach (var hcCol in hornetCols)
+                    if (!mc || mc.isTrigger) continue;
+                    foreach (var hcCol in colliderScratch)
                     {
-                        if (!hcCol) continue;
-                        if (mc.isTrigger || hcCol.isTrigger) continue;
-                        if (hcCol.gameObject.layer == heroAttackLayer) continue; // allow hero attack contact
+                        if (!hcCol || hcCol.isTrigger) continue;
+                        if (hcCol.gameObject.layer == s_heroAttackLayer) continue; // allow hero attack contact
+
+                        long key = PairKey(mc, hcCol);
+                        if (ignoredColliderPairs.Contains(key)) continue;
+
                         // Allow slashes (which may not be on Hero Attack layer) by checking their components
-                        bool isSlash = false;
-                        try { if (hcCol.GetComponentInParent<NailSlashTerrainThunk>()) isSlash = true; } catch { }
-                        if (isSlash) continue;
+                        if (hcCol.GetComponentInParent<NailSlashTerrainThunk>()) continue;
+
+                        ignoredColliderPairs.Add(key);
                         Physics2D.IgnoreCollision(mc, hcCol, true);
                     }
                 }
@@ -273,8 +349,7 @@ public partial class LegacyHelper
             {
                 if (!sharpShadowDashAoE)
                 {
-                    try { sharpShadowDashAoE = sharpShadowDashHitbox.GetComponent<ShadeAoE>(); }
-                    catch { }
+                    sharpShadowDashAoE = sharpShadowDashHitbox.GetComponent<ShadeAoE>();
                 }
                 return;
             }
@@ -361,8 +436,7 @@ public partial class LegacyHelper
 
             if (!sharpShadowDashAoE)
             {
-                try { sharpShadowDashAoE = sharpShadowDashHitbox.GetComponent<ShadeAoE>(); }
-                catch { }
+                sharpShadowDashAoE = sharpShadowDashHitbox.GetComponent<ShadeAoE>();
             }
 
             if (!sharpShadowDashAoE)
@@ -539,6 +613,12 @@ public partial class LegacyHelper
 
             sceneProtectionTimer = Mathf.Max(sceneProtectionTimer, duration);
             bool activating = !sceneProtectionActive;
+            if (activating)
+            {
+                // New scene: the previous scene's colliders are gone along with their
+                // ignore state, so the memo must not carry over.
+                ResetCollisionIgnoreMemo();
+            }
             sceneProtectionActive = true;
             sceneProtectionDesiredDamageState = !assistModeEnabled;
             if (activating && !sceneProtectionSuppressingPersistence)
@@ -690,13 +770,10 @@ public partial class LegacyHelper
         {
             if (hazardCooldown > 0f) return;
             if (!bodyCol) return;
-            var filter = new ContactFilter2D();
-            filter.useTriggers = true;
-            Collider2D[] results = new Collider2D[16];
-            int count = bodyCol.Overlap(filter, results);
+            int count = bodyCol.Overlap(overlapFilter, overlapResults);
             for (int i = 0; i < count; i++)
             {
-                var c = results[i];
+                var c = overlapResults[i];
                 if (!c) continue;
                 if (c.transform == transform || c.transform.IsChildOf(transform)) continue;
                 if (hornetTransform && c.transform.root == hornetTransform.root) continue;
@@ -747,13 +824,15 @@ public partial class LegacyHelper
 
         private static GlobalEnums.HazardType GetHazardType(DamageHero dh)
         {
+            if (s_damageHeroHazardTypeField == null) return GlobalEnums.HazardType.NON_HAZARD;
             try
             {
-                var tf = typeof(DamageHero).GetField("hazardType", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (tf != null) return (GlobalEnums.HazardType)tf.GetValue(dh);
+                return (GlobalEnums.HazardType)s_damageHeroHazardTypeField.GetValue(dh);
             }
-            catch { }
-            return GlobalEnums.HazardType.NON_HAZARD;
+            catch
+            {
+                return GlobalEnums.HazardType.NON_HAZARD;
+            }
         }
 
         private void ApplyKnockback(Vector2 sourcePos, float forceMultiplier = 1f, bool fromDamage = false, float duration = 0.2f)

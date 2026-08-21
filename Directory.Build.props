@@ -1,0 +1,22 @@
+<Project>
+  <!--
+  This repo is checked out directly inside the live BepInEx/plugins folder (a deliberate choice
+  for a fast dev loop: edit here, build here, restart the game). The problem is that BepInEx
+  recursively scans every .dll under BepInEx/plugins, so leaving bin/obj at their default
+  location meant every build — Debug or Release, main project or Tests — silently produced a
+  second, independently loadable copy of the plugin sitting right next to whatever was properly
+  deployed. Multiple copies then race for BepInEx's "load the newer one" logic, which is exactly
+  how a stale build ended up running instead of a fresh one (see the plugin-version fix in
+  LegacyHelper.Core.cs for the other half of that bug).
+
+  Redirecting bin/obj out from under BepInEx/plugins entirely removes the possibility of that
+  happening again, structurally, rather than by convention or by remembering to clean up after
+  every build. Both projects import this file automatically (standard MSBuild SDK behaviour),
+  so this applies to the Tests project too — its own output previously carried a copy of the
+  main plugin DLL as a project-reference artifact, which was just as loadable as any other copy.
+  -->
+  <PropertyGroup>
+    <BaseOutputPath>$(MSBuildThisFileDirectory)..\..\..\LegacyoftheAbyss-DevBuild\bin\$(MSBuildProjectName)\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)..\..\..\LegacyoftheAbyss-DevBuild\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+</Project>

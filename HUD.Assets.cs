@@ -135,7 +135,7 @@ public partial class SimpleHUD
 
     private Sprite[] LoadSpriteSheet(string path, int cols, int rows)
     {
-        if (!File.Exists(path)) return new Sprite[0];
+        if (!File.Exists(path)) return Array.Empty<Sprite>();
         var bytes = File.ReadAllBytes(path);
         var tex = new Texture2D(2, 2, TextureFormat.ARGB32, false);
         TryLoadImage(tex, bytes);
@@ -176,38 +176,11 @@ public partial class SimpleHUD
             if (sp == null) continue;
             string n = sp.name ?? string.Empty; int score = 0;
             if (string.Equals(n, key, StringComparison.OrdinalIgnoreCase)) score += 1000;
-            if (n.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0) score += 100;
+            if (n.Contains(key, StringComparison.OrdinalIgnoreCase)) score += 100;
             score += (int)(sp.rect.width + sp.rect.height);
             if (score > bestScore) { bestScore = score; best = sp; }
         }
         return best;
-    }
-
-    private Sprite[] _slashFramesCache;
-    private Sprite[] GetSlashFrames()
-    {
-        if (_slashFramesCache != null && _slashFramesCache.Length > 0) return _slashFramesCache;
-        var all = Resources.FindObjectsOfTypeAll<Sprite>(); var list = new List<Sprite>();
-        foreach (var sp in all)
-        {
-            if (sp == null) continue; string n = sp.name ?? string.Empty;
-            if (n.IndexOf("charge_slash", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                n.IndexOf("slash", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                n.IndexOf("hit", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                n.IndexOf("impact", StringComparison.OrdinalIgnoreCase) >= 0)
-                list.Add(sp);
-        }
-        if (list.Count > 0)
-        {
-            _slashFramesCache = list
-                .OrderByDescending(s => s.name.IndexOf("charge_slash", StringComparison.OrdinalIgnoreCase) >= 0)
-                .ThenByDescending(s => s.name.IndexOf("_0002_", StringComparison.OrdinalIgnoreCase) >= 0)
-                .ThenBy(s => s.name)
-                .ToArray();
-            return _slashFramesCache;
-        }
-        if (slashFrames != null && slashFrames.Length > 0) { _slashFramesCache = slashFrames; return _slashFramesCache; }
-        return Array.Empty<Sprite>();
     }
 
     private static bool TryLoadImage(Texture2D tex, byte[] bytes)

@@ -500,6 +500,82 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         return DefaultStandaloneRootSize;
     }
 
+    /// <summary>
+    /// Writes the resolved rect values onto <paramref name="root"/>, reporting whether
+    /// anything actually changed. Shared by the standalone and hard-fallback sizing paths,
+    /// which differ only in how they derive their anchors.
+    /// </summary>
+    private static bool ApplyRectValues(
+        RectTransform root,
+        Vector2 size,
+        Vector2 anchorMin,
+        Vector2 anchorMax,
+        Vector2 pivot,
+        Vector2 anchored,
+        Vector2 offsetMin,
+        Vector2 offsetMax)
+    {
+        bool changed = false;
+
+        if (!Approximately(root.anchorMin, anchorMin))
+        {
+            root.anchorMin = anchorMin;
+            changed = true;
+        }
+
+        if (!Approximately(root.anchorMax, anchorMax))
+        {
+            root.anchorMax = anchorMax;
+            changed = true;
+        }
+
+        if (!Approximately(root.pivot, pivot))
+        {
+            root.pivot = pivot;
+            changed = true;
+        }
+
+        if (!Approximately(root.anchoredPosition, anchored))
+        {
+            root.anchoredPosition = anchored;
+            changed = true;
+        }
+
+        if (!Approximately(root.offsetMin, offsetMin))
+        {
+            root.offsetMin = offsetMin;
+            changed = true;
+        }
+
+        if (!Approximately(root.offsetMax, offsetMax))
+        {
+            root.offsetMax = offsetMax;
+            changed = true;
+        }
+
+        if (!Approximately(root.sizeDelta, size))
+        {
+            root.sizeDelta = size;
+            changed = true;
+        }
+
+        float beforeWidth = root.rect.width;
+        root.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, size.x);
+        if (!Mathf.Approximately(beforeWidth, root.rect.width))
+        {
+            changed = true;
+        }
+
+        float beforeHeight = root.rect.height;
+        root.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, size.y);
+        if (!Mathf.Approximately(beforeHeight, root.rect.height))
+        {
+            changed = true;
+        }
+
+        return changed;
+    }
+
     private bool TryApplyStandaloneRootSizing(RectTransform root, Vector2? desiredSize = null)
     {
         if (root == null)
@@ -544,65 +620,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         Vector2 offsetMin = rootRectTemplate?.OffsetMin ?? (anchored - Vector2.Scale(size, pivot));
         Vector2 offsetMax = rootRectTemplate?.OffsetMax ?? (anchored + Vector2.Scale(size, Vector2.one - pivot));
 
-        bool changed = false;
-
-        if (!Approximately(root.anchorMin, anchorMin))
-        {
-            root.anchorMin = anchorMin;
-            changed = true;
-        }
-
-        if (!Approximately(root.anchorMax, anchorMax))
-        {
-            root.anchorMax = anchorMax;
-            changed = true;
-        }
-
-        if (!Approximately(root.pivot, pivot))
-        {
-            root.pivot = pivot;
-            changed = true;
-        }
-
-        if (!Approximately(root.anchoredPosition, anchored))
-        {
-            root.anchoredPosition = anchored;
-            changed = true;
-        }
-
-        if (!Approximately(root.offsetMin, offsetMin))
-        {
-            root.offsetMin = offsetMin;
-            changed = true;
-        }
-
-        if (!Approximately(root.offsetMax, offsetMax))
-        {
-            root.offsetMax = offsetMax;
-            changed = true;
-        }
-
-        if (!Approximately(root.sizeDelta, size))
-        {
-            root.sizeDelta = size;
-            changed = true;
-        }
-
-        float beforeWidth = root.rect.width;
-        root.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, size.x);
-        float afterWidth = root.rect.width;
-        if (!Mathf.Approximately(beforeWidth, afterWidth))
-        {
-            changed = true;
-        }
-
-        float beforeHeight = root.rect.height;
-        root.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, size.y);
-        float afterHeight = root.rect.height;
-        if (!Mathf.Approximately(beforeHeight, afterHeight))
-        {
-            changed = true;
-        }
+        bool changed = ApplyRectValues(root, size, anchorMin, anchorMax, pivot, anchored, offsetMin, offsetMax);
 
         if (!changed)
         {
@@ -640,65 +658,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         Vector2 offsetMin = rootRectTemplate?.OffsetMin ?? (anchored - Vector2.Scale(size, pivot));
         Vector2 offsetMax = rootRectTemplate?.OffsetMax ?? (anchored + Vector2.Scale(size, Vector2.one - pivot));
 
-        bool changed = false;
-
-        if (!Approximately(root.anchorMin, anchorMin))
-        {
-            root.anchorMin = anchorMin;
-            changed = true;
-        }
-
-        if (!Approximately(root.anchorMax, anchorMax))
-        {
-            root.anchorMax = anchorMax;
-            changed = true;
-        }
-
-        if (!Approximately(root.pivot, pivot))
-        {
-            root.pivot = pivot;
-            changed = true;
-        }
-
-        if (!Approximately(root.anchoredPosition, anchored))
-        {
-            root.anchoredPosition = anchored;
-            changed = true;
-        }
-
-        if (!Approximately(root.offsetMin, offsetMin))
-        {
-            root.offsetMin = offsetMin;
-            changed = true;
-        }
-
-        if (!Approximately(root.offsetMax, offsetMax))
-        {
-            root.offsetMax = offsetMax;
-            changed = true;
-        }
-
-        if (!Approximately(root.sizeDelta, size))
-        {
-            root.sizeDelta = size;
-            changed = true;
-        }
-
-        float beforeWidth = root.rect.width;
-        root.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, size.x);
-        float afterWidth = root.rect.width;
-        if (!Mathf.Approximately(beforeWidth, afterWidth))
-        {
-            changed = true;
-        }
-
-        float beforeHeight = root.rect.height;
-        root.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, size.y);
-        float afterHeight = root.rect.height;
-        if (!Mathf.Approximately(beforeHeight, afterHeight))
-        {
-            changed = true;
-        }
+        bool changed = ApplyRectValues(root, size, anchorMin, anchorMax, pivot, anchored, offsetMin, offsetMax);
 
         var layoutElement = root.GetComponent<LayoutElement>();
         if (layoutElement == null)
@@ -805,112 +765,6 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         }
     }
 
-    private void ApplyTemplateRootLayoutFallback(RectTransform root)
-    {
-        if (root == null)
-        {
-            return;
-        }
-
-        Vector2? desiredSize = templateRootSize;
-        bool adjustments = TryApplyStandaloneRootSizing(root, desiredSize);
-        desiredSize = templateRootSize;
-        if (desiredSize.HasValue)
-        {
-            var templateSize = desiredSize.Value;
-            if (templateSize.x >= MinRootSizeThreshold)
-            {
-                float before = root.rect.width;
-                root.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, templateSize.x);
-                if (!Mathf.Approximately(before, root.rect.width))
-                {
-                    adjustments = true;
-                }
-            }
-
-            if (templateSize.y >= MinRootSizeThreshold)
-            {
-                float before = root.rect.height;
-                root.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, templateSize.y);
-                if (!Mathf.Approximately(before, root.rect.height))
-                {
-                    adjustments = true;
-                }
-            }
-        }
-
-        var layoutElement = root.GetComponent<LayoutElement>();
-        if (layoutElement != null)
-        {
-            bool layoutAdjusted = false;
-            if (rootLayoutTemplate.HasValue)
-            {
-                rootLayoutTemplate.Value.Apply(layoutElement);
-                layoutAdjusted = true;
-            }
-
-            if (desiredSize.HasValue)
-            {
-                var templateSize = desiredSize.Value;
-                if (templateSize.x >= MinRootSizeThreshold)
-                {
-                    if (layoutElement.minWidth < templateSize.x)
-                    {
-                        layoutElement.minWidth = templateSize.x;
-                        layoutAdjusted = true;
-                    }
-                    if (layoutElement.preferredWidth < templateSize.x)
-                    {
-                        layoutElement.preferredWidth = templateSize.x;
-                        layoutAdjusted = true;
-                    }
-                }
-
-                if (templateSize.y >= MinRootSizeThreshold)
-                {
-                    if (layoutElement.minHeight < templateSize.y)
-                    {
-                        layoutElement.minHeight = templateSize.y;
-                        layoutAdjusted = true;
-                    }
-                    if (layoutElement.preferredHeight < templateSize.y)
-                    {
-                        layoutElement.preferredHeight = templateSize.y;
-                        layoutAdjusted = true;
-                    }
-                }
-            }
-
-            if (layoutAdjusted)
-            {
-                layoutElement.flexibleWidth = Mathf.Max(0f, layoutElement.flexibleWidth);
-                layoutElement.flexibleHeight = Mathf.Max(0f, layoutElement.flexibleHeight);
-                adjustments = true;
-            }
-        }
-
-        if (!adjustments)
-        {
-            return;
-        }
-
-        Canvas.ForceUpdateCanvases();
-        LayoutRebuilder.ForceRebuildLayoutImmediate(root);
-
-        var parent = root.parent as RectTransform;
-        int guard = 0;
-        while (parent != null && guard < 3)
-        {
-            LayoutRebuilder.ForceRebuildLayoutImmediate(parent);
-            parent = parent.parent as RectTransform;
-            guard++;
-        }
-
-        string templateSizeText = desiredSize.HasValue ? FormatVector2(desiredSize.Value) : "<null>";
-        LogMenuEvent(FormattableString.Invariant(
-            $"ForceLayoutRebuild applied template fallback -> root={FormatVector2(root.rect.size)} template={templateSizeText}"));
-    }
-
     private static float ComputeNormalizedMargin(float dimension, float fraction)
     {
         if (dimension <= 0f)
@@ -948,7 +802,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             cachedTrajanFont = Resources
                 .FindObjectsOfTypeAll<TMP_FontAsset>()
                 .FirstOrDefault(asset => asset != null &&
-                    asset.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0);
+                    asset.name.Contains("Trajan", StringComparison.OrdinalIgnoreCase));
 
             if (cachedTrajanFont == null)
             {
@@ -956,7 +810,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
                 {
                     var defaultFontAsset = TMP_Settings.defaultFontAsset;
                     if (defaultFontAsset != null &&
-                        defaultFontAsset.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0)
+                        defaultFontAsset.name.Contains("Trajan", StringComparison.OrdinalIgnoreCase))
                     {
                         cachedTrajanFont = defaultFontAsset;
                     }
@@ -968,7 +822,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
                         {
                             cachedTrajanFont = fallbackAssets
                                 .FirstOrDefault(asset => asset != null &&
-                                    asset.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0);
+                                    asset.name.Contains("Trajan", StringComparison.OrdinalIgnoreCase));
                         }
                     }
                 }
@@ -1006,7 +860,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
                         continue;
                     }
 
-                    if (asset.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0)
+                    if (asset.name.Contains("Trajan", StringComparison.OrdinalIgnoreCase))
                     {
                         cachedTrajanFont = asset;
                         break;
@@ -1046,7 +900,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             cachedTrajanSourceFont = Resources
                 .FindObjectsOfTypeAll<Font>()
                 .FirstOrDefault(font => font != null &&
-                    font.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0);
+                    font.name.Contains("Trajan", StringComparison.OrdinalIgnoreCase));
         }
         catch
         {
@@ -1092,7 +946,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
                         continue;
                     }
 
-                    if (font.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0)
+                    if (font.name.Contains("Trajan", StringComparison.OrdinalIgnoreCase))
                     {
                         cachedTrajanSourceFont = font;
                         break;
@@ -1110,12 +964,12 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
 
     private static bool FontMatchesTrajan(TMP_FontAsset? font)
     {
-        return font != null && font.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0;
+        return font != null && font.name.Contains("Trajan", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool FontMatchesTrajan(Font? font)
     {
-        return font != null && font.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) >= 0;
+        return font != null && font.name.Contains("Trajan", StringComparison.OrdinalIgnoreCase);
     }
 
     private void EnsureTrajanFallbacks()

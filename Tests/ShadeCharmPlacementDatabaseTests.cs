@@ -57,7 +57,7 @@ namespace LegacyoftheAbyss.Tests
 
             Assert.Single(placements);
 
-            var soulEater = placements.First();
+            var soulEater = placements[0];
             Assert.Equal(Shade.ShadeCharmId.SoulEater, soulEater.CharmId);
             Assert.NotNull(soulEater.WorldPosition);
             Assert.Equal(74.772f, soulEater.WorldPosition!.X, 3);
@@ -73,7 +73,7 @@ namespace LegacyoftheAbyss.Tests
 
             Assert.Single(placements);
 
-            var fury = placements.First();
+            var fury = placements[0];
             Assert.Equal(Shade.ShadeCharmId.FuryOfTheFallen, fury.CharmId);
             Assert.NotNull(fury.WorldPosition);
             Assert.Equal(82.005f, fury.WorldPosition!.X, 3);
@@ -89,7 +89,7 @@ namespace LegacyoftheAbyss.Tests
 
             Assert.Single(placements);
 
-            var compass = placements.First();
+            var compass = placements[0];
             Assert.Equal(Shade.ShadeCharmId.WaywardCompass, compass.CharmId);
             Assert.NotNull(compass.WorldPosition);
             Assert.Equal(301.342f, compass.WorldPosition!.X, 3);

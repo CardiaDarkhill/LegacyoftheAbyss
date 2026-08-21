@@ -66,11 +66,9 @@ public partial class SimpleHUD : MonoBehaviour
     private Vector3 healthGameplayScale = Vector3.one;
     private Vector3 healthMenuScale = Vector3.one;
 
-    private const KeyCode DebugDamageKey = KeyCode.None; // disabled
-    private const KeyCode DebugHealKey = KeyCode.None; // disabled
-    private const KeyCode DebugSoulDecKey = KeyCode.None;   // disabled
-    private const KeyCode DebugSoulIncKey = KeyCode.None;  // disabled
-    private const KeyCode DebugSoulResetKey = KeyCode.Backslash;   // \
+    // Rebindable via the Controls menu's debug rows, shown only when
+    // ModConfig.Instance.debugKeysEnabled is on (see ShadeSettingsMenu.BuildControlsMenu).
+    // Defaults live in ShadeInputConfig.ResetToDefaults.
 
     // Debug silk override (UI-only, does not write PlayerData)
     private bool debugUseCustomSilk;
@@ -123,111 +121,121 @@ public partial class SimpleHUD : MonoBehaviour
 
         if (playerData == null) return;
 
-        // Debug: Shade HP adjust
-        if (Input.GetKeyDown(DebugDamageKey))
-        {
-            shadeHealth = Mathf.Max(0, shadeHealth - 1);
-            if (ModConfig.Instance.logHud)
-            {
-                try { Debug.Log("[SimpleHUD] Debug: Shade HP -1"); } catch { }
-            }
-        }
-        if (Input.GetKeyDown(DebugHealKey))
-        {
-            shadeHealth = Mathf.Min(shadeMax, shadeHealth + 1);
-            if (ModConfig.Instance.logHud)
-            {
-                try { Debug.Log("[SimpleHUD] Debug: Shade HP +1"); } catch { }
-            }
-        }
-
-        // Debug soul controls (UI or Shade override)
-        float sMax = shadeSoulOverride ? Mathf.Max(1f, shadeSoulMax) : Mathf.Max(1f, playerData.silkMax);
-        float step = Mathf.Max(1f, sMax * 0.1f);
-        if (Input.GetKeyDown(DebugSoulIncKey))
-        {
-            if (shadeSoulOverride)
-            {
-                try
-                {
-                    var sc = UnityEngine.Object.FindFirstObjectByType<LegacyHelper.ShadeController>();
-                    if (sc != null) sc.shadeSoul = Mathf.Min(sc.shadeSoul + 11, sc.shadeSoulMax);
-                }
-                catch { }
-                shadeSoul = Mathf.Min(shadeSoul + 11f, Mathf.Max(1f, shadeSoulMax));
-                if (ModConfig.Instance.logHud)
-                {
-                    try { Debug.Log("[SimpleHUD] Debug: Shade Soul +11"); } catch { }
-                }
-            }
-            else
-            {
-                float baseVal = debugUseCustomSilk ? debugSilk : playerData.silk;
-                debugUseCustomSilk = true;
-                debugSilk = Mathf.Min(baseVal + step, sMax);
-                if (ModConfig.Instance.logHud)
-                {
-                    try { Debug.Log("[SimpleHUD] Debug: Hornet Silk +step"); } catch { }
-                }
-            }
-        }
-        if (Input.GetKeyDown(DebugSoulDecKey))
-        {
-            if (shadeSoulOverride)
-            {
-                try
-                {
-                    var sc = UnityEngine.Object.FindFirstObjectByType<LegacyHelper.ShadeController>();
-                    if (sc != null) sc.shadeSoul = Mathf.Max(sc.shadeSoul - 11, 0);
-                }
-                catch { }
-                shadeSoul = Mathf.Max(shadeSoul - 11f, 0f);
-                if (ModConfig.Instance.logHud)
-                {
-                    try { Debug.Log("[SimpleHUD] Debug: Shade Soul -11"); } catch { }
-                }
-            }
-            else
-            {
-                float baseVal = debugUseCustomSilk ? debugSilk : playerData.silk;
-                debugUseCustomSilk = true;
-                debugSilk = Mathf.Max(baseVal - step, 0f);
-                if (ModConfig.Instance.logHud)
-                {
-                    try { Debug.Log("[SimpleHUD] Debug: Hornet Silk -step"); } catch { }
-                }
-            }
-        }
-        if (Input.GetKeyDown(DebugSoulResetKey))
-        {
-            if (shadeSoulOverride)
-            {
-                try
-                {
-                    var sc = UnityEngine.Object.FindFirstObjectByType<LegacyHelper.ShadeController>();
-                    if (sc != null) sc.shadeSoul = 0;
-                }
-                catch { }
-                shadeSoul = 0f;
-                if (ModConfig.Instance.logHud)
-                {
-                    try { Debug.Log("[SimpleHUD] Debug: Shade Soul reset"); } catch { }
-                }
-            }
-            else
-            {
-                debugUseCustomSilk = false;
-                debugSilk = playerData.silk;
-                if (ModConfig.Instance.logHud)
-                {
-                    try { Debug.Log("[SimpleHUD] Debug: Hornet Silk reset"); } catch { }
-                }
-            }
-        }
-
+        HandleDebugKeys();
         SyncShadeFromPlayer();
         RefreshHealth();
         RefreshSoul();
+    }
+
+    /// <summary>
+    /// Developer HP/soul adjustment keys. Gated so shipped builds neither poll these
+    /// keys every frame nor expose the cheats.
+    /// </summary>
+    private void HandleDebugKeys()
+    {
+        if (!ModConfig.Instance.debugKeysEnabled) return;
+
+            // Debug: Shade HP adjust
+            if (ShadeInput.WasActionPressed(ShadeAction.DebugDamageShade))
+            {
+                shadeHealth = Mathf.Max(0, shadeHealth - 1);
+                if (ModConfig.Instance.logHud)
+                {
+                    Debug.Log("[SimpleHUD] Debug: Shade HP -1");
+                }
+            }
+            if (ShadeInput.WasActionPressed(ShadeAction.DebugHealShade))
+            {
+                shadeHealth = Mathf.Min(shadeMax, shadeHealth + 1);
+                if (ModConfig.Instance.logHud)
+                {
+                    Debug.Log("[SimpleHUD] Debug: Shade HP +1");
+                }
+            }
+
+            // Debug soul controls (UI or Shade override)
+            float sMax = shadeSoulOverride ? Mathf.Max(1f, shadeSoulMax) : Mathf.Max(1f, playerData.silkMax);
+            float step = Mathf.Max(1f, sMax * 0.1f);
+            if (ShadeInput.WasActionPressed(ShadeAction.DebugSoulIncrease))
+            {
+                if (shadeSoulOverride)
+                {
+                    try
+                    {
+                        var sc = UnityEngine.Object.FindFirstObjectByType<LegacyHelper.ShadeController>();
+                        if (sc != null) sc.shadeSoul = Mathf.Min(sc.shadeSoul + 11, sc.shadeSoulMax);
+                    }
+                    catch { }
+                    shadeSoul = Mathf.Min(shadeSoul + 11f, Mathf.Max(1f, shadeSoulMax));
+                    if (ModConfig.Instance.logHud)
+                    {
+                        Debug.Log("[SimpleHUD] Debug: Shade Soul +11");
+                    }
+                }
+                else
+                {
+                    float baseVal = debugUseCustomSilk ? debugSilk : playerData.silk;
+                    debugUseCustomSilk = true;
+                    debugSilk = Mathf.Min(baseVal + step, sMax);
+                    if (ModConfig.Instance.logHud)
+                    {
+                        Debug.Log("[SimpleHUD] Debug: Hornet Silk +step");
+                    }
+                }
+            }
+            if (ShadeInput.WasActionPressed(ShadeAction.DebugSoulDecrease))
+            {
+                if (shadeSoulOverride)
+                {
+                    try
+                    {
+                        var sc = UnityEngine.Object.FindFirstObjectByType<LegacyHelper.ShadeController>();
+                        if (sc != null) sc.shadeSoul = Mathf.Max(sc.shadeSoul - 11, 0);
+                    }
+                    catch { }
+                    shadeSoul = Mathf.Max(shadeSoul - 11f, 0f);
+                    if (ModConfig.Instance.logHud)
+                    {
+                        Debug.Log("[SimpleHUD] Debug: Shade Soul -11");
+                    }
+                }
+                else
+                {
+                    float baseVal = debugUseCustomSilk ? debugSilk : playerData.silk;
+                    debugUseCustomSilk = true;
+                    debugSilk = Mathf.Max(baseVal - step, 0f);
+                    if (ModConfig.Instance.logHud)
+                    {
+                        Debug.Log("[SimpleHUD] Debug: Hornet Silk -step");
+                    }
+                }
+            }
+            if (ShadeInput.WasActionPressed(ShadeAction.DebugSoulReset))
+            {
+                if (shadeSoulOverride)
+                {
+                    try
+                    {
+                        var sc = UnityEngine.Object.FindFirstObjectByType<LegacyHelper.ShadeController>();
+                        if (sc != null) sc.shadeSoul = 0;
+                    }
+                    catch { }
+                    shadeSoul = 0f;
+                    if (ModConfig.Instance.logHud)
+                    {
+                        Debug.Log("[SimpleHUD] Debug: Shade Soul reset");
+                    }
+                }
+                else
+                {
+                    debugUseCustomSilk = false;
+                    debugSilk = playerData.silk;
+                    if (ModConfig.Instance.logHud)
+                    {
+                        Debug.Log("[SimpleHUD] Debug: Hornet Silk reset");
+                    }
+                }
+            }
     }
 
     private void UpdatePauseFade()

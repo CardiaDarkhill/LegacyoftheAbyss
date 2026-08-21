@@ -1,0 +1,80 @@
+root = true
+
+[*.cs]
+indent_style = space
+indent_size = 4
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+# ---------------------------------------------------------------------------
+# Analyzer rule severities.
+#
+# The goal is to catch the classes of rot found in the August 2026 audit --
+# dead code, redundant allocation, unnecessary reflection -- without drowning
+# the build in style noise that does not apply to a Unity/BepInEx plugin.
+# ---------------------------------------------------------------------------
+
+# --- Promoted to warnings: these are what we actively want caught ---
+
+# Dead conditional code (conditions with a compile-time-known outcome).
+#
+# Suggestion rather than warning: UnityEngine.Object overloads operator== so that a
+# destroyed-but-not-collected object compares equal to null. Roslyn's dataflow analysis
+# models `x != null` as a plain reference comparison, so it reports "always true" for
+# guards that genuinely fire at runtime once Unity has torn the object down. Removing
+# those would introduce real null-reference bugs.
+#
+# Still worth reading: the non-Unity hits it found (a redundant `?? ` on a local that was
+# just initialised to null, and a `typeof(T) == null` check) were real and are fixed.
+# Treat new hits as "inspect", not "delete".
+dotnet_diagnostic.CA1508.severity = suggestion
+
+# Prefer Array.Empty<T>() over allocating a zero-length array.
+dotnet_diagnostic.CA1825.severity = warning
+
+# Prefer Length/Count property over the LINQ Count()/Any() extension.
+dotnet_diagnostic.CA1826.severity = warning
+
+# Prefer string.Contains(char) over IndexOf(...) >= 0.
+dotnet_diagnostic.CA2249.severity = warning
+
+# Use StringComparison.Ordinal for non-linguistic string comparisons.
+dotnet_diagnostic.CA1307.severity = suggestion
+dotnet_diagnostic.CA1310.severity = suggestion
+
+# Unused private members.
+dotnet_diagnostic.IDE0051.severity = warning
+dotnet_diagnostic.IDE0052.severity = warning
+
+# --- Suppressed: deliberate choices for this codebase ---
+
+# "Do not catch general exception types." A large amount of this plugin reflects
+# against private Silksong internals that can change between game patches, so a
+# defensive catch at the boundary is intentional. The audit removed the ~460
+# catches that guarded code which cannot throw; what remains is load-bearing.
+dotnet_diagnostic.CA1031.severity = none
+
+# "Do not declare visible instance fields." Unity serialises public fields by
+# convention and the shade's state is read directly across partial classes.
+dotnet_diagnostic.CA1051.severity = none
+
+# "Normalize strings to uppercase." Asset-name matching against lowercase
+# literals is correct here and ToUpperInvariant would not improve it.
+dotnet_diagnostic.CA1308.severity = none
+
+# "Mark members as static." Noisy across MonoBehaviour partials with no benefit.
+dotnet_diagnostic.CA1822.severity = none
+
+# "Declare types in namespaces." The plugin's entry points are intentionally
+# global to keep Harmony patch targets and Unity component lookups simple.
+dotnet_diagnostic.CA1050.severity = none
+
+# Naming and API-shape rules aimed at shipped libraries, not game plugins.
+dotnet_diagnostic.CA1034.severity = none
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1711.severity = none
+dotnet_diagnostic.CA1815.severity = none
+dotnet_diagnostic.CA1024.severity = none
+dotnet_diagnostic.CA1016.severity = none
+dotnet_diagnostic.CA2243.severity = none

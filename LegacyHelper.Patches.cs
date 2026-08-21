@@ -90,37 +90,17 @@ public partial class LegacyHelper
         }
     }
 
-    [HarmonyPatch(typeof(Remasker), "OnTriggerEnter2D")]
-    private static class Remasker_OnTriggerEnter2D_Patch
+    // Enter and exit need the same suppression, so one patch covers both rather than
+    // two byte-identical classes.
+    [HarmonyPatch]
+    private static class Remasker_ShadeProxy_Patch
     {
-        private static bool Prefix(Remasker __instance, Collider2D collision)
+        private static IEnumerable<MethodBase> TargetMethods()
         {
-            if (collision == null)
-            {
-                return true;
-            }
-
-            var tracker = collision.GetComponent<ShadeController.AggroProxyTracker>();
-            if (tracker == null)
-            {
-                return true;
-            }
-
-            try
-            {
-                tracker.NotifyRemaskerIgnored(__instance);
-            }
-            catch
-            {
-            }
-
-            return false;
+            yield return AccessTools.Method(typeof(Remasker), "OnTriggerEnter2D");
+            yield return AccessTools.Method(typeof(Remasker), "OnTriggerExit2D");
         }
-    }
 
-    [HarmonyPatch(typeof(Remasker), "OnTriggerExit2D")]
-    private static class Remasker_OnTriggerExit2D_Patch
-    {
         private static bool Prefix(Remasker __instance, Collider2D collision)
         {
             if (collision == null)
@@ -340,35 +320,18 @@ public partial class LegacyHelper
         }
     }
 
-    [HarmonyPatch(typeof(GameManager), nameof(GameManager.PauseGameToggle))]
+    // Both pause entry points need identical handling, so one patch class targets both
+    // rather than two byte-identical copies. Stacking two [HarmonyPatch] attributes would
+    // merge into a single target, so the multi-target form goes through TargetMethods.
+    [HarmonyPatch]
     private class GameManager_PauseGameToggle_Patch
     {
-        private static bool Prefix(GameManager __instance, ref IEnumerator __result)
+        private static IEnumerable<MethodBase> TargetMethods()
         {
-            try
-            {
-                var ui = UIManager.instance;
-                if (ui == null && __instance != null)
-                    ui = __instance.ui;
-                if (ui != null && ShadeSettingsMenu.HandlePauseToggle(ui))
-                {
-                    __result = Skip();
-                    return false;
-                }
-            }
-            catch { }
-            return true;
+            yield return AccessTools.Method(typeof(GameManager), nameof(GameManager.PauseGameToggle));
+            yield return AccessTools.Method(typeof(GameManager), nameof(GameManager.PauseGameToggleByMenu));
         }
 
-        private static IEnumerator Skip()
-        {
-            yield break;
-        }
-    }
-
-    [HarmonyPatch(typeof(GameManager), nameof(GameManager.PauseGameToggleByMenu))]
-    private class GameManager_PauseGameToggleByMenu_Patch
-    {
         private static bool Prefix(GameManager __instance, ref IEnumerator __result)
         {
             try
@@ -469,10 +432,6 @@ public partial class LegacyHelper
         private static IEnumerable<MethodBase> TargetMethods()
         {
             var type = typeof(InventoryPaneList);
-            if (type == null)
-            {
-                yield break;
-            }
 
             string[] candidates = { "Awake", "Start", "OnEnable" };
             foreach (string name in candidates)

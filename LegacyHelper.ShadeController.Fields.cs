@@ -60,7 +60,7 @@ public partial class LegacyHelper
         private float battleCheckTimer;
 
         private static readonly string[] IgnoreDamageTokens =
-            {"alert range", "attack range", "wake", "close range", "sight range", "terrain", "range", "physics pusher", "bounce collider"};
+            {"alert range", "attack range", "wake", "close range", "sight range", "terrain", "range", "physics pusher", "bounce collider", "emerge check"};
 
         // Ranged attack
         public float projectileSpeed = 22f;
@@ -244,6 +244,10 @@ public partial class LegacyHelper
         private AudioClip sfxFocusCharge;
         private AudioClip sfxFocusComplete;
         private AudioClip sfxFocusReady;
+        // Guards against re-running the filesystem probe + full loaded-object walk on
+        // every cast when a clip genuinely cannot be resolved.
+        private bool searchedFocusSfx;
+        private bool searchedSpellSfx;
         private int lastSoulForReady = -1;
 
         private float baseFocusChannelTime;

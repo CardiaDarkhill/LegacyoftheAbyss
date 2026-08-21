@@ -1399,13 +1399,6 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         }
     }
 
-    private void HandleStateChanged()
-    {
-        RefreshEntryStates();
-        UpdateNotchMeter();
-        UpdateDetailPanel();
-    }
-
     private void EnsureEntryCount(int count)
     {
         EnsureBuilt();

@@ -702,13 +702,7 @@ public partial class LegacyHelper
                 return;
             }
 
-            try
-            {
-                UnityEngine.Debug.Log("[ShadeCharmHealth] " + message);
-            }
-            catch
-            {
-            }
+            UnityEngine.Debug.Log("[ShadeCharmHealth] " + message);
         }
 
         private bool ShouldRefillLifebloodImmediately()

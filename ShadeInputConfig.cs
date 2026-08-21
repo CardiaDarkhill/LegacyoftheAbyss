@@ -16,7 +16,16 @@ public enum ShadeAction
     Teleport,
     Focus,
     Sprint,
-    AssistMode
+    AssistMode,
+    // Developer-only utility actions. Only ever surfaced in the Controls menu when
+    // ModConfig.Instance.debugKeysEnabled is on (see BuildControlsMenu), and only ever
+    // read when the same flag is on (see SimpleHUD.HandleDebugKeys), so an ordinary
+    // player never sees or triggers these regardless of what they're bound to.
+    DebugDamageShade,
+    DebugHealShade,
+    DebugSoulIncrease,
+    DebugSoulDecrease,
+    DebugSoulReset
 }
 
 public enum ShadeBindingOptionType
@@ -102,6 +111,11 @@ public class ShadeInputConfig
     public ShadeBinding focus = new();
     public ShadeBinding sprint = new();
     public ShadeBinding assistMode = new();
+    public ShadeBinding debugDamageShade = new();
+    public ShadeBinding debugHealShade = new();
+    public ShadeBinding debugSoulIncrease = new();
+    public ShadeBinding debugSoulDecrease = new();
+    public ShadeBinding debugSoulReset = new();
 
     public ShadeInputConfig()
     {
@@ -127,6 +141,15 @@ public class ShadeInputConfig
         focus = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.H), ShadeBindingOption.None());
         sprint = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.LeftShift), ShadeBindingOption.None());
         assistMode = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Alpha0), ShadeBindingOption.None());
+
+        // Matches the defaults these carried as hardcoded, unrebindable KeyCode constants
+        // in SimpleHUD before they moved into the normal binding system -- unbound except
+        // for soul reset, so existing behaviour doesn't change until someone rebinds them.
+        debugDamageShade = new ShadeBinding(ShadeBindingOption.None(), ShadeBindingOption.None());
+        debugHealShade = new ShadeBinding(ShadeBindingOption.None(), ShadeBindingOption.None());
+        debugSoulIncrease = new ShadeBinding(ShadeBindingOption.None(), ShadeBindingOption.None());
+        debugSoulDecrease = new ShadeBinding(ShadeBindingOption.None(), ShadeBindingOption.None());
+        debugSoulReset = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Backslash), ShadeBindingOption.None());
     }
 
     public void ApplyDualControllerPreset()
@@ -254,6 +277,11 @@ public class ShadeInputConfig
         ShadeAction.Focus => focus,
         ShadeAction.Sprint => sprint,
         ShadeAction.AssistMode => assistMode,
+        ShadeAction.DebugDamageShade => debugDamageShade,
+        ShadeAction.DebugHealShade => debugHealShade,
+        ShadeAction.DebugSoulIncrease => debugSoulIncrease,
+        ShadeAction.DebugSoulDecrease => debugSoulDecrease,
+        ShadeAction.DebugSoulReset => debugSoulReset,
         _ => moveLeft
     };
 
@@ -297,6 +325,21 @@ public class ShadeInputConfig
             case ShadeAction.AssistMode:
                 assistMode = binding;
                 break;
+            case ShadeAction.DebugDamageShade:
+                debugDamageShade = binding;
+                break;
+            case ShadeAction.DebugHealShade:
+                debugHealShade = binding;
+                break;
+            case ShadeAction.DebugSoulIncrease:
+                debugSoulIncrease = binding;
+                break;
+            case ShadeAction.DebugSoulDecrease:
+                debugSoulDecrease = binding;
+                break;
+            case ShadeAction.DebugSoulReset:
+                debugSoulReset = binding;
+                break;
         }
     }
 
@@ -336,6 +379,11 @@ public class ShadeInputConfig
         clone.focus = CloneBinding(focus);
         clone.sprint = CloneBinding(sprint);
         clone.assistMode = CloneBinding(assistMode);
+        clone.debugDamageShade = CloneBinding(debugDamageShade);
+        clone.debugHealShade = CloneBinding(debugHealShade);
+        clone.debugSoulIncrease = CloneBinding(debugSoulIncrease);
+        clone.debugSoulDecrease = CloneBinding(debugSoulDecrease);
+        clone.debugSoulReset = CloneBinding(debugSoulReset);
         return clone;
     }
 
@@ -358,6 +406,11 @@ public class ShadeInputConfig
         focus = CloneBinding(other.focus);
         sprint = CloneBinding(other.sprint);
         assistMode = CloneBinding(other.assistMode);
+        debugDamageShade = CloneBinding(other.debugDamageShade);
+        debugHealShade = CloneBinding(other.debugHealShade);
+        debugSoulIncrease = CloneBinding(other.debugSoulIncrease);
+        debugSoulDecrease = CloneBinding(other.debugSoulDecrease);
+        debugSoulReset = CloneBinding(other.debugSoulReset);
     }
 }
 

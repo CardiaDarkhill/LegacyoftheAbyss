@@ -21,20 +21,24 @@ public static partial class ShadeSettingsMenu
             LogMenuInfo("Attempting to build Shade settings page");
             loggedBuildAttempt = true;
         }
-        if (built && mainScreen != null && builtFor == ui)
+        bool debugKeysEnabled = ModConfig.Instance.debugKeysEnabled;
+        if (built && mainScreen != null && builtFor == ui && lastBuiltDebugKeysEnabled == debugKeysEnabled)
         {
             LogMenuDebug("Settings page already built for this UI");
             return;
         }
 
-        if ((mainScreen != null || allScreens.Count > 0) && builtFor != ui)
+        if (mainScreen != null || allScreens.Count > 0)
         {
-            LogMenuDebug("UIManager changed, destroying previous settings page");
+            LogMenuDebug(builtFor != ui
+                ? "UIManager changed, destroying previous settings page"
+                : "Debug keys setting changed, rebuilding settings page");
             DestroyScreens();
         }
 
         built = false;
         builtFor = ui;
+        lastBuiltDebugKeysEnabled = debugKeysEnabled;
         screenFirstSelectables.Clear();
         allScreens.Clear();
         activeScreen = null;
@@ -219,6 +223,11 @@ public static partial class ShadeSettingsMenu
 
     internal static void Inject(UIManager ui)
     {
+        // Fast path: already injected into this UIManager. Inject is polled every frame, and
+        // everything below it allocates (hierarchy scans, Unity's .name getter), so bail first.
+        if (ui != null && injectedFor == ui)
+            return;
+
         if (ui == null)
         {
             if (!loggedNullUI)
@@ -248,6 +257,7 @@ public static partial class ShadeSettingsMenu
         {
             if (child.name == "ShadeSettingsButton")
             {
+                injectedFor = ui;
                 if (!loggedButtonAlreadyPresent)
                 {
                     LogMenuInfo("ShadeSettingsButton already present; skipping injection");
@@ -402,6 +412,7 @@ public static partial class ShadeSettingsMenu
         dirtyField?.SetValue(list, true);
 
         list.SetupActive();
+        injectedFor = ui;
         LogMenuInfo("Injected ShadeSettingsButton into pause menu");
     }
 
@@ -522,6 +533,7 @@ public static partial class ShadeSettingsMenu
         DestroyScreens();
         built = false;
         builtFor = null;
+        injectedFor = null;
         sliderLabelStyle = null;
         sliderValueStyle = null;
         toggleLabelStyle = null;

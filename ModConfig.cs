@@ -94,6 +94,9 @@ public class ModConfig
     public bool logMenu = true;
     public bool logShade = true;
     public bool logHud = true;
+    // Enables the developer HP/soul cheat keys polled by SimpleHUD.Update. Off by default
+    // so shipped builds do not poll six keys every frame or expose the cheats.
+    public bool debugKeysEnabled = false;
     public bool shadeUnlockPopupsMuted = false;
     public float shadeUnlockPopupDelaySeconds = 0.75f;
     public float shadeUnlockPopupDurationSeconds = 3.5f;

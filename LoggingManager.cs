@@ -15,7 +15,7 @@ internal static class LoggingManager
 
     private static readonly Dictionary<string, DamageEntry> damage = new();
     private static ManualLogSource consoleLogger;
-    private static string logFile;
+    private static StreamWriter writer;
     private static bool wroteHitHeader;
     private static bool wroteBlockedHeader;
     private static bool initialized;
@@ -31,42 +31,48 @@ internal static class LoggingManager
         try
         {
             Directory.CreateDirectory(ModPaths.Logs);
-            logFile = Path.Combine(ModPaths.Logs, $"shade_damage_{DateTime.Now:yyyyMMdd_HHmmss}.txt");
-            File.WriteAllText(logFile, $"Shade damage log {DateTime.Now}\n");
+            string logFile = Path.Combine(ModPaths.Logs, $"shade_damage_{DateTime.Now:yyyyMMdd_HHmmss}.txt");
+            // Held open for the session. The previous implementation reopened and closed
+            // the file for every single line, which meant a full open/flush/close per hit.
+            // AutoFlush stays on so the log survives a crash -- flushing is the cheap part.
+            writer = new StreamWriter(logFile, append: false) { AutoFlush = true };
+            writer.WriteLine($"Shade damage log {DateTime.Now}");
         }
-        catch { }
+        catch
+        {
+            writer = null;
+        }
     }
 
     internal static void LogShadeDamage(string source, bool succeeded)
     {
-        try
+        // Gate first. This previously sat below the console write, so the console was
+        // spammed regardless of the setting and the message string was always allocated.
+        if (!ModConfig.Instance.logDamage) return;
+
+        Initialize();
+
+        if (consoleLogger != null)
         {
-            if (consoleLogger != null)
+            string message = succeeded
+                ? $"Shade took damage from {source}."
+                : $"Shade avoided damage from {source}.";
+            if (succeeded)
             {
-                string message = succeeded
-                    ? $"Shade took damage from {source}."
-                    : $"Shade avoided damage from {source}.";
-                if (succeeded)
-                {
-                    consoleLogger.LogWarning(message);
-                }
-                else
-                {
-                    consoleLogger.LogInfo(message);
-                }
+                consoleLogger.LogWarning(message);
+            }
+            else
+            {
+                consoleLogger.LogInfo(message);
             }
         }
-        catch
-        {
-        }
 
-        if (!ModConfig.Instance.logDamage) return;
-        Initialize();
         if (!damage.TryGetValue(source, out var entry))
         {
             entry = new DamageEntry();
             damage[source] = entry;
         }
+
         if (succeeded)
         {
             if (entry.success == 0)
@@ -103,7 +109,9 @@ internal static class LoggingManager
 
     private static void AppendLine(string line)
     {
-        try { File.AppendAllText(logFile, line + Environment.NewLine); } catch { }
+        if (writer == null) return;
+        try { writer.WriteLine(line); }
+        catch { }
     }
 
     internal static void Update()
@@ -111,17 +119,31 @@ internal static class LoggingManager
         if (Input.GetKeyDown(KeyCode.F1))
         {
             ModConfig.Instance.logDamage = !ModConfig.Instance.logDamage;
+            if (ModConfig.Instance.logDamage)
+            {
+                Initialize();
+            }
             AppendLine($"[Toggle] Damage logging {(ModConfig.Instance.logDamage ? "enabled" : "disabled")}");
         }
     }
 
     internal static void Flush()
     {
-        if (!initialized) return;
-        AppendLine("== Totals ==");
-        foreach (var kv in damage)
+        if (!initialized || writer == null) return;
+        try
         {
-            AppendLine($"{kv.Key}: {kv.Value.success} hits, {kv.Value.blocked} blocks");
+            AppendLine("== Totals ==");
+            foreach (var kv in damage)
+            {
+                AppendLine($"{kv.Key}: {kv.Value.success} hits, {kv.Value.blocked} blocks");
+            }
+            writer.Flush();
+            writer.Dispose();
+        }
+        catch { }
+        finally
+        {
+            writer = null;
         }
     }
 }

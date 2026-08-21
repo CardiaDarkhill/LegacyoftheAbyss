@@ -3,7 +3,12 @@ using UnityEngine;
 
 public static class HornetInput
 {
-    private static InputHandler? FindHandler()
+    /// <summary>
+    /// Resolves the game's InputHandler, preferring the singleton and falling back through
+    /// GameManager and finally a scene scan. Shared with ShadeInventoryPane, which had a
+    /// byte-identical private copy of this cascade.
+    /// </summary>
+    internal static InputHandler? FindHandler()
     {
         try
         {

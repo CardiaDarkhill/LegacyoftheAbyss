@@ -350,6 +350,11 @@ public partial class LegacyHelper
                     focusSfx.volume = Mathf.Clamp01(GetEffectiveSfxVolume());
                 }
 
+                // Clip resolution runs at most once per session: it probes the filesystem
+                // and then walks every loaded object, neither of which should repeat per cast.
+                if (searchedFocusSfx) return;
+                searchedFocusSfx = true;
+
                 // Prefer HK1 SFX dropped into the mod Assets folder (wav)
                 // Primary (per your filenames), with fallback aliases
                 if (sfxFocusCharge == null)
@@ -613,6 +618,11 @@ public partial class LegacyHelper
                     spellSfx.spatialBlend = 0f;
                     spellSfx.volume = Mathf.Clamp01(GetEffectiveSfxVolume());
                 }
+                // As with focus SFX: probing the Assets folder and walking every loaded
+                // object are both one-time costs, not per-cast costs.
+                if (searchedSpellSfx) return;
+                searchedSpellSfx = true;
+
                 if (sfxFireball == null) sfxFireball = TryLoadAudioFromAssets("hero_fireball.wav");
                 if (sfxQuakePrepare == null) sfxQuakePrepare = TryLoadAudioFromAssets("hero_quake_spell_prepare.wav");
                 if (sfxQuakeImpact == null) sfxQuakeImpact = TryLoadAudioFromAssets("hero_quake_spell_impact.wav");
@@ -622,27 +632,75 @@ public partial class LegacyHelper
 
                 if (sfxFireball == null || sfxQuakePrepare == null || sfxQuakeImpact == null || sfxVoidQuakeImpact == null || sfxScream == null || sfxVoidScream == null)
                 {
-                    var all = Resources.FindObjectsOfTypeAll<AudioClip>();
-                    AudioClip best(string[] keys)
-                    {
-                        AudioClip pick = null; int scoreBest = int.MinValue;
-                        foreach (var c in all)
-                        {
-                            if (!c) continue; string n = (c.name ?? string.Empty).ToLowerInvariant();
-                            int sc = 0; foreach (var k in keys) if (n.Contains(k)) sc += 2; // favor multiple matches
-                            if (sc > scoreBest) { scoreBest = sc; pick = c; }
-                        }
-                        return pick;
-                    }
-                    if (sfxFireball == null) sfxFireball = best(new[] { "fireball", "vengeful", "spirit", "spell" });
-                    if (sfxQuakePrepare == null) sfxQuakePrepare = best(new[] { "quake", "prepare", "start", "spell" });
-                    if (sfxQuakeImpact == null) sfxQuakeImpact = best(new[] { "quake", "impact", "spell" });
-                    if (sfxVoidQuakeImpact == null) sfxVoidQuakeImpact = best(new[] { "void", "quake", "impact" });
-                    if (sfxScream == null) sfxScream = best(new[] { "scream", "wraith", "howl", "spell" });
-                    if (sfxVoidScream == null) sfxVoidScream = best(new[] { "void", "scream", "abyss" });
+                    ResolveSpellSfxByName();
                 }
             }
             catch { }
+        }
+
+        private static readonly string[] FireballKeys = { "fireball", "vengeful", "spirit", "spell" };
+        private static readonly string[] QuakePrepareKeys = { "quake", "prepare", "start", "spell" };
+        private static readonly string[] QuakeImpactKeys = { "quake", "impact", "spell" };
+        private static readonly string[] VoidQuakeKeys = { "void", "quake", "impact" };
+        private static readonly string[] ScreamKeys = { "scream", "wraith", "howl", "spell" };
+        private static readonly string[] VoidScreamKeys = { "void", "scream", "abyss" };
+
+        /// <summary>
+        /// Picks the best-matching clip for each unresolved spell sound in a single pass.
+        /// The previous version ran one full pass per sound -- six walks over every loaded
+        /// AudioClip, each lowercasing every clip name again.
+        /// </summary>
+        private void ResolveSpellSfxByName()
+        {
+            var all = Resources.FindObjectsOfTypeAll<AudioClip>();
+            if (all == null || all.Length == 0) return;
+
+            AudioClip bestFireball = null, bestQuakePrepare = null, bestQuakeImpact = null;
+            AudioClip bestVoidQuake = null, bestScream = null, bestVoidScream = null;
+            int sFireball = int.MinValue, sQuakePrepare = int.MinValue, sQuakeImpact = int.MinValue;
+            int sVoidQuake = int.MinValue, sScream = int.MinValue, sVoidScream = int.MinValue;
+
+            static int Score(string name, string[] keys)
+            {
+                int sc = 0;
+                foreach (var k in keys)
+                {
+                    if (name.Contains(k, StringComparison.Ordinal)) sc += 2; // favour multiple matches
+                }
+                return sc;
+            }
+
+            foreach (var c in all)
+            {
+                if (!c) continue;
+                // Lowercased once per clip rather than once per clip per target.
+                string n = (c.name ?? string.Empty).ToLowerInvariant();
+
+                int score = Score(n, FireballKeys);
+                if (score > sFireball) { sFireball = score; bestFireball = c; }
+
+                score = Score(n, QuakePrepareKeys);
+                if (score > sQuakePrepare) { sQuakePrepare = score; bestQuakePrepare = c; }
+
+                score = Score(n, QuakeImpactKeys);
+                if (score > sQuakeImpact) { sQuakeImpact = score; bestQuakeImpact = c; }
+
+                score = Score(n, VoidQuakeKeys);
+                if (score > sVoidQuake) { sVoidQuake = score; bestVoidQuake = c; }
+
+                score = Score(n, ScreamKeys);
+                if (score > sScream) { sScream = score; bestScream = c; }
+
+                score = Score(n, VoidScreamKeys);
+                if (score > sVoidScream) { sVoidScream = score; bestVoidScream = c; }
+            }
+
+            sfxFireball ??= bestFireball;
+            sfxQuakePrepare ??= bestQuakePrepare;
+            sfxQuakeImpact ??= bestQuakeImpact;
+            sfxVoidQuakeImpact ??= bestVoidQuake;
+            sfxScream ??= bestScream;
+            sfxVoidScream ??= bestVoidScream;
         }
 
         private void TryPlayFireballSfx()
@@ -735,11 +793,6 @@ public partial class LegacyHelper
                 }
             }
             catch { }
-        }
-
-        private IEnumerator EnableShadeLightNextFrame()
-        {
-            yield return null;
         }
 
         private static void EnsureSimpleLightResources()

@@ -98,7 +98,7 @@ namespace LegacyoftheAbyss.Shade
                             continue;
                         }
 
-                        if (sceneName.IndexOf(exclude, StringComparison.OrdinalIgnoreCase) >= 0)
+                        if (sceneName.Contains(exclude, StringComparison.OrdinalIgnoreCase))
                         {
                             return false;
                         }
@@ -143,7 +143,7 @@ namespace LegacyoftheAbyss.Shade
                                 continue;
                             }
 
-                            if (sceneName.IndexOf(exclude, StringComparison.OrdinalIgnoreCase) >= 0)
+                            if (sceneName.Contains(exclude, StringComparison.OrdinalIgnoreCase))
                             {
                                 return false;
                             }

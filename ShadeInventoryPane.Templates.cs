@@ -166,7 +166,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
                         string existingName = matchByName.gameObject.name;
                         if (!string.IsNullOrEmpty(existingName))
                         {
-                            existingIsDescription = existingName.IndexOf("description", StringComparison.OrdinalIgnoreCase) >= 0;
+                            existingIsDescription = existingName.Contains("description", StringComparison.OrdinalIgnoreCase);
                         }
 
                         if (!existingIsDescription && currentIsDescription)
@@ -559,13 +559,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             return;
         }
 
-        try
-        {
-            Debug.Log("[ShadeInventory] " + message);
-        }
-        catch
-        {
-        }
+        Debug.Log("[ShadeInventory] " + message);
     }
 
     public override void Awake()

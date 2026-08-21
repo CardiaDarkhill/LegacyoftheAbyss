@@ -287,48 +287,8 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         return handler;
     }
 
-    private static InputHandler? FindInputHandler()
-    {
-        try
-        {
-            var singleton = ManagerSingleton<InputHandler>.UnsafeInstance;
-            if (singleton != null)
-            {
-                return singleton;
-            }
-        }
-        catch
-        {
-        }
-
-        try
-        {
-            var gm = GameManager.instance;
-            if (gm != null && gm.inputHandler != null)
-            {
-                return gm.inputHandler;
-            }
-        }
-        catch
-        {
-        }
-
-        try
-        {
-            return UnityEngine.Object.FindFirstObjectByType<InputHandler>();
-        }
-        catch
-        {
-            try
-            {
-                return UnityEngine.Object.FindAnyObjectByType<InputHandler>();
-            }
-            catch
-            {
-                return null;
-            }
-        }
-    }
+    // Delegates to HornetInput, which owns the canonical resolution cascade.
+    private static InputHandler? FindInputHandler() => HornetInput.FindHandler();
 
     private void ProcessShadeSubmitInput()
     {

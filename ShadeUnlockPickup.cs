@@ -121,30 +121,20 @@ public sealed class ShadeUnlockPickup : MonoBehaviour
         }
 
         string resolvedMessage = !string.IsNullOrWhiteSpace(overrideMessage) ? overrideMessage : message;
-        if (grantCharm && grantedCharm && string.IsNullOrWhiteSpace(resolvedMessage) && useCharmNameForMessage)
+        if (grantCharm && grantedCharm)
         {
+            // Both former branches ended up doing the same definition lookup; only the
+            // message assignment was ever conditional.
             try
             {
                 var inventory = ShadeRuntime.Charms;
                 if (inventory != null)
                 {
                     var definition = inventory.GetDefinition(charmId);
-                    resolvedMessage = definition.DisplayName;
-                    notificationIcon = definition.Icon;
-                }
-            }
-            catch
-            {
-            }
-        }
-        else if (grantCharm && grantedCharm && notificationIcon == null)
-        {
-            try
-            {
-                var inventory = ShadeRuntime.Charms;
-                if (inventory != null)
-                {
-                    var definition = inventory.GetDefinition(charmId);
+                    if (useCharmNameForMessage && string.IsNullOrWhiteSpace(resolvedMessage))
+                    {
+                        resolvedMessage = definition.DisplayName;
+                    }
                     notificationIcon = definition.Icon;
                 }
             }

@@ -91,6 +91,14 @@ internal static class ShadeAggroTracker
 
     internal static bool TryGetTargets(AlertRange range, List<Target> buffer)
     {
+        // Called from a FixedUpdate postfix for every AlertRange in the scene. When no
+        // shade proxy is inside any range -- the common case -- this is the whole cost.
+        if (RangeToProxies.Count == 0)
+        {
+            buffer.Clear();
+            return false;
+        }
+
         buffer.Clear();
         if (range == null)
         {

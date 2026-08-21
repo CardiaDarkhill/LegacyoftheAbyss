@@ -17,6 +17,13 @@ public static partial class ShadeSettingsMenu
     private static GameObject screen;
     private static bool built;
     private static UIManager builtFor;
+    // Tracks the debugKeysEnabled value the Controls menu was last built with, so toggling
+    // it in Debug Options forces a rebuild (adding/removing the debug binding rows) the next
+    // time the settings menu is opened, rather than requiring built to be reset by hand.
+    private static bool lastBuiltDebugKeysEnabled;
+    // Set once the settings button has been injected into a given UIManager's pause menu.
+    // Guards Inject's hierarchy scan, which would otherwise re-walk the whole pause menu every frame.
+    private static UIManager injectedFor;
     private static MenuScreen mainScreen;
     private static MenuScreen difficultyScreen;
     private static MenuScreen controlsScreen;

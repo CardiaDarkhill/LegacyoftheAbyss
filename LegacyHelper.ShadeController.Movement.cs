@@ -13,6 +13,10 @@ public partial class LegacyHelper
 {
     public partial class ShadeController : MonoBehaviour
     {
+        // Resolved once. InArenaFight is reached every frame through AdjustLeashForCamera.
+        private static readonly FieldInfo s_battleSceneStartedField =
+            typeof(BattleScene).GetField("started", BindingFlags.Instance | BindingFlags.NonPublic);
+
         private void Update()
         {
             if (pendingCharmLoadoutRecompute && baselineStatsInitialized)
@@ -680,10 +684,9 @@ public partial class LegacyHelper
                     cachedBattle = UnityEngine.Object.FindFirstObjectByType<BattleScene>();
                     battleCheckTimer = 1f;
                 }
-                if (cachedBattle != null)
+                if (cachedBattle != null && s_battleSceneStartedField != null)
                 {
-                    var f = typeof(BattleScene).GetField("started", BindingFlags.Instance | BindingFlags.NonPublic);
-                    if (f != null && (bool)f.GetValue(cachedBattle))
+                    if ((bool)s_battleSceneStartedField.GetValue(cachedBattle))
                         return true;
                 }
             }

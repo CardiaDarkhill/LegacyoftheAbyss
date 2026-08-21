@@ -402,10 +402,6 @@ internal static class ShadeInventoryPaneIntegration
         }
     }
 
-    private static void ScheduleTemplateSync(InventoryPaneList paneList, InventoryPane? template, ShadeInventoryPane shadePane)
-    {
-    }
-
     private sealed class TemplateSyncHost : MonoBehaviour
     {
         private readonly List<SyncRequest> pending = new List<SyncRequest>();
@@ -731,11 +727,11 @@ internal static class ShadeInventoryPaneIntegration
             string goName = p.gameObject != null ? p.gameObject.name : p.name;
             string typeName = p.GetType().Name;
             bool matchesName = !string.IsNullOrEmpty(goName) &&
-                (goName.IndexOf("Charm", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                 goName.IndexOf("Crest", StringComparison.OrdinalIgnoreCase) >= 0);
+                (goName.Contains("Charm", StringComparison.OrdinalIgnoreCase) ||
+                 goName.Contains("Crest", StringComparison.OrdinalIgnoreCase));
             bool matchesType = !string.IsNullOrEmpty(typeName) &&
-                (typeName.IndexOf("Charm", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                 typeName.IndexOf("Crest", StringComparison.OrdinalIgnoreCase) >= 0);
+                (typeName.Contains("Charm", StringComparison.OrdinalIgnoreCase) ||
+                 typeName.Contains("Crest", StringComparison.OrdinalIgnoreCase));
             return matchesName || matchesType;
         }) ?? panes.FirstOrDefault(p => p != null && !(p is ShadeInventoryPane));
 
@@ -812,7 +808,7 @@ internal static class ShadeInventoryPaneIntegration
         var charms = ShadeRuntime.Charms;
         if (icon == null && charms != null)
         {
-            icon = charms.AllCharms.FirstOrDefault()?.Icon;
+            icon = charms.AllCharms.Count > 0 ? charms.AllCharms[0].Icon : null;
         }
         AssignListIcon(shadePane, icon);
 
@@ -830,7 +826,7 @@ internal static class ShadeInventoryPaneIntegration
 
             string typeName = existing.GetType().Name;
             if (!string.IsNullOrEmpty(typeName) &&
-                typeName.IndexOf("Crest", StringComparison.OrdinalIgnoreCase) >= 0)
+                typeName.Contains("Crest", StringComparison.OrdinalIgnoreCase))
             {
                 insertIndex = i + 1;
                 break;
@@ -850,11 +846,11 @@ internal static class ShadeInventoryPaneIntegration
                 string name = existing.gameObject != null ? existing.gameObject.name : existing.name;
                 string typeName = existing.GetType().Name;
                 bool matchesName = !string.IsNullOrEmpty(name) &&
-                    (name.IndexOf("Charm", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                     name.IndexOf("Tool", StringComparison.OrdinalIgnoreCase) >= 0);
+                    (name.Contains("Charm", StringComparison.OrdinalIgnoreCase) ||
+                     name.Contains("Tool", StringComparison.OrdinalIgnoreCase));
                 bool matchesType = !string.IsNullOrEmpty(typeName) &&
-                    (typeName.IndexOf("Charm", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                     typeName.IndexOf("Tool", StringComparison.OrdinalIgnoreCase) >= 0);
+                    (typeName.Contains("Charm", StringComparison.OrdinalIgnoreCase) ||
+                     typeName.Contains("Tool", StringComparison.OrdinalIgnoreCase));
 
                 if (matchesName || matchesType)
                 {

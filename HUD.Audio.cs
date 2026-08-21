@@ -1,5 +1,6 @@
 #nullable disable
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -12,169 +13,266 @@ public partial class SimpleHUD
     private int shadeHurtIdx;
     private AudioClip pinnedHurtSingle;
     private AudioClip pinnedHurtDouble;
+    // Negative cache: Resources.FindObjectsOfTypeAll walks every loaded object, so a
+    // failed lookup must not re-run on the next hit.
+    private bool searchedPinnedHurtClips;
+
+    private const BindingFlags InstanceMembers =
+        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+    // GetProperties allocates a fresh array per call; the FSM crawl hits the same
+    // action types repeatedly, so resolve each type once.
+    private static readonly Dictionary<Type, PropertyInfo[]> s_propertyCache = new();
+
+    private AudioSource EnsureSfxSource()
+    {
+        if (sfxSource == null)
+        {
+            var go = new GameObject("ShadeHUD_SFX");
+            go.transform.SetParent(transform, false);
+            sfxSource = go.AddComponent<AudioSource>();
+            sfxSource.playOnAwake = false;
+            sfxSource.spatialBlend = 0f;
+        }
+
+        sfxSource.volume = Mathf.Clamp01(LegacyHelper.GetEffectiveSfxVolume());
+        return sfxSource;
+    }
 
     private void TryPlayPinnedHurtSfx(int lost)
     {
         try
         {
-            if (sfxSource == null)
-            {
-                var go = new GameObject("ShadeHUD_SFX");
-                go.transform.SetParent(this.transform, false);
-                sfxSource = go.AddComponent<AudioSource>();
-                sfxSource.playOnAwake = false; sfxSource.spatialBlend = 0f; sfxSource.volume = Mathf.Clamp01(LegacyHelper.GetEffectiveSfxVolume());
-            }
-            if (pinnedHurtSingle == null || pinnedHurtDouble == null)
-            {
-                AudioClip[] all = Resources.FindObjectsOfTypeAll<AudioClip>();
-                if (all != null)
-                {
-                    foreach (var c in all)
-                    {
-                        if (c == null) continue; string n = c.name ?? string.Empty;
-                        if (pinnedHurtSingle == null && string.Equals(n, "hero_damage", StringComparison.OrdinalIgnoreCase)) pinnedHurtSingle = c;
-                        if (pinnedHurtDouble == null && string.Equals(n, "hero_double_damage", StringComparison.OrdinalIgnoreCase)) pinnedHurtDouble = c;
-                        if (pinnedHurtSingle != null && pinnedHurtDouble != null) break;
-                    }
-                    if (pinnedHurtSingle == null)
-                        foreach (var c in all) { var n = c != null ? c.name : null; if (!string.IsNullOrEmpty(n) && n.IndexOf("hero_damage", StringComparison.OrdinalIgnoreCase) >= 0) { pinnedHurtSingle = c; break; } }
-                    if (pinnedHurtDouble == null)
-                        foreach (var c in all) { var n = c != null ? c.name : null; if (!string.IsNullOrEmpty(n) && n.IndexOf("hero_double_damage", StringComparison.OrdinalIgnoreCase) >= 0) { pinnedHurtDouble = c; break; } }
-                }
-            }
+            var source = EnsureSfxSource();
+            ResolvePinnedHurtClips();
+
             AudioClip clip = (lost >= 2 && pinnedHurtDouble != null) ? pinnedHurtDouble : pinnedHurtSingle;
             if (clip != null)
             {
-                float volume = Mathf.Clamp01(LegacyHelper.GetEffectiveSfxVolume());
-                sfxSource.volume = volume;
-                sfxSource.PlayOneShot(clip);
+                source.PlayOneShot(clip);
                 return;
             }
         }
         catch { }
+
         TryPlayDamageSfx();
+    }
+
+    /// <summary>
+    /// Locates the two pinned hero damage clips in a single pass over the loaded set.
+    /// Exact name matches win; a substring match is kept as a fallback for each slot.
+    /// </summary>
+    private void ResolvePinnedHurtClips()
+    {
+        if (searchedPinnedHurtClips) return;
+        searchedPinnedHurtClips = true;
+
+        var all = Resources.FindObjectsOfTypeAll<AudioClip>();
+        if (all == null) return;
+
+        AudioClip singleFallback = null;
+        AudioClip doubleFallback = null;
+
+        foreach (var c in all)
+        {
+            if (c == null) continue;
+            string n = c.name;
+            if (string.IsNullOrEmpty(n)) continue;
+
+            if (pinnedHurtSingle == null && string.Equals(n, "hero_damage", StringComparison.OrdinalIgnoreCase))
+                pinnedHurtSingle = c;
+            else if (singleFallback == null && n.Contains("hero_damage", StringComparison.OrdinalIgnoreCase))
+                singleFallback = c;
+
+            if (pinnedHurtDouble == null && string.Equals(n, "hero_double_damage", StringComparison.OrdinalIgnoreCase))
+                pinnedHurtDouble = c;
+            else if (doubleFallback == null && n.Contains("hero_double_damage", StringComparison.OrdinalIgnoreCase))
+                doubleFallback = c;
+
+            if (pinnedHurtSingle != null && pinnedHurtDouble != null) break;
+        }
+
+        pinnedHurtSingle ??= singleFallback;
+        pinnedHurtDouble ??= doubleFallback;
     }
 
     private void TryPlayDamageSfx()
     {
         try
         {
-            if (sfxSource == null)
-            {
-                var go = new GameObject("ShadeHUD_SFX");
-                go.transform.SetParent(this.transform, false);
-                sfxSource = go.AddComponent<AudioSource>();
-                sfxSource.playOnAwake = false; sfxSource.spatialBlend = 0f; sfxSource.volume = Mathf.Clamp01(LegacyHelper.GetEffectiveSfxVolume());
-            }
+            var source = EnsureSfxSource();
+
             if (shadeHurtCandidates == null || shadeHurtCandidates.Count == 0)
             {
                 shadeHurtCandidates = BuildShadeHurtCandidates();
                 shadeHurtIdx = 0;
             }
-            if (shadeHurtCandidates != null && shadeHurtCandidates.Count > 0)
+
+            if (shadeHurtCandidates.Count == 0) return;
+
+            var clip = shadeHurtCandidates[shadeHurtIdx % shadeHurtCandidates.Count];
+            shadeHurtIdx++;
+            if (clip != null)
             {
-                var clip = shadeHurtCandidates[shadeHurtIdx % shadeHurtCandidates.Count]; shadeHurtIdx++;
-                if (clip != null)
-                {
-                    float volume = Mathf.Clamp01(LegacyHelper.GetEffectiveSfxVolume());
-                    sfxSource.volume = volume;
-                    sfxSource.PlayOneShot(clip);
-                }
+                source.PlayOneShot(clip);
             }
         }
         catch { }
+    }
+
+    /// <summary>
+    /// Ranks every loaded clip by how much it looks like a hero-damage sound.
+    /// The score is computed once per clip; the previous LINQ chain re-ran up to nine
+    /// substring searches per clip on every sort comparison.
+    /// </summary>
+    private static int ScoreHurtCandidate(string n)
+    {
+        bool take = n.Contains("take", StringComparison.OrdinalIgnoreCase);
+        bool hit = n.Contains("hit", StringComparison.OrdinalIgnoreCase);
+        bool hornet = n.Contains("hornet", StringComparison.OrdinalIgnoreCase);
+        bool hurt = n.Contains("hurt", StringComparison.OrdinalIgnoreCase);
+        bool damage = n.Contains("damage", StringComparison.OrdinalIgnoreCase);
+        bool takeHit = n.Contains("take_hit", StringComparison.OrdinalIgnoreCase);
+
+        if (!(hurt || takeHit || damage || hit || hornet)) return -1;
+
+        // Bit weights preserve the original ThenByDescending precedence:
+        // (take && hit) > hornet > hurt > damage.
+        int score = 0;
+        if (take && hit) score |= 8;
+        if (hornet) score |= 4;
+        if (hurt) score |= 2;
+        if (damage) score |= 1;
+        return score;
     }
 
     private List<AudioClip> BuildShadeHurtCandidates()
     {
-        var list = new List<AudioClip>(); var seen = new HashSet<AudioClip>();
-        try { var fsmClips = FindHurtClipsFromHornetFSM(); if (fsmClips != null) foreach (var c in fsmClips) if (c != null && seen.Add(c)) list.Add(c); } catch { }
-        try {
+        var list = new List<AudioClip>();
+        var seen = new HashSet<AudioClip>();
+
+        try
+        {
+            foreach (var c in FindHurtClipsFromHornetFSM())
+            {
+                if (c != null && seen.Add(c)) list.Add(c);
+            }
+        }
+        catch { }
+
+        try
+        {
             var all = Resources.FindObjectsOfTypeAll<AudioClip>();
             if (all != null && all.Length > 0)
             {
-                var ordered = all.Where(c => c != null).Select(c => new { clip = c, n = (c.name ?? string.Empty) })
-                    .Where(x => x.n.IndexOf("hurt", StringComparison.OrdinalIgnoreCase) >= 0
-                             || x.n.IndexOf("take_hit", StringComparison.OrdinalIgnoreCase) >= 0
-                             || x.n.IndexOf("damage", StringComparison.OrdinalIgnoreCase) >= 0
-                             || x.n.IndexOf("hit", StringComparison.OrdinalIgnoreCase) >= 0
-                             || x.n.IndexOf("hornet", StringComparison.OrdinalIgnoreCase) >= 0)
-                    .OrderByDescending(x => (x.n.IndexOf("take", StringComparison.OrdinalIgnoreCase) >= 0 && x.n.IndexOf("hit", StringComparison.OrdinalIgnoreCase) >= 0))
-                    .ThenByDescending(x => x.n.IndexOf("hornet", StringComparison.OrdinalIgnoreCase) >= 0)
-                    .ThenByDescending(x => x.n.IndexOf("hurt", StringComparison.OrdinalIgnoreCase) >= 0)
-                    .ThenByDescending(x => x.n.IndexOf("damage", StringComparison.OrdinalIgnoreCase) >= 0)
-                    .Select(x => x.clip);
-                foreach (var c in ordered) if (c != null && seen.Add(c)) list.Add(c);
-            }
-        } catch { }
-        return list;
-    }
-
-    private List<AudioClip> FindHurtClipsFromHornetFSM()
-    {
-        var result = new List<AudioClip>();
-        try
-        {
-            var hc = HeroController.instance;
-            if (hc != null)
-            {
-                var fsmField = hc.GetType().GetField("HeroFSM", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                var fsmVal = fsmField?.GetValue(hc);
-                if (fsmVal != null)
+                var scored = new List<(AudioClip Clip, int Score)>();
+                foreach (var c in all)
                 {
-                    var statesProp = fsmVal.GetType().GetProperty("States", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    var states = (statesProp != null) ? (statesProp.GetValue(fsmVal, null) as System.Collections.IEnumerable) : null;
-                    if (states != null)
-                    {
-                        foreach (var s in states)
-                        {
-                            var actionsProp = s.GetType().GetProperty("Actions", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                            var actions = (actionsProp != null) ? (actionsProp.GetValue(s, null) as System.Collections.IEnumerable) : null;
-                            if (actions == null) continue;
-                            foreach (var action in actions)
-                            {
-                                if (action == null) continue;
-                                try
-                                {
-                                    var at = action.GetType();
-                                    var props = at.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                                    foreach (var p in props)
-                                    {
-                                        if (p.PropertyType == typeof(AudioClip))
-                                        {
-                                            var clip2 = p.GetValue(action, null) as AudioClip;
-                                            if (clip2 != null && !result.Contains(clip2)) result.Add(clip2);
-                                        }
-                                        var pt = p.PropertyType;
-                                        if (pt != null && pt.FullName != null && pt.FullName.Contains("UnityEngine.AudioSource"))
-                                        {
-                                            var src = p.GetValue(action, null) as AudioSource;
-                                            if (src != null && src.clip != null && !result.Contains(src.clip)) result.Add(src.clip);
-                                        }
-                                        if (pt != null && pt.FullName != null && pt.FullName.Contains("HutongGames.PlayMaker.FsmObject"))
-                                        {
-                                            var pobj = p.GetValue(action, null);
-                                            if (pobj != null)
-                                            {
-                                                var vprop = pobj.GetType().GetProperty("Value", BindingFlags.Instance | BindingFlags.Public);
-                                                var v = (vprop != null) ? vprop.GetValue(pobj, null) : null;
-                                                var clip3 = v as AudioClip;
-                                                if (clip3 != null && !result.Contains(clip3)) result.Add(clip3);
-                                            }
-                                        }
-                                    }
-                                }
-                                catch { }
-                            }
-                        }
-                    }
+                    if (c == null) continue;
+                    string n = c.name ?? string.Empty;
+                    int score = ScoreHurtCandidate(n);
+                    if (score >= 0) scored.Add((c, score));
+                }
+
+                // OrderByDescending is a stable sort, matching the previous ordering
+                // for clips that tie on score.
+                foreach (var entry in scored.OrderByDescending(x => x.Score))
+                {
+                    if (seen.Add(entry.Clip)) list.Add(entry.Clip);
                 }
             }
         }
         catch { }
+
+        return list;
+    }
+
+    private static PropertyInfo[] GetCachedProperties(Type type)
+    {
+        if (!s_propertyCache.TryGetValue(type, out var props))
+        {
+            props = type.GetProperties(InstanceMembers);
+            s_propertyCache[type] = props;
+        }
+        return props;
+    }
+
+    /// <summary>
+    /// Walks Hornet's PlayMaker FSM looking for anything that holds an AudioClip.
+    /// </summary>
+    private List<AudioClip> FindHurtClipsFromHornetFSM()
+    {
+        var result = new List<AudioClip>();
+        var seen = new HashSet<AudioClip>();
+
+        void Collect(AudioClip clip)
+        {
+            if (clip != null && seen.Add(clip)) result.Add(clip);
+        }
+
+        try
+        {
+            var hc = HeroController.instance;
+            if (hc == null) return result;
+
+            var fsmVal = hc.GetType().GetField("HeroFSM", InstanceMembers)?.GetValue(hc);
+            if (fsmVal == null) return result;
+
+            var statesProp = fsmVal.GetType().GetProperty("States", InstanceMembers);
+            if (statesProp?.GetValue(fsmVal, null) is not IEnumerable states) return result;
+
+            foreach (var state in states)
+            {
+                if (state == null) continue;
+
+                var actionsProp = state.GetType().GetProperty("Actions", InstanceMembers);
+                if (actionsProp?.GetValue(state, null) is not IEnumerable actions) continue;
+
+                foreach (var action in actions)
+                {
+                    if (action == null) continue;
+                    try
+                    {
+                        CollectClipsFromAction(action, Collect);
+                    }
+                    catch { }
+                }
+            }
+        }
+        catch { }
+
         return result;
     }
+
+    /// <summary>
+    /// Pulls any AudioClip reachable from a single FSM action: a direct clip property,
+    /// an AudioSource's clip, or a PlayMaker FsmObject wrapping one.
+    /// </summary>
+    private static void CollectClipsFromAction(object action, Action<AudioClip> collect)
+    {
+        foreach (var p in GetCachedProperties(action.GetType()))
+        {
+            var pt = p.PropertyType;
+            if (pt == null) continue;
+
+            // Each branch reads the property at most once; the previous version could
+            // call GetValue three times for the same property.
+            if (typeof(AudioClip).IsAssignableFrom(pt))
+            {
+                collect(p.GetValue(action, null) as AudioClip);
+            }
+            else if (typeof(AudioSource).IsAssignableFrom(pt))
+            {
+                collect((p.GetValue(action, null) as AudioSource)?.clip);
+            }
+            else if (pt.FullName != null && pt.FullName.StartsWith("HutongGames.PlayMaker.FsmObject", StringComparison.Ordinal))
+            {
+                var wrapper = p.GetValue(action, null);
+                if (wrapper == null) continue;
+                var valueProp = wrapper.GetType().GetProperty("Value", BindingFlags.Instance | BindingFlags.Public);
+                collect(valueProp?.GetValue(wrapper, null) as AudioClip);
+            }
+        }
+    }
 }
-
-
 #nullable restore
