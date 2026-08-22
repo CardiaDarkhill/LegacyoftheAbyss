@@ -4,7 +4,10 @@ schemaVersion = "0.0.1"
 [package]
 namespace = "CardiaDarkhill"
 name = "LegacyoftheAbyss"
-versionNumber = "0.0.1"
+# Fallback only. The publish workflow passes --package-version, which overrides this, so a
+# stale value here cannot ship the wrong version number from CI. Kept in sync anyway so that
+# a bare local `tcli build` (used to eyeball the zip before releasing) produces the right name.
+versionNumber = "1.1.0"
 description = "Legacy of the Abyss is a full co-op experience for Silksong. With a unique second playable character: The Shade!"
 websiteUrl = "https://github.com/CardiaDarkhill/LegacyoftheAbyss"
 containsNsfwContent = false
@@ -17,8 +20,17 @@ icon = "./BuildTemplates/Thunderstore/icon.png"
 readme = "./BuildTemplates/Thunderstore/README.md"
 outdir = "./build"
 
+# Single source of truth for package contents is the MSBuild PrepareReleasePackages target;
+# tcli's only job is zip + upload. Two things about this path are load-bearing:
+#
+#  - NO trailing slash. With one, tcli drops the first character of every path it writes
+#    ("plugins/Assets/..." -> "lugins/Assets/...", "LegacyoftheAbyss.dll" -> "egacyoftheAbyss.dll"),
+#    producing a zip that looks fine in the log but installs to the wrong paths.
+#  - NO version in the folder name (see ThunderstorePackageRoot in the csproj). tcli treats a
+#    missing copy source as a no-op rather than an error, so a path that goes stale yields a
+#    silently empty package instead of a failed build.
 [[build.copy]]
-source = "obj/Release/Thunderstore/LegacyoftheAbyss-__VERSION_PLACEHOLDER__/"
+source = "obj/Release/Thunderstore/LegacyoftheAbyss"
 target = ""
 
 

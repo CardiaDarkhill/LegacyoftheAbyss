@@ -32,8 +32,24 @@ jobs:
         with:
           dotnet-version: '7.0.x'
 
+      # Build the plugin project explicitly rather than letting `dotnet build` pick up the .sln:
+      # the solution also contains the xunit test project, which needs the game's Managed folder
+      # to run and is pure overhead on a runner that will never run it.
+      #
+      # CreateDistributionPackages=true is required. Without it PrepareReleasePackages is skipped
+      # (it is opt-in so that plain Release builds don't stage loadable duplicate DLLs inside the
+      # live BepInEx/plugins tree) and every packaging step below silently has nothing to package.
       - name: Build Release packages
-        run: dotnet build -c Release -p:Version=${{ inputs.version }}
+        run: dotnet build LegacyoftheAbyss.csproj -c Release -p:Version=${{ inputs.version }} -p:CreateDistributionPackages=true
+
+      - name: Verify staged packages
+        shell: pwsh
+        run: |
+          $nexus = "obj/Release/Nexus/LegacyoftheAbyss-${{ inputs.version }}/BepInEx/plugins/LegacyoftheAbyss.dll"
+          $ts    = "obj/Release/Thunderstore/LegacyoftheAbyss/LegacyoftheAbyss.dll"
+          if (-not (Test-Path $nexus)) { throw "Nexus staging is missing the plugin DLL: $nexus" }
+          if (-not (Test-Path $ts))    { throw "Thunderstore staging is missing the plugin DLL: $ts" }
+          Write-Host "Both staging folders contain the plugin DLL."
 
       # ---- Nexus Mods -----------------------------------------------------
       - name: Zip Nexus package
@@ -46,35 +62,55 @@ jobs:
           Compress-Archive -Path "$src/*" -DestinationPath $dest -Force
           echo "NEXUS_ZIP=$dest" >> $env:GITHUB_ENV
 
-      # NOTE: verify these `with:` input names against
-      # https://github.com/Nexus-Mods/upload-action#readme before the first real run —
-      # the beta API/action may have changed since this was written. Values below are
-      # this project's best read of the README, not a verified-working config.
+      # Input names below match Nexus-Mods/upload-action's action.yml: api_key, file_id, filename
+      # and version are required; mod_id and display_name are optional. The action defines no
+      # game_domain input — an earlier revision passed one, which Actions ignores with only a
+      # warning, so it looked harmless while the real target came from file_id/mod_id all along.
       - name: Upload to Nexus Mods
         if: ${{ inputs.publish_nexus }}
         uses: Nexus-Mods/upload-action@v1
         with:
-          api_key: ${{ secrets.NEXUS_API_KEY }}
-          game_domain: ${{ vars.NEXUS_GAME_DOMAIN }}
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
           mod_id: ${{ vars.NEXUS_MOD_ID }}
           file_id: ${{ vars.NEXUS_FILE_ID }}
           filename: ${{ env.NEXUS_ZIP }}
           version: ${{ inputs.version }}
+          display_name: LegacyoftheAbyss ${{ inputs.version }}
 
       # ---- Thunderstore -----------------------------------------------------
       - name: Install tcli
         if: ${{ inputs.publish_thunderstore }}
         run: dotnet tool install -g tcli
 
+      # --package-version overrides thunderstore.toml's versionNumber, so no file rewriting is
+      # needed and the committed toml is always valid as-is.
       - name: tcli build
         if: ${{ inputs.publish_thunderstore }}
-        run: tcli build
-        env:
-          TCLI_AUTH_TOKEN: ${{ secrets.TCLI_AUTH_TOKEN }}
+        run: tcli build --package-version ${{ inputs.version }}
 
+      # tcli reports success for a package whose copy source matched nothing, so check the zip
+      # actually contains the plugin before uploading it — a bad version is permanent on
+      # Thunderstore, it can only be superseded by another release.
+      - name: Verify Thunderstore zip
+        if: ${{ inputs.publish_thunderstore }}
+        shell: pwsh
+        run: |
+          $zip = "build/CardiaDarkhill-LegacyoftheAbyss-${{ inputs.version }}.zip"
+          if (-not (Test-Path $zip)) { throw "tcli did not produce $zip" }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $names = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip)).Entries.FullName
+          foreach ($required in @('LegacyoftheAbyss.dll','manifest.json','icon.png','README.md')) {
+            if ($names -notcontains $required) { throw "Package is missing $required — contents: $($names -join ', ')" }
+          }
+          if (-not ($names | Where-Object { $_ -like 'plugins/Assets/*' })) { throw "Package contains no plugins/Assets entries." }
+          Write-Host "Package verified: $($names.Count) entries."
+          echo "TS_ZIP=$zip" >> $env:GITHUB_ENV
+
+      # --file publishes the zip verified above instead of silently rebuilding a second,
+      # unverified one.
       - name: tcli publish
         if: ${{ inputs.publish_thunderstore }}
-        run: tcli publish
+        run: tcli publish --file ${{ env.TS_ZIP }}
         env:
           TCLI_AUTH_TOKEN: ${{ secrets.TCLI_AUTH_TOKEN }}
 
@@ -85,4 +121,5 @@ jobs:
           path: |
             obj/Release/Nexus/**
             obj/Release/Thunderstore/**
+            build/*.zip
           retention-days: 30

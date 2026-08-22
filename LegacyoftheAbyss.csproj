@@ -42,7 +42,15 @@
     <PackageBaseName Condition="'$(PackageBaseName)' == ''">$(MSBuildProjectName)</PackageBaseName>
     <ReleasePackagingRoot>$(MSBuildProjectDirectory)/obj/$(Configuration)</ReleasePackagingRoot>
     <NexusPackageRoot>$(ReleasePackagingRoot)/Nexus/$(PackageBaseName)-$(DistributionVersion)</NexusPackageRoot>
-    <ThunderstorePackageRoot>$(ReleasePackagingRoot)/Thunderstore/$(PackageBaseName)-$(DistributionVersion)</ThunderstorePackageRoot>
+    <!--
+    Deliberately NOT versioned, unlike NexusPackageRoot above. thunderstore.toml's
+    [[build.copy]] source has to name this folder literally, and tcli silently produces an
+    empty package when that path does not exist (no error, exit code 0) - which is exactly how
+    a DLL-less zip got built. A static path means the toml never has to be rewritten per
+    release, so local `tcli build` and CI use the identical, always-valid config. The version
+    still reaches the package via manifest.json and tcli's package-version flag.
+    -->
+    <ThunderstorePackageRoot>$(ReleasePackagingRoot)/Thunderstore/$(PackageBaseName)</ThunderstorePackageRoot>
   </PropertyGroup>
 
   <ItemGroup>
@@ -166,7 +174,13 @@
     <ItemGroup>
       <PluginBinary Include="$(TargetPath)" Condition="Exists('$(TargetPath)')" />
       <PluginDeps Include="$(TargetDir)$(TargetName).deps.json" Condition="Exists('$(TargetDir)$(TargetName).deps.json')" />
-      <AssetFiles Include="Assets\**\*.*" />
+      <!--
+      Assets\logs\ is the mod's own runtime damage-log output, written next to the sprites it
+      loads. It is gitignored, so a CI checkout only ever has the .gitkeep - but a local build
+      packages whatever that folder happens to contain, which meant the manual-fallback zip
+      shipped the maintainer's old debug logs. Exclude them from the glob so both paths agree.
+      -->
+      <AssetFiles Include="Assets\**\*.*" Exclude="Assets\logs\**\*.*" />
       <ThunderstoreStatic Include="BuildTemplates/Thunderstore/README.md" />
       <ThunderstoreStatic Include="BuildTemplates/Thunderstore/icon.png" />
     </ItemGroup>

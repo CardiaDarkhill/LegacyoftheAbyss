@@ -485,3 +485,6 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 DevProfile.props
+
+# tcli package output (thunderstore.toml [build] outdir)
+build/
