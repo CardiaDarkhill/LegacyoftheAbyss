@@ -23,65 +23,54 @@ stops focus/fire/nail/spells, and `SimpleHUD.UpdatePauseFade` hides the Shade HU
 and confirmed. Still wanted: sit at a bench and check where the Shade actually parks —
 `dockOffsetX`/`dockOffsetY`/`dockApproachSpeed` on `ShadeController` are the knobs.
 
-**2. Enemies don't redirect their attention to the Shade — targeting built, alerting is the next
-gap.** The old note said this meant rewriting target resolution in each of the 184 files referencing
+**2. Enemies don't redirect their attention to the Shade — both halves built, needs a live pass.**
+The old note said this meant rewriting target resolution in each of the 184 files referencing
 `HeroController.instance`. That was the wrong read: almost none of those are enemies locating the
 player, they are things done *to* the hero (damage, cState, invulnerability, input blocking), and not
-one of the 53 PlayMaker actions among them is a "find the hero" action.
+one of the 53 PlayMaker actions among them is a "find the hero" action. There were two real gaps, and
+alerting turned out to matter more than targeting — redirecting an enemy's target is meaningless while
+the enemy never leaves its idle state.
 
-Enemy AI is PlayMaker-driven, and the actions that move an enemy toward something are one tagged set:
-`ActionCategory("Enemy AI")`, 63 types, of which 36 name their target in a public `FsmGameObject`
-field alongside an `FsmOwnerDefault` for the enemy itself — `ChaseObject*`, `FaceObject*`,
-`DistanceFly*`, `FireAtTarget`, `GetAngleToTarget2D`. `LegacyHelper.EnemyAiRetargeting` borrows that
-field for the duration of each call when the target is Hornet and `ShadeAggroTargeting` says the Shade
-is the better target (per-enemy latched decisions, re-examined every 0.75s, 20% hysteresis, 30-unit
-cap). `ModConfig.shadeEnemyTargetingEnabled` turns it off. Tests: `ShadeAggroTargetingTests` for the
+*Alerting.* `TrackTriggerObjects` only admits an object into `insideGameObjects` if it passes the
+range's `ignoreLayers`/`tagIncludeList`/`tagExcludeList`, which the Shade's aggro proxy does not — so
+`InsideCount` read 0, `IsInside` read false and `GetClosestInside` returned null however close the
+Shade stood. `AlertRange_FixedUpdate_Patch` already covered the single question
+`AlertRange.IsHeroInRange()` answers, which is why registration logged correctly while enemies still
+walked straight past. Three patches on the base class, scoped to `AlertRange` (the enemy-alerting
+subclass, which inherits rather than overrides these members): `InsideCount`, `GetClosestInside`, and
+the three-argument `GetClosestInsideLineOfSight` — the two-argument overload delegates to it, so
+patching both would double-run. That covers four of the five FSM actions that consult a range:
+`CheckTrackTriggerCount`, `CheckTrackTriggerCountV2` and `GetTrackTriggerCount` go through
+`InsideCount`; `GetTrackTriggerClosestObject` goes through `IsInside` and `GetClosestInside`.
+
+*Targeting.* Enemy AI is PlayMaker-driven and the actions that move an enemy toward something are one
+tagged set: `ActionCategory("Enemy AI")`, 63 types, of which 36 name their target in a public
+`FsmGameObject` field alongside an `FsmOwnerDefault` for the enemy itself — `ChaseObject*`,
+`FaceObject*`, `DistanceFly*`, `FireAtTarget`, `GetAngleToTarget2D`. `LegacyHelper.EnemyAiRetargeting`
+borrows that field for the duration of each call when the target is Hornet and `ShadeAggroTargeting`
+says the Shade is the better one (per-enemy latched decisions, re-examined every 0.75s, 20%
+hysteresis, 30-unit cap).
+
+The split is deliberate and worth keeping: alerting answers facts (is the Shade in this range, what is
+nearest) with no preference applied, targeting answers policy (who should this enemy chase).
+`ModConfig.shadeEnemyTargetingEnabled` turns both off. Tests: `ShadeAggroTargetingTests` for the
 comparison, `EnemyAiActionSelectionTests` reflecting over the real game assembly so a game update that
 renames the category or changes the field type fails loudly instead of silently patching nothing.
 
-**The remaining gap is alerting, not targeting, and it is the more important half.** Live evidence: an
-enemy whose ranges the Shade demonstrably enters and exits (`Shade aggro proxy entered alert range
-'Far Range' (Enemy States)`) still walks past it in a passive state, and no retargeting ever fires —
-because the enemy never reaches a state that chases anything.
+Live pass: with `logShade` on, an enemy the Shade walks up to should leave idle, and
+`Shade aggro: '<enemy>' now targeting the Shade` should appear. Known gaps if it needs to go further,
+in rough priority order:
 
-The cause is one layer below `AlertRange`. `TrackTriggerObjects` only admits an object into
-`insideGameObjects` if it passes the range's `ignoreLayers` / `tagIncludeList` / `tagExcludeList`, and
-the Shade's aggro proxy does not, so `InsideCount` is 0, `IsInside` is false, and
-`GetClosestInside` / `GetClosestInsideLineOfSight` return nothing. `AlertRange_FixedUpdate_Patch`
-already works around this for `AlertRange.IsHeroInRange()` specifically, by forcing `isHeroInRange` and
-`haveLineOfSight` — but an FSM that instead asks "how many things are in this range" or "what is the
-closest thing in this range" sees an empty range and stays unalerted.
-
-Next step, and it mirrors the `AlertRange` patch that already works: patch `TrackTriggerObjects`'s
-`InsideCount` / `IsInside` / `GetClosestInside` / `GetClosestInsideLineOfSight` to account for a
-registered Shade proxy. That is one class, and `ShadeAggroTracker` already knows which proxies are
-inside which ranges. Worth doing on its own and verifying before anything else is stacked on top.
-
-Also not attempted: enemies whose AI is hand-written C# rather than FSM-driven (`Walker`, `Chaser` and
-similar); attacks that resolve `HeroController.instance` at the moment of firing; and any aggro
-stickiness beyond distance, so an enemy will not stay on the Shade because the Shade hit it.
-
-**3. Controller menu/pause input — regression under investigation.** Reported after the enemy-AI work
-landed: the Xbox pad's Menu button stopped pausing entirely, and Hornet-on-controller could no longer
-open the inventory with View. Both are allow-listed hero actions, both broke together, and both are
-native behaviours the mod should be leaving alone.
-
-Ruled out by inspection: the extra controls added to `OpenInventory` in
-`HornetInput.ShadeInventoryControls`. An XInput pad exposes only `View` and `Menu` (see
-`InControl.XInputDevice`) — `Back`, `Select`, `Start`, `Options`, `TouchPadButton` and `Minus` are not
-mapped on it at all, so binding them is inert.
-
-The leading suspect is `PatchAll()` aborting. It is all-or-nothing: one patch class that throws while
-being applied takes down every class it had not reached yet, silently, presenting as unrelated
-features breaking at once. `EnemyAiRetargeting` resolves ~100 methods by reflection and was by far the
-likeliest to throw, so it no longer carries `[HarmonyPatch]` and is applied by
-`EnemyAiRetargeting.Apply` *after* `PatchAll`, one method at a time, each in its own try/catch. Its
-startup line reports how many were patched and how many failed.
-
-`HornetInput.LogDeviceSnapshotOnce` now dumps, once at Info, which menu controls each attached pad
-actually exposes and what `Pause` and `OpenInventory` are bound to — the two facts every round of this
-has turned on. If the regression survives, that snapshot plus the retargeting count line should
-identify it without another round of guessing.
+- `StoreTrackTriggerListAsArray` is the fifth FSM action and the one not covered — it enumerates
+  `InsideGameObjects` directly. That property is the single chokepoint all five ultimately share, so
+  patching it instead of the three members above would cover everything; it was not done that way
+  because it changes more at once and the three-member version was verifiable against known callers.
+  Note the two cannot both be applied — `InsideCount` enumerates `InsideGameObjects`, so patching both
+  would double-count.
+- Enemies whose AI is hand-written C# rather than FSM-driven (`Walker`, `Chaser` and similar).
+- Attacks that resolve `HeroController.instance` at the moment of firing rather than reading a target
+  field.
+- No aggro stickiness beyond distance, so an enemy will not stay on the Shade because the Shade hit it.
 
 ## Planned features — feasibility notes
 

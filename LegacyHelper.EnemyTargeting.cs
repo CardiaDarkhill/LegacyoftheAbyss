@@ -36,6 +36,143 @@ public partial class LegacyHelper
     /// bound to the same invocation that borrowed.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Makes an alert range that the Shade is standing in actually <i>report</i> the Shade, so an
+    /// enemy can notice it in the first place.
+    /// <para>
+    /// This is the half below <see cref="EnemyAiRetargeting"/>, and it is the one that has to work
+    /// first: redirecting an enemy's target is meaningless while the enemy never leaves its idle
+    /// state. <c>TrackTriggerObjects</c> only admits an object into <c>insideGameObjects</c> if it
+    /// passes the range's <c>ignoreLayers</c>/<c>tagIncludeList</c>/<c>tagExcludeList</c>, which the
+    /// Shade's aggro proxy does not - so <c>InsideCount</c> reads 0, <c>IsInside</c> reads false, and
+    /// <c>GetClosestInside</c> returns null however close the Shade is.
+    /// <c>AlertRange_FixedUpdate_Patch</c> already covers the one question
+    /// <c>AlertRange.IsHeroInRange()</c> answers, but an FSM that instead counts what is in a range,
+    /// or asks what the closest thing in it is, was still seeing an empty range.
+    /// </para>
+    /// <para>
+    /// Scoped to <c>AlertRange</c> rather than every <c>TrackTriggerObjects</c>. The base class backs
+    /// plenty of things that have nothing to do with enemies noticing the player, and inflating their
+    /// counts would be a change with no upside; <c>AlertRange</c> is the enemy-alerting subclass, and
+    /// it inherits these members rather than overriding them, so patching the base and filtering here
+    /// reaches exactly the intended set.
+    /// </para>
+    /// </summary>
+    [HarmonyPatch(typeof(TrackTriggerObjects), nameof(TrackTriggerObjects.InsideCount), MethodType.Getter)]
+    private static class TrackTriggerObjects_InsideCount_CountShade
+    {
+        private static void Postfix(TrackTriggerObjects __instance, ref int __result)
+        {
+            try
+            {
+                if (__instance is not AlertRange range || !ModConfig.Instance.shadeEnemyTargetingEnabled)
+                {
+                    return;
+                }
+
+                // A fact, not a preference: the Shade is either in the range or it isn't. Which of
+                // the two an alerted enemy then goes after is EnemyAiRetargeting's decision.
+                __result += ShadeAggroTracker.CountTargets(range);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    /// <summary>
+    /// Lets the Shade win "closest thing in this range" when it genuinely is closest.
+    /// See <see cref="TrackTriggerObjects_InsideCount_CountShade"/> for why the range cannot see it
+    /// on its own. Purely a distance comparison against whatever the base game picked - no
+    /// preference, no hysteresis: this answers "what is nearest", not "who should I chase".
+    /// </summary>
+    [HarmonyPatch(typeof(TrackTriggerObjects), nameof(TrackTriggerObjects.GetClosestInside))]
+    private static class TrackTriggerObjects_GetClosestInside_ConsiderShade
+    {
+        private static void Postfix(TrackTriggerObjects __instance, Vector2 toPos, List<GameObject> excludeObjects, ref GameObject __result)
+        {
+            try
+            {
+                if (__instance is not AlertRange range || !ModConfig.Instance.shadeEnemyTargetingEnabled)
+                {
+                    return;
+                }
+
+                if (!ShadeAggroTracker.TryGetClosestTarget(range, toPos, out var shadeObject, out _, out float shadeSqrDistance))
+                {
+                    return;
+                }
+
+                if (excludeObjects != null && excludeObjects.Contains(shadeObject))
+                {
+                    return;
+                }
+
+                if (__result != null && (((Vector2)__result.transform.position) - toPos).sqrMagnitude <= shadeSqrDistance)
+                {
+                    return;
+                }
+
+                __result = shadeObject;
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    /// <summary>
+    /// The line-of-sight variant. Only the three-argument overload is patched - the two-argument one
+    /// delegates to it, so patching both would run this twice for one call.
+    /// </summary>
+    [HarmonyPatch(typeof(TrackTriggerObjects), nameof(TrackTriggerObjects.GetClosestInsideLineOfSight),
+        new[] { typeof(Vector2), typeof(HashSet<GameObject>), typeof(int) })]
+    private static class TrackTriggerObjects_GetClosestInsideLineOfSight_ConsiderShade
+    {
+        private static void Postfix(TrackTriggerObjects __instance, Vector2 originPos, HashSet<GameObject> excludeObjects, int obstacleLayerMask, ref GameObject __result)
+        {
+            try
+            {
+                if (__instance is not AlertRange range || !ModConfig.Instance.shadeEnemyTargetingEnabled)
+                {
+                    return;
+                }
+
+                if (!ShadeAggroTracker.TryGetClosestTarget(range, originPos, out var shadeObject, out var shadePosition, out float shadeSqrDistance))
+                {
+                    return;
+                }
+
+                if (excludeObjects != null && excludeObjects.Contains(shadeObject))
+                {
+                    return;
+                }
+
+                if (__result != null && (((Vector2)__result.transform.position) - originPos).sqrMagnitude <= shadeSqrDistance)
+                {
+                    return;
+                }
+
+                // Same obstacle test the base method applies to its own candidates, against the
+                // proxy's target point rather than the Shade's transform origin.
+                Vector2 toShade = shadePosition - originPos;
+                if (toShade.sqrMagnitude > 0.0001f)
+                {
+                    var hit = Physics2D.Raycast(originPos, toShade.normalized, toShade.magnitude, obstacleLayerMask);
+                    if (hit.collider != null && hit.collider.gameObject != shadeObject)
+                    {
+                        return;
+                    }
+                }
+
+                __result = shadeObject;
+            }
+            catch
+            {
+            }
+        }
+    }
+
     /// <remarks>
     /// Deliberately <b>not</b> a <c>[HarmonyPatch]</c> class, and so not picked up by
     /// <c>PatchAll()</c>. <c>PatchAll</c> is all-or-nothing: one patch class that throws while being

@@ -89,6 +89,86 @@ internal static class ShadeAggroTracker
         ProxyToRanges.Remove(proxy);
     }
 
+    // Separate from the buffer AlertRange_FixedUpdate_Patch uses, so the two query paths can never
+    // tread on each other's results.
+    private static readonly List<Target> QueryBuffer = new();
+
+    /// <summary>
+    /// How many eligible Shade proxies are currently inside <paramref name="range"/>.
+    /// <para>
+    /// <c>TrackTriggerObjects</c> only admits an object into its own <c>insideGameObjects</c> if it
+    /// passes the range's layer and tag filters, which the Shade's proxy does not - so as far as the
+    /// base game is concerned the Shade is never inside anything, and an enemy FSM that asks how many
+    /// things are in its range sees an empty range no matter where the Shade stands.
+    /// </para>
+    /// </summary>
+    internal static int CountTargets(AlertRange range)
+    {
+        try
+        {
+            if (!TryGetTargets(range, QueryBuffer))
+            {
+                return 0;
+            }
+
+            return QueryBuffer.Count;
+        }
+        catch
+        {
+            return 0;
+        }
+        finally
+        {
+            QueryBuffer.Clear();
+        }
+    }
+
+    /// <summary>
+    /// The nearest eligible Shade inside <paramref name="range"/> to <paramref name="toPos"/>, for
+    /// the "what is the closest thing in this range" lookups that pick an enemy's target.
+    /// </summary>
+    internal static bool TryGetClosestTarget(AlertRange range, Vector2 toPos, out GameObject shadeObject, out Vector2 shadePosition, out float sqrDistance)
+    {
+        shadeObject = null;
+        shadePosition = default;
+        sqrDistance = float.MaxValue;
+
+        try
+        {
+            if (!TryGetTargets(range, QueryBuffer))
+            {
+                return false;
+            }
+
+            foreach (var target in QueryBuffer)
+            {
+                var candidate = target.Shade != null ? target.Shade.gameObject : null;
+                if (candidate == null)
+                {
+                    continue;
+                }
+
+                float distance = (target.Position - toPos).sqrMagnitude;
+                if (distance < sqrDistance)
+                {
+                    sqrDistance = distance;
+                    shadeObject = candidate;
+                    shadePosition = target.Position;
+                }
+            }
+
+            return shadeObject != null;
+        }
+        catch
+        {
+            return false;
+        }
+        finally
+        {
+            QueryBuffer.Clear();
+        }
+    }
+
     internal static bool TryGetTargets(AlertRange range, List<Target> buffer)
     {
         // Called from a FixedUpdate postfix for every AlertRange in the scene. When no
