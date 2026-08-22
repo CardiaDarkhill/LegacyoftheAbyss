@@ -6,6 +6,12 @@
   -->
   <Import Condition="Exists('SilksongPath.props')" Project="SilksongPath.props" />
 
+  <!--
+  Local-only, gitignored (see DevProfile.props). Supplies ModManagerProfileFolder for the
+  DeployDevProfile target below. Absent on CI and on any checkout that does not use a mod manager.
+  -->
+  <Import Condition="Exists('DevProfile.props')" Project="DevProfile.props" />
+
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
     <LangVersion>latest</LangVersion>
@@ -104,6 +110,47 @@
       </ItemGroup>
       <Copy SourceFiles="@(LocalDevBinaries)" DestinationFolder="$(MSBuildProjectDirectory)\.." SkipUnchangedFiles="false" />
       <Message Text="Deployed local dev build to $(MSBuildProjectDirectory)\.." Importance="High" />
+  </Target>
+
+  <!--
+  Deploys this build into a Thunderstore Mod Manager / r2modman profile so the in-development plugin
+  runs next to manager-installed debug mods (DebugMod, FsmMaster, ...). Launching through the manager
+  overrides doorstop's target assembly to the *profile's* BepInEx, so the game folder's
+  BepInEx/plugins tree - where this repo lives - is never scanned on those launches; without this
+  target the only Legacy build the profile can see is the published Thunderstore package.
+
+  Deploys into its own LegacyoftheAbyss-Dev folder rather than over the managed
+  CardiaDarkhill-LegacyoftheAbyss package: the manager owns package folders and rewrites them on
+  update/enable/disable, whereas unmanaged folders (absent from the profile's mods.yml) are left
+  alone. Keep the published package DISABLED in that profile - two copies share one BepInPlugin GUID
+  and only one will load, with no guarantee which.
+
+  Assets/ inside the deploy folder is a directory junction to the game folder's
+  BepInEx/plugins/Assets, matching ModPaths.Assets (resolved next to the DLL), so sprites and audio
+  stay single-sourced instead of being duplicated per profile.
+
+  Usage: dotnet build -c Release -p:DeployDevProfile=true
+  -->
+  <Target Name="DeployDevProfile" AfterTargets="Build" Condition="'$(DeployDevProfile)' == 'true'">
+      <Error Condition="'$(ModManagerProfileFolder)' == ''"
+             Text="DeployDevProfile requires ModManagerProfileFolder. Create DevProfile.props next to this csproj and set it to the mod manager profile folder." />
+      <Error Condition="!Exists('$(ModManagerProfileFolder)')"
+             Text="Mod manager profile folder not found: $(ModManagerProfileFolder). Check the path in DevProfile.props - profiles are renamed and deleted from inside the manager." />
+
+      <PropertyGroup>
+          <DevProfilePluginFolder>$(ModManagerProfileFolder)\BepInEx\plugins\$(TargetName)-Dev</DevProfilePluginFolder>
+      </PropertyGroup>
+
+      <ItemGroup>
+          <DevProfileBinaries Include="$(TargetPath)" />
+          <DevProfileBinaries Include="$(TargetDir)$(TargetName).pdb" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
+      </ItemGroup>
+
+      <MakeDir Directories="$(DevProfilePluginFolder)" />
+      <Copy SourceFiles="@(DevProfileBinaries)" DestinationFolder="$(DevProfilePluginFolder)" SkipUnchangedFiles="false" />
+      <Warning Condition="!Exists('$(DevProfilePluginFolder)\Assets')"
+               Text="No Assets folder at $(DevProfilePluginFolder)\Assets - the mod will fall back to its other search roots and may not find sprites or audio. Recreate the junction: mklink /J &quot;$(DevProfilePluginFolder)\Assets&quot; &quot;&lt;game&gt;\BepInEx\plugins\Assets&quot;" />
+      <Message Text="Deployed dev build to mod manager profile: $(DevProfilePluginFolder)" Importance="High" />
   </Target>
 
   <!--

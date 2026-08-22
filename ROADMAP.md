@@ -66,6 +66,11 @@ in rough priority order:
 Some enemies do appear to still ignore the shade, whilst others attack it. We'll likely need to do a very
 fine-tooth testing run over a full playthrough to work out what's ignoring it and fix those case by case.
 
+**2. The Charms menu "sliding" animation is broken**
+When pressing a hotkey/controller button that navigates from one inventory screen to another, the game plays
+a "slide" animation, sliding the old menu out of focus and the new one in. Our charms menu however, just
+snaps into view, rather than playing this animation, which looks a bit janky.
+
 ## Planned features — feasibility notes
 
 **1. Shade graphical layering** (Easy, mechanical). The Shade's `SpriteRenderer` is always
