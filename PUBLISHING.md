@@ -66,11 +66,13 @@ Two related traps are now designed out rather than documented around:
    generate a personal API key.
 2. Find the existing mod's **mod ID** and **file ID**.
    - Mod ID is the number in the mod page URL: `nexusmods.com/hollowknightsilksong/mods/166`.
-   - File ID identifies *an existing file entry that receives a new version*, not the mod. Get it
-     from the "API Info" option on that file in the public Files tab, or the edit view on Manage
-     Files. Sanity-check it by opening
-     `nexusmods.com/hollowknightsilksong/mods/166?tab=files&file_id=<id>` and confirming it lands
-     on the file you mean to replace.
+   - File ID is the number the Files tab's **"API Info"** dialog shows — where Nexus's UI labels
+     it **"Group ID"** (currently `812617`). The naming mismatch is confusing but the value is
+     right: the action's input identifies *a file lineage that receives a new version*, not one
+     individual upload, which is why every version of the mod reports the same number. Seeing it
+     repeat across 1.0.5/1.0.6 confirms you have the right ID rather than the wrong one.
+   - Do **not** try to verify it via `?tab=files&file_id=<id>` on the mod page. That URL parameter
+     is a different identifier and returns "Object not found" for a valid Group ID.
 3. In the GitHub repo (**Settings → Secrets and variables → Actions**):
    - secret `NEXUSMODS_API_KEY` — the key from step 1. (This name matches the action's own
      README example; an earlier revision of the workflow read `NEXUS_API_KEY`, which would have
@@ -78,8 +80,13 @@ Two related traps are now designed out rather than documented around:
    - variable `NEXUS_MOD_ID` — numeric mod ID.
    - variable `NEXUS_FILE_ID` — numeric file ID.
 
+The action is pinned to the exact tag `v1.0.0-beta.10`. There is **no stable `v1` ref** — every
+release is `v1.0.0-beta.N` — so `@v1` fails to resolve and the step never runs. Nexus's Upload API
+is itself an open beta, so check <https://github.com/Nexus-Mods/upload-action/tags> before bumping,
+and re-read that tag's `action.yml` rather than `main`'s.
+
 The workflow passes `api_key`, `mod_id`, `file_id`, `filename`, `version`, `display_name` and
-`update_mod_version`, all of which are inputs the action actually defines. `mod_id` is optional
+`update_mod_version`, all of which are inputs that tag actually defines. `mod_id` is optional
 per the action's own contract — it is only *required* when `changelog` is set, and the upload
 target comes from `file_id` alone — but it is set here so that adding a changelog later needs no
 extra setup. `update_mod_version: true` is deliberate: it defaults to false, which uploads the

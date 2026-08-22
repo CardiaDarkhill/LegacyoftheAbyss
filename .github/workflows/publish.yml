@@ -68,7 +68,11 @@ jobs:
       # warning, so it looked harmless while the real target came from file_id/mod_id all along.
       - name: Upload to Nexus Mods
         if: ${{ inputs.publish_nexus }}
-        uses: Nexus-Mods/upload-action@v1
+        # Pinned to an exact tag: there is no stable v1 (or v1.x) ref on this action - every
+        # release is v1.0.0-beta.N - so @v1 fails to resolve and the step never runs. Nexus's
+        # Upload API is itself still an open beta, so re-check the tag list before bumping:
+        # https://github.com/Nexus-Mods/upload-action/tags
+        uses: Nexus-Mods/upload-action@v1.0.0-beta.10
         with:
           api_key: ${{ secrets.NEXUSMODS_API_KEY }}
           mod_id: ${{ vars.NEXUS_MOD_ID }}
