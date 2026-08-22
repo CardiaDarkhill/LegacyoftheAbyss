@@ -14,16 +14,7 @@ currently sits at 125 passing, 0 failing.
 
 ## Known bugs — feasibility notes
 
-**1. Bench behavior cluster — built, needs a live pass and probably some tuning.** Implemented as the
-single flag the entry called for: `ShadeController.HornetControlsLocked()` (bench via
-`PlayerData.atBench`, scripted control loss via `HeroController.controlReqlinquished` /
-`!acceptingInput`, excluding pause and inventory). Three consumers read it — `HandleDockedMovement`
-parks the Shade behind Hornet and matches her facing outside hit-stun, the combat gate in `Update`
-stops focus/fire/nail/spells, and `SimpleHUD.UpdatePauseFade` hides the Shade HUD. HUD hiding is done
-and confirmed. Still wanted: sit at a bench and check where the Shade actually parks —
-`dockOffsetX`/`dockOffsetY`/`dockApproachSpeed` on `ShadeController` are the knobs.
-
-**2. Enemies don't redirect their attention to the Shade — both halves built, needs a live pass.**
+**1. Enemies don't redirect their attention to the Shade — both halves built, needs a live pass.**
 The old note said this meant rewriting target resolution in each of the 184 files referencing
 `HeroController.instance`. That was the wrong read: almost none of those are enemies locating the
 player, they are things done *to* the hero (damage, cState, invulnerability, input blocking), and not
@@ -71,6 +62,9 @@ in rough priority order:
 - Attacks that resolve `HeroController.instance` at the moment of firing rather than reading a target
   field.
 - No aggro stickiness beyond distance, so an enemy will not stay on the Shade because the Shade hit it.
+
+Some enemies do appear to still ignore the shade, whilst others attack it. We'll likely need to do a very
+fine-tooth testing run over a full playthrough to work out what's ignoring it and fix those case by case.
 
 ## Planned features — feasibility notes
 
