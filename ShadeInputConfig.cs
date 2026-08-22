@@ -525,6 +525,14 @@ public static class ShadeInput
 
     private static bool ShouldSuppressOption(ShadeBindingOption option)
     {
+        // Every Shade input read funnels through here, which makes it the one place that can keep
+        // the Shade from acting on a bug report being typed into the overlay. Blocking at the
+        // binding level rather than per-action means a new action is covered for free.
+        if (LegacyoftheAbyss.Diagnostics.BugReportSystem.IsCapturingText)
+        {
+            return true;
+        }
+
         try
         {
             return LegacyHelper.InputDeviceBlocker.ShouldSuppressShadeOption(option);

@@ -45,6 +45,16 @@
 - Shade sprite sheets live in `Assets/Knight_Shade_Sprites/`. Alternate skins go in `Assets/Knight_Shade_Sprites/Skins/<Skin Name>/` and only need the sheets they override — `ShadeSkinManager.ResolveSpritePath` falls back to the built-in set for anything missing. `Skins/skins.json` optionally controls menu order and display names. All sheet loading must stay routed through `LoadShadeSprites` in `LegacyHelper.ShadeController.Core.cs` or skin switching will silently stop working for the new sheet.
 - Logs are written under `Assets/logs/` by `LoggingManager`. Clean up this folder before committing if you run the mod locally.
 
+## Bug reports
+- `Diagnostics/` holds the in-game bug capture system. Pressing the hotkey (`bugReportHotkey`, default `F8`) freezes the game, takes a screenshot of the frame *before* the overlay drew, snapshots game state, and writes everything alongside whatever message is typed into the overlay.
+- A report is a folder of `report.md` (the summary you read first), `state.json` (full snapshot including the mod config and every loaded plugin), `log.txt` (the captured log ring, all BepInEx sources), `flight.csv` (rolling state samples leading into the capture) and `screenshot.png`.
+- Reports are written to `ModPaths.UserData/bug_reports/` — i.e. `BepInEx/config/LegacyoftheAbyss/bug_reports/`, **outside this repository**, for the same update-safety reason save data lives there. They can never be committed by accident, and there is nothing to clean up before committing.
+- Use the `/bug-triage` slash command (`.claude/commands/bug-triage.md`) to list open reports, work one, or close it out. `index.md` in that folder is the open/fixed ledger.
+- The pieces: `BugReportLogRing`/`BugReportLogCollector` tap the whole BepInEx listener chain; `BugReportFlightRecorder` samples Hornet/Shade state on an interval; `BugReportStateCollector` reads the point-in-time snapshot; `BugReportStore` renders and writes; `BugReportSystem` is the `DontDestroyOnLoad` MonoBehaviour that drives all of it and hosts the IMGUI overlay.
+- Unhandled exceptions from mod code auto-file a report with no typing involved (`bugReportAutoCaptureExceptions`), deduped by message plus first stack frame and capped per session so one throw in `Update` cannot write a report per frame.
+- `BugReportSystem.IsCapturingText` is the mod-wide "the overlay owns the keyboard" flag. Anything that polls keys directly must respect it — `LegacyHelper.Update` and `ShadeInput.ShouldSuppressOption` already do. A new key handler that ignores it will fire on every matching letter typed into a report.
+- Everything except the MonoBehaviour is plain managed code and is covered by `Tests/BugReportTests.cs`.
+
 ## Additional tips
 - Use the decompiled `Assembly-CSharp` sources to mirror in-game behaviour when implementing new features or Harmony patches.
 - Shade charms and abilities are centrally defined via `ShadeCharmDefinition` and `ShadeCharmStatBaseline`; extend these classes when adding new modifiers to keep stat calculations consistent.

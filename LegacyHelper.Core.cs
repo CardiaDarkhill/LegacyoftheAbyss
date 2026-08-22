@@ -106,6 +106,7 @@ public partial class LegacyHelper : BaseUnityPlugin
         Instance = this;
         ModConfig.Load();
         LoggingManager.Initialize(Logger);
+        LegacyoftheAbyss.Diagnostics.BugReportSystem.Install(Logger);
         var harmony = new Harmony("com.legacyoftheabyss.helper");
         harmony.PatchAll();
 
@@ -127,8 +128,14 @@ public partial class LegacyHelper : BaseUnityPlugin
 
     private void Update()
     {
-        LoggingManager.Update();
-        HandleDebugInput();
+        // While a bug report is being composed the keyboard belongs to that overlay. Without this
+        // gate, typing the message also toggles damage logging and dumps Hornet's position for
+        // every stray backtick or F1 in it.
+        if (!LegacyoftheAbyss.Diagnostics.BugReportSystem.IsCapturingText)
+        {
+            LoggingManager.Update();
+            HandleDebugInput();
+        }
 
         var ui = cachedUI;
         if (ui == null)
@@ -216,6 +223,7 @@ public partial class LegacyHelper : BaseUnityPlugin
             Instance = null;
         }
 
+        LegacyoftheAbyss.Diagnostics.BugReportSystem.Shutdown();
         LoggingManager.Flush();
         ModConfig.Save();
     }

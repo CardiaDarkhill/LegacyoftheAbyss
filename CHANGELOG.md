@@ -52,3 +52,26 @@ game closed. Sensible defaults are already set — most players should never nee
 
 
 
+
+### New: report a bug from inside the game
+
+Press **F8** the moment you see something wrong. The game freezes, and a small panel asks what
+happened — the first line you type becomes the title, the rest is detail. `Ctrl+Enter` saves,
+`Esc` throws it away.
+
+What gets saved with your description is the part that matters. A screenshot of the frame as it
+looked *before* the panel appeared, so the bug is actually in the picture. The scene, Hornet's and
+the Shade's positions, health, soul, state flags and charm loadout. Every log line from the game
+and from every installed mod, not just this one. And roughly thirty seconds of rolling samples
+leading up to the moment you pressed the key — because by the time anyone reacts to a bug, the
+interesting part has already happened.
+
+Each report is a folder under `BepInEx/config/LegacyoftheAbyss/bug_reports/`. Zip one up and send
+it along and there is nothing left to ask you about. Nothing is uploaded anywhere on its own.
+
+If mod code throws an exception, a report is filed automatically with the stack trace attached,
+even if nothing visibly went wrong on screen.
+
+`bugReportsEnabled` turns the whole thing off, and `bugReportHotkey` moves it to any other key;
+both are in `config.json`, alongside settings for the screenshot, the log size and the sampling
+window.

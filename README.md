@@ -34,6 +34,18 @@ opt-in properties:
 Tests: `dotnet test Tests/LegacyoftheAbyss.Tests.csproj` — these load the game's own assemblies
 at runtime, so they need a real Silksong install (see `SilksongPath.props`).
 
+## Bug reports
+
+Pressing `F8` in-game freezes the game and files a bug report: whatever you type, plus a
+screenshot of the frame before the overlay drew, a full state snapshot, the captured log ring
+from every BepInEx source, and roughly thirty seconds of rolling Hornet/Shade samples leading up
+to the keypress. Mod-code exceptions file one automatically.
+
+Reports land in `BepInEx/config/LegacyoftheAbyss/bug_reports/` — deliberately outside this
+repository, so they survive a mod reinstall and cannot be committed by accident. `index.md` there
+is the open/fixed ledger. See `Diagnostics/` for the implementation and `AGENTS.md` for the parts
+list; `/bug-triage` is the slash command for working through them.
+
 ## Releasing
 
 Publishing to both Nexus and Thunderstore is a single manual workflow run — see

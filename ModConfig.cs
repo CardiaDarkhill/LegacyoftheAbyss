@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using LegacyoftheAbyss.Diagnostics;
 using Newtonsoft.Json;
 using UnityEngine;
 
@@ -272,8 +273,41 @@ public class ModConfig
     public int focusShadeHeal = 1;
     public ShadeInputConfig shadeInput = ShadeInputConfig.CreateDefault();
 
+    // --- Bug reporting ---------------------------------------------------------------
+    // Press the hotkey while a bug is on screen: the game freezes, a screenshot and a full
+    // state snapshot are taken, and whatever you type is written next to them under
+    // BepInEx/config/LegacyoftheAbyss/bug_reports/. See Diagnostics/BugReportSystem.cs.
+    // All of these are read once when the reporter installs, so a change needs a restart.
+    public bool bugReportsEnabled = true;
+    // Any UnityEngine.KeyCode name. Stored as a string rather than the enum because
+    // ModConfig has a JsonUtility fallback path that would render it as a bare integer,
+    // and a config file nobody can read by eye is a config file nobody edits.
+    public string bugReportHotkey = DefaultBugReportHotkey;
+    public bool bugReportScreenshot = true;
+    // Longest edge, in pixels, the screenshot is scaled down to. A 4K frame is about 8 MB of PNG
+    // per report; 1920 lands nearer 1.5 MB and is still far more detail than any description.
+    // Set to 0 to keep the native resolution - worth doing when chasing a rendering or aliasing
+    // bug, where the artifact may not survive a resample.
+    public int bugReportScreenshotMaxWidth = 1920;
+    // Log lines kept in memory for the report. These come from every BepInEx source, not
+    // just this mod, because the line that explains a Shade bug is often the game's own.
+    public int bugReportLogLines = 800;
+    // Rolling samples of Hornet/Shade position, health and state flags, so a report covers
+    // the seconds before you reacted rather than only the aftermath.
+    public bool bugReportFlightRecorderEnabled = true;
+    public float bugReportFlightRecorderSeconds = 30f;
+    public float bugReportFlightRecorderIntervalSeconds = 0.1f;
+    // File a report automatically when mod code throws. Capped per session, and deduped by
+    // exception plus first stack frame, so a throw inside Update does not write one report
+    // per frame.
+    public bool bugReportAutoCaptureExceptions = true;
+    public int bugReportAutoCaptureLimit = 5;
+
     /// <summary>Layer <see cref="shadeSortingLayer"/> falls back to when the saved value is blank.</summary>
     public const string DefaultShadeSortingLayer = "Player";
+
+    /// <summary>Hotkey <see cref="bugReportHotkey"/> falls back to when the saved value is blank or unparseable.</summary>
+    public const string DefaultBugReportHotkey = "F8";
 
     /// <summary>Upper bound on <see cref="shadeShadowParticleIntensity"/>, enforced on load.</summary>
     public const float MaxShadowParticleIntensity = 2f;
@@ -313,6 +347,15 @@ public class ModConfig
                 instance.shadeSortingLayer = DefaultShadeSortingLayer;
             }
             instance.shadeShadowParticleIntensity = Mathf.Clamp(instance.shadeShadowParticleIntensity, 0f, MaxShadowParticleIntensity);
+            if (string.IsNullOrWhiteSpace(instance.bugReportHotkey))
+            {
+                instance.bugReportHotkey = DefaultBugReportHotkey;
+            }
+            instance.bugReportLogLines = Mathf.Clamp(instance.bugReportLogLines, BugReportLogRing.MinimumCapacity, BugReportLogRing.MaximumCapacity);
+            instance.bugReportFlightRecorderSeconds = Mathf.Clamp(instance.bugReportFlightRecorderSeconds, BugReportFlightRecorder.MinimumWindowSeconds, BugReportFlightRecorder.MaximumWindowSeconds);
+            instance.bugReportFlightRecorderIntervalSeconds = Mathf.Max(instance.bugReportFlightRecorderIntervalSeconds, BugReportFlightRecorder.MinimumIntervalSeconds);
+            instance.bugReportAutoCaptureLimit = Mathf.Max(0, instance.bugReportAutoCaptureLimit);
+            instance.bugReportScreenshotMaxWidth = Mathf.Max(0, instance.bugReportScreenshotMaxWidth);
         }
         catch
         {

@@ -14,6 +14,8 @@ The Shade is a unique character that behaves completely differently to Hornet.
 
 WARNING: Whilst I've done my best to address bugs, there WILL be issues, likely pretty significant ones. Please let me know in the discussion section (Ideally in a nice and informative way) and I'll do my best to fix it.
 
+The quickest way to report one: press F8 the moment you see it. The game freezes and asks what happened, then saves your description together with a screenshot, the game state, the logs and the last thirty seconds of what the Shade and Hornet were doing, into its own folder under BepInEx/config/LegacyoftheAbyss/bug_reports/. Zip that folder up and attach it and I won't need to ask you any follow-up questions. Nothing is uploaded anywhere by itself.
+
 
 FAQ:
 
