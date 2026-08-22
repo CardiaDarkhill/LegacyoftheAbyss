@@ -181,8 +181,6 @@
       shipped the maintainer's old debug logs. Exclude them from the glob so both paths agree.
       -->
       <AssetFiles Include="Assets\**\*.*" Exclude="Assets\logs\**\*.*" />
-      <ThunderstoreStatic Include="BuildTemplates/Thunderstore/README.md" />
-      <ThunderstoreStatic Include="BuildTemplates/Thunderstore/icon.png" />
     </ItemGroup>
 
     <Message Text="Packaging Nexus and Thunderstore releases for version $(DistributionVersion)." Importance="High" />
@@ -197,13 +195,17 @@
     <MakeDir Directories="$(ThunderstorePackageRoot)" />
     <Copy SourceFiles="@(PluginBinary)" DestinationFolder="$(ThunderstorePackageRoot)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(PluginDeps)" DestinationFolder="$(ThunderstorePackageRoot)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(ThunderstoreStatic)" DestinationFolder="$(ThunderstorePackageRoot)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(AssetFiles)" DestinationFiles="@(AssetFiles->'$(ThunderstorePackageRoot)/plugins/Assets/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
 
-    <WriteLinesToFile
-      File="$(ThunderstorePackageRoot)/manifest.json"
-      Lines="$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)/BuildTemplates/Thunderstore/manifest.template.json').Replace('__VERSION__','$(DistributionVersion)'))"
-      Overwrite="true"
-      Encoding="utf-8" />
+    <!--
+    manifest.json, README.md and icon.png are deliberately NOT staged here. tcli supplies all
+    three itself - the manifest generated from thunderstore.toml, the other two from [build]
+    icon/readme - and staging a second copy made tcli log
+    "<file> was added multiple times to the build and will be overwritten" for each. Those
+    warnings are not cosmetic: tcli exits 1 on them, which failed the publish workflow at the
+    build step even though the zip it produced was perfectly valid. Leaving tcli as the sole
+    source of package metadata also removes the chance of thunderstore.toml and a separate
+    manifest template drifting apart.
+    -->
   </Target>
 </Project>

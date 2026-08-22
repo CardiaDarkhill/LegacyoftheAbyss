@@ -46,10 +46,9 @@ Two related traps are now designed out rather than documented around:
   (`obj/Release/Thunderstore/LegacyoftheAbyss`, no `-<version>` suffix, unlike the Nexus one).
   `thunderstore.toml` has to name that folder literally, so a versioned path would need the toml
   rewritten every release — and getting that wrong lands you in the silent-empty-package case
-  above. The version still reaches the package through `manifest.json` (written by MSBuild from
-  `BuildTemplates/Thunderstore/manifest.template.json`) and through tcli's `--package-version`
-  flag, so the committed toml is always valid as-is and a local `tcli build` behaves identically
-  to CI.
+  above. The version reaches the package through tcli's `--package-version` flag, which is also
+  what writes `manifest.json`, so the committed toml is always valid as-is and a local
+  `tcli build` behaves identically to CI.
 
 ## One-time setup — Thunderstore
 
@@ -116,22 +115,30 @@ installers should be pointed at the Nexus archive.
 
 ## Dependency pin
 
-`BuildTemplates/Thunderstore/manifest.template.json` and `thunderstore.toml` both pin
-`silksong_modding-BepInExPack_Silksong-1.0.3`. That listing's version drifts over time; check
+`thunderstore.toml`'s `[package.dependencies]` pins
+`silksong_modding-BepInExPack_Silksong-1.0.3`, and is the only place that pin lives — tcli
+generates `manifest.json` from it. That listing's version drifts over time; check
 <https://thunderstore.io/c/hollow-knight-silksong/p/silksong_modding/BepInExPack_Silksong/>
 if the dependency ever fails to resolve for someone. (The older
 `BepInEx-BepInExPack_Silksong` listing is deprecated and just redirects — don't go back to it.)
 
 ## Manual fallback
 
-The manual path still works exactly as before: build locally with
-`dotnet build LegacyoftheAbyss.csproj -c Release -p:Version=x.y.z -p:CreateDistributionPackages=true`,
-zip the two `obj/Release/...` folders yourself, and upload through each site's web UI. Running
-`tcli build --package-version x.y.z` locally produces the exact zip CI would publish, in `./build/`
-(gitignored), which is the cheapest way to eyeball a release before shipping it.
+The manual path still works, with one change: build locally with
+`dotnet build LegacyoftheAbyss.csproj -c Release -p:Version=x.y.z -p:CreateDistributionPackages=true`.
 
-`tcli build` emits three `was added multiple times` warnings for `icon.png`, `README.md` and
-`manifest.json`. That's expected: MSBuild stages them into the Thunderstore folder so the
-manual-fallback zip is a valid package on its own, and tcli also places them from `[build]`
-icon/readme. The copy step runs last, so the MSBuild-staged files win and the content is
-equivalent.
+- **Nexus** — `obj/Release/Nexus/LegacyoftheAbyss-x.y.z/` is a complete package; zip it and upload.
+- **Thunderstore** — `obj/Release/Thunderstore/LegacyoftheAbyss/` holds the *payload only* (DLL,
+  deps, `plugins/Assets/`). It is deliberately not a standalone package: `manifest.json`,
+  `README.md` and `icon.png` come from tcli. Run `tcli build --package-version x.y.z` and upload
+  the zip it writes to `./build/` (gitignored). That is also the exact zip CI publishes, so it is
+  the cheapest way to eyeball a release before shipping it.
+
+### tcli exit codes
+
+`tcli build` **exits 1 on warnings**, including cosmetic-looking ones, while still writing a
+perfectly valid zip. Staging `manifest.json`/`README.md`/`icon.png` into the Thunderstore folder
+alongside tcli's own copies produced three `was added multiple times` warnings and failed the
+workflow at the build step for that reason alone. Don't reintroduce a second source for any file
+tcli already places, and don't paper over a non-zero exit — the whole point of that exit code is
+that it is the signal something is wrong with the package.
