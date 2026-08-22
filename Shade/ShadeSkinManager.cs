@@ -189,15 +189,30 @@ namespace LegacyoftheAbyss.Shade
                     return null;
                 }
 
-                var pixels = sheet.GetPixels(0, 0, frameSize, frameSize);
-                var preview = new Texture2D(frameSize, frameSize, TextureFormat.ARGB32, false)
+                var pixels = CropFrame(sheet, frameSize);
+                int width = frameSize;
+                int height = frameSize;
+                bool smoothing = ModConfig.Instance.shadeSkinPreviewSmoothing;
+                if (smoothing)
                 {
-                    filterMode = FilterMode.Point,
+                    // The selector draws this at ~900px, where point filtering turns every source
+                    // pixel into a visible block. Resampling up to a larger texture keeps the
+                    // anti-aliasing the source art already has and leaves the GPU only a small
+                    // bilinear stretch - see ShadeSpriteSmoothing for why that beats upscaling and
+                    // blurring.
+                    int target = ShadeSpriteSmoothing.ChoosePreviewSize(frameSize);
+                    pixels = ShadeSpriteSmoothing.Antialias(pixels, frameSize, frameSize, target, out width, out height);
+                }
+
+                var preview = new Texture2D(width, height, TextureFormat.ARGB32, false)
+                {
+                    name = "ShadeSkinPreview_" + skin.Id,
+                    filterMode = smoothing ? FilterMode.Bilinear : FilterMode.Point,
                     wrapMode = TextureWrapMode.Clamp
                 };
-                preview.SetPixels(pixels);
-                preview.Apply();
-                return Sprite.Create(preview, new Rect(0f, 0f, frameSize, frameSize), new Vector2(0.5f, 0.5f));
+                preview.SetPixels32(pixels);
+                preview.Apply(false, true);
+                return Sprite.Create(preview, new Rect(0f, 0f, width, height), new Vector2(0.5f, 0.5f));
             }
             catch
             {
@@ -210,6 +225,22 @@ namespace LegacyoftheAbyss.Shade
                     UnityEngine.Object.Destroy(sheet);
                 }
             }
+        }
+
+        /// <summary>
+        /// The first (leftmost) frame of a horizontal idle strip, as a bottom-up
+        /// <see cref="Color32"/> block matching Unity's <c>GetPixels32</c> layout.
+        /// </summary>
+        private static Color32[] CropFrame(Texture2D sheet, int frameSize)
+        {
+            var all = sheet.GetPixels32();
+            var frame = new Color32[frameSize * frameSize];
+            for (int y = 0; y < frameSize; y++)
+            {
+                Array.Copy(all, y * sheet.width, frame, y * frameSize, frameSize);
+            }
+
+            return frame;
         }
 
         private static IEnumerable<ShadeSkinDefinition> Discover()

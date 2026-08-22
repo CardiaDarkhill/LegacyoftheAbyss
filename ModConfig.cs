@@ -233,6 +233,35 @@ public class ModConfig
     // target. See LegacyHelper.EnemyAiRetargeting for how, and ShadeAggroTargeting for when.
     public bool shadeEnemyTargetingEnabled = true;
     public string shadeSkin = "Default";
+
+    // --- Shade rendering -------------------------------------------------------------
+    // These have no pause-menu screen: they are read once at startup and applied whenever the
+    // Shade next spawns, so editing config.json and relaunching is the whole workflow.
+    // Sorting layer the Shade's sprite is drawn on. Silksong's layers, in draw order, are
+    // Default / Far BG 2 / Far BG 1 / Mid BG / Immediate BG / Actors / Player / Tiles /
+    // MID Dressing / Immediate FG / Scene Border / Far FG / Vignette / Over / HUD /
+    // Inventory - weather, fog and vignette all live above "Player", so the Shade has to sit
+    // on a character layer to be occluded by them. Blank falls back to whatever layer
+    // Hornet's own renderer is using. See LegacyHelper.ShadeRendering.cs.
+    public string shadeSortingLayer = "Player";
+    // Draw order within shadeSortingLayer. When the Shade shares Hornet's layer this is an
+    // offset from her order (1 = just in front of her); on any other layer it is absolute.
+    public int shadeSortingOrderOffset = 1;
+    // Draw the Shade with a copy of Hornet's own sprite material rather than Unity's default
+    // one, so scene darkness, character tinting and appearance regions treat it as a
+    // character instead of an unlit overlay. Toggleable because it is the one visual change
+    // here that depends on a game-side shader we do not control.
+    public bool shadeUseHornetMaterial = true;
+    // Trailing black-wisp emitter that follows the Shade, scaled by its current SOUL.
+    public bool shadeShadowParticlesEnabled = true;
+    // Global multiplier on that emitter, 0 (off) to 2 (twice the tuned density).
+    public float shadeShadowParticleIntensity = 1f;
+    // Anti-alias the large skin-selector preview. The source art is low-resolution HK1
+    // sprite work shown at ~900px, so point filtering reads as heavy pixelation there.
+    public bool shadeSkinPreviewSmoothing = true;
+    // The same filtering applied to the in-game Shade sheets. Off by default - at gameplay
+    // scale the crisp pixel look is a legitimate preference, so this is opt-in.
+    public bool shadeSpriteSmoothing = false;
     public bool hornetKeyboardEnabled = false;
     public bool hornetControllerEnabled = true;
     public float hornetDamageMultiplier = 1f;
@@ -242,6 +271,12 @@ public class ModConfig
     public int focusHornetHeal = 1;
     public int focusShadeHeal = 1;
     public ShadeInputConfig shadeInput = ShadeInputConfig.CreateDefault();
+
+    /// <summary>Layer <see cref="shadeSortingLayer"/> falls back to when the saved value is blank.</summary>
+    public const string DefaultShadeSortingLayer = "Player";
+
+    /// <summary>Upper bound on <see cref="shadeShadowParticleIntensity"/>, enforced on load.</summary>
+    public const float MaxShadowParticleIntensity = 2f;
 
     private static ModConfig? instance;
     private static readonly JsonSerializerSettings FallbackJsonSettings = new JsonSerializerSettings
@@ -273,6 +308,11 @@ public class ModConfig
             {
                 instance.shadeSkin = "Default";
             }
+            if (string.IsNullOrWhiteSpace(instance.shadeSortingLayer))
+            {
+                instance.shadeSortingLayer = DefaultShadeSortingLayer;
+            }
+            instance.shadeShadowParticleIntensity = Mathf.Clamp(instance.shadeShadowParticleIntensity, 0f, MaxShadowParticleIntensity);
         }
         catch
         {

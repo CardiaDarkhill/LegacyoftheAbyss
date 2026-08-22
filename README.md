@@ -28,8 +28,8 @@ opt-in properties:
 | Property | Effect |
 | --- | --- |
 | `-p:CreateDistributionPackages=true` | Stages the Nexus and Thunderstore release folders under `obj/Release/`. |
-| `-p:DeployLocalDevBuild=true` | Copies the built DLL into the adjacent `BepInEx/plugins/` folder. |
-| `-p:DeployDevProfile=true` | Deploys into a Thunderstore Mod Manager / r2modman profile (needs `DevProfile.props`). |
+| `-p:DeployLocalDevBuild=true` | Copies the built DLL into the adjacent `BepInEx/plugins/` folder, and into the mod manager profile too when `DevProfile.props` is present. |
+| `-p:DeployDevProfile=true` | Deploys into a Thunderstore Mod Manager / r2modman profile only (needs `DevProfile.props`). Implied by `DeployLocalDevBuild`; pass `false` to opt out. |
 
 Tests: `dotnet test Tests/LegacyoftheAbyss.Tests.csproj` — these load the game's own assemblies
 at runtime, so they need a real Silksong install (see `SilksongPath.props`).

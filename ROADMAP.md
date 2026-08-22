@@ -9,8 +9,43 @@ and `REFACTOR_NOTES.md` are the record of what was done and when.
 Refactor/split, skin selector, save-data relocation, the Key1-5 keybind fix, the updraft/aggro
 region-exclusion fix, the SlideSurface crash fix, the sprite-texture leak fix, the Shade-device
 menu/pause input fixes, the sub-menu highlight fix, the Shade charm-tab fixes, and the test-suite
-cleanup are all shipped and confirmed. See git log for details on any of these if needed. The suite
-currently sits at 125 passing, 0 failing.
+cleanup are all shipped and confirmed. Shade graphical layering, shadow particles and the
+skin-preview anti-aliasing are written and building but have **not had a live pass yet** - see
+"Needs a live pass" below. See git log for details on any of these if needed. The suite currently
+sits at 162 passing, 0 failing.
+
+## Needs a live pass
+
+Three visual features landed together (git log, and the 1.2.0 CHANGELOG entries). All three are
+config-gated in `config.json` (no pause-menu screen - the options are read at startup and applied
+as the Shade spawns), so anything that reads badly can be turned off rather than reverted. What to
+check with `logShade` on:
+
+- **Layering.** One `Shade rendering: layer '<name>' order <n> (Hornet: <renderer> on '<layer>'
+  order <n>)` line per spawn. Hornet should resolve as a `MeshRenderer` on a character layer - if
+  she comes back "unresolved", `ResolveHornetBodyRenderer` needs another lookup path. Then walk
+  into fog, snowfall and a darkness region and confirm the Shade is occluded/tinted the way Hornet
+  is rather than sitting flat on top.
+- **Hornet's material.** The one change here that depends on a game shader we do not control: the
+  Shade draws with a clone of Hornet's own material so the `IS_CHARACTER` keyword (which
+  `CharacterTint.CanAdd` gates on) and the darkness/tint properties apply to it too. It is checked
+  for a `_MainTex` property before use and falls back to Sprites/Default otherwise, so the failure
+  mode to watch for is a Shade that renders *wrong*, not one that vanishes. `Match Hornet's
+  Lighting` is the off switch.
+- **Particle and smoothing tuning.** `ShadeVisualTuning` holds the emission/alpha/size curves and
+  the spawn box lives in `LegacyHelper.ShadeController.ShadowParticles.cs`; `PreviewTargetSize` in
+  `ShadeSpriteSmoothing` is the only preview-quality knob left. All single-constant edits. The
+  in-game `Smooth Shade Sprites` option is the "does it read well next to Hornet's art" A/B this
+  was scoped around, and ships off by default.
+- **Preview sharpness has an asset ceiling.** The sheets are 180x180 frames shown at up to ~900px,
+  so roughly 5x magnification. The resample removes the blockiness but cannot add detail that was
+  never there; anything sharper than the current result needs higher-resolution source art, not a
+  better filter.
+
+If any of these settings turn out to be worth exposing in the pause menu after a full playthrough,
+a Visuals screen is a straightforward addition - `BuildLoggingMenu` in `ShadeSettingsMenu.Screens.cs`
+is the pattern, and `ShadeSettingsMenu.Lifecycle.cs` is where a new screen gets instantiated and
+built. It was deliberately dropped as menu clutter for options that are set once and forgotten.
 
 ## Known bugs — feasibility notes
 
@@ -73,16 +108,6 @@ snaps into view, rather than playing this animation, which looks a bit janky.
 
 ## Planned features — feasibility notes
 
-**1. Shade graphical layering** (Easy, mechanical). The Shade's `SpriteRenderer` is always
-pinned to `hornetRenderer.sortingOrder + 1` on the same sorting layer as Hornet
-(`LegacyHelper.Core.cs` spawn code, and consistently through the old `ShadeController.Core.cs`
-— now mostly in `LegacyHelper.ShadeController.Movement.cs` / `.Combat.cs` /
-`.FocusAndAudio.cs` after the split). That's why fog/snow/lighting don't interact with it
-correctly. No `Light2D` references exist anywhere in the mod. First step: inspect a few
-representative scenes' sorting layer setup and Hornet's own renderer relative to weather
-effects, then give the Shade its own explicit sorting layer instead of "Hornet's layer + 1",
-and add whatever `Light2D`-compatible material Hornet's renderer uses.
-
 **3. Optional gravity** (Easy-Medium). The Shade's `Rigidbody2D` already runs with `gravityScale = 0f`
 and fully custom float/knockback code (now in `LegacyHelper.ShadeController.Movement.cs`).
 Making gravity optional is close to flipping `gravityScale` based on a config bool and adding
@@ -107,21 +132,6 @@ Playmaker-FSM-driven; this mod's Harmony-patch approach doesn't generate FSM dat
 boss AI would need to be built directly in C#), original attack patterns, and
 animations/sprites either commissioned or adapted (raises an asset-rights question separate
 from the engineering). Prototype standalone before wiring into the actual cutscene.
-
-**7. Shade shadow particles** (Easy–moderate). Purely additive VFX: a small emitter following
-the Shade, tuned to Hollow Knight 1's black-wisp look. Scaling intensity with current SOUL is
-a one-value hookup once the emitter exists — `ShadeRuntime`'s soul value is already read
-elsewhere for HUD/spell-gating, so the emitter just needs the same read. No architectural
-dependencies; safe to do any time.
-
-**8. Skin-preview anti-aliasing / global filtering** (Easy). The pixelation is a `Sprite`/
-texture-import filtering issue (point/nearest filtering on low-res HK1-sourced art, viewed at
-a large on-screen size in the skin-selector preview column in `ShadeSettingsMenu.Skins.cs`).
-Likely fixable by switching the preview `Image`/`SpriteRenderer` to bilinear filtering plus a
-mild `Material`-level smoothing pass, and — if it reads well — applying the same filtering to
-the in-game Shade sprites so it doesn't look inconsistent next to Hornet's higher-res art.
-Worth a quick visual A/B before committing to the global change, since some players may prefer
-the crisp pixel look.
 
 **9. Dynamic camera option** (Moderate–hard). Depends on how item 1 in "Known bugs" (Shade
 docking at Hornet's side during locked-control states) lands, since that's the same

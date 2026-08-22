@@ -30,6 +30,9 @@ public partial class LegacyHelper
             }
 
             sr = GetComponent<SpriteRenderer>();
+            // Before LoadShadeSprites and SetupShadeLight: both the light quad and the child
+            // effect renderers copy their sorting from this renderer as they are created.
+            ApplyRenderingSettings();
             transform.localScale = Vector3.one * SpriteScale;
             LoadShadeSprites();
             if (sr != null)
@@ -578,17 +581,86 @@ public partial class LegacyHelper
         {
             if (!File.Exists(path)) return System.Array.Empty<Sprite>();
             var bytes = File.ReadAllBytes(path);
+            // Opt-in global filtering (ModConfig.shadeSpriteSmoothing). The sheets are HK1-resolution
+            // art drawn at SpriteScale 1.5 in a higher-resolution game, so bilinear sampling visibly
+            // softens the magnified pixel edges next to Hornet's own art.
+            bool smoothing = ModConfig.Instance.shadeSpriteSmoothing;
             var tex = new Texture2D(2, 2, TextureFormat.ARGB32, false);
-            TryLoadImage(tex, bytes);
-            tex.filterMode = FilterMode.Point;
-            loadedSpriteTextures.Add(tex);
+            // The padding pass below has to read the decoded pixels back, so it cannot use the
+            // markNonReadable fast path the point-filtered route relies on.
+            TryLoadImage(tex, bytes, markNonReadable: !smoothing);
             int cols = frames > 0 ? frames : Mathf.Max(1, tex.width / tex.height);
             int frameWidth = tex.width / cols;
             int frameHeight = tex.height;
+            int padding = 0;
+
+            if (smoothing)
+            {
+                // Without a gutter, bilinear sampling at a frame boundary pulls in the neighbouring
+                // frame's edge pixels - a ghost sliver down one side of every animation frame.
+                var padded = BuildPaddedStripTexture(tex, cols);
+                if (padded != null)
+                {
+                    UnityEngine.Object.Destroy(tex);
+                    tex = padded;
+                    padding = ShadeSpriteSmoothing.StripPadding;
+                }
+            }
+
+            tex.filterMode = smoothing ? FilterMode.Bilinear : FilterMode.Point;
+            loadedSpriteTextures.Add(tex);
+
+            int cellWidth = frameWidth + padding * 2;
             var sprites = new Sprite[cols];
             for (int i = 0; i < cols; i++)
-                sprites[i] = Sprite.Create(tex, new Rect(i * frameWidth, 0, frameWidth, frameHeight), new Vector2(0.5f, 0.5f));
+            {
+                // The sprite rect stays the original frame size and sits inside its gutter, so the
+                // Shade does not change scale when smoothing is toggled.
+                var rect = new Rect(i * cellWidth + padding, padding, frameWidth, frameHeight);
+                sprites[i] = Sprite.Create(tex, rect, new Vector2(0.5f, 0.5f));
+            }
+
             return sprites;
+        }
+
+        /// <summary>
+        /// Rebuilds <paramref name="source"/> with a transparent gutter around every frame. Returns
+        /// null (leaving the caller on the unpadded sheet) if the pixels cannot be read back.
+        /// </summary>
+        private static Texture2D BuildPaddedStripTexture(Texture2D source, int columns)
+        {
+            if (source == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                var pixels = source.GetPixels32();
+                var padded = ShadeSpriteSmoothing.PadStrip(
+                    pixels,
+                    source.width,
+                    source.height,
+                    columns,
+                    ShadeSpriteSmoothing.StripPadding,
+                    out int width,
+                    out int height);
+
+                var result = new Texture2D(width, height, TextureFormat.ARGB32, false)
+                {
+                    name = source.name + "_Padded",
+                    wrapMode = TextureWrapMode.Clamp
+                };
+                result.SetPixels32(padded);
+                // makeNoLongerReadable: nothing reads these back, and keeping the CPU copy would
+                // hold a second full-size image per sheet for the lifetime of the skin.
+                result.Apply(false, true);
+                return result;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         public void TriggerSpawnEntrance()
@@ -661,7 +733,7 @@ public partial class LegacyHelper
             }
         }
 
-        private static bool TryLoadImage(Texture2D tex, byte[] bytes)
+        private static bool TryLoadImage(Texture2D tex, byte[] bytes, bool markNonReadable = true)
         {
             try
             {
@@ -669,10 +741,11 @@ public partial class LegacyHelper
                 if (t != null)
                 {
                     var m = t.GetMethod("LoadImage", BindingFlags.Public | BindingFlags.Static, null, new System.Type[] { typeof(Texture2D), typeof(byte[]), typeof(bool) }, null);
-                    // markNonReadable: true - nothing reads these pixels back after Sprite.Create,
-                    // and keeping them readable holds a full second copy of every sheet in managed
-                    // memory for the lifetime of the texture.
-                    if (m != null) { m.Invoke(null, new object[] { tex, bytes, true }); return true; }
+                    // markNonReadable defaults to true - nothing reads these pixels back after
+                    // Sprite.Create, and keeping them readable holds a full second copy of every
+                    // sheet in managed memory for the lifetime of the texture. The smoothing path
+                    // in LoadSpriteStrip is the one caller that does need the pixels back.
+                    if (m != null) { m.Invoke(null, new object[] { tex, bytes, markNonReadable }); return true; }
                 }
             }
             catch { }

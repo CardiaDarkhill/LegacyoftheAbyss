@@ -32,6 +32,11 @@ public partial class LegacyHelper
                 }
             }
 
+            // Ahead of every early return below: the wisps should keep drifting while Hornet is
+            // downed or her controls are locked, and the emitter has to be stopped when the Shade
+            // goes dormant regardless of which branch this frame takes.
+            UpdateShadowParticles();
+
             if (hornetTransform == null) return;
 
             bool pushedSoulThisFrame = false;

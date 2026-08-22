@@ -13,6 +13,22 @@
   <Import Condition="Exists('DevProfile.props')" Project="DevProfile.props" />
 
   <PropertyGroup>
+    <!--
+    Launching through the mod manager and launching Steam directly load from two different
+    BepInEx trees, and a dev build that only lands in one of them is how a "why is my change not
+    showing up" session starts. So DeployLocalDevBuild implies DeployDevProfile whenever a
+    profile is actually configured - one command, both destinations.
+
+    DeployDevProfileExplicit remembers whether the profile deploy was asked for by name. An
+    explicit -p:DeployDevProfile=true is a direct instruction and still hard-errors when the
+    profile cannot be found; the implied one only warns and skips, so renaming a profile in the
+    manager does not start failing every local build.
+    -->
+    <DeployDevProfileExplicit>$(DeployDevProfile)</DeployDevProfileExplicit>
+    <DeployDevProfile Condition="'$(DeployDevProfile)' == '' AND '$(DeployLocalDevBuild)' == 'true' AND '$(ModManagerProfileFolder)' != ''">true</DeployDevProfile>
+  </PropertyGroup>
+
+  <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
@@ -110,6 +126,9 @@
   install's save data) sit alongside the dll rather than in this repo's own Assets/ folder.
   Opt-in via a property so a plain `dotnet build` never touches the live game folder by
   accident. Usage: dotnet build -c Release -p:DeployLocalDevBuild=true
+
+  This also triggers DeployDevProfile below when DevProfile.props supplies a profile path, so one
+  command updates both the game folder and the mod manager profile.
   -->
   <Target Name="DeployLocalDevBuild" AfterTargets="Build" Condition="'$(DeployLocalDevBuild)' == 'true'">
       <ItemGroup>
@@ -137,16 +156,21 @@
   BepInEx/plugins/Assets, matching ModPaths.Assets (resolved next to the DLL), so sprites and audio
   stay single-sourced instead of being duplicated per profile.
 
-  Usage: dotnet build -c Release -p:DeployDevProfile=true
+  Runs automatically as part of -p:DeployLocalDevBuild=true (see the PropertyGroup near the top of
+  this file), so the ordinary dev-build command covers both launch paths. Pass
+  -p:DeployDevProfile=true on its own to deploy to the profile only, or
+  -p:DeployDevProfile=false alongside DeployLocalDevBuild to opt back out.
   -->
   <Target Name="DeployDevProfile" AfterTargets="Build" Condition="'$(DeployDevProfile)' == 'true'">
-      <Error Condition="'$(ModManagerProfileFolder)' == ''"
+      <Error Condition="'$(DeployDevProfileExplicit)' == 'true' AND '$(ModManagerProfileFolder)' == ''"
              Text="DeployDevProfile requires ModManagerProfileFolder. Create DevProfile.props next to this csproj and set it to the mod manager profile folder." />
-      <Error Condition="!Exists('$(ModManagerProfileFolder)')"
+      <Error Condition="'$(DeployDevProfileExplicit)' == 'true' AND '$(ModManagerProfileFolder)' != '' AND !Exists('$(ModManagerProfileFolder)')"
              Text="Mod manager profile folder not found: $(ModManagerProfileFolder). Check the path in DevProfile.props - profiles are renamed and deleted from inside the manager." />
+      <Warning Condition="'$(DeployDevProfileExplicit)' != 'true' AND !Exists('$(ModManagerProfileFolder)')"
+               Text="Skipping the mod manager profile deploy: $(ModManagerProfileFolder) does not exist. Update the path in DevProfile.props - profiles are renamed and deleted from inside the manager." />
 
       <PropertyGroup>
-          <DevProfilePluginFolder>$(ModManagerProfileFolder)\BepInEx\plugins\$(TargetName)-Dev</DevProfilePluginFolder>
+          <DevProfilePluginFolder Condition="Exists('$(ModManagerProfileFolder)')">$(ModManagerProfileFolder)\BepInEx\plugins\$(TargetName)-Dev</DevProfilePluginFolder>
       </PropertyGroup>
 
       <ItemGroup>
@@ -154,11 +178,11 @@
           <DevProfileBinaries Include="$(TargetDir)$(TargetName).pdb" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
       </ItemGroup>
 
-      <MakeDir Directories="$(DevProfilePluginFolder)" />
-      <Copy SourceFiles="@(DevProfileBinaries)" DestinationFolder="$(DevProfilePluginFolder)" SkipUnchangedFiles="false" />
-      <Warning Condition="!Exists('$(DevProfilePluginFolder)\Assets')"
+      <MakeDir Condition="'$(DevProfilePluginFolder)' != ''" Directories="$(DevProfilePluginFolder)" />
+      <Copy Condition="'$(DevProfilePluginFolder)' != ''" SourceFiles="@(DevProfileBinaries)" DestinationFolder="$(DevProfilePluginFolder)" SkipUnchangedFiles="false" />
+      <Warning Condition="'$(DevProfilePluginFolder)' != '' AND !Exists('$(DevProfilePluginFolder)\Assets')"
                Text="No Assets folder at $(DevProfilePluginFolder)\Assets - the mod will fall back to its other search roots and may not find sprites or audio. Recreate the junction: mklink /J &quot;$(DevProfilePluginFolder)\Assets&quot; &quot;&lt;game&gt;\BepInEx\plugins\Assets&quot;" />
-      <Message Text="Deployed dev build to mod manager profile: $(DevProfilePluginFolder)" Importance="High" />
+      <Message Condition="'$(DevProfilePluginFolder)' != ''" Text="Deployed dev build to mod manager profile: $(DevProfilePluginFolder)" Importance="High" />
   </Target>
 
   <!--

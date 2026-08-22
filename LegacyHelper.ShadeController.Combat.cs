@@ -591,6 +591,9 @@ public partial class LegacyHelper
                 rb.linearVelocity = Vector2.zero;
                 rb.simulated = hadSim;
             }
+            // The shadow wisps simulate in world space, so without this the trail would stretch
+            // from the old position to the new one across the whole room.
+            ClearShadowParticles();
         }
 
         public void SuppressHazardDamage(float duration)

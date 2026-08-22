@@ -432,6 +432,9 @@ public partial class LegacyHelper : BaseUnityPlugin
                 if (sc != null)
                 {
                     sc.TeleportToPosition(pos);
+                    // Hornet's renderer is a new instance in the new scene, so the layer/material
+                    // the Shade inherited from the previous one has to be re-derived.
+                    sc.ApplyRenderingSettings();
                     sc.SuppressHazardDamage(SceneSpawnProtectionSeconds);
                     sc.ApplySceneTransitionProtection(SceneSpawnProtectionSeconds);
                     sc.TriggerSpawnEntrance();
@@ -463,13 +466,7 @@ public partial class LegacyHelper : BaseUnityPlugin
         scNew.ApplySceneTransitionProtection(SceneSpawnProtectionSeconds);
 
         var sr = helper.AddComponent<SpriteRenderer>();
-
-        var hornetRenderer = gm.hero_ctrl.GetComponentInChildren<SpriteRenderer>();
-        if (hornetRenderer != null)
-        {
-            sr.sortingLayerID = hornetRenderer.sortingLayerID;
-            sr.sortingOrder = hornetRenderer.sortingOrder + 1;
-        }
+        ApplyShadeSpriteRendering(sr);
 
         scNew.TriggerSpawnEntrance();
         RequestShadeLoadoutRecompute();

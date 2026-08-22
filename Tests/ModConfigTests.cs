@@ -32,6 +32,57 @@ public class ModConfigTests
     }
 
     [Fact]
+    public void SavesAndLoadsVisualSettings()
+    {
+        var cfg = ModConfig.Instance;
+        string originalLayer = cfg.shadeSortingLayer;
+        cfg.shadeSortingLayer = "Actors";
+        cfg.shadeSortingOrderOffset = -2;
+        cfg.shadeUseHornetMaterial = false;
+        cfg.shadeShadowParticlesEnabled = false;
+        cfg.shadeShadowParticleIntensity = 1.4f;
+        cfg.shadeSkinPreviewSmoothing = false;
+        cfg.shadeSpriteSmoothing = true;
+        ModConfig.Save();
+
+        var loaded = ModConfig.Load();
+        Assert.Equal("Actors", loaded.shadeSortingLayer);
+        Assert.Equal(-2, loaded.shadeSortingOrderOffset);
+        Assert.False(loaded.shadeUseHornetMaterial);
+        Assert.False(loaded.shadeShadowParticlesEnabled);
+        Assert.Equal(1.4f, loaded.shadeShadowParticleIntensity, 3);
+        Assert.False(loaded.shadeSkinPreviewSmoothing);
+        Assert.True(loaded.shadeSpriteSmoothing);
+
+        loaded.shadeSortingLayer = originalLayer;
+        loaded.shadeSortingOrderOffset = 1;
+        loaded.shadeUseHornetMaterial = true;
+        loaded.shadeShadowParticlesEnabled = true;
+        loaded.shadeShadowParticleIntensity = 1f;
+        loaded.shadeSkinPreviewSmoothing = true;
+        loaded.shadeSpriteSmoothing = false;
+        ModConfig.Save();
+    }
+
+    [Fact]
+    public void LoadRepairsOutOfRangeVisualSettings()
+    {
+        var cfg = ModConfig.Instance;
+        // A hand-edited config.json, or one written by an older build, must not leave the Shade on
+        // a blank sorting layer or drive the emitter past its tuned ceiling.
+        cfg.shadeSortingLayer = "   ";
+        cfg.shadeShadowParticleIntensity = 99f;
+        ModConfig.Save();
+
+        var loaded = ModConfig.Load();
+        Assert.Equal(ModConfig.DefaultShadeSortingLayer, loaded.shadeSortingLayer);
+        Assert.Equal(ModConfig.MaxShadowParticleIntensity, loaded.shadeShadowParticleIntensity, 3);
+
+        loaded.shadeShadowParticleIntensity = 1f;
+        ModConfig.Save();
+    }
+
+    [Fact]
     public void ShadeBindingRebindPersists()
     {
         var cfg = ModConfig.Instance;

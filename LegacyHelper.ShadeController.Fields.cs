@@ -203,6 +203,19 @@ public partial class LegacyHelper
         private ParticleSystem furyAuraPs;
         private static Material s_furyAuraMat;
 
+        // Shadow-wisp trail (LegacyHelper.ShadeController.ShadowParticles.cs). The texture and
+        // material are shared across every Shade for the process lifetime, like the light quad above.
+        private GameObject shadowParticleObject;
+        private ParticleSystem shadowParticlePs;
+        private ParticleSystemRenderer shadowParticleRenderer;
+        private static Texture2D s_shadowWispTex;
+        private static Material s_shadowWispMat;
+        // Slewed toward the real SOUL fraction so a spell cast thins the smoke over ~a second
+        // instead of snapping. appliedShadow* are the values currently pushed at the emitter.
+        private float shadowSoulFraction;
+        private float appliedShadowSoulFraction = -1f;
+        private float appliedShadowIntensity = -1f;
+
         // Inactive state (at 0 HP)
         private bool isInactive;
         internal bool IsAggroEligible => !isInactive && isActiveAndEnabled && !assistModeEnabled;
