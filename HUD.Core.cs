@@ -248,8 +248,10 @@ public partial class SimpleHUD : MonoBehaviour
         // Fully hidden, not dimmed, whenever any menu surface is up (inventory, crests, charms, map,
         // pause) - the earlier dim-to-0.35 left the masks and soul orb sitting over the top of the
         // pane art. Same treatment while Hornet's controls are locked, which is the third consumer of
-        // that flag alongside the Shade's movement state machine and its combat gate: at a bench or
-        // in a cutscene the game takes its own HUD away and the Shade's has no business staying up.
+        // that flag alongside the Shade's movement state machine and its combat gate: in a
+        // conversation, at a bench or in a cutscene the game takes its own HUD away and the Shade's
+        // has no business staying up. That is not just the reasoning either - the game's own HUD
+        // being gone is one of the things HornetControlsLocked reads to recognise those moments.
         bool controlsLocked = ShouldHideForLockedControls();
         float target = (menuActive || controlsLocked) ? 0f : 1f;
         float current = canvasGroup.alpha;

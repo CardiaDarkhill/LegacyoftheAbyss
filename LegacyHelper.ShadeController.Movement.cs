@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -355,15 +355,68 @@ public partial class LegacyHelper
         }
 
         /// <summary>
-        /// True while Hornet's own controls are taken away from the player by the game - sitting at a
-        /// bench, or any scripted sequence that relinquishes control (cutscenes, transitions, wake-up
-        /// animations).
+        /// The slice of Hornet's state that decides whether her controls are locked, lifted out of
+        /// <see cref="HeroController"/> so the rule itself can be exercised without a Unity player
+        /// loop. <see cref="CaptureHornetControlState"/> fills it in, <see cref="EvaluateControlsLocked"/>
+        /// is the rule.
+        /// </summary>
+        internal struct HornetControlState
+        {
+            /// <summary>Sitting at a bench.</summary>
+            public bool AtBench;
+            /// <summary><c>HeroController.controlReqlinquished</c> - the game's own spelling.</summary>
+            public bool ControlRelinquished;
+            /// <summary><c>HeroController.acceptingInput</c>.</summary>
+            public bool AcceptingInput;
+            /// <summary><c>HeroController.IsPaused()</c> - paused or inventory open.</summary>
+            public bool Paused;
+            /// <summary>Mid scene change, in either direction.</summary>
+            public bool Transitioning;
+            /// <summary>Dead, dying on a hazard, or being put back on the last safe ground.</summary>
+            public bool Downed;
+            /// <summary>
+            /// An interactable is holding Hornet - which is how conversations work, see
+            /// <see cref="IsHeldByInteraction"/>.
+            /// </summary>
+            public bool HeldByInteraction;
+            /// <summary>A cutscene, by any of the game's several names for one - see <see cref="IsInCutscene"/>.</summary>
+            public bool InCutscene;
+            /// <summary>
+            /// The game has slid its own HUD off the screen. This is the tiebreaker for control losses
+            /// nothing above accounts for - see <see cref="IsGameHudHidden"/>.
+            /// </summary>
+            public bool GameHudHidden;
+        }
+
+        /// <summary>
+        /// How long a control loss has to hold before it counts. Hornet's moves hand control back and
+        /// forth over a couple of frames at their seams; without this, every one of those seams would
+        /// strobe the Shade's HUD. Short enough that the start of a real cutscene still reads as
+        /// instant - the HUD's own fade takes 0.2s on its own.
+        /// </summary>
+        private const float ControlLockGraceSeconds = 0.2f;
+
+        /// <summary>When the current unbroken run of "her controls are gone" started, or -1 if none.</summary>
+        private static float s_controlLockPendingSince = -1f;
+
+        /// <summary>
+        /// True while the game has taken Hornet away from the player: a conversation, a bench, or a
+        /// cutscene. Those three are the whole intended list.
         /// <para>
-        /// Deliberately excludes the pause menu and the inventory: <c>acceptingInput</c> is false for
-        /// those too (<c>HeroController.PauseInput</c>), but they are not the state this is for - the
-        /// Shade stays under player control while a menu is open, which is how its own charm tab is
-        /// reachable at all. <c>HeroController.IsPaused()</c> is exactly "paused or inventory open",
-        /// so subtracting it leaves the scripted-control cases.
+        /// What this is emphatically NOT is "HeroController says it has her controls". Nearly
+        /// everything the player asks Hornet to do that is not plain running and jumping is an FSM on
+        /// the hero, and an FSM that wants to drive her takes her control away first - the Drifter's
+        /// Cloak on an updraft, the air dash, the Needolin, every silk skill, several tools, the quick
+        /// map. All of them set <c>controlReqlinquished</c> and clear <c>acceptingInput</c> for their
+        /// whole duration, exactly as a cutscene does, so those two flags cannot tell the two apart
+        /// and anything built on them alone docks the Shade mid-move. See
+        /// <see cref="IsGameHudHidden"/> for what does tell them apart.
+        /// </para>
+        /// <para>
+        /// The pause menu and the inventory are excluded too, and always have been: <c>acceptingInput</c>
+        /// is false for those as well (<c>HeroController.PauseInput</c>), but the Shade stays under
+        /// player control while a menu is open, which is how its own charm tab is reachable at all.
+        /// <c>HeroController.IsPaused()</c> is exactly "paused or inventory open".
         /// </para>
         /// <para>
         /// Exposed statically for <c>SimpleHUD</c>, which hides the Shade's HUD off the same flag
@@ -372,36 +425,271 @@ public partial class LegacyHelper
         /// </summary>
         internal static bool HornetControlsLocked()
         {
+            bool locked;
             try
             {
-                // Both accessors are the "give me whatever is already there" variants on purpose.
-                // GameManager.instance logs an error and HeroController.instance runs a scene scan
-                // when nothing is registered - neither is wanted from a per-frame check, and both are
-                // extern calls that make this untestable outside a Unity player loop.
-                var gm = MenuStateUtility.TryGetGameManager();
-                var pd = !ReferenceEquals(gm, null) ? gm.playerData : null;
-                if (!ReferenceEquals(pd, null) && pd.atBench)
-                {
-                    return true;
-                }
-
-                var hc = HeroController.UnsafeInstance;
-                if (ReferenceEquals(hc, null))
-                {
-                    return false;
-                }
-
-                if (hc.controlReqlinquished)
-                {
-                    return true;
-                }
-
-                return !hc.acceptingInput && !hc.IsPaused();
+                locked = EvaluateControlsLocked(CaptureHornetControlState());
             }
             catch
             {
                 return false;
             }
+
+            try
+            {
+                return ApplyControlLockGrace(locked);
+            }
+            catch
+            {
+                // The catch has to sit out here rather than inside: with no player loop the clock is
+                // an unjittable ecall, and that throws on the call itself, before the callee's own
+                // try is ever entered. Nothing to debounce against, so the raw answer stands.
+                return locked;
+            }
+        }
+
+        /// <summary>
+        /// The rule itself, with nothing Unity-shaped left in it.
+        /// </summary>
+        internal static bool EvaluateControlsLocked(HornetControlState state)
+        {
+            // The three the feature is actually for, each of which the game names outright.
+            if (state.AtBench || state.HeldByInteraction || state.InCutscene)
+            {
+                return true;
+            }
+
+            // Nothing has taken Hornet's input away: ordinary gameplay, or a menu - which is not this
+            // flag's business, see the summary.
+            if (!state.ControlRelinquished && (state.AcceptingInput || state.Paused))
+            {
+                return false;
+            }
+
+            if (state.Transitioning || state.Downed)
+            {
+                return true;
+            }
+
+            // Her control is gone and nothing above accounts for it. Default to trusting the game's
+            // own HUD: it stays up for everything Hornet does, and slides away for the scripted holds
+            // that do not identify themselves any other way.
+            return state.GameHudHidden;
+        }
+
+        private static HornetControlState CaptureHornetControlState()
+        {
+            // Both accessors are the "give me whatever is already there" variants on purpose.
+            // GameManager.instance logs an error and HeroController.instance runs a scene scan
+            // when nothing is registered - neither is wanted from a per-frame check, and both are
+            // extern calls that make this untestable outside a Unity player loop.
+            var gm = MenuStateUtility.TryGetGameManager();
+            var pd = !ReferenceEquals(gm, null) ? gm.playerData : null;
+            var state = new HornetControlState
+            {
+                AtBench = !ReferenceEquals(pd, null) && pd.atBench
+            };
+
+            if (state.AtBench)
+            {
+                return state;
+            }
+
+            var hc = HeroController.UnsafeInstance;
+            if (ReferenceEquals(hc, null))
+            {
+                // No hero to have lost control, so report the shape of ordinary gameplay.
+                state.AcceptingInput = true;
+                return state;
+            }
+
+            state.ControlRelinquished = hc.controlReqlinquished;
+            state.AcceptingInput = hc.acceptingInput;
+            state.Paused = hc.IsPaused();
+
+            var c = hc.cState;
+            if (c != null)
+            {
+                state.Transitioning = c.transitioning || hc.transitionState != HeroTransitionState.WAITING_TO_TRANSITION;
+                state.Downed = c.dead || c.hazardDeath || c.hazardRespawning;
+                state.InCutscene = c.isInCutsceneMovement;
+            }
+
+            state.HeldByInteraction = IsHeldByInteraction();
+            state.InCutscene = state.InCutscene || IsInCutscene(gm);
+            state.GameHudHidden = IsGameHudHidden();
+
+            return state;
+        }
+
+        /// <summary>
+        /// Whether an interactable is currently holding Hornet, which is how every conversation in the
+        /// game works: <c>InteractableBase.DisableInteraction</c> parks itself in
+        /// <c>InteractManager.BlockingInteractable</c> and relinquishes control in the same breath, and
+        /// every NPC derives from it (<c>NPCControlBase : InteractableBase</c>). It covers the rest of
+        /// the family too - readable signs, boards, item handovers.
+        /// </summary>
+        private static bool IsHeldByInteraction()
+        {
+            try
+            {
+                if (InteractManager.BlockingInteractable != null)
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                // The full-screen prompt canvas, which is not an interactable but holds her the same way.
+                if (GenericMessageCanvas.IsActive)
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// The game has several unrelated notions of "cutscene" and no one of them covers the rest, so
+        /// ask all of them: a played-back cinematic sets <c>GameState.CUTSCENE</c>, a dedicated
+        /// cutscene scene answers <c>InGameCutsceneInfo</c>, camera-level cinematics set
+        /// <c>GameCameras.IsInCinematic</c>, and <c>cState.isInCutsceneMovement</c> (read by the
+        /// caller) marks Hornet being walked around inside an ordinary scene.
+        /// </summary>
+        private static bool IsInCutscene(GameManager gm)
+        {
+            try
+            {
+                if (!ReferenceEquals(gm, null) && gm.GameState == GameState.CUTSCENE)
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                if (InGameCutsceneInfo.IsInCutscene)
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                var cameras = TryGetGameCameras();
+                if (!ReferenceEquals(cameras, null) && cameras.IsInCinematic)
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Whether the game has slid its own HUD off the screen.
+        /// <para>
+        /// This is the tiebreaker, and it works because it is the same question one layer up: the game
+        /// takes its HUD away exactly when it is taking the moment away from the player.
+        /// <c>DialogueBox</c> sends the HUD canvas "OUT" as a conversation opens and "IN" as it
+        /// closes, and the cutscene, boss-door, relic-board and reward-message code all drive it
+        /// through <c>GameCameras.HUDOut</c>/<c>HUDIn</c>. Nothing Hornet does at the player's request
+        /// touches it - her HUD stays up through the Needolin, silk skills, tools, the quick map and
+        /// every movement move - which is precisely why those stopped reading as scripted holds.
+        /// </para>
+        /// <para>
+        /// A false negative here degrades to the Shade simply carrying on as normal, which is what it
+        /// did before this feature existed. That is the right way round for the failure to fall.
+        /// </para>
+        /// </summary>
+        private static bool IsGameHudHidden()
+        {
+            try
+            {
+                var cameras = TryGetGameCameras();
+                if (ReferenceEquals(cameras, null))
+                {
+                    return false;
+                }
+
+                return !cameras.IsHudVisible;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static FieldInfo s_gameCamerasInstanceField;
+        private static bool s_gameCamerasInstanceFieldResolved;
+
+        /// <summary>
+        /// <c>GameCameras.instance</c> logs an error and <c>SilentInstance</c> falls back to a scene
+        /// scan when nothing is registered, and this runs every frame - so read the backing field, the
+        /// same bargain <c>MenuStateUtility.TryGetGameManager</c> strikes.
+        /// </summary>
+        private static GameCameras TryGetGameCameras()
+        {
+            if (!s_gameCamerasInstanceFieldResolved)
+            {
+                s_gameCamerasInstanceFieldResolved = true;
+                try
+                {
+                    s_gameCamerasInstanceField = typeof(GameCameras).GetField("_instance", BindingFlags.Static | BindingFlags.NonPublic);
+                }
+                catch
+                {
+                }
+            }
+
+            try
+            {
+                return s_gameCamerasInstanceField?.GetValue(null) as GameCameras;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Holds off reporting a lock until it has lasted <see cref="ControlLockGraceSeconds"/>.
+        /// Releasing is immediate; only the locking direction waits. Swallows the brief handoffs at the
+        /// seams of Hornet's moves, without letting a real cutscene look late.
+        /// </summary>
+        private static bool ApplyControlLockGrace(bool locked)
+        {
+            if (!locked)
+            {
+                s_controlLockPendingSince = -1f;
+                return false;
+            }
+
+            // Unscaled: a cutscene that stops time still ends, and the Shade should dock for it.
+            float now = Time.unscaledTime;
+            if (s_controlLockPendingSince < 0f || s_controlLockPendingSince > now)
+            {
+                s_controlLockPendingSince = now;
+            }
+
+            return now - s_controlLockPendingSince >= ControlLockGraceSeconds;
         }
 
         /// <summary>

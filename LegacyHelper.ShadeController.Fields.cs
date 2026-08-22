@@ -33,7 +33,7 @@ public partial class LegacyHelper
         private bool inHardLeash;
         private float hardLeashTimer;
 
-        // Bench / cutscene docking. One flag, three consumers - the movement state machine below,
+        // Dialogue / bench / cutscene docking. One flag, three consumers - the movement state machine below,
         // the Shade HUD (SimpleHUD reads ShadeController.HornetControlsLocked), and the combat gate
         // in Update. See HornetControlsLocked for what actually sets it.
         private bool hornetControlsLocked;

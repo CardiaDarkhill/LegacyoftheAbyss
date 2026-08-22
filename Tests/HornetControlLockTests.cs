@@ -51,6 +51,136 @@ public class HornetControlLockTests
         Assert.False(LegacyHelper.ShadeController.HornetControlsLocked());
     }
 
+    [Fact]
+    public void OrdinaryGameplayIsNotAControlLoss()
+    {
+        Assert.False(LegacyHelper.ShadeController.EvaluateControlsLocked(OrdinaryGameplay()));
+    }
+
+    /// <summary>
+    /// Menus take <c>acceptingInput</c> away as well, and always have - the Shade stays under player
+    /// control there so its own charm tab is reachable.
+    /// </summary>
+    [Fact]
+    public void AnOpenMenuIsNotAControlLoss()
+    {
+        var state = OrdinaryGameplay();
+        state.AcceptingInput = false;
+        state.Paused = true;
+
+        Assert.False(LegacyHelper.ShadeController.EvaluateControlsLocked(state));
+    }
+
+    /// <summary>
+    /// The three the Shade is meant to dock for, each named outright by the game rather than inferred
+    /// from Hornet having lost her controls.
+    /// </summary>
+    [Theory]
+    [InlineData("AtBench")]
+    [InlineData("HeldByInteraction")]
+    [InlineData("InCutscene")]
+    public void TheScriptedHoldsLockHornetsControls(string scriptedField)
+    {
+        var state = OrdinaryGameplay();
+        SetControlStateField(ref state, scriptedField, true);
+
+        Assert.True(LegacyHelper.ShadeController.EvaluateControlsLocked(state));
+    }
+
+    /// <summary>
+    /// A scripted hold locks even though Hornet still nominally has her controls - a conversation
+    /// starts by parking the interactable, and the relinquish follows a frame later.
+    /// </summary>
+    [Fact]
+    public void AScriptedHoldLocksBeforeControlIsTakenAway()
+    {
+        var state = OrdinaryGameplay();
+        state.HeldByInteraction = true;
+
+        Assert.True(state.AcceptingInput);
+        Assert.True(LegacyHelper.ShadeController.EvaluateControlsLocked(state));
+    }
+
+    /// <summary>
+    /// The reported bug, and the whole reason the rule cannot be built on <c>controlReqlinquished</c>:
+    /// the Drifter's Cloak on an updraft, the air dash, the Needolin, silk skills, tools and the quick
+    /// map all take Hornet's controls away for their duration while the player is still driving. Each
+    /// arrives here looking exactly like this, and the game's HUD staying up is what says otherwise.
+    /// </summary>
+    [Fact]
+    public void AnActionOfHornetsOwnIsNotAControlLoss()
+    {
+        var state = OrdinaryGameplay();
+        state.ControlRelinquished = true;
+        state.AcceptingInput = false;
+        state.GameHudHidden = false;
+
+        Assert.False(LegacyHelper.ShadeController.EvaluateControlsLocked(state));
+    }
+
+    /// <summary>
+    /// The same control loss, but the game has taken its own HUD away too. Nothing the player asks
+    /// Hornet to do does that, so this is a scripted sequence that did not identify itself.
+    /// </summary>
+    [Fact]
+    public void AControlLossWithTheGameHudGoneLocks()
+    {
+        var state = OrdinaryGameplay();
+        state.ControlRelinquished = true;
+        state.AcceptingInput = false;
+        state.GameHudHidden = true;
+
+        Assert.True(LegacyHelper.ShadeController.EvaluateControlsLocked(state));
+    }
+
+    /// <summary>
+    /// The HUD being gone is only ever a tiebreaker for a control loss. On its own - the reward
+    /// popups and boss-door panels hide it while Hornet keeps playing - it decides nothing.
+    /// </summary>
+    [Fact]
+    public void TheGameHudAloneDoesNotLock()
+    {
+        var state = OrdinaryGameplay();
+        state.GameHudHidden = true;
+
+        Assert.False(LegacyHelper.ShadeController.EvaluateControlsLocked(state));
+    }
+
+    /// <summary>
+    /// Scene changes and death keep locking. Neither is on the user-facing list, but the player has
+    /// no control in either and the screen is going dark regardless.
+    /// </summary>
+    [Theory]
+    [InlineData("Transitioning")]
+    [InlineData("Downed")]
+    public void SceneChangesAndDeathStillLock(string scriptedField)
+    {
+        var state = OrdinaryGameplay();
+        state.ControlRelinquished = true;
+        state.AcceptingInput = false;
+        SetControlStateField(ref state, scriptedField, true);
+
+        Assert.True(LegacyHelper.ShadeController.EvaluateControlsLocked(state));
+    }
+
+    /// <summary>Hornet on the ground with her controls, which is what everything else deviates from.</summary>
+    private static LegacyHelper.ShadeController.HornetControlState OrdinaryGameplay()
+    {
+        return new LegacyHelper.ShadeController.HornetControlState { AcceptingInput = true };
+    }
+
+    private static void SetControlStateField(ref LegacyHelper.ShadeController.HornetControlState state, string name, bool value)
+    {
+        var field = typeof(LegacyHelper.ShadeController.HornetControlState)
+            .GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+
+        // Boxing is the only way to reflect onto a struct field; unbox back over the original.
+        object boxed = state;
+        field.SetValue(boxed, value);
+        state = (LegacyHelper.ShadeController.HornetControlState)boxed;
+    }
+
     /// <summary>
     /// The rule <c>InputDeviceBlocker.IsDrivingAllowedHeroAction</c> exists to work around: a device
     /// binding for a control the action's current device does not have is invisible in
