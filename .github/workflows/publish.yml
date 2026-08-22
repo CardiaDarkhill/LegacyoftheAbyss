@@ -76,6 +76,10 @@ jobs:
           filename: ${{ env.NEXUS_ZIP }}
           version: ${{ inputs.version }}
           display_name: LegacyoftheAbyss ${{ inputs.version }}
+          # Defaults to false, which uploads the file as the new version while leaving the mod
+          # page still displaying the old one - that drift is how a page ends up advertising a
+          # version older than its own current download.
+          update_mod_version: true
 
       # ---- Thunderstore -----------------------------------------------------
       - name: Install tcli

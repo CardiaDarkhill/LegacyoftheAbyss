@@ -64,8 +64,13 @@ Two related traps are now designed out rather than documented around:
 
 1. On nexusmods.com: **Settings → API Keys** (<https://www.nexusmods.com/settings/api-keys>) →
    generate a personal API key.
-2. Find the existing mod's **mod ID** and **file ID** — on the mod's public Files tab use the
-   "API Info" option, or check the edit view on the Manage Files page.
+2. Find the existing mod's **mod ID** and **file ID**.
+   - Mod ID is the number in the mod page URL: `nexusmods.com/hollowknightsilksong/mods/166`.
+   - File ID identifies *an existing file entry that receives a new version*, not the mod. Get it
+     from the "API Info" option on that file in the public Files tab, or the edit view on Manage
+     Files. Sanity-check it by opening
+     `nexusmods.com/hollowknightsilksong/mods/166?tab=files&file_id=<id>` and confirming it lands
+     on the file you mean to replace.
 3. In the GitHub repo (**Settings → Secrets and variables → Actions**):
    - secret `NEXUSMODS_API_KEY` — the key from step 1. (This name matches the action's own
      README example; an earlier revision of the workflow read `NEXUS_API_KEY`, which would have
@@ -73,8 +78,12 @@ Two related traps are now designed out rather than documented around:
    - variable `NEXUS_MOD_ID` — numeric mod ID.
    - variable `NEXUS_FILE_ID` — numeric file ID.
 
-The workflow passes `api_key`, `mod_id`, `file_id`, `filename`, `version` and `display_name`,
-all of which are inputs the action actually defines. Note it has **no** `game_domain` input —
+The workflow passes `api_key`, `mod_id`, `file_id`, `filename`, `version`, `display_name` and
+`update_mod_version`, all of which are inputs the action actually defines. `mod_id` is optional
+per the action's own contract — it is only *required* when `changelog` is set, and the upload
+target comes from `file_id` alone — but it is set here so that adding a changelog later needs no
+extra setup. `update_mod_version: true` is deliberate: it defaults to false, which uploads the
+new file while leaving the mod page still advertising the previous version number. Note it has **no** `game_domain` input —
 Actions only *warns* about unrecognised inputs rather than failing, so passing one looks harmless
 while doing nothing. Other optional inputs available if wanted later: `description`, `changelog`,
 `category` (defaults to `main`), `archive_existing_version`, `update_mod_version`,
