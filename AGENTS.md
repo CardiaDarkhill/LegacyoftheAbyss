@@ -1,5 +1,24 @@
 # AGENTS.md file
 
+## Where the documentation lives
+- The project's prose documentation is a **GitHub Wiki**: <https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki>. This file is still self-contained — you can work most tasks from it alone — but the wiki holds the longer-form material that used to sit in `ROADMAP.md`, `PUBLISHING.md` and `REFACTOR_NOTES.md`, all three of which have been **deleted and superseded** by it. If you are looking for one of those files, that is why it is missing.
+- Only `README.md`, `AGENTS.md` and `CHANGELOG.md` remain as repo-root markdown. **Do not add new `.md` files to the repo root** — new documentation belongs on the wiki.
+- The pages most likely to be useful to an agent working here:
+
+  | If the task is… | Read |
+  | --- | --- |
+  | "which file holds this method?" | [Code Map](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Code-Map) — the per-file responsibility map for every partial class |
+  | Understanding how the pieces fit together | [Architecture Overview](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Architecture-Overview) |
+  | Adding or changing a config field | [Configuration Reference](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Configuration-Reference) — every field, default and gotcha |
+  | Anything path-related (assets, logs, save data) | [Asset and Data Paths](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Asset-and-Data-Paths) |
+  | Build/deploy flags and the test suite | [Building and Testing](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Building-and-Testing) |
+  | Release, packaging or CI work | [Publishing a Release](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Publishing-a-Release) |
+  | Planned work, known bugs, feasibility notes | [Roadmap](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Roadmap) |
+  | Triaging or extending bug capture | [Bug Report System](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Bug-Report-System) |
+  | Input, charms or skins specifically | [Controls and Bindings](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Controls-and-Bindings), [Shade Charms](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Shade-Charms), [Skins](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Skins) |
+
+- The wiki is a separate git repository (`LegacyoftheAbyss.wiki.git`). Editing it is a separate clone and push from the code repo — mention wiki updates that a change makes necessary rather than assuming a code commit carries them.
+
 ## Project overview
 - This repository contains the **Legacy of the Abyss** BepInEx mod for *Hollow Knight: Silksong*. The mod adds a powerful Shade companion that fights alongside the player, exposes configuration menus, and persists its own progression.
 - Nearly all runtime behaviour is hosted in the `LegacyHelper` partial class (see the `LegacyHelper.*.cs` files). Its `BaseUnityPlugin` entry point lives in `LegacyHelper.Core.cs` and wires up Harmony patches, HUD injection, and shade spawning.
@@ -34,6 +53,7 @@
 3. Build with `dotnet build -c Release` (from the repository root). The main artefact lands at `<game root>/LegacyoftheAbyss-DevBuild/bin/LegacyoftheAbyss/Release/netstandard2.1/LegacyoftheAbyss.dll` — **not** under this project's own `bin/`, see Repository layout above.
 4. **To actually test a change in-game**, build with `dotnet build -c Release -p:DeployLocalDevBuild=true` — this also copies the DLL & PDB to `BepInEx/plugins/LegacyoftheAbyss.dll` (what a direct/Steam launch loads) and, when `DevProfile.props` is present, into the mod manager profile's `BepInEx/plugins/LegacyoftheAbyss-Dev/` (what a manager launch loads). A build without this flag compiles but does not deploy anywhere.
 5. **Optional (distribution, not local dev):** to package a distributable zip for Nexus/Thunderstore, create a `SilksongPath.props` file that defines `SilksongFolder` (e.g. `dotnet new silksongpath --SilksongFolder="C:\Games\Silksong"`), and build with `-p:CreateDistributionPackages=true`.
+6. Publishing itself is a manual GitHub Actions run, not part of any build here. The packaging traps it is designed around (tcli's silent empty-package failure, the trailing-slash bug, the unversioned Thunderstore staging folder, the pinned Nexus action tag) are documented on the [Publishing a Release](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Publishing-a-Release) wiki page. Read it before touching `.github/workflows/publish.yml`, `thunderstore.toml`, or the `PrepareReleasePackages` target.
 
 ## Testing
 - Run `dotnet test -c Release` to execute the xUnit suite in `Tests/`.
@@ -54,8 +74,11 @@
 - Unhandled exceptions from mod code auto-file a report with no typing involved (`bugReportAutoCaptureExceptions`), deduped by message plus first stack frame and capped per session so one throw in `Update` cannot write a report per frame.
 - `BugReportSystem.IsCapturingText` is the mod-wide "the overlay owns the keyboard" flag. Anything that polls keys directly must respect it — `LegacyHelper.Update` and `ShadeInput.ShouldSuppressOption` already do. A new key handler that ignores it will fire on every matching letter typed into a report.
 - Everything except the MonoBehaviour is plain managed code and is covered by `Tests/BugReportTests.cs`.
+- The same system written up in full, including the capture sequence and the report file formats: [Bug Report System](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Bug-Report-System).
 
 ## Additional tips
 - Use the decompiled `Assembly-CSharp` sources to mirror in-game behaviour when implementing new features or Harmony patches.
 - Shade charms and abilities are centrally defined via `ShadeCharmDefinition` and `ShadeCharmStatBaseline`; extend these classes when adding new modifiers to keep stat calculations consistent.
 - Always validate gameplay logic with `dotnet build -c Release` and `dotnet test -c Release` before submitting changes.
+- The large partial classes are split by responsibility, not chronology. Put new code in the file whose responsibility it matches rather than at the end of whichever file you opened first — [Code Map](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Code-Map) is the authority on which that is.
+- When a change alters documented behaviour, say which wiki page needs updating (new config fields always mean [Configuration Reference](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Configuration-Reference); finished roadmap items are **removed** from [Roadmap](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Roadmap) rather than checked off, since `CHANGELOG.md` and the git log are the record).
