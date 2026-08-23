@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -229,6 +229,9 @@ public partial class LegacyHelper
         /// </summary>
         internal Collider2D BodyCollider => bodyCol;
 
+        /// <summary>Shade is down and cannot be given anything to do or take.</summary>
+        internal bool IsInactive => isInactive;
+
         private void EnableCollisions(bool enable)
         {
             try
@@ -277,7 +280,7 @@ public partial class LegacyHelper
                     if (col.transform == hornetTransform || col.transform.IsChildOf(hornetTransform) || col.transform.root == hornetRoot)
                         return;
                 }
-                var dh = col.GetComponentInParent<DamageHero>();
+                var dh = ResolveDamager(col);
                 if (dh != null)
                 {
                     ApplyDamageHero(dh, col);
@@ -312,13 +315,127 @@ public partial class LegacyHelper
         }
 
         /// <summary>
+        /// A hit the Shade cannot receive any other way.
+        /// <para>
+        /// Most damage reaches the Shade through its own overlap scan, by finding a
+        /// <see cref="DamageHero"/> on the collider it is touching. Some attacks carry none: Lace's
+        /// cross slash damages Hornet by having its FSM call <c>HeroController.TakeQuickDamage</c>
+        /// directly, and its hitbox is a bare trigger with no damage component on it at all. Nothing
+        /// the Shade can see makes that a hit, so when such an attack is taken off Hornet because she
+        /// is not standing in it, this is what puts it on the Shade instead.
+        /// </para>
+        /// <para>
+        /// Runs the ordinary pools, charms, i-frames and death handling, because it is an ordinary
+        /// hit - only the "what touched us" question was answered somewhere else.
+        /// </para>
+        /// </summary>
+        internal void TakeAttackHit(int amount, string sourceName)
+        {
+            if (amount <= 0 || isInactive || hurtCooldown > 0f)
+            {
+                return;
+            }
+
+            try
+            {
+                int attempted = ApplyOvercharmPenalty(amount);
+                LoggingManager.LogShadeDamage(sourceName ?? "attack", canTakeDamage);
+
+                if (!canTakeDamage)
+                {
+                    hurtCooldown = currentHurtIFrameDuration;
+                    DispatchCharmDamageEvent(attempted, 0, false, true, false);
+                    return;
+                }
+
+                if (TryPreventFocusDamage(attempted, false))
+                {
+                    hurtCooldown = currentHurtIFrameDuration;
+                    return;
+                }
+
+                int actual = ApplyDamageToPools(attempted);
+                bool lethal = GetTotalCurrentHealth() <= 0;
+                if (lethal)
+                {
+                    StartDeathAnimation();
+                }
+
+                PushShadeStatsToHud();
+                hurtCooldown = currentHurtIFrameDuration;
+                CancelFocus();
+                PersistIfChanged();
+                DispatchCharmDamageEvent(attempted, actual, false, actual <= 0, lethal);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Whether the Shade's own overlap scan would find this object as a damage source. If it
+        /// would, a hit taken off Hornet must not also be applied by hand - the Shade would take it
+        /// twice.
+        /// </summary>
+        internal static bool CarriesItsOwnDamage(GameObject candidate)
+        {
+            if (!candidate)
+            {
+                return false;
+            }
+
+            try
+            {
+                var dh = candidate.GetComponent<DamageHero>();
+                return dh != null && dh.enabled && dh.damageDealt > 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// The damage an attack deals, for the hits that name no amount at the point they are
+        /// intercepted. Falls back to one mask, which is what every one of these has been.
+        /// </summary>
+        internal static int ResolveAttackDamage(GameObject attack)
+        {
+            try
+            {
+                if (attack)
+                {
+                    foreach (var dh in attack.GetComponentsInChildren<DamageHero>(false))
+                    {
+                        if (dh != null && dh.enabled && dh.damageDealt > 0)
+                        {
+                            return dh.damageDealt;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return 1;
+        }
+
+        /// <summary>
         /// The damage rules themselves, with the "did something touch us?" question already
         /// answered. <paramref name="source"/> is the collider that carried the hit where there was
         /// one, and is used only for the ignore-token check and the log line.
         /// </summary>
         private void ApplyDamageHero(DamageHero dh, Collider2D source)
         {
-            if (ShouldIgnoreDamageSource(source) || ShouldIgnoreDamageSource(dh)) { LogShadeDamage(dh, source, false); return; }
+            // Not logged: the ignore tokens name detection volumes - alert ranges, sight ranges,
+            // bounce colliders - so this is "that was never a damage source", not a damage decision
+            // anyone wants a record of. It was reported per frame per overlap, and one boss fight
+            // put 800 identical "avoided damage from Lace Boss1 via Battle Range" lines into the
+            // log ring, crowding out everything a report was filed to capture.
+            if (ShouldIgnoreDamageSource(source) || ShouldIgnoreDamageSource(dh)) { return; }
+
+            // Likewise unlogged: a collider on a layer that cannot touch Hornet was never a hit,
+            // it was only something the Shade's layer-blind overlap scan happened to find.
+            if (!CouldReachHornet(source)) { return; }
             bool canDamage = false;
             try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
             if (!canDamage) { LogShadeDamage(dh, source, false); return; }
@@ -357,13 +474,88 @@ public partial class LegacyHelper
             else { LogShadeDamage(dh, source, false); }
         }
 
+        /// <summary>
+        /// The damager a collider actually represents, resolved exactly as <see cref="HeroBox"/> does
+        /// it: <c>GetComponent</c> on the collider's own object, never a walk up the hierarchy.
+        /// <para>
+        /// Walking up is what made the Shade take damage from an attack's telegraph. A boss carries a
+        /// <see cref="DamageHero"/> on its root for body contact, and its attacks are child triggers
+        /// that mostly carry none of their own - so <c>GetComponentInParent</c> attributed the boss's
+        /// contact damage to every child trigger the Shade touched, and the Shade was hurt by marker
+        /// volumes that damage nobody. Hornet is never hit that way, because
+        /// <c>HeroBox.CheckForDamage</c> reads only the object it actually touched.
+        /// </para>
+        /// <para>
+        /// The consequence is deliberate: a collider whose object has no <c>DamageHero</c> deals the
+        /// Shade no damage, which is precisely what it would deal Hornet.
+        /// </para>
+        /// </summary>
+        private static DamageHero ResolveDamager(Collider2D collider)
+        {
+            if (!collider)
+            {
+                return null;
+            }
+
+            try { return collider.GetComponent<DamageHero>(); }
+            catch { return null; }
+        }
+
+        private static int s_heroBoxLayer = -1;
+
+        /// <summary>
+        /// Whether a damager could actually have reached Hornet, judged by the physics layer matrix.
+        /// <para>
+        /// The Shade finds its hazards with <c>Collider2D.Overlap</c> and no layer mask, which returns
+        /// everything geometrically overlapping it whether or not those layers interact. Hornet's own
+        /// damage arrives the opposite way: something has to physically touch her <c>HeroBox</c>, so
+        /// the layer matrix has already filtered it. That asymmetry let the Shade be hit by colliders
+        /// that cannot touch Hornet at all - an ability's telegraph being the case that showed it,
+        /// where the marked circle exists to be looked at and the hitbox that follows is a different
+        /// object on a different layer.
+        /// </para>
+        /// <para>
+        /// Asking the matrix restores the symmetry without hardcoding which layers those are: the
+        /// Shade is hit by exactly the things that could have hit Hornet where she standing there.
+        /// </para>
+        /// </summary>
+        private static bool CouldReachHornet(Collider2D damager)
+        {
+            if (!damager)
+            {
+                return true;
+            }
+
+            try
+            {
+                if (s_heroBoxLayer < 0)
+                {
+                    var hero = HeroController.instance;
+                    var box = hero ? hero.heroBox : null;
+                    if (!box)
+                    {
+                        return true;
+                    }
+
+                    s_heroBoxLayer = box.gameObject.layer;
+                }
+
+                return !Physics2D.GetIgnoreLayerCollision(damager.gameObject.layer, s_heroBoxLayer);
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
         private void LogShadeDamage(DamageHero dh, Collider2D src, bool succeeded)
         {
             try
             {
                 string obj = dh ? dh.gameObject?.name ?? dh.name : "<null>";
                 string colName = src ? src.name : "<null>";
-                string source = $"{obj} via {colName}";
+                string layer = src ? LayerMask.LayerToName(src.gameObject.layer) : "-";
+                string source = $"{obj} via {colName} [{layer}]";
                 LoggingManager.LogShadeDamage(source, succeeded);
             }
             catch { }
@@ -712,7 +904,7 @@ public partial class LegacyHelper
                         continue;
                     }
 
-                    var dh = c.GetComponentInParent<DamageHero>();
+                    var dh = ResolveDamager(c);
                     if (dh == null)
                     {
                         continue;
@@ -821,10 +1013,10 @@ public partial class LegacyHelper
                 if (!c) continue;
                 if (c.transform == transform || c.transform.IsChildOf(transform)) continue;
                 if (hornetTransform && c.transform.root == hornetTransform.root) continue;
-                var dh = c.GetComponentInParent<DamageHero>();
+                var dh = ResolveDamager(c);
                 if (dh != null)
                 {
-                    if (ShouldIgnoreDamageSource(c) || ShouldIgnoreDamageSource(dh)) { LogShadeDamage(dh, c, false); continue; }
+                    if (ShouldIgnoreDamageSource(c) || ShouldIgnoreDamageSource(dh)) { continue; }
                     bool canDamage = false;
                     try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
                     if (!canDamage) { LogShadeDamage(dh, c, false); continue; }

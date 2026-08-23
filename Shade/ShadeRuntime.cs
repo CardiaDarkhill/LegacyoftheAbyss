@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 
 using System;
 using System.Collections.Generic;
@@ -100,11 +100,6 @@ namespace LegacyoftheAbyss.Shade
         public static void CaptureState(int currentHp, int maxHp, int lifebloodCurrent, int lifebloodMax, int soul, bool? canTakeDamage = null, int? baseMaxHp = null)
         {
             s_persistentState.Capture(currentHp, maxHp, lifebloodCurrent, lifebloodMax, soul, canTakeDamage, baseMaxHp);
-        }
-
-        public static void EnsureMinimumHealth(int minimum)
-        {
-            s_persistentState.ForceMinimumHealth(minimum);
         }
 
         public static void RestoreFullHealth()

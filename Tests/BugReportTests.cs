@@ -96,6 +96,44 @@ public class BugReportTests
         Assert.Equal("event " + (ring.Capacity + 2), events[events.Length - 1].Summary);
     }
 
+    /// <summary>
+    /// The per-frame emitters are the reason this matters: one boss attack repeating for under a
+    /// second wrote several hundred identical rows and flushed the rest of the window out of the
+    /// ring. A repeat has to cost one slot, not one slot per frame.
+    /// </summary>
+    [Fact]
+    public void RepeatedEventsCoalesceInsteadOfFloodingTheRing()
+    {
+        var ring = new BugReportEventRing(BugReportEventRing.MinimumCapacity);
+
+        ring.Add("shade-damage", "took damage", "Lace via hero damager", 10f, 1);
+        for (int i = 1; i <= 50; i++)
+        {
+            ring.Add("shade-damage", "took damage", "Lace via hero damager", 10f + (i * 0.016f), 1 + i);
+        }
+        ring.Add("shade-damage", "took damage", "Lace via Battle Range", 11f, 60);
+
+        var events = ring.Snapshot();
+
+        Assert.Equal(2, events.Length);
+        Assert.Equal(50, events[0].Repeats);
+        Assert.Equal(10f, events[0].Realtime);
+        Assert.Equal(10.8f, events[0].LastRealtime, 3);
+        // A different detail is a different event, so it must not be folded into the run above it.
+        Assert.Equal(0, events[1].Repeats);
+    }
+
+    [Fact]
+    public void CoalescedRepeatsAreReportedAsACountAndDuration()
+    {
+        var ring = new BugReportEventRing(BugReportEventRing.MinimumCapacity);
+        ring.Add("shade-damage", "took damage", "Lace", 10f, 1);
+        ring.Add("shade-damage", "took damage", "Lace", 10.5f, 2);
+
+        Assert.Contains("(x2 over 0.5s)", ring.RenderTail(10, 10.5f), StringComparison.Ordinal);
+        Assert.Contains(",1,0.5", ring.ToCsv(10.5f), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void EventCsvTimesRowsRelativeToTheCaptureAndEscapesDetail()
     {

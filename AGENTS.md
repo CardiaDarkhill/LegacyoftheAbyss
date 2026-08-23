@@ -1,4 +1,4 @@
-# AGENTS.md file
+﻿# AGENTS.md file
 
 ## Where the documentation lives
 - The project's prose documentation is a **GitHub Wiki**: <https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki>. This file is still self-contained — you can work most tasks from it alone — but the wiki holds the longer-form material that used to sit in `ROADMAP.md`, `PUBLISHING.md` and `REFACTOR_NOTES.md`, all three of which have been **deleted and superseded** by it. If you are looking for one of those files, that is why it is missing.
@@ -76,9 +76,100 @@
 - Everything except the MonoBehaviour is plain managed code and is covered by `Tests/BugReportTests.cs`.
 - The same system written up in full, including the capture sequence and the report file formats: [Bug Report System](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Bug-Report-System).
 
+## Patching the game safely
+
+Most of this repo is Harmony patches and reflection against an assembly we do not control, and that
+combination has a specific failure mode: **a patch that does nothing looks exactly like a patch that
+was not needed.** Several days of this project were lost to fixes that never ran once. The rules
+below all exist because something here silently did nothing.
+
+- **Never name an overloaded method through a `[HarmonyPatch]` attribute.** `AccessTools` resolves it
+  with `Type.GetMethod(name, flags)`, which throws `AmbiguousMatchException` on more than one match -
+  and the shipped assembly carries overloads the decompiled reference under `Decompiles/` does not.
+  Resolve targets with a `TargetMethods()` that filters by parameter shape and yields nothing when it
+  cannot find a match, so an unrecognised assembly disables one feature instead of the whole mod.
+- **Never trust a reflective lookup; assert it.** `FsmOwnerDefault` exposes its two members as public
+  *properties* over non-public fields. Code that looked for public fields found nothing, returned
+  "unavailable", and disabled an entire subsystem on every call for two rounds of testing without a
+  single error anywhere. Any `GetField`/`GetProperty`/`GetMethod` against game or PlayMaker types
+  belongs in a test that asserts it resolves - `Tests/FsmOwnerDefaultResolutionTests.cs` and
+  `Tests/GrabGateResolutionTests.cs` are the pattern. Those tests run against the real assemblies.
+- **A failed resolution must log and disable, never fail silently.** If a lookup comes back empty, say
+  so once at startup. "Feature is off because it could not find X" is a five-second diagnosis; the
+  same state with no message costs a play session.
+- **Check that a physics API answers the question you are asking.** `Collider2D.IsTouching` and
+  `Collider2D.Overlap`-without-a-mask consult the layer collision matrix; `Collider2D.Distance` is
+  pure geometry. Using the wrong one silently returns "no contact" forever for any pair of layers that
+  do not interact - which is most of the interesting ones, because the Shade sits on Default and the
+  things that hit it do not.
+- **The Shade's damage intake is not the hero's, and the differences bite.** Hornet is damaged only
+  by something physically touching her `HeroBox`, resolved with `GetComponent` on the object she
+  actually touched. The Shade scans for overlaps with no layer mask and used to resolve with
+  `GetComponentInParent`. Both differences caused bugs in opposite directions: the walk-up charged
+  it a boss's body-contact damage for touching any child trigger, so attack telegraphs hurt it, and
+  the layer-blind scan let it be hit by colliders that cannot touch Hornet at all. `ResolveDamager`
+  and `CouldReachHornet` in `LegacyHelper.ShadeController.Combat.cs` hold the line - keep new damage
+  paths behind both.
+- **Removing a bug can remove the behaviour it was accidentally providing.** Correcting that walk-up
+  left the Shade completely immune to Lace's cross slash, because the attack's hitbox carries no
+  damage component at all - it damages the hero by calling `HeroController` from an FSM, and the
+  Shade had only ever been hit by it through the bug. When a fix removes a code path, check what was
+  depending on it, and expect "it stopped working entirely" as the next report.
+- **Patch classes are applied one at a time** (`PatchAllTolerantly` in `LegacyHelper.Core.cs`) rather
+  than through `Harmony.PatchAll`, which rethrows the first failure out of `Awake` and takes the HUD,
+  the Shade and the bug reporter down with it. Do not switch back.
+
+## Diagnosing from a bug report
+
+The reports are the only instrument for anything that needs a live game, so treat gaps in them as
+bugs in the tooling rather than as a reason to ask for another repro.
+
+- **Correlation in `flight.csv` is not causation.** It samples state on a timer; cause and effect
+  routinely land in the same row. Two separate fixes were shipped against a boss attack on the
+  strength of "the Shade entered this hitbox and Hornet was hurt two frames later", and both were
+  wrong - the entry was a symptom. Only `events.csv` names an agent.
+- **Record the decision, not just the action.** An interception that declines must say so and why. A
+  category that never appears is ambiguous between "the code never ran", "it ran and chose not to act"
+  and "the situation never arose", and distinguishing those has cost more round trips here than any
+  other single thing. See the `hero-repositioned-by` lines, which are written whether or not anything
+  is redirected.
+- **Record the discriminator, not the verdict.** "Shade inside" is not enough; "Shade inside
+  [shade:hero damager]" says which collider was consulted and lets a wrong reading be recognised. An
+  early version reported "has a DamageHero" using `GetComponentInParent`, which was true of every
+  collider on a boss and made an attack hitbox indistinguishable from a harmless detection range.
+- **Add the emitter before the next repro, not after.** If a report cannot answer the question, the
+  fix is a new event category in the same turn.
+- **Confirm an interception fired before believing it works.** "The bug persists" and "the fix never
+  ran" look identical from the outside, and on this project they were confused repeatedly - once for
+  two full rounds while a subsystem sat dead behind a failed reflective lookup. Every interception
+  writes an event when it engages; check for it first, before theorising about why the behaviour did
+  not change.
+
+## Writing the changelog
+
+`CHANGELOG.md` is for players, and it is short. **One line per change, two at most.** Grouped bullets
+under `### Fixed` / `### Added`, not a heading per entry.
+
+- Say what changed for the player, and name the setting that controls it. Not the cause, not the
+  mechanism, not what it used to do internally.
+- The reasoning goes in the commit message and in the code comment next to the fix, where the next
+  person to touch that code will actually find it. It has never once been needed in the changelog.
+- **Only net changes reach it.** A bug introduced and fixed before release never happened as far as
+  the changelog is concerned - delete both entries rather than narrating the round trip. An entry
+  like "fixed the thing added three commits ago" is noise to everyone outside that week.
+- Write the entry when the change is finished, not per attempt. A day of bug hunting that fixes four
+  things is four lines.
+
+For scale: this file went from 167 lines to 52 without losing a single distinct fact, because most of
+it was explanation nobody had asked for.
+
 ## Additional tips
 - Use the decompiled `Assembly-CSharp` sources to mirror in-game behaviour when implementing new features or Harmony patches.
 - Shade charms and abilities are centrally defined via `ShadeCharmDefinition` and `ShadeCharmStatBaseline`; extend these classes when adding new modifiers to keep stat calculations consistent.
 - Always validate gameplay logic with `dotnet build -c Release` and `dotnet test -c Release` before submitting changes.
 - The large partial classes are split by responsibility, not chronology. Put new code in the file whose responsibility it matches rather than at the end of whichever file you opened first — [Code Map](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Code-Map) is the authority on which that is.
+- Prefer a config switch for anything that reaches into hero damage, hero movement or enemy AI.
+  `shadeBossAttackSharingEnabled` exists so a misbehaving interception can be turned off without a
+  rebuild, which matters because these are exactly the features that cannot be verified outside a
+  running game.
 - When a change alters documented behaviour, say which wiki page needs updating (new config fields always mean [Configuration Reference](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Configuration-Reference); finished roadmap items are **removed** from [Roadmap](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Roadmap) rather than checked off, since `CHANGELOG.md` and the git log are the record).

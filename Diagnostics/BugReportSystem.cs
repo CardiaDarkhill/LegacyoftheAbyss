@@ -73,6 +73,9 @@ namespace LegacyoftheAbyss.Diagnostics
         /// <summary>Previous flight sample, for the position-discontinuity check.</summary>
         private BugReportFlightSample? _lastHeroSample;
 
+        /// <summary>Previous flight sample, for the health-change check.</summary>
+        private BugReportFlightSample? _lastHealthSample;
+
         private readonly List<string> _sceneHistory = new List<string>(SceneHistoryLength);
         private readonly HashSet<string> _seenExceptions = new HashSet<string>(StringComparer.Ordinal);
         private readonly Queue<PendingException> _pendingExceptions = new Queue<PendingException>();
@@ -333,6 +336,7 @@ namespace LegacyoftheAbyss.Diagnostics
             }
 
             DetectHeroTeleport(in sample);
+            DetectHealthChanges(in sample);
             recorder.Add(sample);
         }
 
@@ -384,6 +388,48 @@ namespace LegacyoftheAbyss.Diagnostics
                 FormattableString.Invariant($"Hornet moved {distance:0.##} units in {elapsed:0.###}s - too far to have run it"),
                 FormattableString.Invariant(
                     $"from ({last.HeroX:0.##}, {last.HeroY:0.##}) hp {last.HeroHp} to ({sample.HeroX:0.##}, {sample.HeroY:0.##}) hp {sample.HeroHp}; shade at ({sample.ShadeX:0.##}, {sample.ShadeY:0.##}) hp {sample.ShadeHp} [{sample.ShadeFlags}]"));
+        }
+
+        /// <summary>
+        /// Records health changes on both sides outright.
+        /// <para>
+        /// "Did Hornet actually take damage?" was not answerable from a report without cross-reading
+        /// the flight rows by eye, even though every other part of the moment was recorded - the
+        /// hero-damage rows say what <i>asked</i> to damage her, and most of them are zero-damage
+        /// probes. A mask leaving the bar is the thing a reader wants, so it gets its own line.
+        /// </para>
+        /// </summary>
+        private void DetectHealthChanges(in BugReportFlightSample sample)
+        {
+            var previous = _lastHealthSample;
+            _lastHealthSample = sample;
+
+            if (!previous.HasValue || _eventRing == null)
+            {
+                return;
+            }
+
+            var last = previous.Value;
+            if (!string.Equals(last.Scene, sample.Scene, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (sample.HeroHp != last.HeroHp)
+            {
+                RecordEvent(
+                    "hero-health",
+                    sample.HeroHp < last.HeroHp ? "Hornet took damage" : "Hornet healed",
+                    FormattableString.Invariant($"{last.HeroHp} -> {sample.HeroHp} of {sample.HeroMaxHp}"));
+            }
+
+            if (sample.ShadePresent && last.ShadePresent && sample.ShadeHp != last.ShadeHp)
+            {
+                RecordEvent(
+                    "shade-health",
+                    sample.ShadeHp < last.ShadeHp ? "Shade took damage" : "Shade healed",
+                    FormattableString.Invariant($"{last.ShadeHp} -> {sample.ShadeHp} of {sample.ShadeMaxHp}"));
+            }
         }
 
         /// <summary>

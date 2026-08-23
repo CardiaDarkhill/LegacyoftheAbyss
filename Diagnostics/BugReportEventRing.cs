@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 using System.Text;
 
@@ -12,6 +12,12 @@ namespace LegacyoftheAbyss.Diagnostics
         internal string? Category;
         internal string? Summary;
         internal string? Detail;
+
+        /// <summary>Times this event repeated identically before something else happened.</summary>
+        internal int Repeats;
+
+        /// <summary>Realtime of the last repeat, equal to <see cref="Realtime"/> when there were none.</summary>
+        internal float LastRealtime;
     }
 
     /// <summary>
@@ -63,20 +69,47 @@ namespace LegacyoftheAbyss.Diagnostics
             }
         }
 
+        /// <summary>
+        /// Appends an event, or coalesces it into the previous one when it is identical.
+        /// <para>
+        /// Several of the emitters sit on per-frame paths - the Shade's damage check runs against
+        /// every overlapping hazard every frame, and the game's own hero damage check is called from
+        /// <c>OnTriggerStay2D</c>. Left uncoalesced, one boss attack wrote several hundred identical
+        /// rows and pushed the whole rest of the window out of the ring: the first report to use this
+        /// covered eight seconds of a thirty-second recording and lost the three earlier moments that
+        /// were the ones worth correlating. Collapsing a repeat into a count loses nothing - "this
+        /// held for 0.8s" is what the repeat actually means - and keeps the window honest.
+        /// </para>
+        /// </summary>
         internal void Add(string? category, string? summary, string? detail, float realtime, int frame)
         {
-            var entry = new BugReportEvent
-            {
-                Realtime = realtime,
-                Frame = frame,
-                Category = category,
-                Summary = summary,
-                Detail = detail
-            };
-
             lock (_sync)
             {
-                _events[_next] = entry;
+                if (_count > 0)
+                {
+                    int newest = (_next - 1 + _events.Length) % _events.Length;
+                    ref var previous = ref _events[newest];
+                    if (string.Equals(previous.Category, category, StringComparison.Ordinal) &&
+                        string.Equals(previous.Summary, summary, StringComparison.Ordinal) &&
+                        string.Equals(previous.Detail, detail, StringComparison.Ordinal))
+                    {
+                        previous.Repeats++;
+                        previous.LastRealtime = realtime;
+                        return;
+                    }
+                }
+
+                _events[_next] = new BugReportEvent
+                {
+                    Realtime = realtime,
+                    Frame = frame,
+                    Category = category,
+                    Summary = summary,
+                    Detail = detail,
+                    Repeats = 0,
+                    LastRealtime = realtime
+                };
+
                 _next = (_next + 1) % _events.Length;
                 if (_count < _events.Length)
                 {
@@ -120,7 +153,7 @@ namespace LegacyoftheAbyss.Diagnostics
         {
             var events = Snapshot();
             var builder = new StringBuilder();
-            builder.AppendLine("t_rel,realtime,frame,category,summary,detail");
+            builder.AppendLine("t_rel,realtime,frame,category,summary,detail,repeats,held_seconds");
 
             foreach (var entry in events)
             {
@@ -130,7 +163,9 @@ namespace LegacyoftheAbyss.Diagnostics
                     .Append(entry.Frame.ToString(CultureInfo.InvariantCulture)).Append(',')
                     .Append(Escape(entry.Category)).Append(',')
                     .Append(Escape(entry.Summary)).Append(',')
-                    .Append(Escape(entry.Detail))
+                    .Append(Escape(entry.Detail)).Append(',')
+                    .Append(entry.Repeats.ToString(CultureInfo.InvariantCulture)).Append(',')
+                    .Append(F(entry.LastRealtime - entry.Realtime))
                     .AppendLine();
             }
 
@@ -156,6 +191,13 @@ namespace LegacyoftheAbyss.Diagnostics
                 if (!string.IsNullOrEmpty(entry.Detail))
                 {
                     builder.Append(" - ").Append(entry.Detail);
+                }
+
+                if (entry.Repeats > 0)
+                {
+                    builder
+                        .Append(" (x").Append((entry.Repeats + 1).ToString(CultureInfo.InvariantCulture))
+                        .Append(" over ").Append(F(entry.LastRealtime - entry.Realtime)).Append("s)");
                 }
 
                 builder.AppendLine();

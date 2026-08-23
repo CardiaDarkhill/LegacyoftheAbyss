@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -101,6 +101,60 @@ public partial class LegacyHelper : BaseUnityPlugin
         return 1f;
     }
 
+    /// <summary>
+    /// <c>Harmony.PatchAll</c>, but a patch class that fails takes only itself down.
+    /// <para>
+    /// The stock call processes every annotated class and rethrows the first failure straight out of
+    /// <c>Awake</c>, which leaves the plugin dead: no HUD, no Shade, no bug reporter, nothing. That
+    /// is a wildly disproportionate outcome for one bad patch, and it happened - a single
+    /// <c>AmbiguousMatchException</c> from patching an overloaded method by name cost the mod every
+    /// other patch it has. Losing one feature and logging why is always the better failure.
+    /// </para>
+    /// <para>
+    /// The two <c>Apply</c> calls below are separate for the same reason, and predate this.
+    /// </para>
+    /// </summary>
+    private void PatchAllTolerantly(Harmony harmony)
+    {
+        int patched = 0;
+        int failed = 0;
+
+        foreach (var type in Assembly.GetExecutingAssembly().GetTypes())
+        {
+            try
+            {
+                var processor = harmony.CreateClassProcessor(type);
+                if (processor == null)
+                {
+                    continue;
+                }
+
+                var result = processor.Patch();
+                if (result != null && result.Count > 0)
+                {
+                    patched++;
+                }
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                try
+                {
+                    Logger?.LogError($"Harmony patch class '{type?.FullName}' failed and was skipped: {ex.Message}");
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        if (failed > 0)
+        {
+            try { Logger?.LogWarning($"Harmony: {patched} patch class(es) applied, {failed} skipped after errors."); }
+            catch { }
+        }
+    }
+
     private void Awake()
     {
         Instance = this;
@@ -108,11 +162,12 @@ public partial class LegacyHelper : BaseUnityPlugin
         LoggingManager.Initialize(Logger);
         LegacyoftheAbyss.Diagnostics.BugReportSystem.Install(Logger);
         var harmony = new Harmony("com.legacyoftheabyss.helper");
-        harmony.PatchAll();
+        PatchAllTolerantly(harmony);
 
         // After PatchAll, never inside it - see the remarks on EnemyAiRetargeting. A throw from this
         // one must not be able to cost the rest of the mod its patches.
         EnemyAiRetargeting.Apply(harmony);
+        ShadeGrabRetargeting.Apply(harmony);
 
         SceneManager.sceneLoaded += (scene, mode) =>
         {

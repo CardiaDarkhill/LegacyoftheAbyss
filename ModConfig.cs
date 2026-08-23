@@ -233,6 +233,11 @@ public class ModConfig
     // Lets alerted enemies chase/face/shoot the Shade instead of Hornet when it is the nearer
     // target. See LegacyHelper.EnemyAiRetargeting for how, and ShadeAggroTargeting for when.
     public bool shadeEnemyTargetingEnabled = true;
+    // Whether a boss attack lands on whoever is standing in it rather than always on Hornet.
+    // Separate from shadeEnemyTargetingEnabled because it reaches into hero damage and
+    // repositioning, so it is the first thing worth switching off if a boss starts behaving
+    // oddly - the Shade will still be chased, it just stops sharing attacks.
+    public bool shadeBossAttackSharingEnabled = true;
     public string shadeSkin = "Default";
 
     // --- Shade rendering -------------------------------------------------------------

@@ -375,6 +375,179 @@ public partial class LegacyHelper
         }
     }
 
+    /// <summary>
+    /// Records what damages Hornet, for the bug report event ring.
+    /// <para>
+    /// <c>HeroBox.CheckForDamage</c> is the single choke point for every hero damage the game
+    /// delivers - it handles both shapes, an FSM named <c>damages_hero</c> on the source and a plain
+    /// <see cref="DamageHero"/> component - so one hook here names the culprit whatever form it took.
+    /// </para>
+    /// <para>
+    /// This exists because of the Lace report the Shade damage recorder could not close out. That
+    /// one established, to the frame, that the Shade was hit by <c>Lace Boss1/Cross Slash/hero
+    /// damager</c> and that Hornet took a hit as the attack ended - and could not say what hit
+    /// Hornet, because nothing recorded the hero's side at all. Whether the Shade's presence caused
+    /// her hit or the attack simply reached her too is exactly the question this answers.
+    /// </para>
+    /// </summary>
+    [HarmonyPatch(typeof(HeroBox), nameof(HeroBox.CheckForDamage))]
+    private static class HeroBox_CheckForDamage_Record
+    {
+        private static void Prefix(GameObject otherGameObject)
+        {
+            try
+            {
+                if (otherGameObject == null)
+                {
+                    return;
+                }
+
+                int damage = 0;
+                var hazard = GlobalEnums.HazardType.NON_HAZARD;
+                var damager = otherGameObject.GetComponent<DamageHero>();
+                if (damager != null)
+                {
+                    try { damage = damager.enabled ? damager.damageDealt : 0; }
+                    catch { }
+                    try { hazard = damager.hazardType; }
+                    catch { }
+                }
+
+                LegacyoftheAbyss.Diagnostics.BugReportSystem.RecordEvent(
+                    "hero-damage",
+                    DescribeHierarchy(otherGameObject.transform, 3),
+                    FormattableString.Invariant(
+                        $"damage={damage} hazard={hazard} layer={LayerMask.LayerToName(otherGameObject.layer)} tag={otherGameObject.tag} hasDamageHero={damager != null}"));
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    /// <summary>
+    /// An object's name with a few ancestors, which is what makes a recorded event identifiable:
+    /// "hero damager" on its own names nothing, "Lace Boss1/Cross Slash/hero damager" names the
+    /// attack.
+    /// </summary>
+    internal static string DescribeHierarchy(Transform target, int ancestors)
+    {
+        if (target == null)
+        {
+            return "<null>";
+        }
+
+        var builder = new System.Text.StringBuilder(target.name);
+        var current = target.parent;
+        int depth = 0;
+        while (current != null && depth < ancestors)
+        {
+            builder.Insert(0, current.name + "/");
+            current = current.parent;
+            depth++;
+        }
+
+        return builder.ToString();
+    }
+
+    /// <summary>
+    /// Sends the hits of a redirected grab to the Shade, since the Shade is the one in the attack.
+    /// <para>
+    /// <c>ShadeGrabRetargeting</c> moves the grab's <i>teleport</i> onto the Shade. Everything the
+    /// grab does afterwards is a separate call aimed at <c>HeroController</c> by name, so without
+    /// this the Shade would be dragged into the attack and Hornet would still take every hit of it
+    /// from wherever she was standing - the same bug wearing a different hat.
+    /// </para>
+    /// <para>
+    /// Both entry points are covered because they carry different amounts of information:
+    /// <c>TakeDamage</c> names the damaging object and can be attributed properly, while
+    /// <c>TakeQuickDamage</c> - which is what the multi-hit part of Lace's cross slash calls - names
+    /// nothing at all. The redirect window exists precisely so an anonymous hit landing inside it can
+    /// still be attributed to the grab that opened it.
+    /// </para>
+    /// </summary>
+    /// <summary>
+    /// Both hero-damage entry points are resolved by shape rather than named through the attribute.
+    /// Naming <c>TakeQuickDamage</c> alone threw <c>AmbiguousMatchException</c> out of
+    /// <c>PatchAll</c> - the shipped assembly carries an overload the decompiled reference does not
+    /// - and because that throw escapes <c>PatchAll</c>, it cost the entire mod every one of its
+    /// patches, not just this one. Resolving here means an overload set we do not recognise leaves
+    /// the feature switched off rather than taking the plugin down.
+    /// </summary>
+    [HarmonyPatch]
+    private static class HeroController_TakeQuickDamage_RedirectGrab
+    {
+        private static IEnumerable<MethodBase> TargetMethods()
+            => FindHeroDamageMethods("TakeQuickDamage", requireSource: false);
+
+        private static bool Prefix(int damageAmount)
+        {
+            return !ShadeGrabRetargeting.TryRedirectHeroDamage(null, damageAmount, "TakeQuickDamage");
+        }
+    }
+
+    [HarmonyPatch]
+    private static class HeroController_TakeDamage_RedirectGrab
+    {
+        private static IEnumerable<MethodBase> TargetMethods()
+            => FindHeroDamageMethods("TakeDamage", requireSource: true);
+
+        private static bool Prefix(GameObject go, int damageAmount)
+        {
+            return !ShadeGrabRetargeting.TryRedirectHeroDamage(go, damageAmount, "TakeDamage");
+        }
+    }
+
+    /// <summary>
+    /// Every <see cref="HeroController"/> method of this name whose parameters the prefixes above can
+    /// actually bind to - an <c>int damageAmount</c>, plus a <c>GameObject go</c> when the caller
+    /// needs to know the source. Harmony binds prefix parameters by name, so an overload missing one
+    /// of those would fail at patch time; filtering here is what keeps that from happening.
+    /// </summary>
+    internal static IEnumerable<MethodBase> FindHeroDamageMethods(string name, bool requireSource)
+    {
+        MethodInfo[] candidates;
+        try
+        {
+            candidates = typeof(HeroController).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        }
+        catch
+        {
+            yield break;
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (candidate == null || !string.Equals(candidate.Name, name, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            ParameterInfo[] parameters;
+            try { parameters = candidate.GetParameters(); }
+            catch { continue; }
+
+            bool hasAmount = false;
+            bool hasSource = false;
+            foreach (var parameter in parameters)
+            {
+                if (parameter.ParameterType == typeof(int) && string.Equals(parameter.Name, "damageAmount", StringComparison.Ordinal))
+                {
+                    hasAmount = true;
+                }
+                else if (parameter.ParameterType == typeof(GameObject) && string.Equals(parameter.Name, "go", StringComparison.Ordinal))
+                {
+                    hasSource = true;
+                }
+            }
+
+            if (hasAmount && (!requireSource || hasSource))
+            {
+                yield return candidate;
+            }
+        }
+    }
+
     [HarmonyPatch(typeof(GameManager), "BeginScene")]
     private class GameManager_BeginScene_Patch
     {

@@ -1033,45 +1033,26 @@ public partial class LegacyHelper
 
                     _lastProxyEntryTimes[other] = now;
 
-                    // Both are worth calling out by name: an FSM is what turns a trigger into a
-                    // scripted attack, and a DamageHero is what makes the contact hurt.
-                    bool hasFsm = other.GetComponentInParent<PlayMakerFSM>() != null;
-                    bool hasDamageHero = other.GetComponentInParent<DamageHero>() != null;
+                    // Self and ancestor are reported separately, and the distinction matters: an
+                    // ancestor DamageHero is just "this belongs to something that can hurt you",
+                    // which is true of every collider on an enemy including its harmless detection
+                    // ranges. Only a DamageHero on the collider's own object means "this collider is
+                    // the thing that hurts". Reporting the two as one flag made an attack hitbox and
+                    // a battle range look identical in the first report that used this.
+                    bool ownFsm = other.GetComponent<PlayMakerFSM>() != null;
+                    bool ownDamageHero = other.GetComponent<DamageHero>() != null;
+                    bool parentFsm = !ownFsm && other.GetComponentInParent<PlayMakerFSM>() != null;
+                    bool parentDamageHero = !ownDamageHero && other.GetComponentInParent<DamageHero>() != null;
 
                     LegacyoftheAbyss.Diagnostics.BugReportSystem.RecordEvent(
                         "shade-proxy-entered",
-                        DescribeHierarchy(other.transform),
+                        LegacyHelper.DescribeHierarchy(other.transform, ProxyEntryPathDepth),
                         FormattableString.Invariant(
-                            $"layer={LayerMask.LayerToName(other.gameObject.layer)} tag={other.gameObject.tag} trigger={other.isTrigger} fsm={hasFsm} damageHero={hasDamageHero}"));
+                            $"layer={LayerMask.LayerToName(other.gameObject.layer)} tag={other.gameObject.tag} trigger={other.isTrigger} fsm={(ownFsm ? "self" : parentFsm ? "parent" : "none")} damageHero={(ownDamageHero ? "self" : parentDamageHero ? "parent" : "none")}"));
                 }
                 catch
                 {
                 }
-            }
-
-            private static string DescribeHierarchy(Transform target)
-            {
-                if (!target)
-                {
-                    return "<null>";
-                }
-
-                var builder = new System.Text.StringBuilder(target.name);
-                var current = target.parent;
-                int depth = 0;
-                while (current && depth < ProxyEntryPathDepth)
-                {
-                    builder.Insert(0, current.name + "/");
-                    current = current.parent;
-                    depth++;
-                }
-
-                return builder.ToString();
-            }
-
-            private void OnTriggerExit2D(Collider2D other)
-            {
-                TrackRemasker(other, entering: false);
             }
 
             private void TrackRemasker(Collider2D other, bool entering)
