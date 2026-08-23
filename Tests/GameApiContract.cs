@@ -191,6 +191,42 @@ public class GameApiContractTests
             "Patched to spare Hornet a hit she is not standing in.", "go", "damageAmount");
     }
 
+    /// <summary>
+    /// The bind's heal is rewritten at <c>AddHealth</c> because <c>BindCompleted</c> touches no
+    /// health at all - it sets crest state and nothing else, so watching Hornet across it always read
+    /// a heal of zero and the correction landed on top of the game's three rather than in place of
+    /// it. If this method ever stops matching, the override goes quiet and the bind heals whatever
+    /// the game says, which is the direction that failure should fall.
+    /// </summary>
+    [Fact]
+    public void TheBindHealCanBeInterceptedWhereItHappens()
+    {
+        GameApiContract.RequireMethod(
+            typeof(HeroController), "AddHealth",
+            "Patched to rewrite the bind burst's heal to bindHornetHeal.", "amount");
+    }
+
+    /// <summary>
+    /// Resolved by parameter shape rather than named through the attribute, for the same reason the
+    /// damage entry points are: an overload set the prefix cannot bind to must leave the override off
+    /// rather than throw out of <c>PatchAll</c> and cost the mod every patch it has.
+    /// </summary>
+    [Fact]
+    public void TheHeroAddHealthResolverFindsOnlyBindableMethods()
+    {
+        var methods = LegacyHelper.FindHeroAddHealthMethods().ToList();
+
+        Assert.NotEmpty(methods);
+        foreach (var method in methods)
+        {
+            Assert.Equal("AddHealth", method.Name);
+            var parameters = method.GetParameters();
+            Assert.Single(parameters);
+            Assert.Equal("amount", parameters[0].Name);
+            Assert.Equal(typeof(int), parameters[0].ParameterType);
+        }
+    }
+
     [Fact]
     public void HeroBoxIsStillTheSingleChokePointForHeroDamage()
     {

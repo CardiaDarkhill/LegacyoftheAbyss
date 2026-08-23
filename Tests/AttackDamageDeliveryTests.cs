@@ -66,6 +66,40 @@ public class AttackDamageDeliveryTests
     }
 
     /// <summary>
+    /// A reading that could not be taken is not a reading that she is clear of the attack.
+    /// <para>
+    /// Both of those arrive as <c>HornetInside == false</c>, and for as long as that was all there
+    /// was to go on, a hurtbox that could not be found or was switched off spared her every hit the
+    /// Shade was standing in. Failing towards her taking damage is the only acceptable direction:
+    /// a hit she should have dodged is a moment, a hit she can never take is the game.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AnUnmeasurableHornetIsNotASparedHornet()
+    {
+        var unmeasurable = new Occupancy(hornetInside: false, shadeInside: true, hornetMeasurable: false);
+
+        Assert.False(LegacyHelper.ShadeGrabRetargeting.ShouldSpareHornet(unmeasurable));
+        Assert.False(LegacyHelper.ShadeGrabRetargeting.ShouldMoveShadeInstead(unmeasurable));
+
+        // The Shade's own share is measured on its own and is unaffected by any of it.
+        Assert.True(LegacyHelper.ShadeGrabRetargeting.ShouldShadeTakeHit(unmeasurable));
+    }
+
+    /// <summary>
+    /// A measured Hornet still behaves exactly as before, so the guard above cannot be mistaken for
+    /// having switched the feature off.
+    /// </summary>
+    [Fact]
+    public void AMeasuredHornetOutsideTheAttackIsStillSpared()
+    {
+        var measured = new Occupancy(hornetInside: false, shadeInside: true, hornetMeasurable: true);
+
+        Assert.True(LegacyHelper.ShadeGrabRetargeting.ShouldSpareHornet(measured));
+        Assert.True(LegacyHelper.ShadeGrabRetargeting.ShouldMoveShadeInstead(measured));
+    }
+
+    /// <summary>
     /// A null object carries no damage of its own, so a hit from one is always the Shade's to be
     /// given by hand. Guards the branch that decides between "give it the hit" and "it already has
     /// one" - getting that backwards is double damage in one direction and immunity in the other.

@@ -92,8 +92,9 @@ below all exist because something here silently did nothing.
   *properties* over non-public fields. Code that looked for public fields found nothing, returned
   "unavailable", and disabled an entire subsystem on every call for two rounds of testing without a
   single error anywhere. Any `GetField`/`GetProperty`/`GetMethod` against game or PlayMaker types
-  belongs in a test that asserts it resolves - `Tests/FsmOwnerDefaultResolutionTests.cs` and
-  `Tests/GrabGateResolutionTests.cs` are the pattern. Those tests run against the real assemblies.
+  belongs in a test that asserts it resolves - `Tests/GameApiContract.cs` holds every one of them and
+  is the pattern to follow. Those tests run against the real assemblies, so a mismatch fails at
+  `dotnet test` rather than in a play session, and its helpers report what was actually found.
 - **A failed resolution must log and disable, never fail silently.** If a lookup comes back empty, say
   so once at startup. "Feature is off because it could not find X" is a five-second diagnosis; the
   same state with no message costs a play session.

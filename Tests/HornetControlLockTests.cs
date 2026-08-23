@@ -227,6 +227,100 @@ public class HornetControlLockTests
     }
 
     /// <summary>
+    /// The two cases above at once, which is what a mantle inside a memory actually looks like and
+    /// what neither of them on its own catches: the HUD is gone because the scene is a memory, and
+    /// her controls are gone because she is mid-move. Read as a framed moment, this switched the
+    /// Shade's renderer off for the length of every ledge grab in a dream.
+    /// </summary>
+    [Fact]
+    public void AnActionOfHornetsOwnInsideAMemoryDoesNotHideTheShade()
+    {
+        var state = OrdinaryGameplay();
+        state.ControlRelinquished = true;
+        state.AcceptingInput = false;
+        state.GameHudHidden = true;
+        state.InOwnMove = true;
+
+        Assert.False(LegacyHelper.ShadeController.EvaluateShadeHiddenNamed(state));
+        Assert.False(LegacyHelper.ShadeController.EvaluateShadeHiddenInferred(state));
+        Assert.False(LegacyHelper.ShadeController.EvaluateShadeHidden(state));
+    }
+
+    /// <summary>
+    /// The same shape with no move named, which is what a framed hold inside a memory looks like and
+    /// the reason the inferred clause cannot simply be deleted. It stays an inferred hold, so the
+    /// debounce is what decides it rather than the rule.
+    /// </summary>
+    [Fact]
+    public void AFramedHoldInsideAMemoryIsStillAnInferredHold()
+    {
+        var state = OrdinaryGameplay();
+        state.ControlRelinquished = true;
+        state.AcceptingInput = false;
+        state.GameHudHidden = true;
+
+        Assert.True(LegacyHelper.ShadeController.EvaluateShadeHiddenInferred(state));
+        Assert.False(LegacyHelper.ShadeController.EvaluateShadeHiddenNamed(state));
+    }
+
+    /// <summary>
+    /// A move of Hornet's does not keep the Shade on screen through a cutscene. The exclusion is the
+    /// inferred clause's alone - a named cutscene is not an inference and does not get narrowed by
+    /// one, or a bind mistimed against a cutscene's opening would leave the Shade standing in shot.
+    /// </summary>
+    [Fact]
+    public void AnActionOfHornetsOwnDoesNotSurviveANamedCutscene()
+    {
+        var state = OrdinaryGameplay();
+        state.ControlRelinquished = true;
+        state.AcceptingInput = false;
+        state.GameHudHidden = true;
+        state.InOwnMove = true;
+        state.InCutscene = true;
+
+        Assert.True(LegacyHelper.ShadeController.EvaluateShadeHidden(state));
+    }
+
+    /// <summary>
+    /// A cutscene the game names outright is not an inference, so nothing waits on it and the Shade
+    /// goes on the frame it starts.
+    /// </summary>
+    [Fact]
+    public void ACutsceneHidesTheShadeWithoutWaiting()
+    {
+        var state = OrdinaryGameplay();
+        state.ControlRelinquished = true;
+        state.AcceptingInput = false;
+        state.InCutscene = true;
+
+        Assert.True(LegacyHelper.ShadeController.EvaluateShadeHiddenNamed(state));
+        Assert.False(LegacyHelper.ShadeController.EvaluateShadeHiddenInferred(state));
+    }
+
+    /// <summary>
+    /// The exclusions win over both halves, or a bench inside a memory would hide the Shade at the
+    /// one moment its charms are being changed.
+    /// </summary>
+    [Theory]
+    [InlineData("AtBench")]
+    [InlineData("HeldByInteraction")]
+    [InlineData("Transitioning")]
+    [InlineData("Downed")]
+    public void NothingHidesTheShadeWhileItIsWantedOnScreen(string visibleField)
+    {
+        var state = OrdinaryGameplay();
+        state.ControlRelinquished = true;
+        state.AcceptingInput = false;
+        state.GameHudHidden = true;
+        state.InCutscene = true;
+        SetControlStateField(ref state, visibleField, true);
+
+        Assert.False(LegacyHelper.ShadeController.EvaluateShadeHiddenNamed(state));
+        Assert.False(LegacyHelper.ShadeController.EvaluateShadeHiddenInferred(state));
+        Assert.False(LegacyHelper.ShadeController.EvaluateShadeHidden(state));
+    }
+
+    /// <summary>
     /// Both lock, but neither is a framed moment: the screen is already going dark for a transition,
     /// and on death the Shade's own death animation is the thing worth watching.
     /// </summary>

@@ -78,28 +78,55 @@ public partial class LegacyHelper
         /// </summary>
         internal readonly struct Occupancy
         {
-            internal Occupancy(bool hornetInside, bool shadeInside)
+            internal Occupancy(bool hornetInside, bool shadeInside, bool hornetMeasurable = true)
             {
                 HornetInside = hornetInside;
                 ShadeInside = shadeInside;
+                HornetMeasurable = hornetMeasurable;
             }
 
             internal bool HornetInside { get; }
 
             internal bool ShadeInside { get; }
 
+            /// <summary>
+            /// Whether Hornet's side of the reading means anything - that a hurtbox was found, was
+            /// switched on, and could be tested against the attack.
+            /// <para>
+            /// Without this the two unlike answers "she was measured, and she is outside it" and
+            /// "she could not be measured at all" arrive as the same <c>false</c>, and every caller
+            /// below reads the second as the first. That reads a failure to measure as grounds to
+            /// take a hit away from her, which is the one direction this must never fail in.
+            /// </para>
+            /// </summary>
+            internal bool HornetMeasurable { get; }
+
+            /// <summary>
+            /// Hornet is known to be out of this attack, as opposed to merely not known to be in it.
+            /// Everything that acts on her behalf asks this rather than <c>!HornetInside</c>.
+            /// </summary>
+            internal bool HornetOutside => HornetMeasurable && !HornetInside;
+
             internal string Describe()
-                => HornetInside
+            {
+                if (!HornetMeasurable)
+                {
+                    return ShadeInside ? "Shade inside, Hornet unmeasurable" : "Hornet unmeasurable";
+                }
+
+                return HornetInside
                     ? (ShadeInside ? "both inside" : "Hornet inside")
                     : (ShadeInside ? "Shade inside" : "neither inside");
+            }
         }
 
         /// <summary>
         /// Whether an effect that can only have one subject should take the Shade. It breaks the tie
-        /// towards Hornet: being grabbed while standing in a grab is correct.
+        /// towards Hornet: being grabbed while standing in a grab is correct, and so is being grabbed
+        /// when there was no reading of her to go on.
         /// </summary>
         internal static bool ShouldMoveShadeInstead(Occupancy occupancy)
-            => occupancy.ShadeInside && !occupancy.HornetInside;
+            => occupancy.ShadeInside && occupancy.HornetOutside;
 
         /// <summary>
         /// Whether the Shade takes this hit. Independent of Hornet entirely - if the Shade is in the
@@ -108,10 +135,11 @@ public partial class LegacyHelper
         internal static bool ShouldShadeTakeHit(Occupancy occupancy) => occupancy.ShadeInside;
 
         /// <summary>
-        /// Whether Hornet's own damage should be skipped. Only when she is not in the attack - never
-        /// as a consequence of the Shade having been hit.
+        /// Whether Hornet's own damage should be skipped. Only when she is known to be out of the
+        /// attack - never as a consequence of the Shade having been hit, and never off a reading that
+        /// could not be taken.
         /// </summary>
-        internal static bool ShouldSpareHornet(Occupancy occupancy) => !occupancy.HornetInside;
+        internal static bool ShouldSpareHornet(Occupancy occupancy) => occupancy.HornetOutside;
 
         // --- measuring it -----------------------------------------------------------------------
 
@@ -249,6 +277,46 @@ public partial class LegacyHelper
         }
 
         /// <summary>
+        /// Whether the damage names Hornet herself, or something she hangs off, as its source.
+        /// <para>
+        /// Occupancy cannot answer for an attack that is Hornet: <see cref="IsInsideAttack"/> skips
+        /// the victim's own collider, and when the attack is her hierarchy the only hitbox that could
+        /// have matched her <i>is</i> that collider - so she reads as outside her own attack every
+        /// time, and any Shade stood on her takes the hit instead. Damage sourced at her is hers by
+        /// definition, so it is settled here rather than measured.
+        /// </para>
+        /// <para>
+        /// Nothing in the game damages Hornet this way; a debug menu's "hurt me" does, which is how it
+        /// was found, and that is reason enough for the case to have an answer of its own.
+        /// </para>
+        /// </summary>
+        private static bool IsHornetsOwn(GameObject source)
+        {
+            if (source == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                var hero = HeroController.UnsafeInstance;
+                var heroTransform = hero != null ? hero.transform : null;
+                if (heroTransform == null)
+                {
+                    return false;
+                }
+
+                var sourceTransform = source.transform;
+                return sourceTransform != null
+                    && (sourceTransform.IsChildOf(heroTransform) || heroTransform.IsChildOf(sourceTransform));
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Measures occupancy of one attack. <paramref name="attack"/> is the object actually
         /// delivering the effect and nothing above it - an earlier version widened this to the boss's
         /// <c>HealthManager</c>, which put every hitbox the boss owns into one bucket, so anyone in
@@ -256,7 +324,19 @@ public partial class LegacyHelper
         /// </summary>
         private static Occupancy MeasureOccupancy(GameObject attack)
         {
-            bool hornetInside = IsInsideAttack(attack, ResolveHornetHurtbox(), out string hornetHitbox);
+            var hornetHurtbox = ResolveHornetHurtbox();
+
+            // A hurtbox that is missing or switched off cannot place her either way. It is off only
+            // while she is dying - HeroBoxOff has no other caller - so this is a guard rather than a
+            // path anything ordinarily takes, but it is the guard that keeps a failed reading from
+            // being spent on her behalf.
+            bool hornetMeasurable = hornetHurtbox != null && hornetHurtbox.enabled;
+            bool hornetInside = false;
+            string hornetHitbox = null;
+            if (hornetMeasurable)
+            {
+                hornetInside = IsInsideAttack(attack, hornetHurtbox, out hornetHitbox);
+            }
 
             bool shadeInside = false;
             string shadeHitbox = null;
@@ -275,7 +355,7 @@ public partial class LegacyHelper
                 ? FormattableString.Invariant($"hornet:{hornetHitbox ?? "-"} shade:{shadeHitbox ?? "-"}")
                 : null;
 
-            return new Occupancy(hornetInside, shadeInside);
+            return new Occupancy(hornetInside, shadeInside, hornetMeasurable);
         }
 
         private static void NoteDamageContext(GameObject attack, Occupancy occupancy)
@@ -394,6 +474,12 @@ public partial class LegacyHelper
                 }
 
                 var attack = ResolveAttackObject(__instance);
+                if (IsHornetsOwn(attack))
+                {
+                    // Hers, and not a reading to be taken - see IsHornetsOwn.
+                    return true;
+                }
+
                 var occupancy = MeasureOccupancy(attack);
 
                 // Kept for TakeQuickDamage, which names no source of its own.
@@ -447,6 +533,12 @@ public partial class LegacyHelper
             {
                 if (damageAmount <= 0 || !ModConfig.Instance.shadeBossAttackSharingEnabled)
                 {
+                    return false;
+                }
+
+                if (IsHornetsOwn(source))
+                {
+                    // Hers, and not a reading to be taken - see IsHornetsOwn.
                     return false;
                 }
 

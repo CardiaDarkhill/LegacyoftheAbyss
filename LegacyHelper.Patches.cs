@@ -1296,31 +1296,120 @@ public partial class LegacyHelper
         }
     }
 
+    /// <summary>
+    /// Rewrites the bind's own heal to <c>bindHornetHeal</c>, at the call that actually performs it.
+    /// <para>
+    /// The obvious hook - watch Hornet's health across <c>BindCompleted</c> and correct the
+    /// difference - cannot work, and quietly healed her twice for as long as it was there.
+    /// <c>HeroController.BindCompleted</c> touches no health at all; it sets Warrior and Reaper crest
+    /// state and nothing else. The heal is a <c>CallMethodProper</c> on <c>AddHealth</c> in the bind
+    /// FSM's Bind Burst state, outside that window entirely, so the difference read zero every time
+    /// and the correction landed on top of the game's three rather than in place of it.
+    /// </para>
+    /// <para>
+    /// Two conditions identify the burst: Hornet is binding, and the amount is the bind's own. Every
+    /// other heal that can land mid-bind moves one mask at a time - regen, lifeblood - so the amount
+    /// separates them on its own, and the state keeps an unrelated three-mask heal from being caught
+    /// if one ever exists.
+    /// </para>
+    /// <para>
+    /// Should the game ever change that amount, the override stops matching and the heal falls back
+    /// to whatever the game does: a customised value silently stops applying, which is the right way
+    /// round for this to fail. Logged once per bind so a report can show whether it fired.
+    /// </para>
+    /// </summary>
+    [HarmonyPatch]
+    private static class HeroController_AddHealth_BindOverride
+    {
+        /// <summary>The bind FSM's hardcoded heal - see Bind Burst in the FSM dump.</summary>
+        private const int VanillaBindHeal = 3;
+
+        private static IEnumerable<MethodBase> TargetMethods()
+            => FindHeroAddHealthMethods();
+
+        private static void Prefix(HeroController __instance, ref int amount)
+        {
+            try
+            {
+                if (amount != VanillaBindHeal)
+                {
+                    return;
+                }
+
+                var cState = __instance != null ? __instance.cState : null;
+                if (cState == null || !cState.isBinding)
+                {
+                    return;
+                }
+
+                int desired = Mathf.Max(0, ModConfig.Instance.bindHornetHeal);
+                if (desired == amount)
+                {
+                    return;
+                }
+
+                LegacyoftheAbyss.Diagnostics.BugReportSystem.RecordEvent(
+                    "bind-heal",
+                    "Hornet",
+                    FormattableString.Invariant($"bind heal {amount} -> {desired}"));
+
+                amount = desired;
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>HeroController.AddHealth</c> overloads whose parameters the prefix above can bind to.
+    /// Resolved by shape rather than named through the attribute for the same reason
+    /// <see cref="FindHeroDamageMethods"/> is: an unrecognised overload set leaves the override off
+    /// instead of throwing <c>AmbiguousMatchException</c> out of <c>PatchAll</c> and costing the mod
+    /// every one of its patches.
+    /// </summary>
+    internal static IEnumerable<MethodBase> FindHeroAddHealthMethods()
+    {
+        MethodInfo[] candidates;
+        try
+        {
+            candidates = typeof(HeroController).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        }
+        catch
+        {
+            yield break;
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (candidate == null || candidate.Name != "AddHealth")
+            {
+                continue;
+            }
+
+            var parameters = candidate.GetParameters();
+            if (parameters.Length != 1)
+            {
+                continue;
+            }
+
+            if (parameters[0].Name != "amount" || parameters[0].ParameterType != typeof(int))
+            {
+                continue;
+            }
+
+            yield return candidate;
+        }
+    }
+
     // Trigger shade heal on explicit Bind completion event
     [HarmonyPatch(typeof(HeroController), "BindCompleted")]
     private class HeroController_BindCompleted_Patch
     {
-        private static void Prefix(HeroController __instance, out int __state)
-        {
-            __state = 0;
-            try { if (__instance != null && __instance.playerData != null) __state = __instance.playerData.health; } catch { }
-        }
-
-        private static void Postfix(HeroController __instance, int __state)
+        private static void Postfix(HeroController __instance)
         {
             try
             {
-                var pd = __instance?.playerData;
-                if (pd != null)
-                {
-                    int healed = pd.health - __state;
-                    int desired = ModConfig.Instance.bindHornetHeal;
-                    if (healed != desired)
-                    {
-                        pd.health = Mathf.Clamp(__state + desired, 0, pd.maxHealth);
-                    }
-                }
-
                 if (ModConfig.Instance.shadeEnabled && helper != null)
                 {
                     var sc = helper.GetComponent<ShadeController>();

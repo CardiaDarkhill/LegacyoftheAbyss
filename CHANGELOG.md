@@ -18,10 +18,14 @@ controls it; the reasoning belongs in the commit and the code.
 - Particle hazards such as acid sprays can hit the Shade.
 - The Shade and its HUD are hidden for cutscenes and the memory sequences, and stay under your
   control for the playable stretches inside them.
+- The Shade no longer blinks out of existence inside a memory whenever Hornet mantles a ledge, dashes
+  or rides an updraft.
+- Fixed a bug where Hornet would sometimes be healed twice while binding.
 - The Shade no longer draws on top of fog, snow and darkness; it sits on a character sorting layer
   and uses Hornet's sprite material. `shadeUseHornetMaterial` and `shadeSortingOrderOffset` restore
   the old always-on-top look.
 - Skin previews are now anti-aliased to look better when view up close.
+- You can now talk to Flick the Fixer after he fixes the Wishing Wall... somehow... I had this bug too and it just... went away at some point
 
 ### Added
 
@@ -35,5 +39,4 @@ controls it; the reasoning belongs in the commit and the code.
 
 ### Note
 
-- These settings live in `BepInEx/config/LegacyoftheAbyss/config.json`, are read at startup, and have
-  sensible defaults — most players will never need to touch them.
+- These settings live in `BepInEx/config/LegacyoftheAbyss/config.json`.

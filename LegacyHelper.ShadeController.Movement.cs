@@ -392,6 +392,11 @@ public partial class LegacyHelper
             /// nothing above accounts for - see <see cref="IsGameHudHidden"/>.
             /// </summary>
             public bool GameHudHidden;
+            /// <summary>
+            /// Hornet is part-way through a move of her own - see <see cref="IsInOwnMove"/>. The
+            /// answer to "her controls are gone, but is anyone else driving?"
+            /// </summary>
+            public bool InOwnMove;
         }
 
         /// <summary>
@@ -402,8 +407,32 @@ public partial class LegacyHelper
         /// </summary>
         private const float ControlLockGraceSeconds = 0.2f;
 
+        /// <summary>
+        /// How long an <i>inferred</i> hold has to last before the Shade is taken off screen.
+        /// <para>
+        /// Longer than <see cref="ControlLockGraceSeconds"/> because it guards a weaker inference and
+        /// a louder failure. Docking the Shade a frame early is invisible; switching its renderer off
+        /// and back on is a blink. Inside a memory the game's HUD is gone for the whole scene, so the
+        /// pairing that identifies a scripted hold elsewhere - control gone, HUD gone - is true there
+        /// for every move Hornet makes, and a mantle or an air dash read as a framed moment. Duration
+        /// is what actually separates them: those moves are over in a third of a second and a framed
+        /// moment is not.
+        /// </para>
+        /// <para>
+        /// Only the inference waits. A cutscene the game names outright still hides the Shade on the
+        /// frame it starts.
+        /// </para>
+        /// </summary>
+        private const float InferredHoldGraceSeconds = 0.5f;
+
         /// <summary>When the current unbroken run of "her controls are gone" started, or -1 if none.</summary>
         private static float s_controlLockPendingSince = -1f;
+
+        /// <summary>
+        /// When the current unbroken run of an inferred hold started, or -1 if none. Its own clock:
+        /// this is asked of a different question every frame than the one above, so they cannot share.
+        /// </summary>
+        private static float s_inferredHoldPendingSince = -1f;
 
         /// <summary>
         /// True while the game has taken Hornet away from the player: a conversation, a bench, or a
@@ -439,16 +468,32 @@ public partial class LegacyHelper
         internal static bool HornetControlsLocked(out bool shadeHidden)
         {
             bool locked;
+            bool hidden;
+            bool hiddenIsInferred;
             shadeHidden = false;
             try
             {
                 var state = CaptureHornetControlState();
                 locked = EvaluateControlsLocked(state);
-                shadeHidden = EvaluateShadeHidden(state);
+                hidden = EvaluateShadeHidden(state);
+                hiddenIsInferred = EvaluateShadeHiddenInferred(state);
             }
             catch
             {
                 return false;
+            }
+
+            // Both graces sit out here rather than inside the try above, and both for the same reason
+            // the control-lock one always has: with no player loop the clock is an unjittable ecall
+            // that throws on the call itself, before the callee's own try is ever entered. Nothing to
+            // debounce against in that case, so the raw answers stand.
+            try
+            {
+                shadeHidden = ApplyInferredHoldGrace(hidden, hiddenIsInferred);
+            }
+            catch
+            {
+                shadeHidden = hidden;
             }
 
             try
@@ -457,9 +502,6 @@ public partial class LegacyHelper
             }
             catch
             {
-                // The catch has to sit out here rather than inside: with no player loop the clock is
-                // an unjittable ecall, and that throws on the call itself, before the callee's own
-                // try is ever entered. Nothing to debounce against, so the raw answer stands.
                 return locked;
             }
         }
@@ -513,21 +555,51 @@ public partial class LegacyHelper
         /// </para>
         /// </summary>
         internal static bool EvaluateShadeHidden(HornetControlState state)
-        {
-            if (state.AtBench || state.HeldByInteraction || state.Downed || state.Transitioning)
-            {
-                return false;
-            }
+            => EvaluateShadeHiddenNamed(state) || EvaluateShadeHiddenInferred(state);
 
-            if (state.InCutscene)
-            {
-                return true;
-            }
+        /// <summary>
+        /// The moments where the game says outright that it has taken the scene over. Acted on the
+        /// frame they start; there is nothing to be unsure about.
+        /// </summary>
+        internal static bool EvaluateShadeHiddenNamed(HornetControlState state)
+            => !ShadeStaysVisibleRegardless(state) && state.InCutscene;
 
-            // A control loss nothing else accounts for, with the game's own HUD gone - the same
-            // pairing EvaluateControlsLocked reads as a scripted hold.
-            return state.ControlRelinquished && state.GameHudHidden && !state.Paused;
-        }
+        /// <summary>
+        /// A scripted hold nothing named, read from a control loss the game does not account for
+        /// alongside its own HUD being gone.
+        /// <para>
+        /// The weak half of the rule, and the reason the two guards below it exist. Both halves of the
+        /// pairing are true of a memory scene for its entire length: the HUD is gone there for
+        /// atmosphere, and every move of Hornet's that is not plain running takes her control for its
+        /// duration. With nothing else asked, this fired on a mantle, an air dash, a silk skill -
+        /// which is what had the Shade blinking on and off through the playable stretches of a dream.
+        /// </para>
+        /// <para>
+        /// It cannot simply be dropped: it is what hides the Shade for the framed moments inside those
+        /// same scenes, the Needolin memories among them, and no single flag the game sets tells those
+        /// apart from a mantle. So it is narrowed twice instead. <see cref="HornetControlState.InOwnMove"/>
+        /// removes the moves that can be named, which is what covers the ones that run long enough to
+        /// outlast a debounce - the Drifter's Cloak on an updraft above all. What is left is short by
+        /// construction, and <see cref="InferredHoldGraceSeconds"/> waits it out.
+        /// </para>
+        /// </summary>
+        internal static bool EvaluateShadeHiddenInferred(HornetControlState state)
+            => !ShadeStaysVisibleRegardless(state)
+                && !state.InCutscene
+                && !state.InOwnMove
+                && state.ControlRelinquished
+                && state.GameHudHidden
+                && !state.Paused;
+
+        /// <summary>
+        /// The four that keep the Shade on screen whatever else is true. A bench and a conversation
+        /// lock Hornet's controls but are not framed moments - the bench is where the Shade's charms
+        /// are changed, and docking beside her through dialogue is the intended look. A transition is
+        /// already fading the screen, and on death the Shade's own death animation is the thing worth
+        /// watching.
+        /// </summary>
+        private static bool ShadeStaysVisibleRegardless(HornetControlState state)
+            => state.AtBench || state.HeldByInteraction || state.Downed || state.Transitioning;
 
         /// <summary>Exposed for <c>SimpleHUD</c>, which takes the game's own hidden HUD as its cue.</summary>
         internal static bool GameHudHidden() => IsGameHudHidden();
@@ -568,6 +640,7 @@ public partial class LegacyHelper
                 state.Transitioning = c.transitioning || hc.transitionState != HeroTransitionState.WAITING_TO_TRANSITION;
                 state.Downed = c.dead || c.hazardDeath || c.hazardRespawning;
                 state.InCutscene = c.isInCutsceneMovement;
+                state.InOwnMove = IsInOwnMove(c);
             }
 
             state.HeldByInteraction = IsHeldByInteraction();
@@ -575,6 +648,47 @@ public partial class LegacyHelper
             state.GameHudHidden = IsGameHudHidden();
 
             return state;
+        }
+
+        /// <summary>
+        /// Whether Hornet is part-way through a move the player asked for.
+        /// <para>
+        /// This exists because <c>controlReqlinquished</c> does not mean what its name suggests.
+        /// Nearly everything Hornet does beyond running and jumping is an FSM on the hero, and an FSM
+        /// that wants to drive her takes her control away first - so a mantle and a cutscene set the
+        /// same flag, and outside a memory only the game's own HUD tells them apart. Inside one the
+        /// HUD is gone either way and that tiebreaker is worth nothing, which is what this replaces.
+        /// </para>
+        /// <para>
+        /// Named moves rather than a debounce, because the moves that matter most here are the ones
+        /// no debounce can cover: the Drifter's Cloak rides an updraft for as long as the player holds
+        /// it, and a bind and a focus both run about a second. Everything shorter is left to
+        /// <see cref="InferredHoldGraceSeconds"/> rather than listed out.
+        /// </para>
+        /// <para>
+        /// <c>needolinPlayingMemory</c> is deliberately absent. Playing the Needolin into a memory is
+        /// the moment the Shade was hidden for in the first place, and naming it here would put it
+        /// back on screen for exactly that.
+        /// </para>
+        /// </summary>
+        private static bool IsInOwnMove(HeroControllerStates c)
+        {
+            try
+            {
+                return c.mantling
+                    || c.mantleRecovery
+                    || c.inUpdraft
+                    || c.isBinding
+                    || c.focusing
+                    || c.isToolThrowing
+                    // The game's own name for "an FSM she asked for is driving her": it gates whether
+                    // a fresh move may interrupt this one, so a scripted hold never carries it.
+                    || c.isInCancelableFSMMove;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>
@@ -745,6 +859,40 @@ public partial class LegacyHelper
             }
 
             return now - s_controlLockPendingSince >= ControlLockGraceSeconds;
+        }
+
+        /// <summary>
+        /// Holds off taking the Shade off screen until an inferred hold has lasted
+        /// <see cref="InferredHoldGraceSeconds"/>. As with the lock above, only the hiding direction
+        /// waits; showing it again is immediate.
+        /// <para>
+        /// The clock runs for a named cutscene as well as an inferred hold, even though a named one
+        /// never waits on it. That is what keeps a cutscene which stops being named partway through -
+        /// while still holding Hornet - from starting a fresh wait and blinking the Shade back into
+        /// shot for half a second in the middle of it.
+        /// </para>
+        /// </summary>
+        private static bool ApplyInferredHoldGrace(bool hidden, bool isInferred)
+        {
+            if (!hidden)
+            {
+                s_inferredHoldPendingSince = -1f;
+                return false;
+            }
+
+            // Unscaled: a cutscene that stops time still ends, and the Shade should go for it.
+            float now = Time.unscaledTime;
+            if (s_inferredHoldPendingSince < 0f || s_inferredHoldPendingSince > now)
+            {
+                s_inferredHoldPendingSince = now;
+            }
+
+            if (!isInferred)
+            {
+                return true;
+            }
+
+            return now - s_inferredHoldPendingSince >= InferredHoldGraceSeconds;
         }
 
         /// <summary>
