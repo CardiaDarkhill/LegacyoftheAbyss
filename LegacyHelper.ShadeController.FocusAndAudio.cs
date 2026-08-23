@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -781,7 +781,10 @@ public partial class LegacyHelper
                 foreach (var r in shadeLightRenderers)
                 {
                     if (!r) continue;
-                    r.enabled = true;
+                    // Re-asserted every frame, so the scripted-hold check has to live here rather
+                    // than in ApplyScriptedHoldVisibility - a one-shot disable would be undone on
+                    // the very next tick and the Shade's glow would sit there through the cutscene.
+                    r.enabled = !hiddenForScriptedHold;
                     r.sortingLayerID = baseLayer;
                     r.sortingOrder = baseOrder - 1;
                 }
@@ -922,6 +925,14 @@ public partial class LegacyHelper
             private readonly HashSet<Remasker> remaskersInside = new HashSet<Remasker>();
             private static readonly List<Remasker> RemaskerBuffer = new List<Remasker>();
 
+            /// <summary>How long the same collider is ignored for after being recorded once.</summary>
+            private const float ProxyEntryThrottleSeconds = 1f;
+
+            /// <summary>Ancestors named in a recorded path. Enough to identify the boss, not the whole scene.</summary>
+            private const int ProxyEntryPathDepth = 2;
+
+            private readonly Dictionary<Collider2D, float> _lastProxyEntryTimes = new Dictionary<Collider2D, float>();
+
             internal void Attach(ShadeController shade, Collider2D collider)
             {
                 owner = shade;
@@ -986,7 +997,76 @@ public partial class LegacyHelper
 
             private void OnTriggerEnter2D(Collider2D other)
             {
+                RecordProxyEntry(other);
                 TrackRemasker(other, entering: true);
+            }
+
+            /// <summary>
+            /// Notes every trigger the proxy walks into, for the bug report event ring.
+            /// <para>
+            /// The proxy exists to look exactly like Hornet to enemy detection, which means it also
+            /// looks like Hornet to anything else that tests for her - including boss attacks that,
+            /// once triggered, go on to act on <c>HeroController.instance</c> rather than on whatever
+            /// actually tripped them. When that happens the visible symptom lands on Hornet and no
+            /// artefact in a report names the object responsible. This is the line that names it.
+            /// </para>
+            /// <para>
+            /// Enters only, and throttled per object: exits are not what starts an attack, and a
+            /// region the Shade is hovering in and out of would otherwise flush the ring.
+            /// </para>
+            /// </summary>
+            private void RecordProxyEntry(Collider2D other)
+            {
+                if (!other)
+                {
+                    return;
+                }
+
+                try
+                {
+                    float now = Time.realtimeSinceStartup;
+                    if (_lastProxyEntryTimes.TryGetValue(other, out float previous) &&
+                        now - previous < ProxyEntryThrottleSeconds)
+                    {
+                        return;
+                    }
+
+                    _lastProxyEntryTimes[other] = now;
+
+                    // Both are worth calling out by name: an FSM is what turns a trigger into a
+                    // scripted attack, and a DamageHero is what makes the contact hurt.
+                    bool hasFsm = other.GetComponentInParent<PlayMakerFSM>() != null;
+                    bool hasDamageHero = other.GetComponentInParent<DamageHero>() != null;
+
+                    LegacyoftheAbyss.Diagnostics.BugReportSystem.RecordEvent(
+                        "shade-proxy-entered",
+                        DescribeHierarchy(other.transform),
+                        FormattableString.Invariant(
+                            $"layer={LayerMask.LayerToName(other.gameObject.layer)} tag={other.gameObject.tag} trigger={other.isTrigger} fsm={hasFsm} damageHero={hasDamageHero}"));
+                }
+                catch
+                {
+                }
+            }
+
+            private static string DescribeHierarchy(Transform target)
+            {
+                if (!target)
+                {
+                    return "<null>";
+                }
+
+                var builder = new System.Text.StringBuilder(target.name);
+                var current = target.parent;
+                int depth = 0;
+                while (current && depth < ProxyEntryPathDepth)
+                {
+                    builder.Insert(0, current.name + "/");
+                    current = current.parent;
+                    depth++;
+                }
+
+                return builder.ToString();
             }
 
             private void OnTriggerExit2D(Collider2D other)

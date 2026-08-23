@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -37,6 +37,9 @@ public partial class LegacyHelper
         // the Shade HUD (SimpleHUD reads ShadeController.HornetControlsLocked), and the combat gate
         // in Update. See HornetControlsLocked for what actually sets it.
         private bool hornetControlsLocked;
+
+        /// <summary>Shade is off screen for a scripted hold - see <c>ApplyScriptedHoldVisibility</c>.</summary>
+        private bool hiddenForScriptedHold;
         /// <summary>How far to Hornet's side the Shade docks while her controls are locked.</summary>
         public float dockOffsetX = 1.6f;
         /// <summary>Vertical offset of the docked position, so the Shade floats rather than stands.</summary>

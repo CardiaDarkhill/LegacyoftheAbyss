@@ -253,7 +253,13 @@ public partial class SimpleHUD : MonoBehaviour
         // has no business staying up. That is not just the reasoning either - the game's own HUD
         // being gone is one of the things HornetControlsLocked reads to recognise those moments.
         bool controlsLocked = ShouldHideForLockedControls();
-        float target = (menuActive || controlsLocked) ? 0f : 1f;
+
+        // And whenever the game has put its own HUD away, whether or not it also took Hornet's
+        // controls. The memory/dream sequences are the case that forced this: they hide the game's
+        // HUD for atmosphere while leaving Hornet fully playable, so the control-lock test above
+        // reads false and the Shade's masks and soul orb were the only UI left on screen.
+        bool gameHudHidden = ShouldHideForHiddenGameHud();
+        float target = (menuActive || controlsLocked || gameHudHidden) ? 0f : 1f;
         float current = canvasGroup.alpha;
         if (!Mathf.Approximately(current, target))
         {
@@ -281,6 +287,18 @@ public partial class SimpleHUD : MonoBehaviour
         try
         {
             return LegacyHelper.ShadeController.HornetControlsLocked();
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private bool ShouldHideForHiddenGameHud()
+    {
+        try
+        {
+            return LegacyHelper.ShadeController.GameHudHidden();
         }
         catch
         {

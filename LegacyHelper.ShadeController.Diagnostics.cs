@@ -150,6 +150,7 @@ public partial class LegacyHelper
             Append(builder, isSprinting, "sprinting");
             Append(builder, inHardLeash, "hardLeash");
             Append(builder, hornetControlsLocked, "hornetLocked");
+            Append(builder, hiddenForScriptedHold, "hiddenForHold");
             Append(builder, assistModeEnabled, "assist");
             Append(builder, !canTakeDamage, "invuln");
             Append(builder, sceneProtectionActive, "sceneProtected");

@@ -223,6 +223,12 @@ public partial class LegacyHelper
             catch { }
         }
 
+        /// <summary>
+        /// The Shade's body collider, for the systems that have to register it explicitly the way
+        /// the game registers Hornet's hero box - see <see cref="NotifyParticleDamage"/>.
+        /// </summary>
+        internal Collider2D BodyCollider => bodyCol;
+
         private void EnableCollisions(bool enable)
         {
             try
@@ -274,46 +280,81 @@ public partial class LegacyHelper
                 var dh = col.GetComponentInParent<DamageHero>();
                 if (dh != null)
                 {
-                    if (ShouldIgnoreDamageSource(col) || ShouldIgnoreDamageSource(dh)) { LogShadeDamage(dh, col, false); return; }
-                    bool canDamage = false;
-                    try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
-                    if (!canDamage) { LogShadeDamage(dh, col, false); return; }
-                    int dmg = GetDamageAmount(dh);
-                    var hz = GetHazardType(dh);
-                    if (hz == GlobalEnums.HazardType.STEAM && dmg <= 0)
-                    {
-                        LogShadeDamage(dh, col, false);
-                        return;
-                    }
-                    if (IsTerrainHazard(hz))
-                    {
-                        if (dmg <= 0)
-                        {
-                            LogShadeDamage(dh, col, false);
-                            return;
-                        }
-
-                        LogShadeDamage(dh, col, canTakeDamage);
-                        OnShadeHitHazard();
-                        return;
-                    }
-                    if (dmg > 0)
-                    {
-                        bool preventedByVoidHeart = IsVoidHeartEvading();
-                        LogShadeDamage(dh, col, canTakeDamage && !preventedByVoidHeart);
-                        if (preventedByVoidHeart)
-                        {
-                            int attempted = ApplyOvercharmPenalty(dmg);
-                            HandleVoidHeartEvadePreventedHit(attempted);
-                            return;
-                        }
-
-                        OnShadeHitEnemy(dh);
-                    }
-                    else { LogShadeDamage(dh, col, false); }
+                    ApplyDamageHero(dh, col);
                 }
             }
             catch { }
+        }
+
+        /// <summary>
+        /// Damage the game delivers through a particle system rather than a collider. Those go via
+        /// <c>ParticleDamageHero</c>, which registers Hornet's hero box as the particle trigger's
+        /// only collider, so no overlap and no <see cref="DamageHero"/> component ever reaches the
+        /// Shade through the ordinary paths above - it simply stands in the acid unharmed. See
+        /// <c>ParticleDamageHero_ShadeRelay</c> for the collider registration that calls this.
+        /// </summary>
+        internal void NotifyParticleDamage(GameObject source)
+        {
+            if (!source)
+            {
+                return;
+            }
+
+            try
+            {
+                var dh = source.GetComponent<DamageHero>() ?? source.GetComponentInParent<DamageHero>();
+                if (dh != null)
+                {
+                    ApplyDamageHero(dh, null);
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// The damage rules themselves, with the "did something touch us?" question already
+        /// answered. <paramref name="source"/> is the collider that carried the hit where there was
+        /// one, and is used only for the ignore-token check and the log line.
+        /// </summary>
+        private void ApplyDamageHero(DamageHero dh, Collider2D source)
+        {
+            if (ShouldIgnoreDamageSource(source) || ShouldIgnoreDamageSource(dh)) { LogShadeDamage(dh, source, false); return; }
+            bool canDamage = false;
+            try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
+            if (!canDamage) { LogShadeDamage(dh, source, false); return; }
+            int dmg = GetDamageAmount(dh);
+            var hz = GetHazardType(dh);
+            if (hz == GlobalEnums.HazardType.STEAM && dmg <= 0)
+            {
+                LogShadeDamage(dh, source, false);
+                return;
+            }
+            if (IsTerrainHazard(hz))
+            {
+                if (dmg <= 0)
+                {
+                    LogShadeDamage(dh, source, false);
+                    return;
+                }
+
+                LogShadeDamage(dh, source, canTakeDamage);
+                OnShadeHitHazard();
+                return;
+            }
+            if (dmg > 0)
+            {
+                bool preventedByVoidHeart = IsVoidHeartEvading();
+                LogShadeDamage(dh, source, canTakeDamage && !preventedByVoidHeart);
+                if (preventedByVoidHeart)
+                {
+                    int attempted = ApplyOvercharmPenalty(dmg);
+                    HandleVoidHeartEvadePreventedHit(attempted);
+                    return;
+                }
+
+                OnShadeHitEnemy(dh);
+            }
+            else { LogShadeDamage(dh, source, false); }
         }
 
         private void LogShadeDamage(DamageHero dh, Collider2D src, bool succeeded)

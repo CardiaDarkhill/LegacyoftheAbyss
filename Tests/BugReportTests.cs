@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using LegacyoftheAbyss.Diagnostics;
@@ -76,6 +76,45 @@ public class BugReportTests
         Assert.Contains("Error", rendered, StringComparison.Ordinal);
         Assert.Contains("Unity", rendered, StringComparison.Ordinal);
         Assert.Contains("something broke", rendered, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EventRingKeepsTheMostRecentEvents()
+    {
+        var ring = new BugReportEventRing(BugReportEventRing.MinimumCapacity);
+        Assert.Equal(BugReportEventRing.MinimumCapacity, ring.Capacity);
+
+        for (int i = 0; i < ring.Capacity + 3; i++)
+        {
+            ring.Add("test", "event " + i, null, i, i);
+        }
+
+        var events = ring.Snapshot();
+
+        Assert.Equal(ring.Capacity, events.Length);
+        Assert.Equal("event 3", events[0].Summary);
+        Assert.Equal("event " + (ring.Capacity + 2), events[events.Length - 1].Summary);
+    }
+
+    [Fact]
+    public void EventCsvTimesRowsRelativeToTheCaptureAndEscapesDetail()
+    {
+        var ring = new BugReportEventRing(BugReportEventRing.MinimumCapacity);
+        ring.Add("shade-proxy-entered", "Lace Boss/Multihitter", "layer=Player, tag=Player", 97f, 5820);
+
+        string csv = ring.ToCsv(100f);
+
+        Assert.StartsWith("t_rel,realtime,frame,category,summary,detail", csv, StringComparison.Ordinal);
+        Assert.Contains("-3,97,5820,shade-proxy-entered", csv, StringComparison.Ordinal);
+        // The commas inside the detail must not become extra columns.
+        Assert.Contains("\"layer=Player, tag=Player\"", csv, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EventRingCapacityIsClampedToItsBounds()
+    {
+        Assert.Equal(BugReportEventRing.MinimumCapacity, new BugReportEventRing(0).Capacity);
+        Assert.Equal(BugReportEventRing.MaximumCapacity, new BugReportEventRing(int.MaxValue).Capacity);
     }
 
     [Fact]
@@ -357,7 +396,14 @@ public class BugReportTests
             }
         };
 
-        string markdown = BugReportStore.RenderMarkdown(state, "log line one\nlog line two", hasLog: true, hasFlight: true, hasScreenshot: true);
+        string markdown = BugReportStore.RenderMarkdown(
+            state,
+            "log line one\nlog line two",
+            "[-1.2s] shade-damage: took damage - Lace via Multihitter",
+            hasLog: true,
+            hasFlight: true,
+            hasEvents: true,
+            hasScreenshot: true);
 
         Assert.StartsWith("# Shade clips through the floor", markdown, StringComparison.Ordinal);
         Assert.Contains("Only after teleporting while focusing.", markdown, StringComparison.Ordinal);
@@ -366,8 +412,10 @@ public class BugReportTests
         Assert.Contains("teleporting|focusing".Replace("|", "\\|"), markdown, StringComparison.Ordinal);
         Assert.Contains("SteadyBody, SharpShadow", markdown, StringComparison.Ordinal);
         Assert.Contains(BugReportStore.FlightFileName, markdown, StringComparison.Ordinal);
+        Assert.Contains(BugReportStore.EventFileName, markdown, StringComparison.Ordinal);
         Assert.Contains(BugReportStore.ScreenshotFileName, markdown, StringComparison.Ordinal);
         Assert.Contains("log line two", markdown, StringComparison.Ordinal);
+        Assert.Contains("Lace via Multihitter", markdown, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -380,10 +428,11 @@ public class BugReportTests
             Shade = new BugReportShadeState { Present = false }
         };
 
-        string markdown = BugReportStore.RenderMarkdown(state, null, hasLog: false, hasFlight: false, hasScreenshot: false);
+        string markdown = BugReportStore.RenderMarkdown(state, null, null, hasLog: false, hasFlight: false, hasEvents: false, hasScreenshot: false);
 
         Assert.Contains("No Shade instance was alive", markdown, StringComparison.Ordinal);
         // Nothing should advertise files that were never written.
+        Assert.DoesNotContain(BugReportStore.EventFileName, markdown, StringComparison.Ordinal);
         Assert.DoesNotContain(BugReportStore.FlightFileName, markdown, StringComparison.Ordinal);
         Assert.DoesNotContain(BugReportStore.ScreenshotFileName, markdown, StringComparison.Ordinal);
         Assert.DoesNotContain(BugReportStore.LogFileName, markdown, StringComparison.Ordinal);
@@ -401,7 +450,7 @@ public class BugReportTests
             ExceptionStackTrace = "  at LegacyHelper.ShadeController.Update ()"
         };
 
-        string markdown = BugReportStore.RenderMarkdown(state, null, hasLog: false, hasFlight: false, hasScreenshot: false);
+        string markdown = BugReportStore.RenderMarkdown(state, null, null, hasLog: false, hasFlight: false, hasEvents: false, hasScreenshot: false);
 
         Assert.Contains("## Exception", markdown, StringComparison.Ordinal);
         Assert.Contains("LegacyHelper.ShadeController.Update", markdown, StringComparison.Ordinal);
@@ -417,7 +466,7 @@ public class BugReportTests
             Hero = new BugReportHeroState { Present = true, Flags = "onGround|attacking|recoiling" }
         };
 
-        string markdown = BugReportStore.RenderMarkdown(state, null, hasLog: false, hasFlight: false, hasScreenshot: false);
+        string markdown = BugReportStore.RenderMarkdown(state, null, null, hasLog: false, hasFlight: false, hasEvents: false, hasScreenshot: false);
 
         // A raw pipe here would silently split the cell into three columns and the row would render
         // as nonsense.

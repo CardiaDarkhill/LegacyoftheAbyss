@@ -297,6 +297,13 @@ public class ModConfig
     public bool bugReportFlightRecorderEnabled = true;
     public float bugReportFlightRecorderSeconds = 30f;
     public float bugReportFlightRecorderIntervalSeconds = 0.1f;
+    // Rolling record of discrete events - hero repositions, what the Shade's aggro proxy walked
+    // into, every damage decision made about the Shade. The flight recorder says what state things
+    // were in; this says what happened to them, which is what a report needs to name a culprit.
+    // Independent of the log* flags on purpose: those are console noise settings, and the line that
+    // explains a bug is routinely one they had switched off.
+    public bool bugReportEventRecorderEnabled = true;
+    public int bugReportEventRecorderCapacity = BugReportEventRing.DefaultCapacity;
     // File a report automatically when mod code throws. Capped per session, and deduped by
     // exception plus first stack frame, so a throw inside Update does not write one report
     // per frame.
@@ -354,6 +361,7 @@ public class ModConfig
             instance.bugReportLogLines = Mathf.Clamp(instance.bugReportLogLines, BugReportLogRing.MinimumCapacity, BugReportLogRing.MaximumCapacity);
             instance.bugReportFlightRecorderSeconds = Mathf.Clamp(instance.bugReportFlightRecorderSeconds, BugReportFlightRecorder.MinimumWindowSeconds, BugReportFlightRecorder.MaximumWindowSeconds);
             instance.bugReportFlightRecorderIntervalSeconds = Mathf.Max(instance.bugReportFlightRecorderIntervalSeconds, BugReportFlightRecorder.MinimumIntervalSeconds);
+            instance.bugReportEventRecorderCapacity = Mathf.Clamp(instance.bugReportEventRecorderCapacity, BugReportEventRing.MinimumCapacity, BugReportEventRing.MaximumCapacity);
             instance.bugReportAutoCaptureLimit = Mathf.Max(0, instance.bugReportAutoCaptureLimit);
             instance.bugReportScreenshotMaxWidth = Mathf.Max(0, instance.bugReportScreenshotMaxWidth);
         }

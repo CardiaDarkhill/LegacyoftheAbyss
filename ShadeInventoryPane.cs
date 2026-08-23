@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -71,17 +71,6 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
     private static Font? cachedTrajanSourceFont;
     private static bool searchedTrajanFont;
     private static ShadeInventoryPane? activePane;
-    private static InputHandler? cachedInputHandler;
-    private static bool loggedMissingInputHandler;
-    private static bool loggedMissingHeroActions;
-
-    private enum DirectionalInputSource
-    {
-        None,
-        ShadeBindings,
-        HeroActions
-    }
-
     private struct RectSnapshot
     {
         public Vector2 AnchorMin;
@@ -278,7 +267,6 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
     private InventoryPaneBase.InputEventType lastPaneInputDirection = InventoryPaneBase.InputEventType.Left;
     private bool lastPaneInputCameFromEvent;
     private InventoryPaneBase.InputEventType? shadeHeldDirection;
-    private DirectionalInputSource shadeHeldDirectionSource;
     private float shadeDirectionRepeatTimer;
     private int lastShadeInputFrame = -1;
     private bool loggedInactiveHierarchyProcessing;

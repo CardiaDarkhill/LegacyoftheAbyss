@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -15,6 +15,10 @@ namespace LegacyoftheAbyss.Diagnostics
         /// <summary>The excerpt quoted inline in report.md. See <c>BugReportLogRing.RenderTail</c>.</summary>
         internal string? LogTail;
         internal string? FlightCsv;
+        internal string? EventCsv;
+
+        /// <summary>The excerpt quoted inline in report.md. See <c>BugReportEventRing.RenderTail</c>.</summary>
+        internal string? EventTail;
         internal byte[]? ScreenshotPng;
     }
 
@@ -54,6 +58,7 @@ namespace LegacyoftheAbyss.Diagnostics
         internal const string StateFileName = "state.json";
         internal const string LogFileName = "log.txt";
         internal const string FlightFileName = "flight.csv";
+        internal const string EventFileName = "events.csv";
         internal const string ScreenshotFileName = "screenshot.png";
 
         /// <summary>Log entries quoted inline in report.md. The full ring still goes to log.txt.</summary>
@@ -206,12 +211,13 @@ namespace LegacyoftheAbyss.Diagnostics
                 Directory.CreateDirectory(folder);
 
                 bool hasFlight = !string.IsNullOrEmpty(payload.FlightCsv);
+                bool hasEvents = !string.IsNullOrEmpty(payload.EventCsv);
                 bool hasScreenshot = payload.ScreenshotPng != null && payload.ScreenshotPng.Length > 0;
                 bool hasLog = !string.IsNullOrEmpty(payload.LogText);
 
                 File.WriteAllText(
                     Path.Combine(folder, ReportFileName),
-                    RenderMarkdown(payload.State, payload.LogTail, hasLog, hasFlight, hasScreenshot),
+                    RenderMarkdown(payload.State, payload.LogTail, payload.EventTail, hasLog, hasFlight, hasEvents, hasScreenshot),
                     Utf8NoBom);
 
                 File.WriteAllText(Path.Combine(folder, StateFileName), SerializeState(payload.State), Utf8NoBom);
@@ -224,6 +230,11 @@ namespace LegacyoftheAbyss.Diagnostics
                 if (hasFlight)
                 {
                     File.WriteAllText(Path.Combine(folder, FlightFileName), payload.FlightCsv, Utf8NoBom);
+                }
+
+                if (hasEvents)
+                {
+                    File.WriteAllText(Path.Combine(folder, EventFileName), payload.EventCsv, Utf8NoBom);
                 }
 
                 if (hasScreenshot)
@@ -295,7 +306,7 @@ namespace LegacyoftheAbyss.Diagnostics
         /// where, and to whom - the log tail is quoted last because it is the part you scroll to only
         /// once the summary has told you what to look for.
         /// </summary>
-        internal static string RenderMarkdown(BugReportState state, string? logTail, bool hasLog, bool hasFlight, bool hasScreenshot)
+        internal static string RenderMarkdown(BugReportState state, string? logTail, string? eventTail, bool hasLog, bool hasFlight, bool hasEvents, bool hasScreenshot)
         {
             var builder = new StringBuilder();
             builder.Append("# ").AppendLine(string.IsNullOrWhiteSpace(state.Title) ? "Untitled report" : state.Title);
@@ -406,12 +417,30 @@ namespace LegacyoftheAbyss.Diagnostics
                 builder.Append("- `").Append(FlightFileName).AppendLine("` - rolling state samples leading up to the capture. `t_rel` is seconds relative to it, so the last rows are the moment reported.");
             }
 
+            if (hasEvents)
+            {
+                builder.Append("- `").Append(EventFileName).AppendLine("` - discrete events leading up to the capture: hero repositions, what the Shade's aggro proxy entered, every damage decision. Shares the `realtime` column with `flight.csv`, so the two line up row for row.");
+            }
+
             if (hasScreenshot)
             {
                 builder.Append("- `").Append(ScreenshotFileName).AppendLine("` - the frame as it looked when the hotkey was pressed, before the report overlay drew.");
             }
 
             builder.AppendLine();
+
+            // Ahead of the log tail on purpose: these lines are the ones chosen for being about the
+            // Shade, so they are far likelier to name the cause than the last 60 lines of whatever
+            // every loaded plugin happened to be saying.
+            if (!string.IsNullOrEmpty(eventTail))
+            {
+                builder.Append("## Event tail (last ").Append(BugReportEventRing.InlineTailEntries.ToString(CultureInfo.InvariantCulture)).AppendLine(" events)");
+                builder.AppendLine();
+                builder.AppendLine("```");
+                builder.AppendLine(eventTail!.TrimEnd('\n', '\r'));
+                builder.AppendLine("```");
+                builder.AppendLine();
+            }
 
             if (!string.IsNullOrEmpty(logTail))
             {

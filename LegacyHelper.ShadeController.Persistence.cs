@@ -33,6 +33,29 @@ public partial class LegacyHelper
 
         public void FullHealFromBench()
         {
+            RefillHealthPools();
+            ShadeRuntime.HandleBenchRest();
+            PushShadeStatsToHud(suppressDamageAudio: true);
+        }
+
+        /// <summary>
+        /// Matches Hornet's own death recovery. <c>HeroController.Respawn</c> calls
+        /// <c>MaxHealth</c> whenever she was dead, whatever kind of marker she respawns at, so the
+        /// Shade refills too - it used to be revived to 1 HP and only topped up if the respawn
+        /// happened to be a bench, which is why dying anywhere else left it on a single mask.
+        /// <para>
+        /// Unlike <see cref="FullHealFromBench"/> this deliberately skips the bench rest: a death is
+        /// what breaks the fragile charms, so it must not also repair them.
+        /// </para>
+        /// </summary>
+        public void FullHealOnRespawn()
+        {
+            RefillHealthPools();
+            PushShadeStatsToHud(suppressDamageAudio: true);
+        }
+
+        private void RefillHealthPools()
+        {
             ApplyCharmHealthModifiers(refillLifeblood: true);
             shadeHP = shadeMaxHP;
             shadeLifeblood = shadeLifebloodMax;
@@ -42,8 +65,6 @@ public partial class LegacyHelper
                 isInactive = false;
                 CancelDeathAnimation();
             }
-            ShadeRuntime.HandleBenchRest();
-            PushShadeStatsToHud(suppressDamageAudio: true);
         }
 
         public void ReviveToAtLeast(int hp, bool allowLifeblood = false)

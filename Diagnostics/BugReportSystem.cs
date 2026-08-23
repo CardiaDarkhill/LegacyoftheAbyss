@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
@@ -28,6 +28,13 @@ namespace LegacyoftheAbyss.Diagnostics
         private const int MessageCharacterLimit = 4000;
         private const float ToastSeconds = 6f;
         private const int SceneHistoryLength = 8;
+
+        /// <summary>
+        /// Units per second above which Hornet is taken to have been moved rather than to have moved.
+        /// Set well clear of anything she can do under her own power - a dash tops out around 20 and
+        /// a long fall around 30 - so only a genuine reposition trips it.
+        /// </summary>
+        private const float HeroTeleportSpeedThreshold = 45f;
 
         /// <summary>
         /// Substrings that mark a stack trace as this mod's problem. Silksong and other plugins throw
@@ -61,6 +68,10 @@ namespace LegacyoftheAbyss.Diagnostics
         private BugReportLogRing? _logRing;
         private BugReportLogCollector? _logCollector;
         private BugReportFlightRecorder? _flightRecorder;
+        private BugReportEventRing? _eventRing;
+
+        /// <summary>Previous flight sample, for the position-discontinuity check.</summary>
+        private BugReportFlightSample? _lastHeroSample;
 
         private readonly List<string> _sceneHistory = new List<string>(SceneHistoryLength);
         private readonly HashSet<string> _seenExceptions = new HashSet<string>(StringComparer.Ordinal);
@@ -81,6 +92,8 @@ namespace LegacyoftheAbyss.Diagnostics
         /// </summary>
         private DateTime _captureLocalTime;
         private string? _pendingFlightCsv;
+        private string? _pendingEventCsv;
+        private string? _pendingEventTail;
         private bool _focusRequested;
 
         private float _nextSampleTime;
@@ -184,6 +197,11 @@ namespace LegacyoftheAbyss.Diagnostics
                 _flightRecorder = new BugReportFlightRecorder(
                     config.bugReportFlightRecorderSeconds,
                     config.bugReportFlightRecorderIntervalSeconds);
+            }
+
+            if (config.bugReportEventRecorderEnabled)
+            {
+                _eventRing = new BugReportEventRing(config.bugReportEventRecorderCapacity);
             }
 
             Application.logMessageReceived += HandleUnityLog;
@@ -314,7 +332,85 @@ namespace LegacyoftheAbyss.Diagnostics
             {
             }
 
+            DetectHeroTeleport(in sample);
             recorder.Add(sample);
+        }
+
+        /// <summary>
+        /// Flags a position jump Hornet cannot have walked, run or dashed. She is repositioned by
+        /// boss grabs, cutscenes and hazard respawns, and when that happens for a reason the player
+        /// did not expect it is the single most useful line in a report - the flight rows alone show
+        /// her somewhere new without ever saying she was moved, because the move and its cause fall
+        /// inside one sampling interval.
+        /// <para>
+        /// Scene has to match: every transition is a legitimate jump of arbitrary size.
+        /// </para>
+        /// </summary>
+        private void DetectHeroTeleport(in BugReportFlightSample sample)
+        {
+            var previous = _lastHeroSample;
+            _lastHeroSample = sample;
+
+            if (!previous.HasValue || _eventRing == null)
+            {
+                return;
+            }
+
+            var last = previous.Value;
+            if (!string.Equals(last.Scene, sample.Scene, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            float elapsed = sample.Realtime - last.Realtime;
+            if (elapsed <= 0f)
+            {
+                return;
+            }
+
+            float dx = sample.HeroX - last.HeroX;
+            float dy = sample.HeroY - last.HeroY;
+            float distance = Mathf.Sqrt((dx * dx) + (dy * dy));
+
+            // Generous enough that a dash, a hard fall or a recoil at a low frame rate stays quiet.
+            float allowed = HeroTeleportSpeedThreshold * elapsed;
+            if (distance <= allowed)
+            {
+                return;
+            }
+
+            RecordEvent(
+                "hero-moved",
+                FormattableString.Invariant($"Hornet moved {distance:0.##} units in {elapsed:0.###}s - too far to have run it"),
+                FormattableString.Invariant(
+                    $"from ({last.HeroX:0.##}, {last.HeroY:0.##}) hp {last.HeroHp} to ({sample.HeroX:0.##}, {sample.HeroY:0.##}) hp {sample.HeroHp}; shade at ({sample.ShadeX:0.##}, {sample.ShadeY:0.##}) hp {sample.ShadeHp} [{sample.ShadeFlags}]"));
+        }
+
+        /// <summary>
+        /// Records one discrete event into the rolling window shipped with the next report. Safe to
+        /// call from anywhere in the mod and at any time - it is a no-op when the system is not
+        /// running or event recording is switched off, and it never throws into its caller.
+        /// <para>
+        /// Deliberately not gated on the <c>log*</c> config flags. Those govern console noise during
+        /// normal play; a report needs this history whether or not the player had logging on, and in
+        /// practice they never do.
+        /// </para>
+        /// </summary>
+        internal static void RecordEvent(string category, string summary, string? detail = null)
+        {
+            try
+            {
+                var ring = s_instance?._eventRing;
+                if (ring == null)
+                {
+                    return;
+                }
+
+                ring.Add(category, summary, detail, Time.realtimeSinceStartup, Time.frameCount);
+            }
+            catch
+            {
+            }
         }
 
         private KeyCode ResolveHotkey()
@@ -348,6 +444,8 @@ namespace LegacyoftheAbyss.Diagnostics
             _pendingState = BugReportStateCollector.Capture("hotkey", null, null);
             _pendingState.SceneHistory = _sceneHistory.ToArray();
             _pendingFlightCsv = _flightRecorder?.ToCsv(_captureRealtime);
+            _pendingEventCsv = _eventRing?.ToCsv(_captureRealtime);
+            _pendingEventTail = _eventRing?.RenderTail(BugReportEventRing.InlineTailEntries, _captureRealtime);
 
             StartCoroutine(FinishCaptureRoutine());
         }
@@ -452,6 +550,8 @@ namespace LegacyoftheAbyss.Diagnostics
                 LogText = _logRing?.Render(),
                 LogTail = _logRing?.RenderTail(BugReportStore.InlineLogTailEntries, BugReportStore.InlineLogTailCharacters),
                 FlightCsv = _pendingFlightCsv,
+                EventCsv = _pendingEventCsv,
+                EventTail = _pendingEventTail,
                 ScreenshotPng = _pendingScreenshot
             };
 
@@ -483,6 +583,8 @@ namespace LegacyoftheAbyss.Diagnostics
             _pendingScreenshot = null;
             _pendingState = null;
             _pendingFlightCsv = null;
+            _pendingEventCsv = null;
+            _pendingEventTail = null;
             RestoreGameInput();
         }
 
@@ -699,7 +801,9 @@ namespace LegacyoftheAbyss.Diagnostics
                 State = state,
                 LogText = _logRing?.Render(),
                 LogTail = _logRing?.RenderTail(BugReportStore.InlineLogTailEntries, BugReportStore.InlineLogTailCharacters),
-                FlightCsv = _flightRecorder?.ToCsv(state.Realtime)
+                FlightCsv = _flightRecorder?.ToCsv(state.Realtime),
+                EventCsv = _eventRing?.ToCsv(state.Realtime),
+                EventTail = _eventRing?.RenderTail(BugReportEventRing.InlineTailEntries, state.Realtime)
             };
 
             var result = BugReportStore.Write(payload);

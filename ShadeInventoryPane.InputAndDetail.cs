@@ -69,11 +69,10 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
 
     private void ProcessShadeDirectionalInput()
     {
-        var pressed = TryGetShadeDirectionalPress(out var source);
+        var pressed = TryGetShadeDirectionalPress();
         if (pressed.HasValue)
         {
             shadeHeldDirection = pressed;
-            shadeHeldDirectionSource = source;
             shadeDirectionRepeatTimer = ShadeInputInitialRepeatDelay;
             HandleDirectionalInput(pressed.Value, fromInputComponent: false);
             return;
@@ -101,46 +100,42 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         HandleDirectionalInput(direction, fromInputComponent: false);
     }
 
-    private InventoryPaneBase.InputEventType? TryGetShadeDirectionalPress(out DirectionalInputSource source)
+    /// <summary>
+    /// Reads the Shade's own bindings only. Hornet's directional input reaches the pane through
+    /// <c>InventoryPaneInput.PressDirection</c> - once as the <c>OnInput*</c> event this pane
+    /// subscribes to, and once as the Harmony postfix that catches the case where those handlers
+    /// are not registered, with <see cref="HandleDirectionalInput"/> deduplicating the pair.
+    /// Polling <c>HeroActions</c> here as well made every press move the selection twice and ran a
+    /// second repeat timer alongside the game's own.
+    /// </summary>
+    private InventoryPaneBase.InputEventType? TryGetShadeDirectionalPress()
     {
         if (ShadeInput.WasActionPressed(ShadeAction.MoveLeft))
         {
-            source = DirectionalInputSource.ShadeBindings;
             return InventoryPaneBase.InputEventType.Left;
         }
 
         if (ShadeInput.WasActionPressed(ShadeAction.MoveRight))
         {
-            source = DirectionalInputSource.ShadeBindings;
             return InventoryPaneBase.InputEventType.Right;
         }
 
         if (ShadeInput.WasActionPressed(ShadeAction.MoveUp))
         {
-            source = DirectionalInputSource.ShadeBindings;
             return InventoryPaneBase.InputEventType.Up;
         }
 
         if (ShadeInput.WasActionPressed(ShadeAction.MoveDown))
         {
-            source = DirectionalInputSource.ShadeBindings;
             return InventoryPaneBase.InputEventType.Down;
         }
 
-        var heroPress = TryGetHeroDirectionalPress();
-        if (heroPress.HasValue)
-        {
-            source = DirectionalInputSource.HeroActions;
-            return heroPress;
-        }
-
-        source = DirectionalInputSource.None;
         return null;
     }
 
     private bool IsShadeDirectionHeld(InventoryPaneBase.InputEventType direction)
     {
-        bool shadeHeld = shadeHeldDirectionSource != DirectionalInputSource.HeroActions && direction switch
+        return direction switch
         {
             InventoryPaneBase.InputEventType.Left => ShadeInput.IsActionHeld(ShadeAction.MoveLeft),
             InventoryPaneBase.InputEventType.Right => ShadeInput.IsActionHeld(ShadeAction.MoveRight),
@@ -148,165 +143,17 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             InventoryPaneBase.InputEventType.Down => ShadeInput.IsActionHeld(ShadeAction.MoveDown),
             _ => false
         };
-
-        if (shadeHeld)
-        {
-            return true;
-        }
-
-        if (shadeHeldDirectionSource == DirectionalInputSource.ShadeBindings)
-        {
-            return false;
-        }
-
-        return IsHeroDirectionHeld(direction);
     }
 
-    private static InventoryPaneBase.InputEventType? TryGetHeroDirectionalPress()
-    {
-        var actions = ResolveHeroActions();
-        if (actions == null)
-        {
-            return null;
-        }
-
-        if (actions.Left != null && actions.Left.WasPressed)
-        {
-            return InventoryPaneBase.InputEventType.Left;
-        }
-
-        if (actions.Right != null && actions.Right.WasPressed)
-        {
-            return InventoryPaneBase.InputEventType.Right;
-        }
-
-        if (actions.Up != null && actions.Up.WasPressed)
-        {
-            return InventoryPaneBase.InputEventType.Up;
-        }
-
-        if (actions.Down != null && actions.Down.WasPressed)
-        {
-            return InventoryPaneBase.InputEventType.Down;
-        }
-
-        return null;
-    }
-
-    private static bool IsHeroDirectionHeld(InventoryPaneBase.InputEventType direction)
-    {
-        var actions = ResolveHeroActions();
-        if (actions == null)
-        {
-            return false;
-        }
-
-        return direction switch
-        {
-            InventoryPaneBase.InputEventType.Left => actions.Left != null && actions.Left.IsPressed,
-            InventoryPaneBase.InputEventType.Right => actions.Right != null && actions.Right.IsPressed,
-            InventoryPaneBase.InputEventType.Up => actions.Up != null && actions.Up.IsPressed,
-            InventoryPaneBase.InputEventType.Down => actions.Down != null && actions.Down.IsPressed,
-            _ => false
-        };
-    }
-
-    private static HeroActions? ResolveHeroActions()
-    {
-        var handler = ResolveInputHandler();
-        if (handler == null)
-        {
-            if (!loggedMissingHeroActions)
-            {
-                LogMenuEvent("ResolveHeroActions -> InputHandler unavailable");
-                loggedMissingHeroActions = true;
-            }
-            return null;
-        }
-
-        try
-        {
-            var actions = handler.inputActions;
-            if (actions == null)
-            {
-                if (!loggedMissingHeroActions)
-                {
-                    LogMenuEvent("ResolveHeroActions -> inputActions null");
-                    loggedMissingHeroActions = true;
-                }
-            }
-            else if (loggedMissingHeroActions)
-            {
-                LogMenuEvent("ResolveHeroActions -> hero actions restored");
-                loggedMissingHeroActions = false;
-            }
-
-            return actions;
-        }
-        catch (Exception ex)
-        {
-            if (!loggedMissingHeroActions)
-            {
-                LogMenuEvent(FormattableString.Invariant(
-                    $"ResolveHeroActions -> exception {ex.GetType().Name}: {ex.Message}"));
-                loggedMissingHeroActions = true;
-            }
-            return null;
-        }
-    }
-
-    private static InputHandler? ResolveInputHandler()
-    {
-        var handler = cachedInputHandler;
-        if (handler != null)
-        {
-            if (loggedMissingInputHandler)
-            {
-                LogMenuEvent("ResolveInputHandler -> reusing cached handler");
-                loggedMissingInputHandler = false;
-            }
-            return handler;
-        }
-
-        cachedInputHandler = FindInputHandler();
-        handler = cachedInputHandler;
-        if (handler == null)
-        {
-            if (!loggedMissingInputHandler)
-            {
-                LogMenuEvent("ResolveInputHandler -> unable to locate InputHandler");
-                loggedMissingInputHandler = true;
-            }
-        }
-        else
-        {
-            LogMenuEvent("ResolveInputHandler -> located InputHandler");
-            loggedMissingInputHandler = false;
-        }
-
-        return handler;
-    }
-
-    // Delegates to HornetInput, which owns the canonical resolution cascade.
-    private static InputHandler? FindInputHandler() => HornetInput.FindHandler();
-
+    /// <summary>
+    /// The Shade's own slash binding only. Hornet's confirm arrives through the
+    /// <c>InventoryPaneInput.PressSubmit</c> patch; also polling <c>Attack</c>/<c>Jump</c> here
+    /// meant one controller press called <see cref="HandleSubmit"/> twice - and since that toggles,
+    /// a charm was equipped and immediately unequipped, playing the animation but changing nothing.
+    /// </summary>
     private void ProcessShadeSubmitInput()
     {
         if (ShadeInput.WasActionPressed(ShadeAction.Nail))
-        {
-            HandleSubmit();
-            return;
-        }
-
-        var actions = ResolveHeroActions();
-        if (actions == null)
-        {
-            return;
-        }
-
-        bool attackPressed = actions.Attack != null && actions.Attack.WasPressed;
-        bool jumpPressed = actions.Jump != null && actions.Jump.WasPressed;
-        if (attackPressed || jumpPressed)
         {
             HandleSubmit();
         }
@@ -315,7 +162,6 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
     private void ResetShadeInputState(string? reason = null)
     {
         shadeHeldDirection = null;
-        shadeHeldDirectionSource = DirectionalInputSource.None;
         shadeDirectionRepeatTimer = 0f;
         lastShadeInputFrame = -1;
     }

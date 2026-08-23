@@ -163,6 +163,94 @@ public class HornetControlLockTests
         Assert.True(LegacyHelper.ShadeController.EvaluateControlsLocked(state));
     }
 
+    /// <summary>
+    /// The Shade docks for a bench and a conversation but stays on screen for both - the bench is
+    /// where its charms are changed, and standing beside her through dialogue is the intended look.
+    /// Only a cutscene takes it out of shot.
+    /// </summary>
+    [Theory]
+    [InlineData("AtBench", false)]
+    [InlineData("HeldByInteraction", false)]
+    [InlineData("InCutscene", true)]
+    public void OnlyACutsceneHidesTheShade(string scriptedField, bool expectHidden)
+    {
+        var state = OrdinaryGameplay();
+        SetControlStateField(ref state, scriptedField, true);
+
+        Assert.True(LegacyHelper.ShadeController.EvaluateControlsLocked(state));
+        Assert.Equal(expectHidden, LegacyHelper.ShadeController.EvaluateShadeHidden(state));
+    }
+
+    /// <summary>
+    /// The unnamed scripted holds - the ones only the missing game HUD gives away - hide it too.
+    /// </summary>
+    [Fact]
+    public void AControlLossWithTheGameHudGoneHidesTheShade()
+    {
+        var state = OrdinaryGameplay();
+        state.ControlRelinquished = true;
+        state.AcceptingInput = false;
+        state.GameHudHidden = true;
+
+        Assert.True(LegacyHelper.ShadeController.EvaluateShadeHidden(state));
+    }
+
+    /// <summary>
+    /// The memory/dream sequences, and the reason this cannot key off the hidden game HUD alone.
+    /// They hide it for atmosphere across long playable parkour stretches with Hornet fully under
+    /// player control; hiding the Shade there would leave the player steering something invisible.
+    /// The Shade's HUD is a separate question - <c>SimpleHUD</c> hides that off the game HUD directly.
+    /// </summary>
+    [Fact]
+    public void APlayableStretchWithTheGameHudGoneDoesNotHideTheShade()
+    {
+        var state = OrdinaryGameplay();
+        state.GameHudHidden = true;
+
+        Assert.False(LegacyHelper.ShadeController.EvaluateControlsLocked(state));
+        Assert.False(LegacyHelper.ShadeController.EvaluateShadeHidden(state));
+    }
+
+    /// <summary>
+    /// Hornet's own moves take her controls for their duration. The Shade must stay visible through
+    /// every one of them, exactly as it stays under player control.
+    /// </summary>
+    [Fact]
+    public void AnActionOfHornetsOwnDoesNotHideTheShade()
+    {
+        var state = OrdinaryGameplay();
+        state.ControlRelinquished = true;
+        state.AcceptingInput = false;
+        state.GameHudHidden = false;
+
+        Assert.False(LegacyHelper.ShadeController.EvaluateShadeHidden(state));
+    }
+
+    /// <summary>
+    /// Both lock, but neither is a framed moment: the screen is already going dark for a transition,
+    /// and on death the Shade's own death animation is the thing worth watching.
+    /// </summary>
+    [Theory]
+    [InlineData("Transitioning")]
+    [InlineData("Downed")]
+    public void SceneChangesAndDeathDoNotHideTheShade(string scriptedField)
+    {
+        var state = OrdinaryGameplay();
+        state.ControlRelinquished = true;
+        state.AcceptingInput = false;
+        state.GameHudHidden = true;
+        SetControlStateField(ref state, scriptedField, true);
+
+        Assert.True(LegacyHelper.ShadeController.EvaluateControlsLocked(state));
+        Assert.False(LegacyHelper.ShadeController.EvaluateShadeHidden(state));
+    }
+
+    [Fact]
+    public void OrdinaryGameplayDoesNotHideTheShade()
+    {
+        Assert.False(LegacyHelper.ShadeController.EvaluateShadeHidden(OrdinaryGameplay()));
+    }
+
     /// <summary>Hornet on the ground with her controls, which is what everything else deviates from.</summary>
     private static LegacyHelper.ShadeController.HornetControlState OrdinaryGameplay()
     {

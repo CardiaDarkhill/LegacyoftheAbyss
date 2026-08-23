@@ -38,6 +38,26 @@ public class ShadePersistentStateTests
     }
 
     [Fact]
+    public void RestoreFullHealthRefillsBothPools()
+    {
+        var state = new ShadePersistentState();
+        state.Capture(1, 3, 1, 2, 0, true);
+        state.RestoreFullHealth();
+
+        Assert.Equal(3, state.CurrentHP);
+        Assert.Equal(2, state.CurrentLifeblood);
+    }
+
+    [Fact]
+    public void RestoreFullHealthIgnoresEmptyState()
+    {
+        var state = new ShadePersistentState();
+        state.RestoreFullHealth();
+
+        Assert.False(state.HasData);
+    }
+
+    [Fact]
     public void SpellProgressClampsAndPersists()
     {
         var state = new ShadePersistentState();

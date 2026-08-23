@@ -1,4 +1,50 @@
-# Changelog
+﻿# Changelog
+
+## Unreleased
+
+### Fixed: the Shade's charm menu no longer double-handles every input
+
+Moving the selection stepped twice per press and ran a second repeat timer alongside the game's
+own, and on a controller the A button played the equip animation without equipping anything. Both
+were the same cause: the menu polled Hornet's own actions every frame *as well as* receiving them
+through the game's pane input, so one press arrived twice. Because submit toggles, the charm was
+equipped and immediately unequipped again.
+
+The menu now reads only the Shade's own bindings; Hornet's input reaches it through the game's
+pane input, once.
+
+### Fixed: the Shade comes back from death at full health
+
+Hornet's death always refills her, whatever kind of marker she respawns at. The Shade was only
+revived to a single mask, and topped up afterwards solely by resting at a bench - so dying
+anywhere that did not respawn you onto one left it on 1 HP. It now refills with her. Fragile
+charms are still not repaired by dying; that remains a bench.
+
+### Fixed: particle hazards can hit the Shade
+
+Acid sprays and anything else the game delivers as damaging particles register a single collider
+to hit - Hornet's hero box - so they passed straight through the Shade, which has no collider
+overlap or damage component for the ordinary paths to find. The Shade's collider is now registered
+alongside hers, and each particle is attributed to whichever of the two it actually struck.
+
+### Fixed: the Shade leaves the shot for cutscenes
+
+The Shade docked behind Hornet for cutscenes but stayed visible, and its health masks and soul orb
+stayed on screen through the memory sequences, which hide the game's own HUD while leaving Hornet
+playable. The Shade is now hidden for scripted, camera-framed holds - not for benches or
+conversations, where it should be visible - and its HUD follows the game's own. It stays present
+and under player control throughout, so the playable stretches inside a memory are unaffected.
+
+### Bug reports now record events, not just state
+
+Reports gained an `events.csv`: hero repositions the player cannot have caused, every trigger the
+Shade's aggro proxy walks into, and every damage decision made about the Shade. The flight recorder
+samples state on a timer, which is enough to show that something happened and never enough to name
+what did it - a boss grab that hit the Shade and yanked Hornet into the attack landed entirely
+inside one sampling interval. Recorded independently of the `log*` settings, since the line that
+explains a bug was routinely one they had switched off. `bugReportEventRecorderEnabled` and
+`bugReportEventRecorderCapacity` control it.
+
 
 ## 1.2.0
 

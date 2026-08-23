@@ -46,6 +46,14 @@ internal static class LoggingManager
 
     internal static void LogShadeDamage(string source, bool succeeded)
     {
+        // Ahead of the logDamage gate on purpose. This is the one line that names what hit the
+        // Shade, and a filed bug report needs it whether or not damage logging happened to be on -
+        // in practice it never is, so every damage report arrived without the answer in it.
+        LegacyoftheAbyss.Diagnostics.BugReportSystem.RecordEvent(
+            "shade-damage",
+            succeeded ? "took damage" : "avoided damage",
+            source);
+
         // Gate first. This previously sat below the console write, so the console was
         // spammed regardless of the setting and the message string was always allocated.
         if (!ModConfig.Instance.logDamage) return;

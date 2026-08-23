@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -140,6 +140,239 @@ public partial class LegacyHelper
         /// </summary>
         internal static bool CountsTheShade(Type regionType)
             => regionType != null && typeof(AlertRange).IsAssignableFrom(regionType);
+    }
+
+    /// <summary>
+    /// Lets particle hazards hit the Shade.
+    /// <para>
+    /// <c>ParticleDamageHero.Start</c> clears the particle system's trigger collider list and adds
+    /// exactly one collider - Hornet's hero box - then damages her from <c>OnParticleTrigger</c>
+    /// whenever any particle enters it. Nothing in that reaches the Shade: the "projectiles" are
+    /// particles, so there is no collider overlap for <c>TryProcessDamageHero</c> to find and no
+    /// <c>DamageHero</c> component to walk up to. The Shade simply stood in the acid unharmed.
+    /// </para>
+    /// <para>
+    /// The relay below registers the Shade's body collider alongside Hornet's. That forces the
+    /// callback to be replaced rather than extended: the stock one damages Hornet on <i>any</i>
+    /// enter particle, so with two colliders registered a spray that only touched the Shade would
+    /// hurt Hornet instead. The replacement asks which collider each particle actually hit, which
+    /// needs <c>colliderQueryMode</c> raised from <c>One</c> to <c>All</c>.
+    /// </para>
+    /// </summary>
+    [HarmonyPatch(typeof(ParticleDamageHero), "Start")]
+    private static class ParticleDamageHero_Start_AddShadeRelay
+    {
+        private static void Postfix(ParticleDamageHero __instance)
+        {
+            try
+            {
+                if (__instance == null || __instance.GetComponent<ParticleDamageHeroShadeRelay>() != null)
+                {
+                    return;
+                }
+
+                __instance.gameObject.AddComponent<ParticleDamageHeroShadeRelay>();
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(ParticleDamageHero), "OnParticleTrigger")]
+    private static class ParticleDamageHero_OnParticleTrigger_Shade
+    {
+        private static bool Prefix(ParticleDamageHero __instance)
+        {
+            try
+            {
+                var relay = __instance != null ? __instance.GetComponent<ParticleDamageHeroShadeRelay>() : null;
+                // The relay declines whenever the Shade is not registered, leaving the stock
+                // hero-only path to run exactly as it always did.
+                return relay == null || !relay.HandleParticleTrigger();
+            }
+            catch
+            {
+                return true;
+            }
+        }
+    }
+
+    private sealed class ParticleDamageHeroShadeRelay : MonoBehaviour
+    {
+        private static readonly List<ParticleSystem.Particle> ParticleBuffer = new List<ParticleSystem.Particle>();
+
+        private ParticleSystem system;
+        private ShadeController cachedController;
+        private Collider2D registeredShadeCollider;
+
+        private void Awake()
+        {
+            system = GetComponent<ParticleSystem>();
+        }
+
+        private void Update()
+        {
+            SyncShadeCollider();
+        }
+
+        /// <summary>
+        /// Re-checked every frame rather than captured once, because the Shade is destroyed and
+        /// rebuilt on every scene load and whenever it is toggled off. A collider registered once in
+        /// Start would go stale on the first transition and quietly stop the Shade being hit again
+        /// for the rest of the session.
+        /// </summary>
+        private void SyncShadeCollider()
+        {
+            if (system == null)
+            {
+                return;
+            }
+
+            Collider2D desired = ResolveShadeCollider();
+            if (ReferenceEquals(desired, registeredShadeCollider))
+            {
+                return;
+            }
+
+            try
+            {
+                var trigger = system.trigger;
+                if (registeredShadeCollider != null)
+                {
+                    for (int i = trigger.colliderCount - 1; i >= 0; i--)
+                    {
+                        if (ReferenceEquals(trigger.GetCollider(i), registeredShadeCollider))
+                        {
+                            trigger.RemoveCollider(i);
+                        }
+                    }
+                }
+
+                if (desired != null)
+                {
+                    trigger.AddCollider(desired);
+                    trigger.colliderQueryMode = ParticleSystemColliderQueryMode.All;
+                }
+
+                registeredShadeCollider = desired;
+            }
+            catch
+            {
+                registeredShadeCollider = null;
+            }
+        }
+
+        private Collider2D ResolveShadeCollider()
+        {
+            try
+            {
+                if (!ModConfig.Instance.shadeEnabled)
+                {
+                    return null;
+                }
+
+                if (cachedController == null && !TryGetShadeController(out cachedController))
+                {
+                    return null;
+                }
+
+                return cachedController != null ? cachedController.BodyCollider : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Returns false to hand the frame back to the stock handler; true once it has dealt with
+        /// the entering particles itself.
+        /// </summary>
+        internal bool HandleParticleTrigger()
+        {
+            if (system == null || registeredShadeCollider == null)
+            {
+                return false;
+            }
+
+            if (system.GetSafeTriggerParticlesSize(ParticleSystemTriggerEventType.Enter) <= 0)
+            {
+                return true;
+            }
+
+            bool hitHornet = false;
+            bool hitShade = false;
+
+            int count = system.GetTriggerParticles(ParticleSystemTriggerEventType.Enter, ParticleBuffer, out var colliderData);
+            for (int i = 0; i < count; i++)
+            {
+                int colliders = colliderData.GetColliderCount(i);
+                for (int j = 0; j < colliders; j++)
+                {
+                    var hit = colliderData.GetCollider(i, j);
+                    if (hit == null)
+                    {
+                        continue;
+                    }
+
+                    if (ReferenceEquals(hit, registeredShadeCollider))
+                    {
+                        hitShade = true;
+                    }
+                    else
+                    {
+                        hitHornet = true;
+                    }
+                }
+            }
+
+            if (hitHornet)
+            {
+                DamageHornet();
+            }
+
+            if (hitShade)
+            {
+                DamageShade();
+            }
+
+            return true;
+        }
+
+        // Mirrors the body of the method this replaces, HeroBox.Inactive guard included.
+        private void DamageHornet()
+        {
+            try
+            {
+                var hero = HeroController.instance;
+                var heroBox = hero != null ? hero.heroBox : null;
+                if (heroBox != null && !HeroBox.Inactive)
+                {
+                    heroBox.CheckForDamage(gameObject);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private void DamageShade()
+        {
+            try
+            {
+                // Unity's null check, not C#'s: the Shade can be destroyed between the frame that
+                // registered its collider and the callback that reports a hit on it.
+                var controller = cachedController;
+                if (controller != null)
+                {
+                    controller.NotifyParticleDamage(gameObject);
+                }
+            }
+            catch
+            {
+            }
+        }
     }
 
     [HarmonyPatch(typeof(GameManager), "BeginScene")]
@@ -383,7 +616,7 @@ public partial class LegacyHelper
         }
     }
 
-    // Revive shade (at least 1 HP) when Hornet dies
+    // Refill the shade when Hornet dies, matching the MaxHealth she gets on respawn
     [HarmonyPatch(typeof(GameManager), nameof(GameManager.PlayerDead))]
     private class GameManager_PlayerDead_Patch
     {
@@ -399,15 +632,15 @@ public partial class LegacyHelper
                     var sc = helper.GetComponent<ShadeController>();
                     if (sc != null)
                     {
-                        sc.ReviveToAtLeast(1);
+                        sc.FullHealOnRespawn();
                         SaveShadeState(sc.GetCurrentNormalHP(), sc.GetMaxNormalHP(), sc.GetCurrentLifeblood(), sc.GetMaxLifeblood(), sc.GetShadeSoul(), sc.GetCanTakeDamage(), sc.GetBaseMaxHP());
                         return;
                     }
                 }
-                // Fallback: ensure saved state revives next spawn
+                // Fallback: refill the saved state so the next spawn comes back whole
                 if (ShadeRuntime.PersistentState.HasData)
                 {
-                    ShadeRuntime.EnsureMinimumHealth(1);
+                    ShadeRuntime.RestoreFullHealth();
                 }
             }
             catch { }

@@ -107,6 +107,11 @@ namespace LegacyoftheAbyss.Shade
             s_persistentState.ForceMinimumHealth(minimum);
         }
 
+        public static void RestoreFullHealth()
+        {
+            s_persistentState.RestoreFullHealth();
+        }
+
         internal static void HandleSceneEntered(string? sceneName)
         {
             EnsureActiveSlot();

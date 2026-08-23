@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using System;
 using System.Collections;
 using System.Globalization;
@@ -253,6 +253,15 @@ public partial class LegacyHelper
 
             var tempCols = slash.GetComponentsInChildren<Collider2D>(true);
 
+            // The clone arrives carrying Hornet's own slash tag ("Nail Attack"), and must not keep
+            // it. That tag is what every hero-only nail reaction in the game keys off, so a tagged
+            // Shade slash fed Hornet's systems - silk gain on hit the clearest of them - from a
+            // second source she never swung. Stripping it was the outcome of a long debugging pass;
+            // do not put it back to fix a single interaction.
+            //
+            // Known cost: FSMs that gate on the tag ignore the Shade, so nail-triggered breakables
+            // such as moss fruits cannot be hit by it. That is deliberately parked, not overlooked -
+            // separating the two wants per-reaction filtering rather than a tag.
             try
             {
                 int desiredLayer = source.layer;
@@ -558,6 +567,8 @@ public partial class LegacyHelper
 
             var tempCols = slash.GetComponentsInChildren<Collider2D>(true);
 
+            // Tag stripped for the same reason as the shaman slash above: keeping "Nail Attack"
+            // makes the Shade drive Hornet's own hero-only nail reactions.
             try
             {
                 int desiredLayer = source.layer;

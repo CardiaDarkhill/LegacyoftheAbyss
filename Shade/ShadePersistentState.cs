@@ -285,6 +285,21 @@ namespace LegacyoftheAbyss.Shade
             public Dictionary<int, int[]>? EquippedCharmLoadouts { get; set; }
         }
 
+        /// <summary>
+        /// Refills the saved pools for the case where Hornet dies with no live ShadeController to
+        /// heal - see <c>ShadeController.FullHealOnRespawn</c> for why a death respawn heals at all.
+        /// </summary>
+        public void RestoreFullHealth()
+        {
+            if (!HasData)
+            {
+                return;
+            }
+
+            CurrentHP = Mathf.Max(0, MaxHP);
+            CurrentLifeblood = Mathf.Max(0, LifebloodMax);
+        }
+
         public void ForceMinimumHealth(int minimum)
         {
             if (!HasData)

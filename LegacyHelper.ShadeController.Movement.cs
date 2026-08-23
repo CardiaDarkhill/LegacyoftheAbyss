@@ -230,7 +230,8 @@ public partial class LegacyHelper
 
             // Recomputed once a frame and read by FixedUpdate, the combat gate below, and SimpleHUD.
             bool wasControlsLocked = hornetControlsLocked;
-            hornetControlsLocked = HornetControlsLocked();
+            hornetControlsLocked = HornetControlsLocked(out bool shadeHidden);
+            ApplyScriptedHoldVisibility(shadeHidden);
             if (hornetControlsLocked && !wasControlsLocked)
             {
                 // Entering the locked state mid-action: drop whatever the Shade was doing rather than
@@ -428,12 +429,22 @@ public partial class LegacyHelper
         /// rather than deciding "is this a cutscene?" for itself.
         /// </para>
         /// </summary>
-        internal static bool HornetControlsLocked()
+        internal static bool HornetControlsLocked() => HornetControlsLocked(out _);
+
+        /// <summary>
+        /// As <see cref="HornetControlsLocked()"/>, additionally reporting whether the Shade should
+        /// be out of shot for it. One capture serves both - the two questions are asked together
+        /// every frame and <see cref="CaptureHornetControlState"/> is not free.
+        /// </summary>
+        internal static bool HornetControlsLocked(out bool shadeHidden)
         {
             bool locked;
+            shadeHidden = false;
             try
             {
-                locked = EvaluateControlsLocked(CaptureHornetControlState());
+                var state = CaptureHornetControlState();
+                locked = EvaluateControlsLocked(state);
+                shadeHidden = EvaluateShadeHidden(state);
             }
             catch
             {
@@ -481,6 +492,45 @@ public partial class LegacyHelper
             // that do not identify themselves any other way.
             return state.GameHudHidden;
         }
+
+        /// <summary>
+        /// True while the Shade should not be on screen: the scripted, camera-framed holds.
+        /// <para>
+        /// Deliberately narrower than <see cref="EvaluateControlsLocked"/>. A bench and a
+        /// conversation lock Hornet's controls too and the Shade stays visible for both - the bench
+        /// is where its charms are changed, and docking beside her through dialogue is the intended
+        /// look. Only the moments the camera has taken over want it gone; before this, the Shade sat
+        /// visibly docked behind Hornet through every cutscene.
+        /// </para>
+        /// <para>
+        /// Note what this deliberately is NOT: "we are in a memory scene". Those scenes run long
+        /// playable parkour stretches where the Shade belongs on screen and under player control, so
+        /// hiding it - or despawning it - for the whole scene is not an option. Only the framed
+        /// moments inside them qualify, which is why <c>GameHudHidden</c> alone is not enough here:
+        /// a memory keeps the game's HUD away for its playable stretches too, and hiding the Shade
+        /// there would leave the player steering something they cannot see. Its HUD is a separate
+        /// question, and <c>SimpleHUD</c> answers that one off the hidden game HUD directly.
+        /// </para>
+        /// </summary>
+        internal static bool EvaluateShadeHidden(HornetControlState state)
+        {
+            if (state.AtBench || state.HeldByInteraction || state.Downed || state.Transitioning)
+            {
+                return false;
+            }
+
+            if (state.InCutscene)
+            {
+                return true;
+            }
+
+            // A control loss nothing else accounts for, with the game's own HUD gone - the same
+            // pairing EvaluateControlsLocked reads as a scripted hold.
+            return state.ControlRelinquished && state.GameHudHidden && !state.Paused;
+        }
+
+        /// <summary>Exposed for <c>SimpleHUD</c>, which takes the game's own hidden HUD as its cue.</summary>
+        internal static bool GameHudHidden() => IsGameHudHidden();
 
         private static HornetControlState CaptureHornetControlState()
         {
@@ -752,6 +802,45 @@ public partial class LegacyHelper
 
             facing = hornetFacing;
             if (sr != null) sr.flipX = (facing == 1);
+        }
+
+        /// <summary>
+        /// Takes the Shade off screen for a scripted hold and puts it back afterwards. It keeps
+        /// updating and stays where it was - this hides it, it does not park or disable it, so a
+        /// hold that ends mid-parkour hands back a Shade exactly where the player left it.
+        /// <para>
+        /// Only the two visuals that are on unconditionally are touched. Everything else the Shade
+        /// draws - the focus aura, Baldur's Shell, spell effects - is already cancelled when the
+        /// control lock engages, so reaching for those as well would only fight the code that owns
+        /// them.
+        /// </para>
+        /// </summary>
+        private void ApplyScriptedHoldVisibility(bool hidden)
+        {
+            if (hidden == hiddenForScriptedHold)
+            {
+                return;
+            }
+
+            hiddenForScriptedHold = hidden;
+
+            try
+            {
+                if (sr)
+                {
+                    sr.enabled = !hidden;
+                }
+            }
+            catch { }
+
+            try
+            {
+                if (shadowParticleRenderer)
+                {
+                    shadowParticleRenderer.enabled = !hidden;
+                }
+            }
+            catch { }
         }
 
         private static bool HornetIsDowned()
