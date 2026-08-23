@@ -16,8 +16,7 @@ controls it; the reasoning belongs in the commit and the code.
   and A equips a charm on a controller instead of playing the animation and changing nothing.
 - The Shade comes back from death at full health rather than one mask, wherever you respawn.
 - Particle hazards such as acid sprays can hit the Shade.
-- The Shade and its HUD are hidden for cutscenes and the memory sequences, and stay under your
-  control for the playable stretches inside them.
+- The Shade and its HUD are hidden for cutscenes and the memory sequences.
 - The Shade no longer blinks out of existence inside a memory whenever Hornet mantles a ledge, dashes
   or rides an updraft.
 - Fixed a bug where Hornet would sometimes be healed twice while binding.
