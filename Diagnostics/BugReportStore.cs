@@ -396,6 +396,14 @@ namespace LegacyoftheAbyss.Diagnostics
                 Row(builder, "Soul", shade.Soul + " / " + shade.SoulMax);
                 Row(builder, "Can take damage", shade.CanTakeDamage ? "yes" : "no");
                 Row(builder, "Assist mode", shade.AssistMode ? "on" : "off");
+                // "The Shade did nothing" is the shape of most Shade reports, and whether an AI was
+                // driving it at the time is the first thing that changes what to look at next.
+                Row(builder, "AI order", string.IsNullOrEmpty(shade.AiCommandState) || shade.AiCommandState == "Inactive"
+                    ? "none"
+                    : shade.AiCommandState + " " + Coordinate(shade.AiCommandX, shade.AiCommandY));
+                Row(builder, "AI", shade.AiEnabled
+                    ? shade.AiAction + " (" + shade.AiReason + "), target " + shade.AiTargetId + ", " + shade.AiTargetsInRange + " enemies in range"
+                    : "off");
                 Row(builder, "Skin", shade.Skin);
                 Row(builder, "Notches", shade.NotchesUsed + " / " + shade.NotchCapacity);
                 Row(builder, "Charms", shade.EquippedCharms == null || shade.EquippedCharms.Length == 0

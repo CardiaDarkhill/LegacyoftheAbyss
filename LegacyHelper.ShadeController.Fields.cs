@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using LegacyoftheAbyss.Shade;
+using LegacyoftheAbyss.Shade.Ai;
 using UnityEngine;
 using GlobalEnums;
 
@@ -318,6 +319,75 @@ public partial class LegacyHelper
         private float ignoreRefreshTimer;
         private float hornetIgnoreRefreshTimer;
         private bool isCastingSpell;
+
+        // Shade AI. The decision itself lives in LegacyoftheAbyss.Shade.Ai; these are only the
+        // driver's own state, and the driver is LegacyHelper.ShadeController.Ai.cs.
+        private readonly ShadeAiBrain aiBrain = new ShadeAiBrain();
+        private readonly ShadeAiTargetScanner aiScanner = new ShadeAiTargetScanner();
+        private readonly ShadeAiNavigator aiNavigator = new ShadeAiNavigator();
+        private bool aiEnabled;
+        /// <summary>
+        /// When the AI last published a slash. Its own governor, separate from <c>nailTimer</c>: the
+        /// cooldown is what the game permits, this is the slower rate the AI is actually allowed.
+        /// </summary>
+        private float aiLastNailTime;
+        /// <summary>Last computed SOUL reserve, kept only so the event line can report it without recomputing.</summary>
+        private int aiSoulReserve;
+        private readonly List<ShadeAiThreat> aiThreats = new List<ShadeAiThreat>();
+        private readonly Collider2D[] aiThreatBuffer = new Collider2D[32];
+        private ContactFilter2D aiThreatFilter;
+        private bool aiThreatFilterReady;
+        private int aiThreatCount;
+        /// <summary>
+        /// How many times running the navigator has given up on a route and turned round. A standing
+        /// order that racks these up is one the Shade cannot honour, so it gets dropped rather than
+        /// left grinding against whatever is in the way.
+        /// </summary>
+        private int aiStuckStreak;
+        /// <summary>
+        /// Keeps Hornet reading as airborne for a moment after she lands. Without it a run over
+        /// broken ground toggles onGround several times a second and the Shade swaps escort corners
+        /// with it, which looks like a bug even though each individual decision is correct.
+        /// </summary>
+        private float aiHornetAirborneHold;
+        /// <summary>
+        /// Hornet's airborne state as of this frame, held briefly past a landing. Read by the escort
+        /// placement and by the leash, so it is resolved once a frame and shared rather than sampled
+        /// twice with a timer that would decay at double rate.
+        /// </summary>
+        private bool aiHornetAirborne;
+        private int aiHornetAirborneFrame = -1;
+
+        // Shade command reticle (LegacyHelper.ShadeController.AiCommand.cs).
+        private ShadeAiCommandState aiCommandState;
+        /// <summary>The spot the Shade has been ordered to hold. Only meaningful while Holding.</summary>
+        private Vector2 aiCommandPoint;
+        /// <summary>
+        /// How far the leash must reach for the current order to be keepable - the distance the order
+        /// was placed at, plus slack. Zero when no order is held.
+        /// </summary>
+        private float aiCommandLeashFloor;
+        /// <summary>Live reticle position while aiming.</summary>
+        private Vector2 aiReticlePoint;
+        /// <summary>Whether the reticle moved before it was confirmed - the only thing separating
+        /// "stay where you are" from "go over there", and kept for the event log rather than for
+        /// behaviour, since both end as a hold at the reticle.</summary>
+        private bool aiReticleMoved;
+        private Vector3 aiReticleMouseAnchor;
+        private GameObject aiReticleObject;
+        private SpriteRenderer aiReticleRenderer;
+        private ShadeAiPlan aiPlan;
+        private bool aiEngaged;
+        /// <summary>
+        /// Which way the AI wants the Shade to face, or 0 to leave facing to movement. Read by
+        /// <c>HandleMovementAndFacing</c>, which would otherwise turn the Shade away from its target
+        /// on the last half-unit of the approach - the strike point sits between the Shade and the
+        /// enemy, so closing the final gap means briefly moving away from what it is about to hit.
+        /// </summary>
+        private int aiFacingOverride;
+        private int aiTargetCount;
+        private int aiLastEventKey;
+        private float aiLastEventTime;
 
         private int lastSavedHP;
         private int lastSavedMax;

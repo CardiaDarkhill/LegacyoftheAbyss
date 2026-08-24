@@ -522,7 +522,7 @@ public static partial class ShadeSettingsMenu
         {
             if (comp == null)
                 continue;
-            if (comp is CancelRouter || comp is SliderMenuDriver || comp is ToggleMenuDriver)
+            if (comp is CancelRouter || comp is SliderMenuDriver)
                 continue;
             var type = comp.GetType();
             string ns = type.Namespace ?? string.Empty;
@@ -805,118 +805,29 @@ public static partial class ShadeSettingsMenu
         return selectable;
     }
 
-    private static MenuSelectable CreateToggle(Transform parent, MenuSelectable template, MenuButton buttonTemplate, string label, bool value, System.Action<bool> onChange, CancelTarget cancelTarget)
+    /// <summary>
+    /// A yes/no row. Rendered as an ordinary menu button whose label reads
+    /// <c>"Something: On"</c>, rather than as a checkbox square.
+    /// <para>
+    /// It used to clone the game's Toggle prefab and sit a little square next to a label. Two
+    /// problems with that: it was a second visual language for the same idea the Shade Enabled row
+    /// already expressed in words, and a Toggle clone carries none of the selection fleurs a
+    /// MenuButton clone does, so those rows were also the ones that looked unselected.
+    /// </para>
+    /// </summary>
+    private static MenuSelectable CreateToggle(Transform parent, MenuButton buttonTemplate, string label, bool value, System.Action<bool> onChange, CancelTarget cancelTarget)
     {
-        // container row stretching full width
-        var row = new GameObject(label + "Row");
-        var rowRect = row.AddComponent<RectTransform>();
-        rowRect.SetParent(parent, false);
-        rowRect.anchorMin = new Vector2(0f, 1f);
-        rowRect.anchorMax = new Vector2(1f, 1f);
-        rowRect.pivot = new Vector2(0.5f, 1f);
-        var hLayout = row.AddComponent<HorizontalLayoutGroup>();
-        hLayout.childControlHeight = true;
-        hLayout.childControlWidth = true;
-        hLayout.childForceExpandHeight = false;
-        hLayout.childForceExpandWidth = false;
-        hLayout.spacing = 64f;
-        hLayout.childAlignment = TextAnchor.MiddleLeft;
-
-        // label text
-        var labelObj = new GameObject("Label");
-        labelObj.transform.SetParent(row.transform, false);
-        var labelTxt = labelObj.AddComponent<Text>();
-        ApplyTextStyle(labelTxt, toggleLabelStyle, TextAnchor.MiddleLeft, Color.white);
-        labelTxt.text = label;
-        labelTxt.raycastTarget = false;
-        var labelLe = labelObj.AddComponent<LayoutElement>();
-        labelLe.minWidth = LabelColumnWidth;
-        labelLe.preferredWidth = LabelColumnWidth;
-        labelLe.flexibleWidth = 0f;
-
-        // toggle instance
-        var go = Object.Instantiate(template.gameObject, row.transform, false);
-        go.SetActive(true);
-        go.name = label + "Toggle";
-        foreach (var t in go.GetComponentsInChildren<Text>(true))
-            Object.DestroyImmediate(t);
-        var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
-        if (tmpType != null)
+        var selectable = CreateMenuButton(parent, buttonTemplate, label, null, cancelTarget);
+        if (selectable is not MenuButton button)
         {
-            var tmps = go.GetComponentsInChildren(tmpType, true);
-            foreach (var tmp in tmps)
-                Object.DestroyImmediate(tmp);
+            if (selectable == null)
+                LogMenuError($"Could not create toggle row '{label}'");
+            return selectable;
         }
-        foreach (var auto in go.GetComponentsInChildren<AutoLocalizeTextUI>(true))
-            Object.DestroyImmediate(auto);
 
-        SanitizeSelectableHierarchy(go);
-
-        var toggle = go.GetComponentInChildren<Toggle>(true);
-        if (toggle == null)
-        {
-            LogMenuError($"Created toggle '{label}' missing Toggle component");
-            Object.DestroyImmediate(row);
-            return null;
-        }
-        Object.DestroyImmediate(toggle.GetComponent<MenuPreventDeselect>());
-        var rect = go.GetComponent<RectTransform>();
-        rect.anchorMin = new Vector2(0f, 0.5f);
-        rect.anchorMax = new Vector2(0f, 0.5f);
-        rect.pivot = new Vector2(0f, 0.5f);
-        var toggleLe = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
-        toggleLe.minWidth = 80f;
-        toggleLe.preferredWidth = 80f;
-        toggleLe.flexibleWidth = 0f;
-
-        toggle.onValueChanged.RemoveAllListeners();
-        toggle.isOn = value;
-        toggle.interactable = true;
-        toggle.enabled = true;
-        toggle.onValueChanged.AddListener(onChange.Invoke);
-
-        SetAutomaticNavigation(toggle);
-
-        var rowLe = row.AddComponent<LayoutElement>();
-        float baseHeight = 0f;
-        if (rect != null)
-        {
-            baseHeight = rect.rect.height;
-            if (baseHeight <= 0f)
-                baseHeight = rect.sizeDelta.y;
-        }
-        if (baseHeight <= 0f)
-            baseHeight = ToggleRowHeight;
-        else
-            baseHeight = Mathf.Max(baseHeight, ToggleRowHeight);
-        rowLe.preferredHeight = baseHeight;
-        rowLe.minHeight = baseHeight;
-        rowRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, baseHeight);
-        if (rect != null)
-            rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, baseHeight);
-
-        var selectable = go.GetComponent<MenuSelectable>();
-        if (selectable == null)
-        {
-            LogMenuError($"Created toggle '{label}' missing Selectable component");
-            Object.Destroy(row);
-            return null;
-        }
-        selectable.DontPlaySelectSound = true;
-        selectable.cancelAction = CancelAction.DoNothing;
-        var router = go.GetComponent<CancelRouter>() ?? go.AddComponent<CancelRouter>();
-        router.target = cancelTarget;
-        var driver = go.GetComponent<ToggleMenuDriver>() ?? go.AddComponent<ToggleMenuDriver>();
-        driver.Initialize(toggle);
-
-        var highlight = CreateRowHighlight(row.transform, buttonTemplate, baseHeight, label, out var leftCursor, out var rightCursor, out var selectHighlight);
-        var highlightDriver = go.GetComponent<RowHighlightDriver>() ?? go.AddComponent<RowHighlightDriver>();
-        highlightDriver.Initialize(highlight, new[] { leftCursor, rightCursor, selectHighlight });
-        selectable.leftCursor = leftCursor;
-        selectable.rightCursor = rightCursor;
-        selectable.selectHighlight = selectHighlight;
-        SetAutomaticNavigation(selectable);
-        return selectable;
+        var driver = button.gameObject.AddComponent<LabeledToggleDriver>();
+        driver.Initialize(button, label, value, onChange);
+        return button;
     }
 
 }

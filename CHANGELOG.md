@@ -28,6 +28,20 @@ controls it; the reasoning belongs in the commit and the code.
 
 ### Added
 
+- The Shade can fight on its own: press **9**, or use the new **Shade AI** options screen. It picks a
+  target, closes on it, attacks, casts only where a spell would hit a boss or several enemies at
+  once, steps out of what would hurt it, and heals you both when either of you is low. It can be
+  killed, so you will still need to revive it.
+- With nothing to fight it keeps station just behind and above Hornet, and drops ahead of and below
+  her the moment she leaves the ground - close enough to pogo off over a gap.
+- Tell it where to stand with **middle mouse** or **left stick click** ("Command Shade" in Controls):
+  tap twice for "hold here", or aim the reticle - mouse or right stick - to send it anywhere on
+  screen. A Shade told to wait holds its ground until Hornet lands, instead of being recalled
+  halfway across a platforming section.
+- While the AI drives, Hornet answers to the keyboard and the controller at once whichever control
+  preset is set, and the Shade's own controls do nothing - there is no second player to share them
+  with. `shadeAiVanillaControls`.
+- Yes/no settings now read "Setting: On" like the Shade Enabled row, instead of a checkbox square.
 - Shadow particles around the Shade, in the style of the first game, growing denser as its soul
   fills.
 - Press **F8** to file a bug report from inside the game. It freezes, asks what happened, and saves a

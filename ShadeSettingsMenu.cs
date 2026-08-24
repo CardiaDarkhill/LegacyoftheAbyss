@@ -28,6 +28,14 @@ public static partial class ShadeSettingsMenu
     private static MenuScreen difficultyScreen;
     private static MenuScreen controlsScreen;
     private static MenuScreen loggingScreen;
+    private static MenuScreen shadeAiScreen;
+    private static MenuScreen shadeAiAdvancedScreen;
+
+    /// <summary>Muted colour for the explanation line under each options screen.</summary>
+    private static readonly Color DescriptionColor = new Color(0.84f, 0.82f, 0.74f, 0.92f);
+
+    /// <summary>Height reserved for that line. Two rows of wrapped text at the reduced size.</summary>
+    private const float DescriptionRowHeight = 92f;
     private static MenuScreen charmsScreen;
     private static MenuScreen skinsScreen;
     private static MenuScreen activeScreen;

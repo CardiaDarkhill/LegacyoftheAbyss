@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Reflection;
 using InControl;
 using UnityEngine;
 
@@ -166,6 +168,229 @@ public static class HornetInput
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Whether the Shade AI is currently standing in for the second player, in which case the
+    /// two-player device split has nobody to serve.
+    /// </summary>
+    internal static bool ShadeAiHoldsTheShade()
+    {
+        try
+        {
+            var cfg = ModConfig.Instance;
+            if (cfg == null || !cfg.shadeAiVanillaControls)
+            {
+                return false;
+            }
+
+            var shade = LegacyHelper.ShadeController.ActiveInstance;
+            return shade != null ? shade.ShadeAiEnabled : cfg.shadeAiEnabled;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Whether Hornet should answer to the keyboard right now.
+    /// <para>
+    /// The stored preference still says what the player chose for two-player; this is that answer
+    /// widened while an AI is driving the Shade. Kept as a separate question rather than by writing
+    /// <c>true</c> into the config, because the split has to come back exactly as it was the moment
+    /// the AI is switched off.
+    /// </para>
+    /// </summary>
+    internal static bool EffectiveKeyboardEnabled()
+    {
+        try
+        {
+            var cfg = ModConfig.Instance;
+            return (cfg != null && cfg.hornetKeyboardEnabled) || ShadeAiHoldsTheShade();
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    internal static bool EffectiveControllerEnabled()
+    {
+        try
+        {
+            var cfg = ModConfig.Instance;
+            return cfg == null || cfg.hornetControllerEnabled || ShadeAiHoldsTheShade();
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// The gameplay actions the two mapping passes fill in - the same set
+    /// <c>InputHandler.ResetDefaultKeyBindings</c> clears, minus the menu actions, which must keep
+    /// their bindings or the pause menu stops answering.
+    /// </summary>
+    private static IEnumerable<PlayerAction> GameplayActions(HeroActions actions)
+    {
+        yield return actions.Jump;
+        yield return actions.Attack;
+        yield return actions.Dash;
+        yield return actions.Cast;
+        yield return actions.SuperDash;
+        yield return actions.DreamNail;
+        yield return actions.QuickMap;
+        yield return actions.QuickCast;
+        yield return actions.Taunt;
+        yield return actions.Evade;
+        yield return actions.Up;
+        yield return actions.Down;
+        yield return actions.Left;
+        yield return actions.Right;
+        yield return actions.OpenInventory;
+        yield return actions.OpenInventoryMap;
+        yield return actions.OpenInventoryJournal;
+        yield return actions.OpenInventoryTools;
+        yield return actions.OpenInventoryQuests;
+    }
+
+    private static MethodInfo? mapKeyboardFromSettings;
+    private static bool mapKeyboardLookupDone;
+
+    /// <summary>
+    /// <c>InputHandler.MapKeyboardLayoutFromGameSettings</c>, which rebuilds the keyboard half from
+    /// the player's own saved keys and only ever adds.
+    /// <para>
+    /// Reflected because it is private, and asserted in <c>Tests/GameApiContract.cs</c>. The public
+    /// alternative, <c>ResetDefaultKeyBindings</c>, is not usable here: it overwrites every saved key
+    /// with the hardcoded Z/X/C defaults and calls <c>SaveKeyboardSettings</c>, so using it to
+    /// re-apply a device split would silently destroy the player's own layout.
+    /// </para>
+    /// </summary>
+    private static MethodInfo? ResolveMapKeyboard()
+    {
+        if (mapKeyboardLookupDone)
+        {
+            return mapKeyboardFromSettings;
+        }
+
+        mapKeyboardLookupDone = true;
+        try
+        {
+            mapKeyboardFromSettings = typeof(InputHandler).GetMethod(
+                "MapKeyboardLayoutFromGameSettings",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+        }
+        catch
+        {
+            mapKeyboardFromSettings = null;
+        }
+
+        if (mapKeyboardFromSettings == null)
+        {
+            LegacyHelper.LogInfo(
+                "[HornetInput] InputHandler.MapKeyboardLayoutFromGameSettings not found - Hornet's keyboard cannot be restored when the Shade AI takes over.");
+        }
+
+        return mapKeyboardFromSettings;
+    }
+
+    private static void RemoveBindings(PlayerAction action, bool keyboard)
+    {
+        if (action == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var doomed = new List<BindingSource>();
+            foreach (var binding in action.UnfilteredBindings)
+            {
+                if (binding == null)
+                {
+                    continue;
+                }
+
+                bool isKeyboard = binding is KeyBindingSource || binding is MouseBindingSource;
+                if (isKeyboard == keyboard)
+                {
+                    doomed.Add(binding);
+                }
+            }
+
+            foreach (var binding in doomed)
+            {
+                action.RemoveBinding(binding);
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    /// <summary>
+    /// Rebuilds Hornet's device split from <see cref="EffectiveKeyboardEnabled"/> and
+    /// <see cref="EffectiveControllerEnabled"/>. Called when the Shade AI is switched on or off, so
+    /// the change lands immediately rather than at the next scene load.
+    /// <para>
+    /// Removes only the bindings for a device that should not be answering and re-adds the ones that
+    /// should, rather than clearing everything - the saved layout is the player's and this has no
+    /// business rewriting it.
+    /// </para>
+    /// </summary>
+    internal static void RefreshHornetDeviceBindings()
+    {
+        var handler = FindHandler();
+        if (handler == null)
+        {
+            return;
+        }
+
+        var actions = handler.inputActions;
+        if (actions == null)
+        {
+            return;
+        }
+
+        bool keyboard = EffectiveKeyboardEnabled();
+        bool controller = EffectiveControllerEnabled();
+
+        try
+        {
+            foreach (var action in GameplayActions(actions))
+            {
+                if (!keyboard)
+                {
+                    RemoveBindings(action, keyboard: true);
+                }
+
+                if (!controller)
+                {
+                    RemoveBindings(action, keyboard: false);
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        if (keyboard)
+        {
+            try { ResolveMapKeyboard()?.Invoke(handler, null); }
+            catch { }
+        }
+
+        if (controller)
+        {
+            try { handler.MapControllerButtons(handler.activeGamepadType); }
+            catch { }
+        }
+
+        try { EnsureShadeInventoryBindings(actions); }
+        catch { }
     }
 
     public static void ApplyKeyboardDefaults(bool disableController)

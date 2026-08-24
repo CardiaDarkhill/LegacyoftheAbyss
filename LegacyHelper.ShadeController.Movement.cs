@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using LegacyoftheAbyss.Shade;
+using LegacyoftheAbyss.Shade.Ai;
 using UnityEngine;
 using GlobalEnums;
 
@@ -19,6 +20,12 @@ public partial class LegacyHelper
 
         private void Update()
         {
+            // Ahead of every early return below and of every read: last frame's synthesised input
+            // is cleared here and only republished if the AI driver actually runs this frame. A
+            // Shade that is paused, dormant or gone therefore cannot leave a direction held down -
+            // which matters because the pause-menu panes navigate on the same move actions.
+            ShadeAiInput.Clear();
+
             if (pendingCharmLoadoutRecompute && baselineStatsInitialized)
             {
                 pendingCharmLoadoutRecompute = false;
@@ -98,35 +105,10 @@ public partial class LegacyHelper
             if (damageStaggerTimer > 0f) damageStaggerTimer = Mathf.Max(0f, damageStaggerTimer - Time.deltaTime);
             if (ShadeInput.WasActionPressed(ShadeAction.AssistMode))
             {
-                assistModeEnabled = !assistModeEnabled;
-                bool desiredCanTakeDamage = !assistModeEnabled;
-
-                if (sceneProtectionActive)
-                {
-                    sceneProtectionDesiredDamageState = desiredCanTakeDamage;
-                    if (ModConfig.Instance.logShade)
-                    {
-                        string assistState = assistModeEnabled ? "enabled" : "disabled";
-                        string suffix = sceneProtectionTimer > 0f ? " (will apply after spawn protection)" : string.Empty;
-                        try { UnityEngine.Debug.Log($"[ShadeDebug] Assist Mode {assistState}{suffix}"); } catch { }
-                    }
-                }
-                else
-                {
-                    if (canTakeDamage != desiredCanTakeDamage)
-                    {
-                        canTakeDamage = desiredCanTakeDamage;
-                        PersistIfChanged();
-                    }
-                    if (ModConfig.Instance.logShade)
-                    {
-                        string assistState = assistModeEnabled ? "enabled" : "disabled";
-                        try { UnityEngine.Debug.Log($"[ShadeDebug] Assist Mode {assistState}"); } catch { }
-                    }
-                }
-
-                PushShadeStatsToHud(suppressDamageAudio: true);
+                SetAssistModeEnabled(!assistModeEnabled);
             }
+
+            HandleShadeAiToggleInput();
 
             if (sceneProtectionActive)
             {
@@ -242,6 +224,12 @@ public partial class LegacyHelper
                 teleportChannelTimer = 0f;
             }
 
+            // Before the driver, so an order given this frame is already in the plan it builds.
+            UpdateShadeAiCommand();
+
+            // Before CaptureMovementInput, because that is what reads the input this publishes.
+            UpdateShadeAi();
+
             CaptureMovementInput();
             if (hornetControlsLocked)
             {
@@ -327,6 +315,53 @@ public partial class LegacyHelper
                 }
             }
             catch { }
+        }
+
+        /// <summary>
+        /// Turns assist mode on or off, with the spawn-protection deferral that has to happen either
+        /// way.
+        /// <para>
+        /// Extracted from the hotkey handler when the AI briefly forced assist mode on. It no longer
+        /// does - the AI fights on the same terms the player does - but the extraction is worth
+        /// keeping: the deferral below is subtle and belongs in one place rather than inline in
+        /// Update.
+        /// </para>
+        /// </summary>
+        private void SetAssistModeEnabled(bool enabled)
+        {
+            if (assistModeEnabled == enabled)
+            {
+                return;
+            }
+
+            assistModeEnabled = enabled;
+            bool desiredCanTakeDamage = !assistModeEnabled;
+
+            if (sceneProtectionActive)
+            {
+                sceneProtectionDesiredDamageState = desiredCanTakeDamage;
+                if (ModConfig.Instance.logShade)
+                {
+                    string assistState = assistModeEnabled ? "enabled" : "disabled";
+                    string suffix = sceneProtectionTimer > 0f ? " (will apply after spawn protection)" : string.Empty;
+                    try { UnityEngine.Debug.Log($"[ShadeDebug] Assist Mode {assistState}{suffix}"); } catch { }
+                }
+            }
+            else
+            {
+                if (canTakeDamage != desiredCanTakeDamage)
+                {
+                    canTakeDamage = desiredCanTakeDamage;
+                    PersistIfChanged();
+                }
+                if (ModConfig.Instance.logShade)
+                {
+                    string assistState = assistModeEnabled ? "enabled" : "disabled";
+                    try { UnityEngine.Debug.Log($"[ShadeDebug] Assist Mode {assistState}"); } catch { }
+                }
+            }
+
+            PushShadeStatsToHud(suppressDamageAudio: true);
         }
 
         private void CaptureMovementInput()
@@ -1050,10 +1085,12 @@ public partial class LegacyHelper
                         Vector3 bottomWorld = cam.ViewportToWorldPoint(new Vector3(viewport.x, 0f, depth));
                         Vector3 topWorld = cam.ViewportToWorldPoint(new Vector3(viewport.x, 1f, depth));
 
-                        float leftRoom = Mathf.Max(0f, hornetWorld.x - leftWorld.x - LeashScreenPadding);
-                        float rightRoom = Mathf.Max(0f, rightWorld.x - hornetWorld.x - LeashScreenPadding);
-                        float downRoom = Mathf.Max(0f, hornetWorld.y - bottomWorld.y - LeashScreenPadding);
-                        float upRoom = Mathf.Max(0f, topWorld.y - hornetWorld.y - LeashScreenPadding);
+                        float roomMultiplier = GetLeashRoomMultiplier();
+                        float roomFloor = GetLeashRoomFloor();
+                        float leftRoom = Mathf.Max(roomFloor, Mathf.Max(0f, hornetWorld.x - leftWorld.x - LeashScreenPadding) * roomMultiplier);
+                        float rightRoom = Mathf.Max(roomFloor, Mathf.Max(0f, rightWorld.x - hornetWorld.x - LeashScreenPadding) * roomMultiplier);
+                        float downRoom = Mathf.Max(roomFloor, Mathf.Max(0f, hornetWorld.y - bottomWorld.y - LeashScreenPadding) * roomMultiplier);
+                        float upRoom = Mathf.Max(roomFloor, Mathf.Max(0f, topWorld.y - hornetWorld.y - LeashScreenPadding) * roomMultiplier);
 
                         ApplyAxisLimit(ref limits.X.NegativeSoft, ref limits.X.NegativeHard, ref limits.X.NegativeSnap, leftRoom);
                         ApplyAxisLimit(ref limits.X.PositiveSoft, ref limits.X.PositiveHard, ref limits.X.PositiveSnap, rightRoom);
@@ -1335,7 +1372,11 @@ public partial class LegacyHelper
             else transform.position = clampedPos;
             lastMoveDelta = clampedPos - currentPos;
 
-            if (h > 0.1f) facing = 1;
+            if (aiFacingOverride != 0)
+            {
+                facing = aiFacingOverride;
+            }
+            else if (h > 0.1f) facing = 1;
             else if (h < -0.1f) facing = -1;
 
             if (sr != null) sr.flipX = (facing == 1);
@@ -1374,6 +1415,9 @@ public partial class LegacyHelper
             return false;
         }
 
+        /// <summary>Leash multiplier while an AI drives the Shade. See the note in the body.</summary>
+        private const float ShadeAiLeashMultiplier = 2.5f;
+
         private void AdjustLeashForCamera()
         {
             try
@@ -1381,22 +1425,63 @@ public partial class LegacyHelper
                 var cam = GameManager.instance?.cameraCtrl;
                 bool locked = cam != null && cam.mode == CameraController.CameraMode.LOCKED;
                 bool arena = locked && InArenaFight();
-                if (arena)
+
+                float multiplier = arena ? 3f : 1f;
+
+                // An AI-driven Shade should be able to go anywhere on screen: the fixed radii were
+                // tuned for a second player who keeps themselves near Hornet by choice, and they cut
+                // the command reticle off well inside the visible screen. Raising them is safe
+                // because it does not actually let the Shade off screen - GetDynamicLeashLimits
+                // overwrites the per-axis limits with the real room to the screen edge either way, so
+                // this only stops the radii being the tighter of the two constraints.
+                if (aiEnabled)
                 {
-                    maxDistance = baseMaxDistance * 3f;
-                    softLeashRadius = baseSoftLeashRadius * 3f;
-                    hardLeashRadius = baseHardLeashRadius * 3f;
-                    snapLeashRadius = baseSnapLeashRadius * 3f;
+                    multiplier = Mathf.Max(multiplier, ShadeAiLeashMultiplier);
                 }
-                else
-                {
-                    maxDistance = baseMaxDistance;
-                    softLeashRadius = baseSoftLeashRadius;
-                    hardLeashRadius = baseHardLeashRadius;
-                    snapLeashRadius = baseSnapLeashRadius;
-                }
+
+                maxDistance = baseMaxDistance * multiplier;
+                softLeashRadius = baseSoftLeashRadius * multiplier;
+                hardLeashRadius = baseHardLeashRadius * multiplier;
+                snapLeashRadius = baseSnapLeashRadius * multiplier;
             }
             catch { }
+        }
+
+        /// <summary>
+        /// How much further than the visible screen the Shade may sit while it is holding a spot the
+        /// player sent it to and Hornet is in the air.
+        /// <para>
+        /// The point of telling the Shade to wait is usually that it was in the way of a jump. Ending
+        /// the wait at the screen edge undoes that exactly when it matters, because a platforming
+        /// section is routinely wider than one screen - the Shade would be recalled to Hornet's side
+        /// halfway through the thing the player moved it out of the way for. So while she is off the
+        /// ground the room is widened, and it snaps back to normal the moment she lands.
+        /// </para>
+        /// </summary>
+        private const float ShadeAiParkourRoomMultiplier = 2.2f;
+
+        private float GetLeashRoomMultiplier()
+        {
+            if (!aiEnabled || !HasShadeAiCommand)
+            {
+                return 1f;
+            }
+
+            return aiHornetAirborne ? ShadeAiParkourRoomMultiplier : 1f;
+        }
+
+        /// <summary>
+        /// The smallest leash room a standing order needs to be keepable.
+        /// <para>
+        /// The reticle reaches further than the screen does, so an order can be placed somewhere the
+        /// screen-derived room would clamp the Shade short of - and a Shade that stops short of where
+        /// it was sent looks broken for no visible reason. The order's own distance is therefore a
+        /// floor under the room, for as long as it stands.
+        /// </para>
+        /// </summary>
+        private float GetLeashRoomFloor()
+        {
+            return aiEnabled && HasShadeAiCommand ? aiCommandLeashFloor : 0f;
         }
 
         private void SpawnSprintBurst(Vector2 dir)

@@ -157,6 +157,8 @@ public static partial class ShadeSettingsMenu
         skinsScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
         controlsScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
         loggingScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
+        shadeAiScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
+        shadeAiAdvancedScreen = Object.Instantiate(screenTemplate, screenTemplate.transform.parent).GetComponent<MenuScreen>();
 
         if (mainScreen != null)
         {
@@ -200,6 +202,20 @@ public static partial class ShadeSettingsMenu
             InitializeScreen(loggingScreen);
             allScreens.Add(loggingScreen);
         }
+        if (shadeAiScreen != null)
+        {
+            shadeAiScreen.gameObject.name = "ShadeSettingsShadeAi";
+            shadeAiScreen.gameObject.SetActive(false);
+            InitializeScreen(shadeAiScreen);
+            allScreens.Add(shadeAiScreen);
+        }
+        if (shadeAiAdvancedScreen != null)
+        {
+            shadeAiAdvancedScreen.gameObject.name = "ShadeSettingsShadeAiAdvanced";
+            shadeAiAdvancedScreen.gameObject.SetActive(false);
+            InitializeScreen(shadeAiAdvancedScreen);
+            allScreens.Add(shadeAiAdvancedScreen);
+        }
 
         screen = mainScreen != null ? mainScreen.gameObject : null;
 
@@ -209,7 +225,9 @@ public static partial class ShadeSettingsMenu
             BuildCharmsMenu(ui, charmsScreen, buttonTemplate);
         BuildSkinsMenu(ui, skinsScreen, buttonTemplate);
         BuildControlsMenu(ui, controlsScreen, buttonTemplate);
-        BuildLoggingMenu(ui, loggingScreen, toggleTemplate, buttonTemplate);
+        BuildLoggingMenu(ui, loggingScreen, buttonTemplate);
+        BuildShadeAiMenu(ui, shadeAiScreen, sliderTemplate, buttonTemplate);
+        BuildShadeAiAdvancedMenu(ui, shadeAiAdvancedScreen, sliderTemplate, buttonTemplate);
 
         if (createdSliderTemplate && sliderTemplate != null)
             Object.Destroy(sliderTemplate.gameObject);

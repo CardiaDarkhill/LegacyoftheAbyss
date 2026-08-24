@@ -238,6 +238,61 @@ public class ModConfig
     // repositioning, so it is the first thing worth switching off if a boss starts behaving
     // oddly - the Shade will still be chased, it just stops sharing attacks.
     public bool shadeBossAttackSharingEnabled = true;
+
+    // --- Shade AI --------------------------------------------------------------------
+    // Hands the Shade to an AI driver that picks a target, closes on it and attacks, rather
+    // than waiting for a second player. The pause menu has a "Shade AI" screen for the few
+    // settings worth deciding and an "Advanced AI Options" screen under it for the rest; the
+    // three marked config-only below are not on either, because they are not worth the screen
+    // space. The AI also has a rebindable hotkey in Controls. See Shade/Ai/ and
+    // LegacyHelper.ShadeController.Ai.cs.
+    //
+    // Note the AI does not touch assist mode. It fights on the same terms the player does and
+    // can be killed; turn assist mode on yourself if you want an invincible Shade.
+    public bool shadeAiEnabled = false;
+    // Fraction of the Shade's theoretical maximum attack rate the AI is allowed to use. The
+    // nail cooldown is what the game permits, not what a person achieves while also dodging,
+    // and an AI swinging at the cap trivialises fights. Derived from the live cooldown, so
+    // Quick Slash still speeds it up. Clamped 0.05-1.
+    public float shadeAiAttackSpeedFraction = 0.5f;
+    // Whether the AI steps out of attacks and hazards it can see. Off makes it stand and
+    // trade, which is mostly interesting with assist mode on.
+    public bool shadeAiAvoidAttacks = true;
+    // Whether the AI holds SOUL back and channels Focus when it or Hornet is running low.
+    public bool shadeAiHealWhenLow = true;
+    // Health fractions below which it does that. The Shade has to be damaged either way -
+    // Focus refuses to channel at full health, so healing Hornet is a side effect of the
+    // Shade healing itself near her.
+    public float shadeAiSelfHealBelow = 0.5f;
+    public float shadeAiHornetHealBelow = 0.4f;
+    // How far from the Shade an enemy has to be before the AI walks over to it. Clamped 2-40.
+    public float shadeAiEngageRadius = 14f;
+    // Config-only. How many enemies one cast has to land on before the AI thinks it worth the
+    // SOUL. A single enemy tanky enough to qualify on its own does too - see below. Clamped 1-8.
+    public int shadeAiSpellClusterSize = 2;
+    // Config-only. How many of the Shade's own nail hits one enemy has to survive before it is
+    // worth a spell by itself. This stands in for a boss flag, because the game does not expose one:
+    // HealthManager's enemy types are Regular/Shade/Armoured and the journal only knows
+    // Enemy/Other. An earlier flat "200 HP is a boss" test classified ordinary Ant enemies as
+    // bosses and burned a full meter on three fireballs at one of them. Clamped 1-100.
+    public int shadeAiSpellWorthNailHits = 20;
+    // While an AI drives the Shade there is no second player, so Hornet has no reason to be locked
+    // to one input device. With this on, the keyboard/controller split the two-player presets set up
+    // is ignored for as long as the AI is driving and Hornet answers to both at once, exactly as she
+    // does in the unmodded game. Turn it off to keep the split regardless.
+    public bool shadeAiVanillaControls = true;
+    // Whether the Shade steers around terrain instead of pressing into it. Local steering only - it
+    // handles corners and pillars, not a dead-end it has to back out of.
+    public bool shadeAiPathAroundTerrain = true;
+    // Whether the "Command Shade" binding (middle mouse, or the left stick of the first pad) opens
+    // the targeting reticle that tells an AI-driven Shade where to stand. Tap twice to make it hold
+    // where it is; aim first to send it somewhere. Off if you would rather not risk the press.
+    public bool shadeAiCommandEnabled = true;
+    // How often the AI rebuilds its list of enemies. That scan walks every HealthManager in
+    // the scene, so it is the one part of this that is not free; the positions of everything
+    // already on the list are re-read every frame regardless.
+    public float shadeAiScanIntervalSeconds = 0.35f;
+
     public string shadeSkin = "Default";
 
     // --- Shade rendering -------------------------------------------------------------
@@ -369,6 +424,13 @@ public class ModConfig
             instance.bugReportEventRecorderCapacity = Mathf.Clamp(instance.bugReportEventRecorderCapacity, BugReportEventRing.MinimumCapacity, BugReportEventRing.MaximumCapacity);
             instance.bugReportAutoCaptureLimit = Mathf.Max(0, instance.bugReportAutoCaptureLimit);
             instance.bugReportScreenshotMaxWidth = Mathf.Max(0, instance.bugReportScreenshotMaxWidth);
+            instance.shadeAiEngageRadius = Mathf.Clamp(instance.shadeAiEngageRadius, 2f, 40f);
+            instance.shadeAiSpellClusterSize = Mathf.Clamp(instance.shadeAiSpellClusterSize, 1, 8);
+            instance.shadeAiSpellWorthNailHits = Mathf.Clamp(instance.shadeAiSpellWorthNailHits, 1, 100);
+            instance.shadeAiAttackSpeedFraction = Mathf.Clamp(instance.shadeAiAttackSpeedFraction, 0.05f, 1f);
+            instance.shadeAiSelfHealBelow = Mathf.Clamp01(instance.shadeAiSelfHealBelow);
+            instance.shadeAiHornetHealBelow = Mathf.Clamp01(instance.shadeAiHornetHealBelow);
+            instance.shadeAiScanIntervalSeconds = Mathf.Clamp(instance.shadeAiScanIntervalSeconds, 0.05f, 2f);
         }
         catch
         {

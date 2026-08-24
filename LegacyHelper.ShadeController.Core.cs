@@ -118,6 +118,7 @@ public partial class LegacyHelper
             lastSavedHP = lastSavedMax = lastSavedLifeblood = lastSavedLifebloodMax = lastSavedSoul = -999;
             PersistIfChanged();
             lastSoulForReady = shadeSoul;
+            InitializeShadeAi();
             TryPlaySpawnAnimation();
             QueueCharmLoadoutRecompute();
             PersistIfChanged();
@@ -129,6 +130,12 @@ public partial class LegacyHelper
             {
                 ActiveInstance = null;
             }
+
+            // The synthesised input is static and outlives this component. Leaving a direction held
+            // on the way out would hand it straight to the pause-menu panes, which navigate on the
+            // same actions.
+            try { LegacyoftheAbyss.Shade.Ai.ShadeAiInput.Clear(); } catch { }
+            try { DestroyShadeAiReticle(); } catch { }
 
             try
             {

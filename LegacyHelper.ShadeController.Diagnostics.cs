@@ -98,6 +98,17 @@ public partial class LegacyHelper
             state.NailTimer = nailTimer;
             state.FocusTimer = focusTimer;
             state.MoveSpeed = moveSpeed;
+            state.AiEnabled = aiEnabled;
+            state.AiReason = aiPlan.Reason.ToString();
+            state.AiAction = DescribeAiAction(aiPlan.Action);
+            state.AiTargetId = aiPlan.TargetId;
+            state.AiTargetsInRange = aiTargetCount;
+            state.AiCommandState = aiCommandState.ToString();
+            if (aiCommandState == ShadeAiCommandState.Holding)
+            {
+                state.AiCommandX = aiCommandPoint.x;
+                state.AiCommandY = aiCommandPoint.y;
+            }
 
             try
             {
@@ -157,6 +168,21 @@ public partial class LegacyHelper
             Append(builder, baldurShellActive, "baldurShell");
             Append(builder, sharpShadowDashActive, "sharpShadowDash");
             Append(builder, voidHeartEvadeActive, "voidHeartEvade");
+
+            // Named rather than a bare flag: "the AI is on" and "the AI is on and has decided there
+            // is nothing to fight" are different reports, and the flight recorder is where the
+            // difference has to be visible.
+            string aiState = DescribeAiState();
+            if (aiState != null)
+            {
+                if (builder.Length > 0)
+                {
+                    builder.Append('|');
+                }
+
+                builder.Append(aiState);
+            }
+
             return builder.Length == 0 ? "idle" : builder.ToString();
         }
 

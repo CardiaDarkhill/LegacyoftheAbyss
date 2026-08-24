@@ -66,7 +66,7 @@ public static partial class ShadeSettingsMenu
                 continue;
             if (ms.backButton != null && comp.gameObject == ms.backButton.gameObject)
                 continue;
-            if (comp is CancelRouter || comp is SliderMenuDriver || comp is ToggleMenuDriver)
+            if (comp is CancelRouter || comp is SliderMenuDriver)
                 continue;
             var type = comp.GetType();
             string fullName = type.FullName ?? string.Empty;
@@ -148,6 +148,10 @@ public static partial class ShadeSettingsMenu
         {
             if (ui != null)
                 ms.backButton.OnSubmitPressed.AddListener(() => ui.StartCoroutine(Hide(ui)));
+        }
+        else if (cancelTarget == CancelTarget.ShadeAi)
+        {
+            ms.backButton.OnSubmitPressed.AddListener(ShowShadeAiMenu);
         }
         else
         {
@@ -552,6 +556,11 @@ public static partial class ShadeSettingsMenu
         if (skinsScreen != null)
         {
             var s = CreateMenuButton(content, buttonTemplate, "Skins", () => ShowScreen(skinsScreen), CancelTarget.PauseMenu);
+            if (s != null) selectables.Add(s);
+        }
+        if (shadeAiScreen != null)
+        {
+            var s = CreateMenuButton(content, buttonTemplate, "Shade AI", () => ShowScreen(shadeAiScreen), CancelTarget.PauseMenu);
             if (s != null) selectables.Add(s);
         }
         if (controlsScreen != null)
@@ -1312,7 +1321,9 @@ public static partial class ShadeSettingsMenu
             (ShadeAction.Teleport, "Teleport"),
             (ShadeAction.Focus, "Focus"),
             (ShadeAction.Sprint, "Sprint"),
-            (ShadeAction.AssistMode, "Assist Mode")
+            (ShadeAction.AssistMode, "Assist Mode"),
+            (ShadeAction.ToggleAi, "Shade AI"),
+            (ShadeAction.CommandShade, "Command Shade")
         };
 
         // Only surfaced while the "Debug Keys" toggle in Debug Options is on -- these bind
@@ -1513,9 +1524,9 @@ public static partial class ShadeSettingsMenu
         }
     }
 
-    private static void BuildLoggingMenu(UIManager ui, MenuScreen ms, MenuSelectable toggleTemplate, MenuButton buttonTemplate)
+    private static void BuildLoggingMenu(UIManager ui, MenuScreen ms, MenuButton buttonTemplate)
     {
-        if (ms == null || toggleTemplate == null)
+        if (ms == null || buttonTemplate == null)
             return;
         var content = CreateContentRoot(ms);
         if (content == null)
@@ -1523,7 +1534,7 @@ public static partial class ShadeSettingsMenu
         var selectables = new List<MenuSelectable>();
         void AddToggle(string label, bool value, System.Action<bool> onChange)
         {
-            var t = CreateToggle(content, toggleTemplate, buttonTemplate, label, value, onChange, CancelTarget.ShadeMain);
+            var t = CreateToggle(content, buttonTemplate, label, value, onChange, CancelTarget.ShadeMain);
             if (t != null) selectables.Add(t);
         }
         AddToggle("General Logs", ModConfig.Instance.logGeneral, v => ModConfig.Instance.logGeneral = v);
@@ -1546,6 +1557,206 @@ public static partial class ShadeSettingsMenu
         }
         ConfigureBackButton(ms, CancelTarget.ShadeMain, ui);
         LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+    }
+
+    /// <summary>
+    /// A line of explanation for whichever row is highlighted, pinned to the bottom of the screen.
+    /// <para>
+    /// The options these screens carry cannot be named descriptively enough to stand alone -
+    /// "Spell Group Size" means nothing without a sentence - and this is cheaper than a tooltip
+    /// system. The spacer above it takes the slack, so the line sits at the bottom rather than
+    /// floating directly under the last row.
+    /// </para>
+    /// </summary>
+    private static MenuDescriptionDriver CreateDescriptionFooter(RectTransform content)
+    {
+        var spacer = new GameObject("Spacer");
+        var spacerRect = spacer.AddComponent<RectTransform>();
+        spacerRect.SetParent(content, false);
+        var spacerLayout = spacer.AddComponent<LayoutElement>();
+        spacerLayout.minHeight = 0f;
+        spacerLayout.preferredHeight = 0f;
+        spacerLayout.flexibleHeight = 1f;
+
+        var footer = new GameObject("Description");
+        var footerRect = footer.AddComponent<RectTransform>();
+        footerRect.SetParent(content, false);
+        var text = footer.AddComponent<Text>();
+        ApplyTextStyle(text, toggleLabelStyle, TextAnchor.UpperLeft, DescriptionColor);
+        text.text = string.Empty;
+        text.raycastTarget = false;
+        text.horizontalOverflow = HorizontalWrapMode.Wrap;
+        text.verticalOverflow = VerticalWrapMode.Truncate;
+        text.fontSize = Mathf.Max(12, Mathf.RoundToInt(text.fontSize * 0.78f));
+
+        var footerLayout = footer.AddComponent<LayoutElement>();
+        footerLayout.minHeight = DescriptionRowHeight;
+        footerLayout.preferredHeight = DescriptionRowHeight;
+        footerLayout.flexibleHeight = 0f;
+
+        var driver = footer.AddComponent<MenuDescriptionDriver>();
+        driver.target = text;
+        return driver;
+    }
+
+    /// <summary>
+    /// Finishes an options screen: the description footer, the navigation list, the default
+    /// highlight and the back button. Shared by both Shade AI screens.
+    /// </summary>
+    private static void FinishOptionsScreen(UIManager ui, MenuScreen ms, RectTransform content, List<MenuSelectable> selectables, List<KeyValuePair<MenuSelectable, string>> descriptions, CancelTarget cancelTarget)
+    {
+        // Built after the rows so it is the last thing in the layout, then told about them.
+        var footer = CreateDescriptionFooter(content);
+        if (footer != null && descriptions != null)
+        {
+            foreach (var entry in descriptions)
+            {
+                footer.Register(entry.Key, entry.Value);
+            }
+        }
+
+        SetupButtonList(ms, selectables);
+        if (selectables.Count > 0)
+        {
+            var first = selectables[0];
+            screenFirstSelectables[ms] = first;
+            ms.defaultHighlight = first;
+        }
+        else if (ms.backButton != null)
+        {
+            screenFirstSelectables[ms] = ms.backButton;
+            ms.defaultHighlight = ms.backButton;
+        }
+
+        ConfigureBackButton(ms, cancelTarget, ui);
+        LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+    }
+
+    /// <summary>
+    /// The Shade AI category: the three things a player actually decides, and a way through to the
+    /// rest.
+    /// <para>
+    /// This screen scrolled when it carried ten rows, which was the only screen here that did, and
+    /// the RectMask2D that scrolling needs clipped the selection fleurs - they are cloned from the
+    /// button template with the template's own offsets, so they sit just outside each row and just
+    /// outside the viewport with it. Splitting the list so neither screen needs to scroll fixes that
+    /// and the "far too much detail" problem in the same move.
+    /// </para>
+    /// </summary>
+    private static void BuildShadeAiMenu(UIManager ui, MenuScreen ms, MenuSelectable sliderTemplate, MenuButton buttonTemplate)
+    {
+        if (ms == null || sliderTemplate == null || buttonTemplate == null)
+            return;
+        var content = CreateContentRoot(ms);
+        if (content == null)
+            return;
+
+        var selectables = new List<MenuSelectable>();
+        var descriptions = new List<KeyValuePair<MenuSelectable, string>>();
+
+        void Add(MenuSelectable selectable, string description)
+        {
+            if (selectable == null)
+                return;
+            selectables.Add(selectable);
+            descriptions.Add(new KeyValuePair<MenuSelectable, string>(selectable, description));
+        }
+
+        Add(CreateToggle(content, buttonTemplate, "Shade AI", ModConfig.Instance.shadeAiEnabled, v =>
+            {
+                ModConfig.Instance.shadeAiEnabled = v;
+                // Apply to the Shade standing in the scene right now rather than waiting for a
+                // respawn. persist:false because this menu owns the value and saves it on close.
+                try
+                {
+                    var shade = LegacyHelper.ShadeController.ActiveInstance;
+                    if (shade != null)
+                        shade.SetShadeAiEnabled(v, persist: false);
+                }
+                catch
+                {
+                }
+            }, CancelTarget.ShadeMain),
+            "Let the Shade fight by itself. It picks targets, attacks, steps out of danger and heals you both. It can be killed, so you will need to revive it.");
+
+        Add(CreateSlider(content, sliderTemplate, buttonTemplate, "Attack Speed", 0.1f, 1f, ModConfig.Instance.shadeAiAttackSpeedFraction,
+                v => ModConfig.Instance.shadeAiAttackSpeedFraction = v, CancelTarget.ShadeMain),
+            "How fast the Shade swings, as a share of the fastest the game allows. Lower leaves more of the fight to you. Quick Slash still speeds it up.");
+
+        if (shadeAiAdvancedScreen != null)
+        {
+            Add(CreateMenuButton(content, buttonTemplate, "Advanced AI Options", () => ShowScreen(shadeAiAdvancedScreen), CancelTarget.ShadeMain),
+                "How the Shade dodges, when it stops to heal, and how far it will roam to reach an enemy.");
+        }
+
+        FinishOptionsScreen(ui, ms, content, selectables, descriptions, CancelTarget.ShadeMain);
+    }
+
+    /// <summary>
+    /// The rest of the AI settings. Kept off the main AI screen because none of them are decisions a
+    /// player needs to make to use the feature.
+    /// <para>
+    /// A few knobs are deliberately config-only rather than shown here - how tanky one enemy must be
+    /// to be worth a spell, how long the AI stands down after you take over, and how often it rescans
+    /// the scene. They are documented in <see cref="ModConfig"/>; putting them on screen would cost
+    /// this screen its scrollbar-free layout for options nobody adjusts twice.
+    /// </para>
+    /// </summary>
+    private static void BuildShadeAiAdvancedMenu(UIManager ui, MenuScreen ms, MenuSelectable sliderTemplate, MenuButton buttonTemplate)
+    {
+        if (ms == null || sliderTemplate == null || buttonTemplate == null)
+            return;
+        var content = CreateContentRoot(ms);
+        if (content == null)
+            return;
+
+        var selectables = new List<MenuSelectable>();
+        var descriptions = new List<KeyValuePair<MenuSelectable, string>>();
+
+        void AddToggle(string label, string description, bool value, System.Action<bool> onChange)
+        {
+            var t = CreateToggle(content, buttonTemplate, label, value, onChange, CancelTarget.ShadeAi);
+            if (t == null)
+                return;
+            selectables.Add(t);
+            descriptions.Add(new KeyValuePair<MenuSelectable, string>(t, description));
+        }
+
+        void AddSlider(string label, string description, float min, float max, float value, System.Action<float> onChange, bool whole = false)
+        {
+            var s = CreateSlider(content, sliderTemplate, buttonTemplate, label, min, max, value, onChange, CancelTarget.ShadeAi, whole);
+            if (s == null)
+                return;
+            selectables.Add(s);
+            descriptions.Add(new KeyValuePair<MenuSelectable, string>(s, description));
+        }
+
+        AddToggle("Dodge Attacks",
+            "Step out of enemy attacks and hazards instead of standing in them. Turn this off and the Shade will trade hits.",
+            ModConfig.Instance.shadeAiAvoidAttacks,
+            v => ModConfig.Instance.shadeAiAvoidAttacks = v);
+
+        AddToggle("Heal When Low",
+            "Save SOUL for healing rather than spells, and stop to channel Focus when someone needs it. Healing Hornet also heals the Shade, and needs it standing close.",
+            ModConfig.Instance.shadeAiHealWhenLow,
+            v => ModConfig.Instance.shadeAiHealWhenLow = v);
+
+        AddSlider("Heal Shade Below",
+            "How hurt the Shade has to be before it breaks off to heal itself.",
+            0f, 1f, ModConfig.Instance.shadeAiSelfHealBelow,
+            v => ModConfig.Instance.shadeAiSelfHealBelow = v);
+
+        AddSlider("Heal Hornet Below",
+            "How hurt you have to be before the Shade comes to you and heals instead of fighting.",
+            0f, 1f, ModConfig.Instance.shadeAiHornetHealBelow,
+            v => ModConfig.Instance.shadeAiHornetHealBelow = v);
+
+        AddSlider("Engage Range",
+            "How far the Shade will travel to reach an enemy. It never goes further than its leash on Hornet allows.",
+            2f, 40f, ModConfig.Instance.shadeAiEngageRadius,
+            v => ModConfig.Instance.shadeAiEngageRadius = v);
+
+        FinishOptionsScreen(ui, ms, content, selectables, descriptions, CancelTarget.ShadeAi);
     }
 
     private static void EnsureBaseMenusHidden()
@@ -1625,6 +1836,11 @@ public static partial class ShadeSettingsMenu
     private static void ShowMainMenu()
     {
         ShowScreen(mainScreen);
+    }
+
+    private static void ShowShadeAiMenu()
+    {
+        ShowScreen(shadeAiScreen);
     }
 
     internal static bool HandlePauseToggle(UIManager ui)

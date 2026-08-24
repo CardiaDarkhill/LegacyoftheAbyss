@@ -1428,15 +1428,9 @@ public partial class LegacyHelper
     {
         private static bool Prefix()
         {
-            try
-            {
-                var cfg = ModConfig.Instance;
-                return cfg != null && cfg.hornetKeyboardEnabled;
-            }
-            catch
-            {
-                return false;
-            }
+            // EffectiveKeyboardEnabled, not the raw config flag: while an AI drives the Shade there
+            // is no second player to reserve a device for, so Hornet gets the keyboard back.
+            return HornetInput.EffectiveKeyboardEnabled();
         }
     }
 
@@ -1445,15 +1439,7 @@ public partial class LegacyHelper
     {
         private static bool Prefix()
         {
-            try
-            {
-                var cfg = ModConfig.Instance;
-                return cfg != null && cfg.hornetKeyboardEnabled;
-            }
-            catch
-            {
-                return false;
-            }
+            return HornetInput.EffectiveKeyboardEnabled();
         }
     }
 
@@ -1468,7 +1454,7 @@ public partial class LegacyHelper
                 if (cfg == null)
                     return true;
 
-                if (cfg.hornetControllerEnabled)
+                if (HornetInput.EffectiveControllerEnabled())
                     return true;
 
                 var shadeConfig = cfg.shadeInput;
@@ -1835,6 +1821,16 @@ public partial class LegacyHelper
                     return;
                 }
 
+                // Nobody is holding the Shade's controls while an AI drives it, so no device is
+                // being reserved for a second player and every one of them belongs to Hornet.
+                // Releasing rather than merely not-restricting matters: a device restricted before
+                // the AI came on stays restricted until something lets it go.
+                if (HornetInput.ShadeAiHoldsTheShade())
+                {
+                    ReleaseTrackedDevices(handler);
+                    return;
+                }
+
                 var shadeConfig = cfg.shadeInput;
                 if (shadeConfig == null || !shadeConfig.UsesControllerBindings())
                 {
@@ -1875,7 +1871,10 @@ public partial class LegacyHelper
 
             try
             {
-                if (device != null && device != InputDevice.Null && !device.IsUnknown)
+                // Same reasoning as RefreshShadeDevices: with an AI on the Shade there is no second
+                // player to reserve a pad for. Checked here too because this is called directly from
+                // the per-device path as well as from the sweep.
+                if (device != null && device != InputDevice.Null && !device.IsUnknown && !HornetInput.ShadeAiHoldsTheShade())
                 {
                     var cfg = ModConfig.Instance;
                     if (cfg != null)
@@ -2245,31 +2244,9 @@ public partial class LegacyHelper
             }
         }
 
-        private static bool HornetControllerBindingsEnabled()
-        {
-            try
-            {
-                var cfg = ModConfig.Instance;
-                return cfg == null || cfg.hornetControllerEnabled;
-            }
-            catch
-            {
-                return true;
-            }
-        }
+        private static bool HornetControllerBindingsEnabled() => HornetInput.EffectiveControllerEnabled();
 
-        private static bool HornetKeyboardBindingsEnabled()
-        {
-            try
-            {
-                var cfg = ModConfig.Instance;
-                return cfg != null && cfg.hornetKeyboardEnabled;
-            }
-            catch
-            {
-                return false;
-            }
-        }
+        private static bool HornetKeyboardBindingsEnabled() => HornetInput.EffectiveKeyboardEnabled();
 
         private static void RegisterSimulatedBinding(BindingSourceType sourceType)
         {

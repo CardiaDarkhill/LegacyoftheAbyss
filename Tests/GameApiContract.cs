@@ -186,6 +186,13 @@ public class GameApiContractTests
             typeof(HeroController), "TakeQuickDamage",
             "Patched to spare Hornet a hit she is not standing in.", "damageAmount");
 
+        // HornetInput.ResolveMapKeyboard. Without it Hornet cannot be handed the keyboard back when
+        // the Shade AI takes over, and the failure is silent - the key simply does nothing.
+        GameApiContract.RequireMethod(
+            typeof(InputHandler), "MapKeyboardLayoutFromGameSettings",
+            "Called to restore Hornet's keyboard bindings while the Shade AI drives, because the "
+            + "public ResetDefaultKeyBindings overwrites the player's saved layout.");
+
         GameApiContract.RequireMethod(
             typeof(HeroController), "TakeDamage",
             "Patched to spare Hornet a hit she is not standing in.", "go", "damageAmount");

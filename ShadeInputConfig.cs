@@ -1,6 +1,7 @@
 using System;
 using System.Text;
 using InControl;
+using LegacyoftheAbyss.Shade.Ai;
 using UnityEngine;
 
 public enum ShadeAction
@@ -17,6 +18,13 @@ public enum ShadeAction
     Focus,
     Sprint,
     AssistMode,
+    ToggleAi,
+    /// <summary>
+    /// Opens the targeting reticle that tells an AI-driven Shade where to stand. Bound on Hornet's
+    /// side of the controls rather than the Shade's, because in AI mode nobody is holding the
+    /// Shade's own inputs - see LegacyHelper.ShadeController.AiCommand.cs.
+    /// </summary>
+    CommandShade,
     // Developer-only utility actions. Only ever surfaced in the Controls menu when
     // ModConfig.Instance.debugKeysEnabled is on (see BuildControlsMenu), and only ever
     // read when the same flag is on (see SimpleHUD.HandleDebugKeys), so an ordinary
@@ -111,6 +119,8 @@ public class ShadeInputConfig
     public ShadeBinding focus = new();
     public ShadeBinding sprint = new();
     public ShadeBinding assistMode = new();
+    public ShadeBinding toggleAi = new();
+    public ShadeBinding commandShade = new();
     public ShadeBinding debugDamageShade = new();
     public ShadeBinding debugHealShade = new();
     public ShadeBinding debugSoulIncrease = new();
@@ -141,6 +151,12 @@ public class ShadeInputConfig
         focus = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.H), ShadeBindingOption.None());
         sprint = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.LeftShift), ShadeBindingOption.None());
         assistMode = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Alpha0), ShadeBindingOption.None());
+        toggleAi = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Alpha9), ShadeBindingOption.None());
+        // Middle mouse and the left stick of the *first* pad: this is Hornet's control, not the
+        // Shade player's, so it is pinned to device 0 rather than following controllerDeviceIndex.
+        commandShade = new ShadeBinding(
+            ShadeBindingOption.FromKey(KeyCode.Mouse2),
+            ShadeBindingOption.FromControl(InputControlType.LeftStickButton, 0));
 
         // Matches the defaults these carried as hardcoded, unrebindable KeyCode constants
         // in SimpleHUD before they moved into the normal binding system -- unbound except
@@ -169,6 +185,13 @@ public class ShadeInputConfig
         focus = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action2), ShadeBindingOption.None());
         sprint = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightTrigger), ShadeBindingOption.None());
         assistMode = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightStickButton), ShadeBindingOption.None());
+        // Every pad button worth having is spoken for, so the AI toggle keeps its keyboard binding
+        // rather than displacing one. A preset that left this holding the previous preset's value
+        // would be worse than leaving it plainly on the keyboard.
+        toggleAi = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Alpha9), ShadeBindingOption.None());
+        commandShade = new ShadeBinding(
+            ShadeBindingOption.FromKey(KeyCode.Mouse2),
+            ShadeBindingOption.FromControl(InputControlType.LeftStickButton, 0));
     }
 
     public void ApplyKeyboardOnlyPreset()
@@ -188,6 +211,8 @@ public class ShadeInputConfig
         focus = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.KeypadEnter), ShadeBindingOption.None());
         sprint = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad0), ShadeBindingOption.None());
         assistMode = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad9), ShadeBindingOption.None());
+        toggleAi = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad7), ShadeBindingOption.None());
+        commandShade = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Mouse2), ShadeBindingOption.None());
     }
 
     public void ApplySharedKeyboardPreset()
@@ -212,6 +237,10 @@ public class ShadeInputConfig
         focus = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action2), ShadeBindingOption.None());
         sprint = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightTrigger), ShadeBindingOption.None());
         assistMode = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightStickButton), ShadeBindingOption.None());
+        toggleAi = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Alpha9), ShadeBindingOption.None());
+        // The Shade owns pad 0 under this preset, so its left stick click is already Teleport.
+        // Hornet is on the keyboard here, which leaves middle mouse as the whole binding.
+        commandShade = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Mouse2), ShadeBindingOption.None());
     }
 
     private static bool BindingUsesController(ShadeBinding binding)
@@ -241,7 +270,8 @@ public class ShadeInputConfig
         return BindingUsesController(moveLeft) || BindingUsesController(moveRight) || BindingUsesController(moveUp) ||
                BindingUsesController(moveDown) || BindingUsesController(fire) || BindingUsesController(nail) ||
                BindingUsesController(nailUp) || BindingUsesController(nailDown) || BindingUsesController(teleport) ||
-               BindingUsesController(focus) || BindingUsesController(sprint) || BindingUsesController(assistMode);
+               BindingUsesController(focus) || BindingUsesController(sprint) || BindingUsesController(assistMode) ||
+               BindingUsesController(toggleAi) || BindingUsesController(commandShade);
     }
 
     public bool IsControllerIndexInUse(int index)
@@ -260,7 +290,9 @@ public class ShadeInputConfig
                BindingUsesControllerIndex(teleport, fallbackIndex, index) ||
                BindingUsesControllerIndex(focus, fallbackIndex, index) ||
                BindingUsesControllerIndex(sprint, fallbackIndex, index) ||
-               BindingUsesControllerIndex(assistMode, fallbackIndex, index);
+               BindingUsesControllerIndex(assistMode, fallbackIndex, index) ||
+               BindingUsesControllerIndex(toggleAi, fallbackIndex, index) ||
+               BindingUsesControllerIndex(commandShade, fallbackIndex, index);
     }
 
     public ShadeBinding GetBinding(ShadeAction action) => action switch
@@ -277,6 +309,8 @@ public class ShadeInputConfig
         ShadeAction.Focus => focus,
         ShadeAction.Sprint => sprint,
         ShadeAction.AssistMode => assistMode,
+        ShadeAction.ToggleAi => toggleAi,
+        ShadeAction.CommandShade => commandShade,
         ShadeAction.DebugDamageShade => debugDamageShade,
         ShadeAction.DebugHealShade => debugHealShade,
         ShadeAction.DebugSoulIncrease => debugSoulIncrease,
@@ -324,6 +358,12 @@ public class ShadeInputConfig
                 break;
             case ShadeAction.AssistMode:
                 assistMode = binding;
+                break;
+            case ShadeAction.ToggleAi:
+                toggleAi = binding;
+                break;
+            case ShadeAction.CommandShade:
+                commandShade = binding;
                 break;
             case ShadeAction.DebugDamageShade:
                 debugDamageShade = binding;
@@ -379,6 +419,8 @@ public class ShadeInputConfig
         clone.focus = CloneBinding(focus);
         clone.sprint = CloneBinding(sprint);
         clone.assistMode = CloneBinding(assistMode);
+        clone.toggleAi = CloneBinding(toggleAi);
+        clone.commandShade = CloneBinding(commandShade);
         clone.debugDamageShade = CloneBinding(debugDamageShade);
         clone.debugHealShade = CloneBinding(debugHealShade);
         clone.debugSoulIncrease = CloneBinding(debugSoulIncrease);
@@ -406,6 +448,8 @@ public class ShadeInputConfig
         focus = CloneBinding(other.focus);
         sprint = CloneBinding(other.sprint);
         assistMode = CloneBinding(other.assistMode);
+        toggleAi = CloneBinding(other.toggleAi);
+        commandShade = CloneBinding(other.commandShade);
         debugDamageShade = CloneBinding(other.debugDamageShade);
         debugHealShade = CloneBinding(other.debugHealShade);
         debugSoulIncrease = CloneBinding(other.debugSoulIncrease);
@@ -480,7 +524,25 @@ public static class ShadeInput
 
     public static float GetActionValue(ShadeAction action) => GetActionValue(action, null);
 
+    // The three reads below are the only place the Shade AI exists as far as the rest of the mod is
+    // concerned: it publishes a frame of synthesised input and every handler that polls an action
+    // gets it without knowing. A caller that names a requiredType is asking about physical hardware
+    // (the Hornet-input bridge in LegacyHelper.Patches.cs, and the bindings UI), so those read past
+    // it. See LegacyoftheAbyss.Shade.Ai.ShadeAiInput.
     internal static float GetActionValue(ShadeAction action, ShadeBindingOptionType? requiredType)
+    {
+        if (requiredType == null)
+        {
+            if (ShadeAiInput.TryGetValue(action, out float driven))
+                return driven;
+            if (ShadeAiInput.Suppressed(action))
+                return 0f;
+        }
+
+        return GetActionValueRaw(action, requiredType);
+    }
+
+    internal static float GetActionValueRaw(ShadeAction action, ShadeBindingOptionType? requiredType = null)
     {
         var binding = ConfigInstance.GetBinding(action);
         if (binding == null)
@@ -492,6 +554,19 @@ public static class ShadeInput
 
     internal static bool IsActionHeld(ShadeAction action, ShadeBindingOptionType? requiredType)
     {
+        if (requiredType == null)
+        {
+            if (ShadeAiInput.TryGetHeld(action, out bool driven))
+                return driven;
+            if (ShadeAiInput.Suppressed(action))
+                return false;
+        }
+
+        return IsActionHeldRaw(action, requiredType);
+    }
+
+    internal static bool IsActionHeldRaw(ShadeAction action, ShadeBindingOptionType? requiredType = null)
+    {
         var binding = ConfigInstance.GetBinding(action);
         if (binding == null)
             return false;
@@ -502,10 +577,65 @@ public static class ShadeInput
 
     internal static bool WasActionPressed(ShadeAction action, ShadeBindingOptionType? requiredType)
     {
+        if (requiredType == null)
+        {
+            if (ShadeAiInput.TryGetPressed(action, out bool driven))
+                return driven;
+            if (ShadeAiInput.Suppressed(action))
+                return false;
+        }
+
+        return WasActionPressedRaw(action, requiredType);
+    }
+
+    internal static bool WasActionPressedRaw(ShadeAction action, ShadeBindingOptionType? requiredType = null)
+    {
         var binding = ConfigInstance.GetBinding(action);
         if (binding == null)
             return false;
         return WasOptionPressed(binding.primary, requiredType) || WasOptionPressed(binding.secondary, requiredType);
+    }
+
+    /// <summary>
+    /// A stick on whichever device an action's controller binding points at, or zero when it has
+    /// none. Used to steer the Shade command reticle with the same pad that opened it, rather than
+    /// guessing which device the player is holding.
+    /// </summary>
+    /// <param name="rightStick">
+    /// True for the right stick. The reticle uses it because the left stick is Hornet's movement and
+    /// aiming must not cost the player the ability to walk.
+    /// </param>
+    public static Vector2 GetActionStick(ShadeAction action, bool rightStick)
+    {
+        try
+        {
+            var binding = ConfigInstance.GetBinding(action);
+            if (binding == null)
+                return Vector2.zero;
+
+            Vector2 primary = ReadStick(binding.primary, rightStick);
+            return primary.sqrMagnitude > 0f ? primary : ReadStick(binding.secondary, rightStick);
+        }
+        catch
+        {
+            return Vector2.zero;
+        }
+    }
+
+    private static Vector2 ReadStick(ShadeBindingOption option, bool rightStick)
+    {
+        if (option.type != ShadeBindingOptionType.Controller)
+            return Vector2.zero;
+
+        var device = GetDeviceForOption(option);
+        if (device == null || device == InputDevice.Null)
+            return Vector2.zero;
+
+        var stick = rightStick
+            ? new Vector2(device.RightStickX.Value, device.RightStickY.Value)
+            : new Vector2(device.LeftStickX.Value, device.LeftStickY.Value);
+        float deadzone = Mathf.Clamp(ConfigInstance.controllerDeadzone, 0.01f, 1f);
+        return stick.sqrMagnitude >= deadzone * deadzone ? stick : Vector2.zero;
     }
 
     public static string DescribeBindingOption(ShadeBindingOption option)

@@ -17,7 +17,9 @@ public static partial class ShadeSettingsMenu
     private enum CancelTarget
     {
         PauseMenu,
-        ShadeMain
+        ShadeMain,
+        /// <summary>Back out to the Shade AI screen - for anything nested under it.</summary>
+        ShadeAi
     }
 
     private class CancelRouter : MonoBehaviour, ICancelHandler
@@ -27,7 +29,11 @@ public static partial class ShadeSettingsMenu
         public void OnCancel(BaseEventData eventData)
         {
             eventData?.Use();
-            if (target == CancelTarget.ShadeMain)
+            if (target == CancelTarget.ShadeAi)
+            {
+                ShowShadeAiMenu();
+            }
+            else if (target == CancelTarget.ShadeMain)
             {
                 ShowMainMenu();
             }
@@ -90,42 +96,6 @@ public static partial class ShadeSettingsMenu
             if (slider == null)
                 return;
             Step(1f);
-            eventData?.Use();
-        }
-    }
-
-    private sealed class ToggleMenuDriver : MonoBehaviour, IMoveHandler, ISubmitHandler
-    {
-        public Toggle toggle;
-
-        public void Initialize(Toggle t)
-        {
-            toggle = t;
-        }
-
-        public void OnMove(AxisEventData eventData)
-        {
-            if (toggle == null || eventData == null)
-                return;
-            if (eventData.moveDir == MoveDirection.Left)
-            {
-                if (toggle.isOn)
-                    toggle.isOn = false;
-                eventData.Use();
-            }
-            else if (eventData.moveDir == MoveDirection.Right)
-            {
-                if (!toggle.isOn)
-                    toggle.isOn = true;
-                eventData.Use();
-            }
-        }
-
-        public void OnSubmit(BaseEventData eventData)
-        {
-            if (toggle == null)
-                return;
-            toggle.isOn = !toggle.isOn;
             eventData?.Use();
         }
     }
@@ -696,24 +666,153 @@ public static partial class ShadeSettingsMenu
         }
     }
 
+    /// <summary>
+    /// Writes a label onto a cloned menu row, whichever text component the game's prefab happens to
+    /// use. Shared by every row that renders its own state into its label.
+    /// </summary>
+    private static void SetSelectableLabelText(GameObject root, string value)
+    {
+        if (root == null)
+        {
+            return;
+        }
+
+        var uiText = root.GetComponentInChildren<Text>(true);
+        if (uiText != null)
+        {
+            uiText.text = value;
+            return;
+        }
+
+        var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
+        if (tmpType == null)
+        {
+            return;
+        }
+
+        var tmp = root.GetComponentInChildren(tmpType, true);
+        if (tmp != null)
+        {
+            tmpType.GetProperty("text")?.SetValue(tmp, value);
+        }
+    }
+
+    /// <summary>
+    /// A yes/no option rendered the way the Shade Enabled row always was: the label carries the
+    /// state after a colon, and submitting flips it.
+    /// <para>
+    /// This is what every toggle in these menus is now. The checkbox squares it replaced were a
+    /// second visual language for the same idea, and being cloned from a Toggle prefab rather than a
+    /// MenuButton they also had no selection fleurs of their own.
+    /// </para>
+    /// </summary>
+    private sealed class LabeledToggleDriver : MonoBehaviour
+    {
+        private MenuButton button;
+        private string label;
+        private bool value;
+        private System.Action<bool> onChange;
+
+        public void Initialize(MenuButton menuButton, string labelText, bool initial, System.Action<bool> changed)
+        {
+            button = menuButton;
+            label = labelText;
+            value = initial;
+            onChange = changed;
+            button.OnSubmitPressed.RemoveAllListeners();
+            button.OnSubmitPressed.AddListener(Toggle);
+            UpdateLabel();
+        }
+
+        private void OnEnable()
+        {
+            UpdateLabel();
+        }
+
+        private void Toggle()
+        {
+            value = !value;
+            try
+            {
+                onChange?.Invoke(value);
+            }
+            catch (Exception e)
+            {
+                LogMenuWarning($"Toggle '{label}' threw: {e}");
+            }
+
+            UpdateLabel();
+        }
+
+        private void UpdateLabel()
+        {
+            if (button == null || label == null)
+            {
+                return;
+            }
+
+            SetSelectableLabelText(button.gameObject, label + ": " + (value ? "On" : "Off"));
+        }
+    }
+
+    /// <summary>
+    /// Shows a line of explanation for whichever row is highlighted.
+    /// <para>
+    /// Polls the EventSystem for the same reason <see cref="ScrollIntoViewDriver"/> does: rows are
+    /// cloned game prefabs and there is no selection event to subscribe to that covers all of them.
+    /// </para>
+    /// </summary>
+    private sealed class MenuDescriptionDriver : MonoBehaviour
+    {
+        public Text target;
+
+        private readonly Dictionary<GameObject, string> descriptions = new Dictionary<GameObject, string>();
+        private GameObject lastSelected;
+
+        public void Register(MenuSelectable selectable, string description)
+        {
+            if (selectable == null || string.IsNullOrEmpty(description))
+            {
+                return;
+            }
+
+            descriptions[selectable.gameObject] = description;
+        }
+
+        private void OnEnable()
+        {
+            // Force a refresh: the screen may be reopened with the same row highlighted.
+            lastSelected = null;
+        }
+
+        private void Update()
+        {
+            if (target == null)
+            {
+                return;
+            }
+
+            var eventSystem = EventSystem.current;
+            var selected = eventSystem != null ? eventSystem.currentSelectedGameObject : null;
+            if (selected == lastSelected)
+            {
+                return;
+            }
+
+            lastSelected = selected;
+            target.text = selected != null && descriptions.TryGetValue(selected, out var description)
+                ? description
+                : string.Empty;
+        }
+    }
+
     private sealed class ShadeToggleDriver : MonoBehaviour
     {
         private MenuButton button;
-        private Text uiText;
-        private Component tmpTextComponent;
-        private PropertyInfo tmpTextProperty;
 
         public void Initialize(MenuButton menuButton)
         {
             button = menuButton;
-            uiText = button.GetComponentInChildren<Text>(true);
-            var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
-            if (tmpType != null)
-            {
-                tmpTextComponent = button.GetComponentInChildren(tmpType, true);
-                tmpTextProperty = tmpType.GetProperty("text");
-            }
-
             button.OnSubmitPressed.RemoveAllListeners();
             button.OnSubmitPressed.AddListener(ToggleShade);
             shadeToggleDriver = this;
@@ -739,16 +838,7 @@ public static partial class ShadeSettingsMenu
 
         private void SetButtonText(string value)
         {
-            if (uiText != null)
-            {
-                uiText.text = value;
-                return;
-            }
-
-            if (tmpTextComponent != null && tmpTextProperty != null)
-            {
-                tmpTextProperty.SetValue(tmpTextComponent, value);
-            }
+            SetSelectableLabelText(button != null ? button.gameObject : null, value);
         }
 
         private void OnDestroy()

@@ -39,6 +39,14 @@ namespace LegacyoftheAbyss.Diagnostics
         public float NailTimer;
         public float FocusTimer;
         public float MoveSpeed;
+        public bool AiEnabled;
+        public string? AiReason;
+        public string? AiAction;
+        public int AiTargetId;
+        public int AiTargetsInRange;
+        public string? AiCommandState;
+        public float AiCommandX;
+        public float AiCommandY;
     }
 
     /// <summary>Hornet-side detail for <see cref="BugReportState"/>.</summary>
