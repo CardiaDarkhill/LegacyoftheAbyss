@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using System;
 using System.Collections;
 using System.Reflection;
@@ -14,6 +14,226 @@ using LegacyoftheAbyss.Shade;
 
 public static partial class ShadeSettingsMenu
 {
+    /// <summary>
+    /// Finds the row to clone for a slider: one of the base game's volume sliders.
+    /// <para>
+    /// Two earlier attempts at this both came back empty and left every slider in the mod as the
+    /// bare Unity fallback. The first searched <c>optionsMenuScreen</c>, which is the list of
+    /// category buttons and carries no slider at all. The second added the Audio/Video/Brightness
+    /// screens but still went looking for a <c>MenuSelectable</c> with a <c>Slider</c> underneath it,
+    /// which assumes a row shape nothing here had verified.
+    /// </para>
+    /// <para>
+    /// So this asks the question the other way round and starts from the component that can only
+    /// exist on a volume slider. <see cref="Resources.FindObjectsOfTypeAll{T}"/> sees inactive
+    /// objects, which every one of these is while the game is not on that screen, and does not care
+    /// which <c>UIManager</c> field happens to be wired. The result is logged unconditionally,
+    /// because "the slider template was not found" is otherwise indistinguishable from "it was found
+    /// and still looks wrong".
+    /// </para>
+    /// </summary>
+    private static GameObject FindGameSliderTemplate(UIManager ui)
+    {
+        try
+        {
+            // Scene instances only. FindObjectsOfTypeAll also returns prefab assets, and one of
+            // those - a generic options row carrying its own label, its own value text and a
+            // checkbox - is what got cloned when the ordering happened to put it first. Every mod
+            // slider then drew "Master Volume", "10" and a tick box on top of its own label. A
+            // prefab is not a row on a screen; only something in a loaded scene is.
+            foreach (var audioSlider in Resources.FindObjectsOfTypeAll<MenuAudioSlider>())
+            {
+                if (audioSlider == null || !audioSlider.gameObject.scene.IsValid())
+                {
+                    continue;
+                }
+
+                var root = ResolveSliderTemplateRoot(audioSlider.gameObject);
+                if (root == null)
+                {
+                    continue;
+                }
+
+                RecordSliderTemplate($"{DescribeHierarchyPath(root.transform)} (from MenuAudioSlider)");
+                return root;
+            }
+        }
+        catch (Exception e)
+        {
+            LogMenuWarning($"MenuAudioSlider scan failed: {e}");
+        }
+
+        // Fallback: any row on a screen that draws sliders. Keeps working if a future build renames
+        // or drops MenuAudioSlider.
+        if (ui != null)
+        {
+            var screens = new[]
+            {
+                ui.audioMenuScreen,
+                ui.brightnessMenuScreen,
+                ui.videoMenuScreen,
+                ui.gameOptionsMenuScreen,
+                ui.optionsMenuScreen
+            };
+
+            foreach (var screen in screens)
+            {
+                if (screen == null)
+                {
+                    continue;
+                }
+
+                foreach (var slider in screen.GetComponentsInChildren<Slider>(true))
+                {
+                    if (slider == null || !slider.gameObject.scene.IsValid())
+                    {
+                        continue;
+                    }
+
+                    var root = ResolveSliderTemplateRoot(slider.gameObject);
+                    if (root == null)
+                    {
+                        continue;
+                    }
+
+                    RecordSliderTemplate($"{DescribeHierarchyPath(root.transform)} (from screen '{screen.name}')");
+                    return root;
+                }
+            }
+        }
+
+        RecordSliderTemplate("none found - using the plain fallback");
+        return null;
+    }
+
+    /// <summary>
+    /// Remembers and announces which row the sliders were cloned from. Goes to the log *and* to
+    /// <see cref="LastSliderTemplateDescription"/>, which the bug reporter puts in every snapshot -
+    /// the menu is built seconds after launch, so this line is always long gone from the log ring by
+    /// the time anyone files a report about how the sliders look.
+    /// </summary>
+    private static void RecordSliderTemplate(string description)
+    {
+        LastSliderTemplateDescription = description;
+        log.LogInfo("Slider template: " + description);
+    }
+
+    /// <summary>
+    /// Which shoulder-button glyph to draw: the pad's when one is plugged in, the keyboard's cap
+    /// otherwise.
+    /// <para>
+    /// Not <c>GetButtonSkinFor</c>, which picks by <c>lastActiveController</c>. On a machine with
+    /// both, that shows whichever device was touched last - so this menu drew the keyboard's square
+    /// bracket caps for a player who wanted the LB/RB the inventory shows them. It also flaps as the
+    /// player switches hands, and two people can be on these screens at once.
+    /// </para>
+    /// </summary>
+    internal static ButtonSkin ResolvePaneButtonSkin(HeroActionButton action)
+    {
+        try
+        {
+            var skins = UIManager.instance != null ? UIManager.instance.uiButtonSkins : null;
+            var handler = HornetInput.FindHandler();
+            if (skins == null || handler == null)
+            {
+                return null;
+            }
+
+            var playerAction = handler.ActionButtonToPlayerAction(action);
+            if (playerAction == null)
+            {
+                return null;
+            }
+
+            return AnyControllerAttached()
+                ? skins.GetControllerButtonSkinFor(playerAction)
+                : skins.GetKeyboardSkinFor(playerAction);
+        }
+        catch (Exception e)
+        {
+            LogMenuWarning($"Could not resolve the button skin for {action}: {e}");
+            return null;
+        }
+    }
+
+    private static bool AnyControllerAttached()
+    {
+        try
+        {
+            var devices = InControl.InputManager.Devices;
+            if (devices == null)
+            {
+                return false;
+            }
+
+            foreach (var device in devices)
+            {
+                if (device != null && device != InControl.InputDevice.Null && device.IsAttached)
+                {
+                    return true;
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Walks up from the object carrying the Slider to the row that should be cloned: the nearest
+    /// ancestor with a <see cref="MenuSelectable"/> (which is what carries the selection fleurs), or
+    /// the slider's own object when the row has none. Stops before leaving the row - an ancestor
+    /// holding a second Slider is a list of rows, not a row.
+    /// </summary>
+    private static GameObject ResolveSliderTemplateRoot(GameObject sliderObject)
+    {
+        if (sliderObject == null)
+        {
+            return null;
+        }
+
+        GameObject best = sliderObject;
+        var cursor = sliderObject.transform.parent;
+        for (int depth = 0; depth < 4 && cursor != null; depth++)
+        {
+            var candidate = cursor.gameObject;
+            if (candidate.GetComponentsInChildren<Slider>(true).Length > 1)
+            {
+                break;
+            }
+
+            if (candidate.GetComponent<MenuSelectable>() != null)
+            {
+                best = candidate;
+                break;
+            }
+
+            cursor = cursor.parent;
+        }
+
+        return best;
+    }
+
+    private static string DescribeHierarchyPath(Transform transform)
+    {
+        if (transform == null)
+        {
+            return "<null>";
+        }
+
+        var parts = new List<string>();
+        var cursor = transform;
+        while (cursor != null && parts.Count < 8)
+        {
+            parts.Insert(0, cursor.name);
+            cursor = cursor.parent;
+        }
+
+        return string.Join("/", parts);
+    }
+
     private static void Build(UIManager ui)
     {
         if (!loggedBuildAttempt)
@@ -61,34 +281,23 @@ public static partial class ShadeSettingsMenu
             return;
         }
 
-        MenuSelectable sliderTemplate = null;
-        if (optionsScreen != null)
-        {
-            foreach (var cand in optionsScreen.GetComponentsInChildren<MenuSelectable>(true))
-            {
-                if (cand.GetComponentInChildren<Slider>(true) != null)
-                {
-                    sliderTemplate = cand;
-                    break;
-                }
-            }
-        }
-        bool createdSliderTemplate = false;
-        if (sliderTemplate == null)
-        {
-            if (!loggedMissingSliderTemplate)
-            {
-                LogMenuWarning("slider template not found in options menu; using default");
-                loggedMissingSliderTemplate = true;
-            }
-            sliderTemplate = CreateDefaultSliderTemplate();
-            createdSliderTemplate = true;
-        }
+        // The game's slider is read for its look, never cloned. See SliderSkin for why: its rows
+        // carry their own label, value and layout group, and three separate attempts at deleting
+        // those from a clone afterwards each missed something.
+        var gameSlider = FindGameSliderTemplate(ui);
+        gameSliderSkin = CaptureSliderSkin(gameSlider, screenTemplate);
+        RecordSliderTemplate(LastSliderTemplateDescription + " | " + gameSliderSkin.Describe());
+        GameObject sliderTemplate = CreateDefaultSliderTemplate();
 
+        // Only supplies a text style (toggle rows themselves are drawn as menu buttons), but the
+        // same reasoning as the slider applies: the screen that actually carries toggles is Game
+        // Options, not the category list.
         MenuSelectable toggleTemplate = null;
-        if (optionsScreen != null)
+        foreach (var candidateScreen in new[] { ui.gameOptionsMenuScreen, ui.videoMenuScreen, optionsScreen })
         {
-            foreach (var cand in optionsScreen.GetComponentsInChildren<MenuSelectable>(true))
+            if (candidateScreen == null)
+                continue;
+            foreach (var cand in candidateScreen.GetComponentsInChildren<MenuSelectable>(true))
             {
                 if (cand.GetComponentInChildren<Toggle>(true) != null)
                 {
@@ -96,6 +305,8 @@ public static partial class ShadeSettingsMenu
                     break;
                 }
             }
+            if (toggleTemplate != null)
+                break;
         }
         bool createdToggleTemplate = false;
         if (toggleTemplate == null)
@@ -229,8 +440,9 @@ public static partial class ShadeSettingsMenu
         BuildShadeAiMenu(ui, shadeAiScreen, sliderTemplate, buttonTemplate);
         BuildShadeAiAdvancedMenu(ui, shadeAiAdvancedScreen, sliderTemplate, buttonTemplate);
 
-        if (createdSliderTemplate && sliderTemplate != null)
-            Object.Destroy(sliderTemplate.gameObject);
+        // Always ours, so always disposed once every screen has cloned it.
+        if (sliderTemplate != null)
+            Object.Destroy(sliderTemplate);
         if (createdToggleTemplate && toggleTemplate != null)
             Object.Destroy(toggleTemplate.gameObject);
         if (createdButtonTemplate && buttonTemplate != null)

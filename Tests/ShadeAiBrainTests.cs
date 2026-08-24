@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using LegacyoftheAbyss.Shade.Ai;
 using UnityEngine;
@@ -783,6 +783,67 @@ public class ShadeAiBrainTests
         var threats = new[] { Threat(4f, 0f, 1f) };
 
         Assert.False(ShadeAiNavigator.ThreatBlocks(threats, Vector2.zero, Vector2.up, 8f, 0.4f, 0.6f));
+    }
+
+    /// <summary>
+    /// The way round an obstacle should be the shallowest one that clears it, not a right-angle
+    /// detour. Reported as the Shade travelling to the far side of the screen to get past a platform
+    /// it was sitting just under: the fan required a candidate heading to be clear for the full
+    /// seven-unit look-ahead, so every shallow way round was rejected for something in the distance
+    /// and only the perpendicular heading survived.
+    /// <para>
+    /// Steerable without an engine because <c>ShadeAiTerrain</c> answers "clear" to everything when
+    /// there is no Terrain layer to query, which leaves the threat ring as the only obstacle - and
+    /// that half is pure geometry.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void GoesRoundAnObstacleByTheShallowestWayThatClearsIt()
+    {
+        var navigator = new ShadeAiNavigator();
+        // Sits squarely on the direct line, six units out, and is wide. Placed and sized so the two
+        // look-aheads disagree: within seven units the first fan step still clips it, within two and
+        // a half the segment stops short of it. That is exactly the case the old code got wrong.
+        var threats = new[] { Threat(6f, 0f, 2.6f) };
+
+        var heading = navigator.Steer(
+            Vector2.zero,
+            new Vector2(12f, 0f),
+            bodyRadius: 0.3f,
+            time: 1f,
+            threats: threats,
+            threatStandoff: 0.2f);
+
+        Assert.True(navigator.LastPathBlocked, "the direct line should have been recognised as blocked");
+
+        float turn = Vector2.Angle(Vector2.right, heading);
+        Assert.True(turn > 1f, $"expected a detour, got the direct heading ({turn:0.0} degrees off)");
+        Assert.True(turn < 30f, $"expected the first fan step, got {turn:0.0} degrees off the direct line");
+    }
+
+    /// <summary>
+    /// Once the way ahead opens the Shade should turn towards it promptly. The detour used to be
+    /// latched for the side-commitment window - most of a second - which is the rest of the overshoot
+    /// in the report above.
+    /// </summary>
+    [Fact]
+    public void ReturnsToTheDirectLineSoonAfterItClears()
+    {
+        var navigator = new ShadeAiNavigator();
+        var threats = new[] { Threat(6f, 0f, 2.6f) };
+        var target = new Vector2(12f, 0f);
+
+        navigator.Steer(Vector2.zero, target, 0.3f, 1f, threats, 0.2f);
+        Assert.True(navigator.LastPathBlocked);
+
+        // The obstacle is gone. The first clear frame is still ignored - a single one is noise.
+        var immediately = navigator.Steer(Vector2.zero, target, 0.3f, 1.05f, null, 0.2f);
+        Assert.NotEqual(Vector2.right, immediately);
+
+        var shortlyAfter = navigator.Steer(Vector2.zero, target, 0.3f, 1.3f, null, 0.2f);
+        Assert.Equal(Vector2.right.x, shortlyAfter.x, 3);
+        Assert.Equal(Vector2.right.y, shortlyAfter.y, 3);
+        Assert.False(navigator.LastPathBlocked);
     }
 
     /// <summary>

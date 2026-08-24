@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -1518,6 +1518,11 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
 
             if (entry.Icon != null)
             {
+                // The locked placeholder is a notch sprite standing in for a charm, and at the grid's
+                // full icon size it dwarfs the real art around it. Scaled rather than resized so the
+                // cell itself, and the grid spacing that depends on it, are untouched.
+                entry.Icon.rectTransform.localScale = owned ? Vector3.one : LockedIconScale;
+
                 if (!owned && lockedSprite != null)
                 {
                     entry.Icon.sprite = lockedSprite;
@@ -1617,7 +1622,12 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             var selectedEntry = entries[selectedIndex];
             selectedDefinition = selectedEntry.Definition;
             selectedId = selectedEntry.Id;
-            highlightCost = Mathf.Max(selectedDefinition?.NotchCost ?? 0, 0);
+            // Only a charm you actually have can preview its cost. Hovering an undiscovered one used
+            // to light up notches on the Shade's meter for a charm that cannot be equipped, which
+            // reads as "this is what it would cost" for something you are not supposed to know yet.
+            highlightCost = inv.IsOwned(selectedEntry.Id)
+                ? Mathf.Max(selectedDefinition?.NotchCost ?? 0, 0)
+                : 0;
             highlightEquippedSlots = inv.IsEquipped(selectedEntry.Id);
         }
 

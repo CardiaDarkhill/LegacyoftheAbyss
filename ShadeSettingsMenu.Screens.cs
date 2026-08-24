@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using System;
 using System.Collections;
 using System.Reflection;
@@ -26,6 +26,7 @@ public static partial class ShadeSettingsMenu
         screenLastSelectables.Clear();
         mainScreen = null;
         difficultyScreen = null;
+        difficultyController = null;
         controlsScreen = null;
         loggingScreen = null;
         charmsScreen = null;
@@ -100,12 +101,91 @@ public static partial class ShadeSettingsMenu
             rt.anchoredPosition = Vector2.zero;
             rt.offsetMin = Vector2.zero;
             rt.offsetMax = Vector2.zero;
+            StretchScreenOverCanvas(rt);
         }
         ms.transform.SetAsLastSibling();
         StripTemplateComponents(ms);
 
         var focusDriver = ms.gameObject.GetComponent<MenuFocusDriver>() ?? ms.gameObject.AddComponent<MenuFocusDriver>();
         focusDriver.screen = ms;
+    }
+
+    /// <summary>
+    /// Grows a cloned screen's rect until it actually covers the canvas, and centres it there.
+    /// <para>
+    /// These screens are clones of the pause menu, parented where it sits, and that part of the
+    /// hierarchy is scaled down - roughly 0.7 on the install this was measured on. Stretching to the
+    /// parent therefore produced a rect that *reports* the full 1920x1080 in local units while
+    /// drawing over about 70% of the display, in the upper part of the screen. Every layout
+    /// calculation in this file works in those local units, so all of them were quietly budgeting
+    /// for a third more space than the player could see: the Controls screen concluded its binding
+    /// list did not fit and grew a scrollbar with a quarter of the display sitting empty below it.
+    /// </para>
+    /// <para>
+    /// Compensating by resetting localScale would fix the coverage but resize every glyph with it.
+    /// Growing the rect by the same factor instead leaves the rendered size of everything already on
+    /// these screens untouched and simply hands the layout the room it thought it had. The scale is
+    /// measured rather than assumed, so a build where the pause menu is not scaled gets a no-op.
+    /// </para>
+    /// </summary>
+    private static void StretchScreenOverCanvas(RectTransform rt)
+    {
+        try
+        {
+            // includeInactive, because InitializeScreen runs on a screen that has just been
+            // deactivated - the parameterless overload skips inactive objects and would find nothing.
+            var canvas = rt.GetComponentInParent<Canvas>(true);
+            if (canvas == null)
+            {
+                return;
+            }
+
+            var canvasRect = canvas.rootCanvas != null
+                ? canvas.rootCanvas.transform as RectTransform
+                : canvas.transform as RectTransform;
+            if (canvasRect == null)
+            {
+                return;
+            }
+
+            Vector2 canvasSize = canvasRect.rect.size;
+            if (canvasSize.x <= 1f || canvasSize.y <= 1f)
+            {
+                return;
+            }
+
+            Vector3 ourScale = rt.lossyScale;
+            Vector3 canvasScale = canvasRect.lossyScale;
+            if (Mathf.Abs(canvasScale.x) < 0.0001f || Mathf.Abs(canvasScale.y) < 0.0001f)
+            {
+                return;
+            }
+
+            float relativeX = ourScale.x / canvasScale.x;
+            float relativeY = ourScale.y / canvasScale.y;
+
+            // Only ever grow. A screen already covering the canvas (or somehow larger than it) is
+            // left exactly as the stretch left it, so this cannot shrink a layout that was fine.
+            if (relativeX <= 0.0001f || relativeY <= 0.0001f || (relativeX >= 0.999f && relativeY >= 0.999f))
+            {
+                return;
+            }
+
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(canvasSize.x / Mathf.Min(1f, relativeX), canvasSize.y / Mathf.Min(1f, relativeY));
+            // Centre on the canvas in world space - the parent is not necessarily centred on it
+            // either, and on the measured install it sits noticeably high.
+            rt.position = canvasRect.TransformPoint(canvasRect.rect.center);
+
+            LogMenuDebug(FormattableString.Invariant(
+                $"Screen '{rt.name}' stretched to {rt.sizeDelta.x:0}x{rt.sizeDelta.y:0} local units (scale {relativeX:0.000}x{relativeY:0.000} of canvas {canvasSize.x:0}x{canvasSize.y:0})"));
+        }
+        catch (Exception e)
+        {
+            LogMenuWarning($"Could not stretch screen '{rt.name}' over the canvas: {e}");
+        }
     }
 
     private static RectTransform CreateContentRoot(MenuScreen ms)
@@ -126,8 +206,29 @@ public static partial class ShadeSettingsMenu
         contentRect.anchorMax = new Vector2(1f, 1f);
         contentRect.pivot = new Vector2(0.5f, 1f);
         contentRect.anchoredPosition = Vector2.zero;
-        contentRect.offsetMin = new Vector2(60f, 80f);
-        contentRect.offsetMax = new Vector2(-60f, -70f);
+
+        // Insets are a share of the screen rather than a fixed 60/80/70, because that rect is no
+        // longer the size it used to be - StretchScreenOverCanvas grew it to cover the display, and
+        // fixed margins against it left every list starting hard against the top edge with rows
+        // running the full width. The game's own option screens sit in a narrow centred column with
+        // a clear band above them, so these match that: about a fifth of the height reserved at the
+        // top, and a column roughly two thirds of the width.
+        // Screens that lay themselves out (Controls, Difficulty) overwrite these straight after.
+        var screenRect = (RectTransform)ms.transform;
+        float screenWidth = screenRect.rect.width;
+        float screenHeight = screenRect.rect.height;
+        if (screenWidth > 1f && screenHeight > 1f)
+        {
+            float columnWidth = Mathf.Clamp(screenWidth * ListColumnWidthFraction, 480f, screenWidth - 96f);
+            float sideMargin = Mathf.Max(48f, (screenWidth - columnWidth) * 0.5f);
+            contentRect.offsetMin = new Vector2(sideMargin, screenHeight * ListBottomMarginFraction);
+            contentRect.offsetMax = new Vector2(-sideMargin, -(screenHeight * ListTopMarginFraction));
+        }
+        else
+        {
+            contentRect.offsetMin = new Vector2(60f, 80f);
+            contentRect.offsetMax = new Vector2(-60f, -70f);
+        }
         var layout = content.AddComponent<VerticalLayoutGroup>();
         layout.childControlHeight = true;
         layout.childControlWidth = true;
@@ -478,7 +579,16 @@ public static partial class ShadeSettingsMenu
         btn.OnSubmitPressed.RemoveAllListeners();
         if (onSubmit != null)
             btn.OnSubmitPressed.AddListener(() => onSubmit());
+        // Activate, not Proceed. MenuButton.OnSubmit calls ForceDeselect() for every type except
+        // Activate, which clears the EventSystem's selection - and MenuFocusDriver then puts the
+        // highlight back on the screen's defaultHighlight. That is why pressing any toggle or
+        // stepper row threw the cursor back to the top of the screen. It also cost ShowScreen its
+        // RememberSelection, because by the time a Proceed row opened a sub-menu there was no
+        // selection left to remember, so backing out never returned to the row that opened it.
+        btn.buttonType = MenuButton.MenuButtonType.Activate;
         btn.cancelAction = CancelAction.DoNothing;
+        var pointerSelect = go.GetComponent<PointerSelectDriver>() ?? go.AddComponent<PointerSelectDriver>();
+        pointerSelect.target = btn;
         var router = go.GetComponent<CancelRouter>() ?? go.AddComponent<CancelRouter>();
         router.target = cancelTarget;
         btn.DontPlaySelectSound = true;
@@ -532,17 +642,9 @@ public static partial class ShadeSettingsMenu
         if (content == null)
             return;
         var selectables = new List<MenuSelectable>();
-        var shadeToggle = CreateMenuButton(content, buttonTemplate, GetShadeToggleLabel(), null, CancelTarget.PauseMenu);
-        if (shadeToggle is MenuButton toggleButton)
-        {
-            var driver = toggleButton.gameObject.AddComponent<ShadeToggleDriver>();
-            driver.Initialize(toggleButton);
-            selectables.Add(toggleButton);
-        }
-        else if (shadeToggle != null)
-        {
-            selectables.Add(shadeToggle);
-        }
+        // "Shade Enabled" used to head this list. It now lives in Debug Options: with the Shade AI
+        // in, removing the Shade outright is a testing tool rather than something a player who
+        // installed this mod wants on the front page.
         if (difficultyScreen != null)
         {
             var s = CreateMenuButton(content, buttonTemplate, "Difficulty", () => ShowScreen(difficultyScreen), CancelTarget.PauseMenu);
@@ -856,39 +958,633 @@ public static partial class ShadeSettingsMenu
         LayoutRebuilder.ForceRebuildLayoutImmediate(content);
     }
 
-    private static void BuildDifficultyMenu(UIManager ui, MenuScreen ms, MenuSelectable sliderTemplate, MenuButton buttonTemplate)
+    /// <summary>
+    /// The Difficulty screen: a header row of three discrete settings, then Damage and Healing side
+    /// by side, then the explanation line.
+    /// <para>
+    /// Positioned explicitly rather than through nested layout groups, for the same reason the
+    /// Controls screen is - see the note at the top of <see cref="BuildControlsMenu"/>. The two
+    /// panels have to be a known width before their slider rows can pick their column widths, and
+    /// asking Unity's layout system for that number bottom-up is exactly the arrangement that
+    /// produced zero-height rows there.
+    /// </para>
+    /// </summary>
+    private static void BuildDifficultyMenu(UIManager ui, MenuScreen ms, GameObject sliderTemplate, MenuButton buttonTemplate)
     {
-        if (ms == null || sliderTemplate == null)
+        if (ms == null || sliderTemplate == null || buttonTemplate == null)
             return;
         var content = CreateContentRoot(ms);
         if (content == null)
             return;
+
+        var contentLayout = content.GetComponent<VerticalLayoutGroup>();
+        if (contentLayout != null)
+            contentLayout.enabled = false;
+
+        difficultyController = ms.gameObject.GetComponent<DifficultyMenuController>() ?? ms.gameObject.AddComponent<DifficultyMenuController>();
+
+        var msRect = (RectTransform)ms.transform;
+        float canvasWidth = msRect.rect.width;
+        float canvasHeight = msRect.rect.height;
+
+        // Wider than a list screen - two panels of rows need the room - but the same band above
+        // and below, so this screen sits in the same place on the display as the others.
+        float horizontalMargin = Mathf.Max(48f, canvasWidth * 0.06f);
+        float bottomMargin = canvasHeight * ListBottomMarginFraction;
+        float topMargin = canvasHeight * ListTopMarginFraction;
+        content.offsetMin = new Vector2(horizontalMargin, bottomMargin);
+        content.offsetMax = new Vector2(-horizontalMargin, -topMargin);
+
+        float contentWidth = content.rect.width;
+        float contentHeight = content.rect.height;
+        const float SectionSpacing = 28f;
+
         var selectables = new List<MenuSelectable>();
-        void AddSlider(string label, float min, float max, float value, System.Action<float> onChange, bool whole = false)
+        var descriptions = new List<KeyValuePair<MenuSelectable, string>>();
+        var headerButtons = new List<MenuButton>();
+        var damageRows = new List<MenuSelectable>();
+        var healingRows = new List<MenuSelectable>();
+
+        void Describe(MenuSelectable selectable, string description)
         {
-            var s = CreateSlider(content, sliderTemplate, buttonTemplate, label, min, max, value, onChange, CancelTarget.ShadeMain, whole);
-            if (s != null) selectables.Add(s);
+            if (selectable == null)
+                return;
+            selectables.Add(selectable);
+            if (!string.IsNullOrEmpty(description))
+                descriptions.Add(new KeyValuePair<MenuSelectable, string>(selectable, description));
         }
-        AddSlider("Hornet Damage", 0.2f, 2f, ModConfig.Instance.hornetDamageMultiplier, v => ModConfig.Instance.hornetDamageMultiplier = v);
-        AddSlider("Shade Damage", 0.2f, 2f, ModConfig.Instance.shadeDamageMultiplier, v => ModConfig.Instance.shadeDamageMultiplier = v);
-        AddSlider("Shade Heal (Bind)", 0f, 6f, ModConfig.Instance.bindShadeHeal, v => ModConfig.Instance.bindShadeHeal = Mathf.RoundToInt(v), true);
-        AddSlider("Hornet Heal (Bind)", 0f, 6f, ModConfig.Instance.bindHornetHeal, v => ModConfig.Instance.bindHornetHeal = Mathf.RoundToInt(v), true);
-        AddSlider("Shade Focus Heal", 0f, 6f, ModConfig.Instance.focusShadeHeal, v => ModConfig.Instance.focusShadeHeal = Mathf.RoundToInt(v), true);
-        AddSlider("Hornet Focus Heal", 0f, 6f, ModConfig.Instance.focusHornetHeal, v => ModConfig.Instance.focusHornetHeal = Mathf.RoundToInt(v), true);
+
+        // --- header row: preset, assist mode, shade masks ------------------------------------
+        float cursorY = 0f;
+        var headerRow = new GameObject("DifficultyHeader");
+        var headerRect = headerRow.AddComponent<RectTransform>();
+        headerRect.SetParent(content, false);
+        headerRect.anchorMin = new Vector2(0f, 1f);
+        headerRect.anchorMax = new Vector2(1f, 1f);
+        headerRect.pivot = new Vector2(0.5f, 1f);
+        headerRect.anchoredPosition = new Vector2(0f, -cursorY);
+        headerRect.sizeDelta = new Vector2(0f, ButtonRowHeight);
+
+        float headerSpacing = Mathf.Clamp(contentWidth * 0.03f, 24f, 90f);
+        float headerCellWidth = Mathf.Max(120f, (contentWidth - headerSpacing * 2f) / 3f);
+
+        MenuButton AddHeaderCell(int column, string label, string description, Func<string> value, Action<int> step)
+        {
+            var selectable = CreateMenuButton(headerRect, buttonTemplate, label, null, CancelTarget.ShadeMain);
+            if (selectable is not MenuButton button)
+            {
+                if (selectable != null)
+                    Describe(selectable, description);
+                return null;
+            }
+
+            var rect = button.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0f, 0f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 0.5f);
+            rect.offsetMin = new Vector2(rect.offsetMin.x, 0f);
+            rect.offsetMax = new Vector2(rect.offsetMax.x, 0f);
+            rect.anchoredPosition = new Vector2(column * (headerCellWidth + headerSpacing), 0f);
+            rect.sizeDelta = new Vector2(headerCellWidth, 0f);
+
+            var driver = button.gameObject.AddComponent<LabeledStepperDriver>();
+            driver.Initialize(button, label, value, step);
+            difficultyController.RegisterStepper(driver);
+            Describe(button, description);
+            headerButtons.Add(button);
+            return button;
+        }
+
+        // The preset row's explanation is whichever preset is currently selected, so unlike every
+        // other row here it cannot be a fixed string. Registered as a live lookup further down.
+        var presetButton = AddHeaderCell(0, "Difficulty",
+            null,
+            () => DifficultyPreset.IdentifyName(ModConfig.Instance),
+            StepDifficultyPreset);
+        MenuSelectable presetSelectable = presetButton;
+
+        AddHeaderCell(1, "Assist Mode",
+            "Press to switch. Makes the Shade invulnerable: it still fights and still heals, it simply cannot be killed or need reviving.",
+            () => GetShadeAssistMode() ? "On" : "Off",
+            _ => SetShadeAssistMode(!GetShadeAssistMode()));
+
+        AddHeaderCell(2, "Shade Masks",
+            "Press to step by 10%. How many masks the Shade carries, as a share of Hornet's, rounded up. Applies to the Shade in front of you at once.",
+            DescribeShadeMaskSetting,
+            StepShadeMaskFraction);
+
+        cursorY += ButtonRowHeight + SectionSpacing;
+
+        // --- the two panels ------------------------------------------------------------------
+        float footerHeight = DescriptionRowHeight;
+        float panelsHeight = Mathf.Max(160f, contentHeight - cursorY - footerHeight - SectionSpacing);
+        float panelSpacing = Mathf.Clamp(contentWidth * 0.03f, 24f, 90f);
+        float panelWidth = Mathf.Max(200f, (contentWidth - panelSpacing) / 2f);
+
+        const float PanelHeaderHeight = 64f;
+        const float PanelPadding = 24f;
+        float panelRowWidth = Mathf.Max(120f, panelWidth - PanelPadding * 2f);
+
+        RectTransform CreatePanel(int column, string title, HeroActionButton promptAction, out CanvasGroup promptGroup)
+        {
+            promptGroup = null;
+            var panel = new GameObject(title + "Panel");
+            var rect = panel.AddComponent<RectTransform>();
+            rect.SetParent(content, false);
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.anchoredPosition = new Vector2(column * (panelWidth + panelSpacing), -cursorY);
+            rect.sizeDelta = new Vector2(panelWidth, panelsHeight);
+
+            // A flat dark plate rather than the pause menu's own frame art: that art is nine-sliced
+            // around a fixed aspect and does not survive being stretched to this shape. Deliberately
+            // no RectMask2D on it either - one of those is what clipped the selection fleurs off the
+            // AI screen, and every row in here has a pair sitting just outside its own rect.
+            var background = panel.AddComponent<Image>();
+            background.sprite = GetFallbackSprite(ref fallbackSlicedSprite, "ShadeSettingsPanelBg", true);
+            background.type = Image.Type.Sliced;
+            background.color = new Color(0f, 0f, 0f, 0.35f);
+            background.raycastTarget = false;
+
+            // Heading and prompt sit in one centred row, so the glyph reads as part of the
+            // heading rather than as something stranded in the panel's corner.
+            var header = new GameObject("Title");
+            var headerRowRect = header.AddComponent<RectTransform>();
+            headerRowRect.SetParent(rect, false);
+            headerRowRect.anchorMin = new Vector2(0f, 1f);
+            headerRowRect.anchorMax = new Vector2(1f, 1f);
+            headerRowRect.pivot = new Vector2(0.5f, 1f);
+            headerRowRect.anchoredPosition = Vector2.zero;
+            headerRowRect.sizeDelta = new Vector2(0f, PanelHeaderHeight);
+            var headerLayout = header.AddComponent<HorizontalLayoutGroup>();
+            headerLayout.spacing = 14f;
+            headerLayout.childAlignment = TextAnchor.MiddleCenter;
+            headerLayout.childControlWidth = true;
+            headerLayout.childControlHeight = true;
+            headerLayout.childForceExpandWidth = false;
+            headerLayout.childForceExpandHeight = false;
+
+            // The glyph points at where pressing it takes you, so it leads on the right-hand panel
+            // and trails on the left-hand one.
+            if (promptAction == HeroActionButton.MENU_PANE_LEFT)
+            {
+                promptGroup = CreatePaneSwitchPrompt(headerRowRect, promptAction, PanelHeaderHeight);
+            }
+
+            var titleObject = new GameObject("TitleText");
+            var titleRect = titleObject.AddComponent<RectTransform>();
+            titleRect.SetParent(headerRowRect, false);
+            var headerText = titleObject.AddComponent<Text>();
+            ApplyTextStyle(headerText, sliderLabelStyle, TextAnchor.MiddleCenter, Color.white);
+            headerText.text = title;
+            headerText.raycastTarget = false;
+            headerText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            var titleLayout = titleObject.AddComponent<LayoutElement>();
+            titleLayout.preferredWidth = headerText.preferredWidth;
+            titleLayout.preferredHeight = PanelHeaderHeight;
+            titleLayout.flexibleWidth = 0f;
+
+            if (promptAction == HeroActionButton.MENU_PANE_RIGHT)
+            {
+                promptGroup = CreatePaneSwitchPrompt(headerRowRect, promptAction, PanelHeaderHeight);
+            }
+
+            LayoutRebuilder.ForceRebuildLayoutImmediate(headerRowRect);
+            return rect;
+        }
+
+        var damagePanel = CreatePanel(0, "Damage", HeroActionButton.MENU_PANE_RIGHT, out var damagePromptGroup);
+        var healingPanel = CreatePanel(1, "Healing", HeroActionButton.MENU_PANE_LEFT, out var healingPromptGroup);
+
+        // Rows are spread through whatever height the panel has rather than stacked at a fixed
+        // pitch, so both panels stay balanced whether or not the screen ended up scaled.
+        float rowsAreaHeight = Mathf.Max(80f, panelsHeight - PanelHeaderHeight - PanelPadding);
+        const int DamageRowCount = 4;
+        const int HealingRowCount = 5;
+        float damagePitch = rowsAreaHeight / DamageRowCount;
+        float healingPitch = rowsAreaHeight / HealingRowCount;
+        float damageRowHeight = Mathf.Clamp(damagePitch - 12f, 48f, SliderRowHeight);
+        float healingRowHeight = Mathf.Clamp(healingPitch - 12f, 44f, SliderRowHeight);
+
+        var damageMetrics = SliderRowMetrics.ForWidth(panelRowWidth, damageRowHeight);
+        var healingMetrics = SliderRowMetrics.ForWidth(panelRowWidth, healingRowHeight);
+
+        // CreateSlider and CreateToggle both leave their row at the top of whatever they were
+        // parented to, and the panels deliberately have no layout group, so the vertical offset is
+        // stamped here.
+        void PlacePanelRow(RectTransform rect, int index, float pitch, float height)
+        {
+            if (rect == null)
+                return;
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.offsetMin = new Vector2(PanelPadding, rect.offsetMin.y);
+            rect.offsetMax = new Vector2(-PanelPadding, rect.offsetMax.y);
+            rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
+            rect.anchoredPosition = new Vector2(0f, -(PanelHeaderHeight + index * pitch));
+            LayoutRebuilder.ForceRebuildLayoutImmediate(rect);
+        }
+
+        void AddPanelSlider(RectTransform panel, List<MenuSelectable> column, int index, float pitch,
+            SliderRowMetrics metrics, string label, string description, float min, float max,
+            Func<float> read, Action<float> write, bool whole = false)
+        {
+            var row = CreateSlider(panel, sliderTemplate, buttonTemplate, label, min, max, read(),
+                v =>
+                {
+                    write(v);
+                    // Any hand edit means the values no longer match whichever preset was chosen, so
+                    // the header has to be re-read.
+                    RefreshDifficultyHeader();
+                },
+                CancelTarget.ShadeMain, metrics, out var rowRect, whole);
+            if (row == null)
+                return;
+
+            PlacePanelRow(rowRect, index, pitch, metrics.Height);
+            column.Add(row);
+            Describe(row, description);
+
+            var slider = row.GetComponentInChildren<Slider>(true);
+            if (slider != null)
+            {
+                // Re-read from config after a preset change. SetValueWithoutNotify would leave the
+                // value text stale, so the notify path is used; the write it triggers is a harmless
+                // no-op write of the value that is already there.
+                difficultyController.RegisterSliderRefresh(() =>
+                {
+                    float current = read();
+                    if (!Mathf.Approximately(slider.value, current))
+                        slider.value = Mathf.Clamp(current, slider.minValue, slider.maxValue);
+                });
+            }
+        }
+
+        // Damage, in the order of the sketch: each character's melee first, then their casts.
+        AddPanelSlider(damagePanel, damageRows, 0, damagePitch, damageMetrics,
+            "Hornet Needle", "Multiplies the damage of Hornet's needle strikes. Her silk skills are on their own slider.",
+            0.2f, 2f, () => ModConfig.Instance.hornetDamageMultiplier, v => ModConfig.Instance.hornetDamageMultiplier = v);
+        AddPanelSlider(damagePanel, damageRows, 1, damagePitch, damageMetrics,
+            "Shade Nail", "Multiplies the damage of the Shade's nail. Its spells are on their own slider.",
+            0.2f, 2f, () => ModConfig.Instance.shadeDamageMultiplier, v => ModConfig.Instance.shadeDamageMultiplier = v);
+        AddPanelSlider(damagePanel, damageRows, 2, damagePitch, damageMetrics,
+            "Hornet Silk Skills", "Multiplies everything of Hornet's that is not a needle strike - silk skills, tools and thrown damage.",
+            0.2f, 2f, () => ModConfig.Instance.hornetSilkSkillDamageMultiplier, v => ModConfig.Instance.hornetSilkSkillDamageMultiplier = v);
+        AddPanelSlider(damagePanel, damageRows, 3, damagePitch, damageMetrics,
+            "Shade Spells", "Multiplies all six of the Shade's spells. Its nail is on its own slider.",
+            0.2f, 2f, () => ModConfig.Instance.shadeSpellDamageMultiplier, v => ModConfig.Instance.shadeSpellDamageMultiplier = v);
+
+        AddPanelSlider(healingPanel, healingRows, 0, healingPitch, healingMetrics,
+            "Hornet Bind", "Masks Hornet recovers from one Bind.",
+            0f, 6f, () => ModConfig.Instance.bindHornetHeal, v => ModConfig.Instance.bindHornetHeal = Mathf.RoundToInt(v), true);
+        AddPanelSlider(healingPanel, healingRows, 1, healingPitch, healingMetrics,
+            "Shade Bind", "Masks the Shade recovers when Hornet Binds.",
+            0f, 6f, () => ModConfig.Instance.bindShadeHeal, v => ModConfig.Instance.bindShadeHeal = Mathf.RoundToInt(v), true);
+        AddPanelSlider(healingPanel, healingRows, 2, healingPitch, healingMetrics,
+            "Hornet Focus", "Masks Hornet recovers when the Shade Focuses near her. Zero stops the Shade healing her at all.",
+            0f, 6f, () => ModConfig.Instance.focusHornetHeal, v => ModConfig.Instance.focusHornetHeal = Mathf.RoundToInt(v), true);
+        AddPanelSlider(healingPanel, healingRows, 3, healingPitch, healingMetrics,
+            "Shade Focus", "Masks the Shade recovers from one of its own Focus channels.",
+            0f, 6f, () => ModConfig.Instance.focusShadeHeal, v => ModConfig.Instance.focusShadeHeal = Mathf.RoundToInt(v), true);
+
+        var fullMasksRow = CreateToggle(healingPanel, buttonTemplate, "Full Masks Focus",
+            ModConfig.Instance.shadeFocusAtFullMasks,
+            v =>
+            {
+                ModConfig.Instance.shadeFocusAtFullMasks = v;
+                RefreshDifficultyHeader();
+            },
+            CancelTarget.ShadeMain);
+        if (fullMasksRow != null)
+        {
+            PlacePanelRow(fullMasksRow.GetComponent<RectTransform>(), HealingRowCount - 1, healingPitch, healingRowHeight);
+            healingRows.Add(fullMasksRow);
+            Describe(fullMasksRow, "Whether the Shade may channel Focus while on full masks. Off matches Hornet's own rule; on lets it spend SOUL purely to heal her.");
+        }
+
+        cursorY += panelsHeight + SectionSpacing;
+
+        // --- description footer ---------------------------------------------------------------
+        var footer = new GameObject("Description");
+        var footerRect = footer.AddComponent<RectTransform>();
+        footerRect.SetParent(content, false);
+        footerRect.anchorMin = new Vector2(0f, 1f);
+        footerRect.anchorMax = new Vector2(1f, 1f);
+        footerRect.pivot = new Vector2(0.5f, 1f);
+        footerRect.anchoredPosition = new Vector2(0f, -cursorY);
+        footerRect.sizeDelta = new Vector2(0f, footerHeight);
+        var footerText = footer.AddComponent<Text>();
+        ApplyTextStyle(footerText, toggleLabelStyle, TextAnchor.UpperLeft, DescriptionColor);
+        footerText.text = string.Empty;
+        footerText.raycastTarget = false;
+        footerText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        footerText.verticalOverflow = VerticalWrapMode.Truncate;
+        footerText.fontSize = Mathf.Max(12, Mathf.RoundToInt(footerText.fontSize * 0.78f));
+
+        var footerDriver = footer.AddComponent<MenuDescriptionDriver>();
+        footerDriver.target = footerText;
+        foreach (var entry in descriptions)
+            footerDriver.Register(entry.Key, entry.Value);
+        if (presetSelectable != null)
+            footerDriver.RegisterLive(presetSelectable, () => DifficultyPreset.IdentifyDescription(ModConfig.Instance));
+
         SetupButtonList(ms, selectables);
-        if (selectables.Count > 0)
+        ConfigureDifficultyMenuNavigation(headerButtons, damageRows, healingRows);
+        var paneSwitch = ms.gameObject.GetComponent<PaneSwitchDriver>() ?? ms.gameObject.AddComponent<PaneSwitchDriver>();
+        paneSwitch.leftColumn = damageRows;
+        paneSwitch.rightColumn = healingRows;
+        // Each prompt belongs to the column you have to be standing in for its button to do
+        // anything: RB lives on Damage and moves you off it, LB lives on Healing and moves you back.
+        paneSwitch.leftColumnPrompt = damagePromptGroup;
+        paneSwitch.rightColumnPrompt = healingPromptGroup;
+        // MenuButtonList.Start() flattens Explicit navigation back to a single up/down chain when
+        // Unity gets round to running it, so the grid is reapplied afterwards. Same reason and same
+        // mechanism as the Controls screen.
+        var navigationReapply = ms.gameObject.AddComponent<DeferredNavigationReapplyDriver>();
+        navigationReapply.Reapply = () => ConfigureDifficultyMenuNavigation(headerButtons, damageRows, healingRows);
+
+        // The preset row, top-left, is where the highlight lands on entry - it is the setting that
+        // decides every other one on the screen.
+        MenuSelectable firstHighlight = presetSelectable;
+        if (firstHighlight == null)
+            firstHighlight = headerButtons.Count > 0 ? headerButtons[0] : null;
+        if (firstHighlight == null)
+            firstHighlight = selectables.Count > 0 ? selectables[0] : ms.backButton;
+        if (firstHighlight != null)
         {
-            var first = selectables[0];
-            screenFirstSelectables[ms] = first;
-            ms.defaultHighlight = first;
+            screenFirstSelectables[ms] = firstHighlight;
+            ms.defaultHighlight = firstHighlight;
         }
-        else if (ms.backButton != null)
-        {
-            screenFirstSelectables[ms] = ms.backButton;
-            ms.defaultHighlight = ms.backButton;
-        }
+
         ConfigureBackButton(ms, CancelTarget.ShadeMain, ui);
-        LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+        difficultyController.RefreshAll();
+    }
+
+    /// <summary>
+    /// Draws the game's own shoulder-button glyph beside a panel heading, so the way across to the
+    /// other panel is visible rather than something the player has to guess.
+    /// <para>
+    /// A <c>ButtonSkin</c> is two halves, and drawing only the first is what produced the empty
+    /// boxes that got reported: on a keyboard the sprite is a blank key cap and the letter lives in
+    /// <c>symbol</c>, to be drawn on top of it. On a pad the sprite is the whole glyph and the
+    /// symbol is empty. <c>ActionButtonIconBase.GetButtonIcon</c> assigns both for exactly that
+    /// reason, and this does the same.
+    /// </para>
+    /// </summary>
+    private static CanvasGroup CreatePaneSwitchPrompt(RectTransform parent, HeroActionButton action, float headerHeight)
+    {
+        if (parent == null)
+        {
+            return null;
+        }
+
+        ButtonSkin skin = ResolvePaneButtonSkin(action);
+
+        bool hasSprite = skin != null && skin.sprite != null;
+        bool hasSymbol = skin != null && !string.IsNullOrWhiteSpace(skin.symbol);
+        if (!hasSprite && !hasSymbol)
+        {
+            return null;
+        }
+
+        float size = headerHeight * PanePromptHeightFraction;
+        // A wide key cap is drawn wide; everything else is square. Same three cases the game sizes
+        // its own prompt containers by.
+        float width = skin != null && skin.skinType == ButtonSkinType.WIDE ? size * 1.9f : size;
+
+        var prompt = new GameObject(action == HeroActionButton.MENU_PANE_LEFT ? "PaneLeftPrompt" : "PaneRightPrompt");
+        var rect = prompt.AddComponent<RectTransform>();
+        rect.SetParent(parent, false);
+        var layout = prompt.AddComponent<LayoutElement>();
+        layout.preferredWidth = width;
+        layout.preferredHeight = size;
+        layout.minWidth = width;
+        layout.minHeight = size;
+        layout.flexibleWidth = 0f;
+
+        // Faded rather than deactivated when it does not apply, so the heading beside it keeps the
+        // same place on screen instead of sliding as the highlight moves between columns.
+        var group = prompt.AddComponent<CanvasGroup>();
+        group.alpha = 0f;
+
+        if (hasSprite)
+        {
+            var image = prompt.AddComponent<Image>();
+            image.sprite = skin.sprite;
+            image.preserveAspect = true;
+            image.raycastTarget = false;
+        }
+
+        if (!hasSymbol)
+        {
+            return group;
+        }
+
+        // The symbol goes on its own child stretched over the cap, so it stays centred on the art
+        // whatever size the cap ended up.
+        var symbolObject = new GameObject("Symbol");
+        var symbolRect = symbolObject.AddComponent<RectTransform>();
+        symbolRect.SetParent(rect, false);
+        symbolRect.anchorMin = Vector2.zero;
+        symbolRect.anchorMax = Vector2.one;
+        symbolRect.offsetMin = Vector2.zero;
+        symbolRect.offsetMax = Vector2.zero;
+        var symbolText = symbolObject.AddComponent<Text>();
+        ApplyTextStyle(symbolText, sliderLabelStyle, TextAnchor.MiddleCenter, Color.white);
+        symbolText.alignment = TextAnchor.MiddleCenter;
+        symbolText.text = skin.symbol;
+        symbolText.raycastTarget = false;
+        symbolText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        // Sized to the cap rather than to the menu's body size, which would overflow a key cap.
+        symbolText.resizeTextForBestFit = true;
+        symbolText.resizeTextMinSize = 8;
+        symbolText.resizeTextMaxSize = Mathf.Max(9, Mathf.RoundToInt(size * 0.7f));
+        // No sprite behind it means nothing to sit inside, so it stands alone as plain text.
+        if (!hasSprite)
+        {
+            symbolText.resizeTextForBestFit = false;
+            ScaleTextElements(symbolObject, 0.7f);
+        }
+
+        return group;
+    }
+
+    /// <summary>Cycles to the next or previous difficulty preset and writes its whole value set.</summary>
+    private static void StepDifficultyPreset(int direction)
+    {
+        var presets = DifficultyPreset.All;
+        if (presets.Length == 0)
+            return;
+
+        var current = DifficultyPreset.Identify(ModConfig.Instance);
+        int index = current != null ? Array.IndexOf(presets, current) : -1;
+
+        // From a custom set, stepping either way lands on a real preset rather than needing two
+        // presses to leave a state that is not in the list.
+        int next = index < 0
+            ? (direction >= 0 ? 0 : presets.Length - 1)
+            : ((index + direction) % presets.Length + presets.Length) % presets.Length;
+
+        presets[next].ApplyTo(ModConfig.Instance);
+        ApplyShadeMaskFractionToLiveShade();
+    }
+
+    private static string DescribeShadeMaskSetting()
+    {
+        float fraction = Mathf.Clamp(ModConfig.Instance.shadeMaskFraction, ModConfig.MinShadeMaskFraction, 1f);
+        if (fraction <= ModConfig.MinShadeMaskFraction + 0.001f)
+            return "Always 1";
+        return Mathf.RoundToInt(fraction * 100f).ToString(CultureInfo.InvariantCulture) + "% of Hornet";
+    }
+
+    private static void StepShadeMaskFraction(int direction)
+    {
+        float fraction = Mathf.Clamp(ModConfig.Instance.shadeMaskFraction, ModConfig.MinShadeMaskFraction, 1f);
+        int minStep = Mathf.RoundToInt(ModConfig.MinShadeMaskFraction * 10f);
+        int steps = Mathf.RoundToInt(fraction * 10f) + (direction >= 0 ? 1 : -1);
+        if (steps > 10)
+            steps = minStep;
+        else if (steps < minStep)
+            steps = 10;
+        ModConfig.Instance.shadeMaskFraction = steps / 10f;
+        ApplyShadeMaskFractionToLiveShade();
+    }
+
+    /// <summary>
+    /// Resizes the Shade standing in the scene right now rather than waiting for it to respawn.
+    /// Nothing is saved here - the menu writes the config out when it closes.
+    /// </summary>
+    private static void ApplyShadeMaskFractionToLiveShade()
+    {
+        try
+        {
+            var shade = LegacyHelper.ShadeController.ActiveInstance;
+            if (shade != null)
+                shade.RefreshMaskCountFromConfig();
+        }
+        catch (Exception e)
+        {
+            LogMenuWarning($"Could not apply the Shade mask setting to the live Shade: {e}");
+        }
+    }
+
+    private static bool GetShadeAssistMode()
+    {
+        try
+        {
+            var shade = LegacyHelper.ShadeController.ActiveInstance;
+            if (shade != null)
+                return shade.GetAssistModeEnabled();
+
+            // No Shade in the scene - it is switched off, or this is not a gameplay scene. The
+            // persisted "can take damage" flag is the same state seen from the other side.
+            return !ShadeRuntime.PersistentState.CanTakeDamage;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void SetShadeAssistMode(bool enabled)
+    {
+        try
+        {
+            var shade = LegacyHelper.ShadeController.ActiveInstance;
+            if (shade != null)
+                shade.SetAssistMode(enabled);
+            else
+                LogMenuWarning("Assist mode was changed with no Shade in the scene; nothing to apply it to.");
+        }
+        catch (Exception e)
+        {
+            LogMenuWarning($"Could not change assist mode: {e}");
+        }
+    }
+
+    /// <summary>Re-reads the Difficulty screen's rows after something changed one of them.</summary>
+    private static void RefreshDifficultyHeader()
+    {
+        difficultyController?.RefreshAll();
+    }
+
+    /// <summary>
+    /// Explicit 2D navigation for the Difficulty screen: the header row moves Left/Right across
+    /// itself and Down into the panel below it, each panel moves Up/Down within itself, and the top
+    /// row of each panel moves Up back to the header. Same reasoning as the Controls screen - see
+    /// ConfigureControlsMenuNavigation for why automatic navigation is not enough here.
+    /// </summary>
+    private static void ConfigureDifficultyMenuNavigation(
+        List<MenuButton> headerButtons,
+        List<MenuSelectable> damageRows,
+        List<MenuSelectable> healingRows)
+    {
+        for (int i = 0; i < headerButtons.Count; i++)
+        {
+            var button = headerButtons[i];
+            if (button == null)
+                continue;
+            var nav = button.navigation;
+            nav.mode = Navigation.Mode.Explicit;
+            nav.selectOnLeft = i > 0 ? headerButtons[i - 1] : null;
+            nav.selectOnRight = i < headerButtons.Count - 1 ? headerButtons[i + 1] : null;
+            nav.selectOnUp = null;
+            // The first two cells sit over the Damage panel and the third over Healing, so Down
+            // lands under the cell rather than always in the left column.
+            var target = i >= 2 ? FirstOrNull(healingRows) : FirstOrNull(damageRows);
+            if (target == null)
+                target = FirstOrNull(healingRows);
+            if (target == null)
+                target = FirstOrNull(damageRows);
+            nav.selectOnDown = target;
+            button.navigation = nav;
+        }
+
+        MenuSelectable headerLeft = headerButtons.Count > 0 ? headerButtons[0] : null;
+        MenuSelectable headerRight = headerButtons.Count > 2 ? headerButtons[2] : headerLeft;
+
+        WireDifficultyColumn(damageRows, healingRows, headerLeft, isLeftColumn: true);
+        WireDifficultyColumn(healingRows, damageRows, headerRight, isLeftColumn: false);
+    }
+
+    private static MenuSelectable FirstOrNull(List<MenuSelectable> rows)
+        => rows != null && rows.Count > 0 ? rows[0] : null;
+
+    private static void WireDifficultyColumn(
+        List<MenuSelectable> column,
+        List<MenuSelectable> otherColumn,
+        MenuSelectable topRowUpFallback,
+        bool isLeftColumn)
+    {
+        for (int i = 0; i < column.Count; i++)
+        {
+            var row = column[i];
+            if (row == null)
+                continue;
+
+            var up = i > 0 ? column[i - 1] : topRowUpFallback;
+            var down = i < column.Count - 1 ? column[i + 1] : null;
+            var across = otherColumn.Count > 0 ? otherColumn[Mathf.Min(i, otherColumn.Count - 1)] : null;
+
+            var nav = row.navigation;
+            nav.mode = Navigation.Mode.Explicit;
+            nav.selectOnUp = up;
+            nav.selectOnDown = down;
+            // Left/Right on a slider row belongs to the slider - SliderMenuDriver consumes those
+            // moves to step the value - so crossing between panels is only wired for rows that are
+            // not sliders. Up/Down still reaches every row in both columns.
+            bool ownsHorizontal = row.GetComponent<SliderMenuDriver>() != null;
+            if (!ownsHorizontal)
+            {
+                if (isLeftColumn)
+                    nav.selectOnRight = across;
+                else
+                    nav.selectOnLeft = across;
+            }
+            row.navigation = nav;
+        }
     }
 
     /// <summary>
@@ -986,17 +1682,18 @@ public static partial class ShadeSettingsMenu
         float canvasWidth = msRect.rect.width;
         float canvasHeight = msRect.rect.height;
 
-        float horizontalMargin = Mathf.Clamp(canvasWidth * 0.035f, 48f, 140f);
-        float bottomMargin = Mathf.Clamp(canvasHeight * 0.08f, 56f, 132f);
-        float topMargin = Mathf.Clamp(canvasHeight * 0.115f, 72f, 168f);
+        float horizontalMargin = Mathf.Max(48f, canvasWidth * 0.05f);
+        float bottomMargin = canvasHeight * ListBottomMarginFraction;
+        // A little tighter than the other screens: this one carries the most rows, and its own
+        // heading line already provides some of the band.
+        float topMargin = canvasHeight * (ListTopMarginFraction - 0.03f);
 
         if (content != null)
         {
             content.offsetMin = new Vector2(horizontalMargin, bottomMargin);
             content.offsetMax = new Vector2(-horizontalMargin, -topMargin);
-            var anchored = content.anchoredPosition;
-            anchored.y = Mathf.Clamp(canvasHeight * 0.04f, 28f, 64f);
-            content.anchoredPosition = anchored;
+            // No upward nudge. It used to shove the whole screen up by a few percent of its height,
+            // which is dead space at the bottom now that the margins are proportional.
         }
 
         // content's own size doesn't depend on its children or on contentLayout (now
@@ -1038,7 +1735,9 @@ public static partial class ShadeSettingsMenu
         presetRect.sizeDelta = Vector2.zero;
         var presetLayout = presetRow.AddComponent<HorizontalLayoutGroup>();
         float presetSpacing = Mathf.Clamp(canvasWidth * 0.035f, 32f, 90f);
-        int sidePadding = Mathf.RoundToInt(Mathf.Clamp(canvasWidth * 0.04f, 36f, -80f));
+        // The maximum here used to be -80, below the minimum, so Mathf.Clamp returned -80 for
+        // every width and the preset row hung 80 units past each edge of the content it sits in.
+        int sidePadding = Mathf.RoundToInt(Mathf.Clamp(canvasWidth * 0.04f, 36f, 120f));
         float presetCardPreferredWidth = Mathf.Clamp(canvasWidth * 0.22f, 260f, 430f);
         float presetCardMinWidth = Mathf.Clamp(canvasWidth * 0.16f, 200f, presetCardPreferredWidth);
         presetLayout.spacing = presetSpacing;
@@ -1059,100 +1758,46 @@ public static partial class ShadeSettingsMenu
         presetLayoutElement.flexibleHeight = 0f;
         var presetCardHeights = new List<float>();
 
+        // One button per preset. The description that used to sit under each one is now shown in
+        // the footer for whichever is highlighted, the way every other screen here explains itself.
+        // That description was measured at presetCardPreferredWidth and stamped as an explicit
+        // height, so once the cards grew wider than that guess the wrapped lines no longer matched
+        // the space reserved and piled on top of each other. Nothing to measure, nothing to garble.
+        var presetDescriptions = new List<KeyValuePair<MenuSelectable, string>>();
+
         void AddPresetOption(string label, string description, System.Action onSubmit)
         {
-            var optionRoot = new GameObject(label.Replace(' ', '_'));
-            var optionRect = optionRoot.AddComponent<RectTransform>();
-            optionRect.SetParent(presetRow.transform, false);
-            optionRect.anchorMin = new Vector2(0f, 1f);
-            optionRect.anchorMax = new Vector2(1f, 1f);
-            optionRect.pivot = new Vector2(0.5f, 1f);
+            var selectable = CreateMenuButton(presetRow.transform, buttonTemplate, label, onSubmit, CancelTarget.ShadeMain);
+            if (selectable == null)
+            {
+                return;
+            }
 
-            var optionLayout = optionRoot.AddComponent<VerticalLayoutGroup>();
-            optionLayout.spacing = 18f;
-            optionLayout.padding = new RectOffset(12, 12, 0, 0);
-            optionLayout.childControlWidth = true;
-            optionLayout.childControlHeight = false;
-            optionLayout.childForceExpandWidth = true;
-            optionLayout.childForceExpandHeight = false;
-            optionLayout.childAlignment = TextAnchor.UpperCenter;
+            var layout = selectable.GetComponent<LayoutElement>();
+            if (layout != null)
+            {
+                layout.minWidth = presetCardMinWidth;
+                layout.preferredWidth = presetCardPreferredWidth;
+                layout.flexibleWidth = 1f;
+                layout.minHeight = ButtonRowHeight;
+                layout.preferredHeight = ButtonRowHeight;
+                layout.flexibleHeight = 0f;
+            }
 
-            var optionLayoutElement = optionRoot.AddComponent<LayoutElement>();
-            optionLayoutElement.minWidth = presetCardMinWidth;
-            optionLayoutElement.preferredWidth = presetCardPreferredWidth;
-            optionLayoutElement.flexibleWidth = 1f;
-            // Real value set below once the description's measured height is known -- see
-            // the comment further down for why. Must not compete for flexible space either
-            // (matches presetLayoutElement.flexibleHeight above).
-            optionLayoutElement.flexibleHeight = 0f;
+            var optionRect = selectable.GetComponent<RectTransform>();
+            if (optionRect != null)
+            {
+                optionRect.sizeDelta = new Vector2(optionRect.sizeDelta.x, ButtonRowHeight);
+            }
 
-            var selectable = CreateMenuButton(optionRoot.transform, buttonTemplate, label, onSubmit, CancelTarget.ShadeMain);
+            selectables.Add(selectable);
             if (selectable is MenuButton button)
             {
-                var layout = button.GetComponent<LayoutElement>();
-                if (layout != null)
-                {
-                    float buttonPadding = optionLayout.padding.left + optionLayout.padding.right;
-                    float buttonMinWidth = Mathf.Max(0f, presetCardMinWidth - buttonPadding);
-                    float buttonPreferredWidth = Mathf.Max(buttonMinWidth, presetCardPreferredWidth - buttonPadding);
-                    layout.minWidth = buttonMinWidth;
-                    layout.preferredWidth = buttonPreferredWidth;
-                    layout.flexibleWidth = 1f;
-                }
-                selectables.Add(button);
                 presetButtons.Add(button);
             }
-            else if (selectable != null)
-            {
-                selectables.Add(selectable);
-            }
 
-            var descriptionObject = new GameObject("Description");
-            var descriptionRect = descriptionObject.AddComponent<RectTransform>();
-            descriptionRect.SetParent(optionRoot.transform, false);
-            // Point anchor, not stretched: a stretched anchor's sizeDelta is an *offset*
-            // from the parent-derived size, not a size, so it can't be used to reliably
-            // force a known width before any layout pass has actually run (the parent's own
-            // size isn't settled yet either at this point in construction). optionLayout's
-            // childControlWidth=true will reset this to a proper stretch during the real
-            // layout pass regardless, so using a point anchor here only matters for the
-            // measurement below.
-            descriptionRect.anchorMin = new Vector2(0.5f, 1f);
-            descriptionRect.anchorMax = new Vector2(0.5f, 1f);
-            descriptionRect.pivot = new Vector2(0.5f, 1f);
-            var descriptionText = descriptionObject.AddComponent<Text>();
-            ApplyTextStyle(descriptionText, sliderLabelStyle, TextAnchor.UpperCenter, Color.white);
-            descriptionText.horizontalOverflow = HorizontalWrapMode.Wrap;
-            descriptionText.verticalOverflow = VerticalWrapMode.Overflow;
-            descriptionText.text = description;
-            ScaleTextElements(descriptionObject, 0.64f);
-
-            // Measured explicitly rather than left to a LayoutElement + ContentSizeFitter,
-            // which was the actual cause of the overlap: a LayoutElement on the same
-            // GameObject as a Text component takes priority over Text's own ILayoutElement
-            // height reporting (regardless of what value it holds, even -1/"unset"), so
-            // nothing upstream -- this card, then the preset row -- ever saw the *real*
-            // wrapped-text height; each just saw whatever the LayoutElement claimed (0, in
-            // the removed code). VerticalWrapMode.Overflow then let the text render past
-            // its own undersized RectTransform regardless, straight into whatever sits
-            // below. Measuring directly and stamping the result as an explicit size at
-            // every level (here, and again for the card and the preset row below) sidesteps
-            // that priority behaviour entirely instead of fighting it.
-            float usableWidth = Mathf.Max(0f, presetCardPreferredWidth - optionLayout.padding.left - optionLayout.padding.right);
-            descriptionRect.sizeDelta = new Vector2(usableWidth, 0f);
-            float descriptionHeight = descriptionText.preferredHeight;
-            descriptionRect.sizeDelta = new Vector2(usableWidth, descriptionHeight);
-
-            float cardHeight = ButtonRowHeight + optionLayout.spacing + descriptionHeight
-                + optionLayout.padding.top + optionLayout.padding.bottom;
-            optionLayoutElement.minHeight = cardHeight;
-            optionLayoutElement.preferredHeight = cardHeight;
-            // optionLayout (VerticalLayoutGroup on this card) has childControlHeight=false,
-            // and presetLayout (HorizontalLayoutGroup on the row) does too for its children
-            // -- neither one pushes a computed height down onto this RectTransform, so it
-            // has to be set directly or the card renders at whatever default size it had.
-            optionRect.sizeDelta = new Vector2(optionRect.sizeDelta.x, cardHeight);
-            presetCardHeights.Add(cardHeight);
+            presetDescriptions.Add(new KeyValuePair<MenuSelectable, string>(selectable, description));
+            presetCardHeights.Add(ButtonRowHeight);
         }
 
         AddPresetOption("Default", "Shade keeps the original keyboard layout. Hornet stays on controller and keyboard hotkeys stay disabled.", ApplyDefaultPreset);
@@ -1164,7 +1809,7 @@ public static partial class ShadeSettingsMenu
         // childControlHeight=true, so it *will* correctly apply whatever height
         // presetLayoutElement reports here -- no need to also set presetRect.sizeDelta
         // directly the way the card and description RectTransforms needed above.
-        float maxPresetCardHeight = presetCardHeights.Count > 0 ? Mathf.Max(presetCardHeights.ToArray()) : ButtonRowHeight * 1.75f;
+        float maxPresetCardHeight = presetCardHeights.Count > 0 ? Mathf.Max(presetCardHeights.ToArray()) : ButtonRowHeight;
         presetLayoutElement.minHeight = maxPresetCardHeight;
         presetLayoutElement.preferredHeight = maxPresetCardHeight;
         // presetLayout (HorizontalLayoutGroup, on this same row) has childControlHeight=
@@ -1189,6 +1834,9 @@ public static partial class ShadeSettingsMenu
         const float BindingRowHeight = 58f;
         float bindingRowSpacing = 18f;
 
+        // Reserved before the scroll view takes the rest, so the explanation line always has room.
+        float controlsFooterHeight = DescriptionRowHeight;
+
         var scrollWrapper = new GameObject("BindingScrollView");
         var scrollWrapperRect = scrollWrapper.AddComponent<RectTransform>();
         scrollWrapperRect.SetParent(content, false);
@@ -1198,7 +1846,7 @@ public static partial class ShadeSettingsMenu
         // Takes every bit of height content has left after info and the preset row -- this
         // is the section that actually benefits from more space, unlike the fixed header
         // above it.
-        float scrollWrapperHeight = Mathf.Max(0f, availableContentHeight - sectionCursorY);
+        float scrollWrapperHeight = Mathf.Max(0f, availableContentHeight - sectionCursorY - controlsFooterHeight - SectionSpacing);
         scrollWrapperRect.anchoredPosition = new Vector2(0f, -sectionCursorY);
         scrollWrapperRect.sizeDelta = new Vector2(0f, scrollWrapperHeight);
 
@@ -1321,8 +1969,6 @@ public static partial class ShadeSettingsMenu
             (ShadeAction.Teleport, "Teleport"),
             (ShadeAction.Focus, "Focus"),
             (ShadeAction.Sprint, "Sprint"),
-            (ShadeAction.AssistMode, "Assist Mode"),
-            (ShadeAction.ToggleAi, "Shade AI"),
             (ShadeAction.CommandShade, "Command Shade")
         };
 
@@ -1391,6 +2037,28 @@ public static partial class ShadeSettingsMenu
         viewportRect.offsetMax = needsScroll
             ? new Vector2(-(ScrollbarWidth + ScrollbarGap), 0f)
             : Vector2.zero;
+
+        var controlsFooter = new GameObject("Description");
+        var controlsFooterRect = controlsFooter.AddComponent<RectTransform>();
+        controlsFooterRect.SetParent(content, false);
+        controlsFooterRect.anchorMin = new Vector2(0f, 1f);
+        controlsFooterRect.anchorMax = new Vector2(1f, 1f);
+        controlsFooterRect.pivot = new Vector2(0.5f, 1f);
+        controlsFooterRect.anchoredPosition = new Vector2(0f, -(availableContentHeight - controlsFooterHeight));
+        controlsFooterRect.sizeDelta = new Vector2(0f, controlsFooterHeight);
+        var controlsFooterText = controlsFooter.AddComponent<Text>();
+        ApplyTextStyle(controlsFooterText, toggleLabelStyle, TextAnchor.UpperCenter, DescriptionColor);
+        controlsFooterText.text = string.Empty;
+        controlsFooterText.raycastTarget = false;
+        controlsFooterText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        controlsFooterText.verticalOverflow = VerticalWrapMode.Truncate;
+        controlsFooterText.fontSize = Mathf.Max(12, Mathf.RoundToInt(controlsFooterText.fontSize * 0.78f));
+        var controlsFooterDriver = controlsFooter.AddComponent<MenuDescriptionDriver>();
+        controlsFooterDriver.target = controlsFooterText;
+        foreach (var entry in presetDescriptions)
+        {
+            controlsFooterDriver.Register(entry.Key, entry.Value);
+        }
 
         SetupButtonList(ms, selectables);
         ConfigureControlsMenuNavigation(presetButtons, leftColumnButtons, rightColumnButtons);
@@ -1537,6 +2205,22 @@ public static partial class ShadeSettingsMenu
             var t = CreateToggle(content, buttonTemplate, label, value, onChange, CancelTarget.ShadeMain);
             if (t != null) selectables.Add(t);
         }
+
+        // Not a LabeledToggleDriver like the rows below it: turning the Shade off destroys the live
+        // instance and turning it back on respawns one, so it needs ShadeToggleDriver's path through
+        // LegacyHelper.SetShadeEnabled rather than a plain config write.
+        var shadeToggle = CreateMenuButton(content, buttonTemplate, GetShadeToggleLabel(), null, CancelTarget.ShadeMain);
+        if (shadeToggle is MenuButton shadeToggleButton)
+        {
+            var shadeDriver = shadeToggleButton.gameObject.AddComponent<ShadeToggleDriver>();
+            shadeDriver.Initialize(shadeToggleButton);
+            selectables.Add(shadeToggleButton);
+        }
+        else if (shadeToggle != null)
+        {
+            selectables.Add(shadeToggle);
+        }
+
         AddToggle("General Logs", ModConfig.Instance.logGeneral, v => ModConfig.Instance.logGeneral = v);
         AddToggle("Menu Logs", ModConfig.Instance.logMenu, v => ModConfig.Instance.logMenu = v);
         AddToggle("Shade Debug Logs", ModConfig.Instance.logShade, v => ModConfig.Instance.logShade = v);
@@ -1643,7 +2327,7 @@ public static partial class ShadeSettingsMenu
     /// and the "far too much detail" problem in the same move.
     /// </para>
     /// </summary>
-    private static void BuildShadeAiMenu(UIManager ui, MenuScreen ms, MenuSelectable sliderTemplate, MenuButton buttonTemplate)
+    private static void BuildShadeAiMenu(UIManager ui, MenuScreen ms, GameObject sliderTemplate, MenuButton buttonTemplate)
     {
         if (ms == null || sliderTemplate == null || buttonTemplate == null)
             return;
@@ -1702,7 +2386,7 @@ public static partial class ShadeSettingsMenu
     /// this screen its scrollbar-free layout for options nobody adjusts twice.
     /// </para>
     /// </summary>
-    private static void BuildShadeAiAdvancedMenu(UIManager ui, MenuScreen ms, MenuSelectable sliderTemplate, MenuButton buttonTemplate)
+    private static void BuildShadeAiAdvancedMenu(UIManager ui, MenuScreen ms, GameObject sliderTemplate, MenuButton buttonTemplate)
     {
         if (ms == null || sliderTemplate == null || buttonTemplate == null)
             return;
@@ -1802,7 +2486,18 @@ public static partial class ShadeSettingsMenu
         {
             if (previous != null && previous != mainScreen)
                 consumeNextToggle = true;
+        }
+        else if (target == loggingScreen)
+        {
+            // The Shade Enabled row lives here now, and SetShadeEnabled can also be called from
+            // outside this menu, so its label is re-read whenever the screen comes up.
+            consumeNextToggle = false;
             NotifyShadeToggleChanged();
+        }
+        else if (target == difficultyScreen)
+        {
+            consumeNextToggle = false;
+            difficultyController?.HandleScreenShown();
         }
         else if (target == charmsScreen)
         {

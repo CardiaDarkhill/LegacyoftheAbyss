@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using System;
 using UnityEngine;
 public partial class SimpleHUD
@@ -21,9 +21,9 @@ public partial class SimpleHUD
 
         if (!hasExplicitShadeStats)
         {
-            shadeMax = (playerData.maxHealth + 1) / 2;
+            shadeMax = ModConfig.ComputeShadeMaskCount(playerData.maxHealth);
             shadeLifebloodMax = 0;
-            shadeHealth = (playerData.health + 1) / 2;
+            shadeHealth = Mathf.Min(ModConfig.ComputeShadeMaskCount(playerData.health), shadeMax);
             shadeLifeblood = 0;
             suppressNextDamageSound = true;
         }
@@ -36,7 +36,7 @@ public partial class SimpleHUD
         int newHornet = playerData.health;
         if (!hasExplicitShadeStats)
         {
-            int newMax = (newHornetMax + 1) / 2;
+            int newMax = ModConfig.ComputeShadeMaskCount(newHornetMax);
             if (newMax != shadeMax)
             {
                 shadeMax = newMax;

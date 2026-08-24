@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 
 using System;
 using System.Collections.Generic;
@@ -28,11 +28,42 @@ namespace LegacyoftheAbyss.Shade.Ai
         /// <summary>How far ahead to look. Beyond this the detour is guesswork anyway.</summary>
         private const float MaxProbeDistance = 7f;
 
+        /// <summary>
+        /// How far a detour has to be clear before it is worth taking - much less than
+        /// <see cref="MaxProbeDistance"/>.
+        /// <para>
+        /// Both were the same number, and that is what made the Shade route around a ledge as though
+        /// it were a building. Near anything wide, a shallow detour is blocked somewhere in the next
+        /// seven units even though its first two are open, so the fan rejected every shallow heading
+        /// and settled on the perpendicular one - which reads as "it went to the far side of the
+        /// screen to get past a platform". A detour only has to clear the corner in front of it; the
+        /// heading is re-derived every frame, so what lies beyond is next frame's problem.
+        /// </para>
+        /// </summary>
+        private const float DetourProbeDistance = 2.5f;
+
         /// <summary>How far off the direct heading each fan step turns.</summary>
         private const float FanStepDegrees = 22.5f;
 
-        /// <summary>How far round the fan may reach - just past a right angle each way.</summary>
-        private const int FanSteps = 5;
+        /// <summary>
+        /// How far round the fan may reach. Ninety degrees - straight along the face of whatever is
+        /// in the way - and no further: past that the Shade is heading away from where it wants to
+        /// be, which is a decision for <see cref="TrackProgress"/> to force after the shallow ways
+        /// round have actually been shown not to work, not one to take on the first blocked frame.
+        /// </summary>
+        private const int FanSteps = 4;
+
+        /// <summary>
+        /// How long the direct line has to stay clear before a detour is dropped.
+        /// <para>
+        /// This used to be <see cref="SideCommitSeconds"/>, which is tuned for something else
+        /// entirely - how long to stay committed to a side so the Shade does not vibrate between two
+        /// equal detours. Spending that long carrying on sideways after the way ahead had opened is
+        /// the rest of the overshoot. Long enough to ignore a single clear frame at a ledge lip,
+        /// short enough not to sail past the gap.
+        /// </para>
+        /// </summary>
+        private const float DirectClearSeconds = 0.15f;
 
         /// <summary>
         /// How long a chosen way round an obstacle stands before the other side may be considered.
@@ -65,6 +96,9 @@ namespace LegacyoftheAbyss.Shade.Ai
         private float progressDistance = float.MaxValue;
         private float progressCheckedAt;
 
+        /// <summary>When the direct line last became clear, or 0 while it is blocked.</summary>
+        private float directClearSince;
+
         /// <summary>True when the last call had to route around something. Diagnostics only.</summary>
         internal bool LastPathBlocked { get; private set; }
 
@@ -79,6 +113,7 @@ namespace LegacyoftheAbyss.Shade.Ai
             headingCommitUntil = 0f;
             progressDistance = float.MaxValue;
             progressCheckedAt = 0f;
+            directClearSince = 0f;
             LastPathBlocked = false;
             LastPathStuck = false;
         }
@@ -116,6 +151,7 @@ namespace LegacyoftheAbyss.Shade.Ai
 
             Vector2 direct = toDesired / distance;
             float probe = Mathf.Min(distance, MaxProbeDistance);
+            float detourProbe = Mathf.Min(distance, DetourProbeDistance);
 
             TrackProgress(distance, time);
 
@@ -123,12 +159,22 @@ namespace LegacyoftheAbyss.Shade.Ai
             {
                 // The direct line is open. Only drop the detour once it has been open long enough to
                 // trust - a single clear frame at a ledge lip is how the bouncing started.
-                if (time >= headingCommitUntil)
+                if (directClearSince <= 0f)
+                {
+                    directClearSince = time;
+                }
+
+                if (time - directClearSince >= DirectClearSeconds)
                 {
                     committedSide = 0;
                     committedHeading = Vector2.zero;
+                    headingCommitUntil = 0f;
                     return direct;
                 }
+            }
+            else
+            {
+                directClearSince = 0f;
             }
 
             LastPathBlocked = true;
@@ -136,12 +182,12 @@ namespace LegacyoftheAbyss.Shade.Ai
             // Keep following a detour that is still viable rather than re-deriving one.
             if (committedHeading.sqrMagnitude > 0.0001f
                 && time < headingCommitUntil
-                && !Blocked(origin, committedHeading, probe, bodyRadius, threats, threatStandoff))
+                && !Blocked(origin, committedHeading, detourProbe, bodyRadius, threats, threatStandoff))
             {
                 return committedHeading;
             }
 
-            int preferred = ResolvePreferredSide(origin, direct, probe, bodyRadius, time, threats, threatStandoff);
+            int preferred = ResolvePreferredSide(origin, direct, detourProbe, bodyRadius, time, threats, threatStandoff);
 
             for (int step = 1; step <= FanSteps; step++)
             {
@@ -153,7 +199,7 @@ namespace LegacyoftheAbyss.Shade.Ai
                 {
                     int side = i == 0 ? preferred : -preferred;
                     Vector2 candidate = Rotate(direct, angle * side);
-                    if (Blocked(origin, candidate, probe, bodyRadius, threats, threatStandoff))
+                    if (Blocked(origin, candidate, detourProbe, bodyRadius, threats, threatStandoff))
                     {
                         continue;
                     }

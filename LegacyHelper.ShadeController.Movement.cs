@@ -103,12 +103,9 @@ public partial class LegacyHelper
             if (hazardCooldown > 0f) hazardCooldown = Mathf.Max(0f, hazardCooldown - Time.deltaTime);
             if (hurtCooldown > 0f) hurtCooldown = Mathf.Max(0f, hurtCooldown - Time.deltaTime);
             if (damageStaggerTimer > 0f) damageStaggerTimer = Mathf.Max(0f, damageStaggerTimer - Time.deltaTime);
-            if (ShadeInput.WasActionPressed(ShadeAction.AssistMode))
-            {
-                SetAssistModeEnabled(!assistModeEnabled);
-            }
-
-            HandleShadeAiToggleInput();
+            // Assist mode and the AI switch used to be polled here as rebindable hotkeys. Both now
+            // live only in the pause menu - assist mode on the Difficulty screen, the AI on its own
+            // screen - so there is nothing to read every frame and no binding to mis-hit mid-fight.
 
             if (sceneProtectionActive)
             {
@@ -327,6 +324,15 @@ public partial class LegacyHelper
         /// Update.
         /// </para>
         /// </summary>
+        /// <summary>Whether assist mode is on right now. Read by the Difficulty menu's toggle.</summary>
+        internal bool GetAssistModeEnabled() => assistModeEnabled;
+
+        /// <summary>
+        /// Public face of <see cref="SetAssistModeEnabled"/>, for the Difficulty menu. Assist mode
+        /// used to be reachable only through a hotkey, which is why the setter was private.
+        /// </summary>
+        internal void SetAssistMode(bool enabled) => SetAssistModeEnabled(enabled);
+
         private void SetAssistModeEnabled(bool enabled)
         {
             if (assistModeEnabled == enabled)

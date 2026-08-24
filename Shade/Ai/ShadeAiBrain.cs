@@ -545,9 +545,11 @@ namespace LegacyoftheAbyss.Shade.Ai
         /// <summary>
         /// Whether a Focus is worth starting.
         /// <para>
-        /// Note the Shade has to be damaged either way: <c>HandleFocus</c> refuses to channel at full
-        /// health, and healing Hornet is a side effect of the Shade healing itself while she is
-        /// nearby, not something Focus can be aimed at her on its own.
+        /// Note this can return true for a Shade on full masks, when only Hornet is hurt. Whether
+        /// anything comes of that is <c>HandleFocus</c>'s call, not the brain's: by default it
+        /// refuses to channel at full health, and only the "Full Masks Focus" difficulty setting
+        /// lets the channel start purely to heal her. Healing Hornet is a side effect of the Shade
+        /// healing itself while she is nearby, not something Focus can be aimed at her on its own.
         /// </para>
         /// </summary>
         internal static bool ShouldHeal(in ShadeAiSnapshot snapshot)

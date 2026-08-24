@@ -7,6 +7,13 @@ controls it; the reasoning belongs in the commit and the code.
 
 ### Fixed
 
+- The charm menu no longer runs its text out under the frame, no longer shows the notch cost of a
+  charm you have not discovered, and draws undiscovered charms at a sensible size.
+- Charm menu headings are no longer shouted in full capitals.
+- The charm menu names every way to equip the charm you are looking at - the Shade's key and
+  Hornet's button - rather than only the Shade's first binding, and calls the mouse buttons
+  LMB/RMB/MMB.
+- The Shade takes the short way round a ledge instead of crossing the room to get past it.
 - Boss attacks that mark an area now hit whoever is standing in it — the Shade, Hornet, or both.
   Previously an attack the Shade walked into would drag Hornet across the arena into it.
   `shadeBossAttackSharingEnabled` turns this off.
@@ -28,7 +35,7 @@ controls it; the reasoning belongs in the commit and the code.
 
 ### Added
 
-- The Shade can fight on its own: press **9**, or use the new **Shade AI** options screen. It picks a
+- The Shade can fight on its own: turn on **Shade AI** on its own options screen. It picks a
   target, closes on it, attacks, casts only where a spell would hit a boss or several enemies at
   once, steps out of what would hurt it, and heals you both when either of you is low. It can be
   killed, so you will still need to revive it.
@@ -49,6 +56,34 @@ controls it; the reasoning belongs in the commit and the code.
   thirty seconds of rolling samples and a log of what happened, into
   `BepInEx/config/LegacyoftheAbyss/bug_reports/`. Nothing is uploaded anywhere. Mod exceptions file
   one automatically.
+- Difficulty presets: **Easy** plays vanilla Silksong with the Shade's help, **Normal** weakens both
+  of you to keep the vanilla difficulty curve, and **Abyss** asks for sharper combat than vanilla.
+- **Assist Mode** now has a switch on the Difficulty screen, and the Shade's damage is split into
+  **Shade Nail** and **Shade Spells** with Hornet's split into **Hornet Needle** and
+  **Hornet Silk Skills**.
+- **Shade Masks** sets how many masks the Shade carries as a share of Hornet's, in tenths, and
+  **Full Masks Focus** lets it Focus while undamaged so it can still heal her.
+
+### Changed
+
+- The Difficulty screen is laid out as Damage and Healing side by side, uses the game's own sliders
+  instead of plain grey ones, and explains whichever setting is highlighted.
+- Assist Mode and Shade AI no longer have key bindings; both are switches in the menus. **Shade
+  Enabled** has moved to Debug Options.
+- The mod's menu screens now fill the display rather than the middle two thirds of it, sitting in a
+  centred column with a clear band above them. The Controls screen no longer needs a scrollbar.
+- Pressing a toggle or a preset no longer throws the highlight back to the top of the screen, and
+  backing out of a sub-menu returns to the row that opened it.
+- On the Difficulty screen, the shoulder buttons move between the Damage and Healing columns, which
+  the sliders' own left/right could not. The prompt shows only while the button would actually move
+  you.
+- The Controls screen explains the highlighted preset at the bottom of the screen like every other
+  screen, instead of printing all four descriptions at once.
+- Hovering a row with the mouse now selects it, so the selection markers and the explanation line
+  follow the cursor instead of staying on whichever row the screen opened with.
+- Typing a bug report no longer reaches the game: the keyboard is locked out for the whole message,
+  so a report written while paused stops changing settings, and one written in play stops queueing
+  moves for Hornet to act out on submit.
 
 ### Note
 

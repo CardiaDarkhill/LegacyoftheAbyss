@@ -376,6 +376,47 @@ public partial class LegacyHelper
             shamanMovesetActive = active;
         }
 
+        /// <summary>
+        /// Re-derives the Shade's mask count from Hornet's after <see cref="ModConfig.shadeMaskFraction"/>
+        /// changes, and resizes it in place.
+        /// <para>
+        /// Awake's own derivation only ever raises the maximum - it has to, or loading a save whose
+        /// Shade out-levels the current playerData would shrink it. That makes it useless for a
+        /// setting the player can turn *down* in the pause menu, which is why this exists as a
+        /// separate, deliberately unconditional path rather than as a call back into Awake.
+        /// </para>
+        /// </summary>
+        internal void RefreshMaskCountFromConfig()
+        {
+            int hornetMax;
+            try
+            {
+                var pd = GameManager.instance != null ? GameManager.instance.playerData : null;
+                if (pd == null)
+                {
+                    return;
+                }
+
+                hornetMax = pd.maxHealth;
+            }
+            catch
+            {
+                return;
+            }
+
+            int derived = ModConfig.ComputeShadeMaskCount(hornetMax);
+            if (derived <= 0 || derived == baseShadeMaxHP)
+            {
+                return;
+            }
+
+            baseShadeMaxHP = derived;
+            // Everything downstream of the base max - the charm bonus, Joni's lifeblood conversion,
+            // clamping current health into the new ceiling, the HUD and persistence - is already
+            // handled here, so this is the one call needed rather than a second copy of that maths.
+            ApplyCharmHealthModifiers();
+        }
+
         internal void AddMaxHpBonus(int amount, bool fillNew)
         {
             int prevNormalMax = Mathf.Max(0, shadeMaxHP);

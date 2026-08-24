@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using System;
 using System.Collections;
 using System.Reflection;
@@ -756,6 +756,362 @@ public static partial class ShadeSettingsMenu
     }
 
     /// <summary>
+    /// A row whose value is chosen from a short list rather than dragged on a slider: the difficulty
+    /// preset, assist mode, the Shade's mask share. Submit advances by one, wrapping.
+    /// <para>
+    /// Rendered as a menu button reading <c>"Label: Value"</c>, the same shape
+    /// <see cref="LabeledToggleDriver"/> uses, because these three sit in one row across the top of
+    /// the Difficulty screen where a slider would not fit and would read as three different kinds of
+    /// control for three settings of the same weight.
+    /// </para>
+    /// <para>
+    /// Deliberately not an <c>IMoveHandler</c>, unlike <see cref="SliderMenuDriver"/>. These three
+    /// sit side by side, so Left/Right has to move between them - and Unity delivers a move event to
+    /// every handler on the object, <c>Selectable.OnMove</c> included, with no way for one to
+    /// suppress the other. A stepper that also read Left/Right would change its value and jump to
+    /// the next cell on the same press.
+    /// </para>
+    /// </summary>
+    private sealed class LabeledStepperDriver : MonoBehaviour
+    {
+        private MenuButton button;
+        private string label;
+        private Func<string> describeValue;
+        private Action<int> step;
+
+        public void Initialize(MenuButton menuButton, string labelText, Func<string> valueText, Action<int> stepBy)
+        {
+            button = menuButton;
+            label = labelText;
+            describeValue = valueText;
+            step = stepBy;
+            button.OnSubmitPressed.RemoveAllListeners();
+            button.OnSubmitPressed.AddListener(() => Step(1));
+            UpdateLabel();
+        }
+
+        private void OnEnable()
+        {
+            UpdateLabel();
+        }
+
+        private void Step(int direction)
+        {
+            try
+            {
+                step?.Invoke(direction);
+            }
+            catch (Exception e)
+            {
+                LogMenuWarning($"Stepper '{label}' threw: {e}");
+            }
+
+            // Every stepper on the Difficulty screen can change what another one reads - applying a
+            // preset rewrites the sliders, and editing a slider turns the preset into Custom - so
+            // the whole screen refreshes rather than just this row.
+            difficultyController?.RefreshAll();
+        }
+
+        public void UpdateLabel()
+        {
+            if (button == null || label == null)
+                return;
+
+            string value;
+            try
+            {
+                value = describeValue?.Invoke() ?? string.Empty;
+            }
+            catch (Exception e)
+            {
+                LogMenuWarning($"Stepper '{label}' could not describe its value: {e}");
+                return;
+            }
+
+            SetSelectableLabelText(button.gameObject, label + ": " + value);
+        }
+    }
+
+    /// <summary>
+    /// Keeps the Difficulty screen agreeing with itself.
+    /// <para>
+    /// Its rows are not independent: choosing a preset rewrites every slider on the screen, and
+    /// nudging any one of those sliders turns the preset row into "Custom". Nothing here owns state -
+    /// every row reads <see cref="ModConfig"/> when asked to refresh - so a refresh is always
+    /// correct regardless of what changed it, including a change made from outside this screen.
+    /// </para>
+    /// </summary>
+    private sealed class DifficultyMenuController : MonoBehaviour
+    {
+        private readonly List<LabeledStepperDriver> steppers = new();
+        private readonly List<Action> sliderRefreshers = new();
+
+        /// <summary>
+        /// Guards the loop a refresh would otherwise re-enter: pushing a preset's value into a slider
+        /// fires its onValueChanged, whose handler asks for a refresh so the preset row can go to
+        /// Custom if the value was edited by hand. Without this the outer pass would restart once per
+        /// remaining stale row. It terminates either way - each pass settles at least one row - but
+        /// there is no reason to do the work.
+        /// </summary>
+        private bool refreshing;
+
+        public void RegisterStepper(LabeledStepperDriver stepper)
+        {
+            if (stepper != null && !steppers.Contains(stepper))
+                steppers.Add(stepper);
+        }
+
+        public void RegisterSliderRefresh(Action refresh)
+        {
+            if (refresh != null)
+                sliderRefreshers.Add(refresh);
+        }
+
+        public void HandleScreenShown() => RefreshAll();
+
+        public void RefreshAll()
+        {
+            if (refreshing)
+            {
+                return;
+            }
+
+            refreshing = true;
+            try
+            {
+                for (int i = sliderRefreshers.Count - 1; i >= 0; i--)
+                {
+                    try { sliderRefreshers[i]?.Invoke(); }
+                    catch (Exception e) { LogMenuWarning($"Difficulty slider refresh threw: {e}"); }
+                }
+
+                for (int i = steppers.Count - 1; i >= 0; i--)
+                {
+                    var stepper = steppers[i];
+                    if (stepper == null)
+                    {
+                        steppers.RemoveAt(i);
+                        continue;
+                    }
+
+                    stepper.UpdateLabel();
+                }
+            }
+            finally
+            {
+                refreshing = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Makes hovering a row select it.
+    /// <para>
+    /// Unity selects on click, not on hover: <c>Selectable.OnPointerEnter</c> only sets the
+    /// highlighted *tint*, leaving <c>currentSelectedGameObject</c> where it was. Everything this
+    /// menu shows about the current row hangs off the selection - the fleurs either side of it, the
+    /// explanation at the bottom of the screen, which column the shoulder prompts belong to - so
+    /// with the mouse all of it stayed pinned to whichever row the screen opened on while the cursor
+    /// moved over everything else.
+    /// </para>
+    /// <para>
+    /// Selecting on hover is also how the game's own menus behave, so this is the behaviour a player
+    /// arrives expecting.
+    /// </para>
+    /// </summary>
+    private sealed class PointerSelectDriver : MonoBehaviour, IPointerEnterHandler
+    {
+        public Selectable target;
+
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            var selectable = target != null ? target : GetComponent<Selectable>();
+            if (selectable == null || !selectable.IsInteractable())
+            {
+                return;
+            }
+
+            var eventSystem = EventSystem.current;
+            if (eventSystem == null || eventSystem.currentSelectedGameObject == selectable.gameObject)
+            {
+                return;
+            }
+
+            eventSystem.SetSelectedGameObject(selectable.gameObject);
+            UIManager.HighlightSelectableNoSound(selectable);
+        }
+    }
+
+    /// <summary>
+    /// Moves the highlight between two columns of rows on a shoulder-button press.
+    /// <para>
+    /// The Difficulty screen's rows are almost all sliders, and a slider row eats Left and Right to
+    /// step its own value - so there was no way to reach the Healing column from the Damage one at
+    /// all. The inventory already solves this exact problem with its pane buttons, so this borrows
+    /// them: the same two actions, and the same glyphs drawn beside each column heading.
+    /// </para>
+    /// <para>
+    /// Polls <c>PaneLeft</c>/<c>PaneRight</c> off the game's own <c>InputHandler</c> rather than
+    /// listening for a UI event, because these arrive as PlayerActions and nothing routes them into
+    /// a MenuScreen. Held state is tracked here so one press moves one column.
+    /// </para>
+    /// </summary>
+    private sealed class PaneSwitchDriver : MonoBehaviour
+    {
+        public List<MenuSelectable> leftColumn;
+        public List<MenuSelectable> rightColumn;
+
+        /// <summary>
+        /// Shown only while the highlight is in the column it would move you out of - a prompt for a
+        /// button that would do nothing is worse than no prompt.
+        /// </summary>
+        public CanvasGroup leftColumnPrompt;
+        public CanvasGroup rightColumnPrompt;
+
+        private bool leftWasPressed;
+        private bool rightWasPressed;
+
+        private void OnDisable()
+        {
+            leftWasPressed = false;
+            rightWasPressed = false;
+        }
+
+        private void OnEnable()
+        {
+            UpdatePromptVisibility();
+        }
+
+        private void UpdatePromptVisibility()
+        {
+            var eventSystem = EventSystem.current;
+            var current = eventSystem != null ? eventSystem.currentSelectedGameObject : null;
+
+            SetVisible(leftColumnPrompt, current != null && rightColumn != null && rightColumn.Count > 0 && Contains(leftColumn, current));
+            SetVisible(rightColumnPrompt, current != null && leftColumn != null && leftColumn.Count > 0 && Contains(rightColumn, current));
+        }
+
+        private static void SetVisible(CanvasGroup group, bool visible)
+        {
+            if (group == null)
+            {
+                return;
+            }
+
+            float target = visible ? 1f : 0f;
+            if (!Mathf.Approximately(group.alpha, target))
+            {
+                group.alpha = target;
+            }
+        }
+
+        private static bool Contains(List<MenuSelectable> column, GameObject candidate)
+        {
+            if (column == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < column.Count; i++)
+            {
+                if (column[i] != null && column[i].gameObject == candidate)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void Update()
+        {
+            HeroActions actions;
+            try
+            {
+                var handler = HornetInput.FindHandler();
+                actions = handler != null ? handler.inputActions : null;
+            }
+            catch
+            {
+                return;
+            }
+
+            if (actions == null)
+            {
+                return;
+            }
+
+            bool leftHeld = actions.PaneLeft.IsPressed;
+            bool rightHeld = actions.PaneRight.IsPressed;
+
+            if (rightHeld && !rightWasPressed)
+            {
+                MoveTo(rightColumn, leftColumn);
+            }
+            else if (leftHeld && !leftWasPressed)
+            {
+                MoveTo(leftColumn, rightColumn);
+            }
+
+            leftWasPressed = leftHeld;
+            rightWasPressed = rightHeld;
+
+            UpdatePromptVisibility();
+        }
+
+        /// <summary>
+        /// Highlights <paramref name="target"/>'s row at the same index as the highlighted row in
+        /// <paramref name="source"/>, clamped when the columns are different lengths. Does nothing
+        /// when the highlight is not in the source column, so pressing the button that points at the
+        /// column you are already in is a no-op rather than a jump to its first row.
+        /// </summary>
+        private void MoveTo(List<MenuSelectable> target, List<MenuSelectable> source)
+        {
+            if (target == null || target.Count == 0 || source == null)
+            {
+                return;
+            }
+
+            var eventSystem = EventSystem.current;
+            var current = eventSystem != null ? eventSystem.currentSelectedGameObject : null;
+            if (current == null)
+            {
+                return;
+            }
+
+            int index = -1;
+            for (int i = 0; i < source.Count; i++)
+            {
+                if (source[i] != null && source[i].gameObject == current)
+                {
+                    index = i;
+                    break;
+                }
+            }
+
+            if (index < 0)
+            {
+                return;
+            }
+
+            var destination = target[Mathf.Min(index, target.Count - 1)];
+            if (destination == null)
+            {
+                return;
+            }
+
+            var interactable = destination.GetFirstInteractable();
+            if (interactable == null)
+            {
+                return;
+            }
+
+            eventSystem.SetSelectedGameObject(interactable.gameObject);
+            UIManager.HighlightSelectableNoSound(interactable);
+        }
+    }
+
+    /// <summary>
     /// Shows a line of explanation for whichever row is highlighted.
     /// <para>
     /// Polls the EventSystem for the same reason <see cref="ScrollIntoViewDriver"/> does: rows are
@@ -767,7 +1123,17 @@ public static partial class ShadeSettingsMenu
         public Text target;
 
         private readonly Dictionary<GameObject, string> descriptions = new Dictionary<GameObject, string>();
+
+        /// <summary>
+        /// Rows whose explanation depends on their own current value - the Difficulty screen's
+        /// preset row, which describes whichever preset is selected. Looked up every frame the row
+        /// is highlighted rather than cached, because stepping the preset does not change the
+        /// selection and so would not otherwise re-run the lookup.
+        /// </summary>
+        private readonly Dictionary<GameObject, Func<string>> liveDescriptions = new Dictionary<GameObject, Func<string>>();
+
         private GameObject lastSelected;
+        private string lastText;
 
         public void Register(MenuSelectable selectable, string description)
         {
@@ -779,10 +1145,21 @@ public static partial class ShadeSettingsMenu
             descriptions[selectable.gameObject] = description;
         }
 
+        public void RegisterLive(MenuSelectable selectable, Func<string> description)
+        {
+            if (selectable == null || description == null)
+            {
+                return;
+            }
+
+            liveDescriptions[selectable.gameObject] = description;
+        }
+
         private void OnEnable()
         {
             // Force a refresh: the screen may be reopened with the same row highlighted.
             lastSelected = null;
+            lastText = null;
         }
 
         private void Update()
@@ -794,15 +1171,33 @@ public static partial class ShadeSettingsMenu
 
             var eventSystem = EventSystem.current;
             var selected = eventSystem != null ? eventSystem.currentSelectedGameObject : null;
-            if (selected == lastSelected)
+            bool isLive = selected != null && liveDescriptions.ContainsKey(selected);
+            if (selected == lastSelected && !isLive)
             {
                 return;
             }
 
             lastSelected = selected;
-            target.text = selected != null && descriptions.TryGetValue(selected, out var description)
-                ? description
-                : string.Empty;
+
+            string text = string.Empty;
+            if (selected != null)
+            {
+                if (liveDescriptions.TryGetValue(selected, out var live))
+                {
+                    try { text = live() ?? string.Empty; }
+                    catch (Exception e) { LogMenuWarning($"Live description threw: {e}"); }
+                }
+                else if (descriptions.TryGetValue(selected, out var description))
+                {
+                    text = description;
+                }
+            }
+
+            if (!string.Equals(text, lastText, StringComparison.Ordinal))
+            {
+                lastText = text;
+                target.text = text;
+            }
         }
     }
 

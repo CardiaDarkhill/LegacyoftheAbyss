@@ -3,7 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using BepInEx.Logging;
+using InControl;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 
 namespace LegacyoftheAbyss.Diagnostics
@@ -107,6 +109,11 @@ namespace LegacyoftheAbyss.Diagnostics
         private bool _freezeActive;
         private bool _restoreAcceptingInput = true;
         private bool _restorePauseAllowed = true;
+        // Both only ever hold something while the overlay is composing, and both are restored by
+        // RestoreGameInput - which OnDestroy also calls, so a plugin reload mid-report cannot leave
+        // the game with no input.
+        private bool _inputManagerSuspended;
+        private EventSystem? _suspendedEventSystem;
 
         private string? _toastText;
         private float _toastUntil;
@@ -692,6 +699,42 @@ namespace LegacyoftheAbyss.Diagnostics
             catch
             {
             }
+
+            // InputHandler.acceptingInput above only gates its *gameplay* branch. It was never
+            // enough on its own: InControl keeps polling the keyboard either way, so every letter
+            // typed into a report was also read as a game binding. Reported as Hornet acting out
+            // the message the moment it was submitted, and as a paused report changing settings
+            // under the cursor with each keystroke.
+            //
+            // Two more switches close that. InControl's own enable flag stops the PlayerActions
+            // updating at all, which is what the hero's queued-input state and the pause menu's
+            // navigation both read; disabling the EventSystem stops anything driven by Unity's
+            // input modules, which is the other half of a menu responding while the overlay owns
+            // the keyboard. Both are pure on/off switches, so restoring them cannot lose state.
+            try
+            {
+                if (!_inputManagerSuspended && InputManager.Enabled)
+                {
+                    InputManager.Enabled = false;
+                    _inputManagerSuspended = true;
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                var eventSystem = EventSystem.current;
+                if (eventSystem != null && eventSystem.enabled)
+                {
+                    _suspendedEventSystem = eventSystem;
+                    eventSystem.enabled = false;
+                }
+            }
+            catch
+            {
+            }
         }
 
         /// <summary>
@@ -714,6 +757,36 @@ namespace LegacyoftheAbyss.Diagnostics
             }
             catch
             {
+            }
+
+            try
+            {
+                if (_inputManagerSuspended)
+                {
+                    InputManager.Enabled = true;
+                }
+            }
+            catch
+            {
+            }
+            finally
+            {
+                _inputManagerSuspended = false;
+            }
+
+            try
+            {
+                if (_suspendedEventSystem != null)
+                {
+                    _suspendedEventSystem.enabled = true;
+                }
+            }
+            catch
+            {
+            }
+            finally
+            {
+                _suspendedEventSystem = null;
             }
 
             try

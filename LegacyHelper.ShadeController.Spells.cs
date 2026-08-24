@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -305,7 +305,7 @@ public partial class LegacyHelper
             int nail = Mathf.Max(1, GetHornetNailDamage());
             float mult = upgraded ? baseMult : baseMult * 0.7f; // Soul variant = 30% less
             mult *= charmSpellDamageMultiplier;
-            int dmg = Mathf.RoundToInt(nail * mult * ModConfig.Instance.shadeDamageMultiplier);
+            int dmg = Mathf.RoundToInt(nail * mult * ModConfig.Instance.shadeSpellDamageMultiplier);
             return Mathf.Max(1, dmg);
         }
 

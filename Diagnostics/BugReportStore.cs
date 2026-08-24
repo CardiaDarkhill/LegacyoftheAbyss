@@ -357,6 +357,11 @@ namespace LegacyoftheAbyss.Diagnostics
                 Row(builder, "Recent scenes", string.Join(" -> ", state.SceneHistory));
             }
 
+            if (!string.IsNullOrEmpty(state.MenuSliderTemplate))
+            {
+                Row(builder, "Menu slider template", state.MenuSliderTemplate);
+            }
+
             builder.AppendLine();
 
             var hero = state.Hero;

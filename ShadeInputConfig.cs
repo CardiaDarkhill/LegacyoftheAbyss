@@ -1,4 +1,5 @@
-using System;
+﻿using System;
+using System.Globalization;
 using System.Text;
 using InControl;
 using LegacyoftheAbyss.Shade.Ai;
@@ -17,8 +18,6 @@ public enum ShadeAction
     Teleport,
     Focus,
     Sprint,
-    AssistMode,
-    ToggleAi,
     /// <summary>
     /// Opens the targeting reticle that tells an AI-driven Shade where to stand. Bound on Hornet's
     /// side of the controls rather than the Shade's, because in AI mode nobody is holding the
@@ -118,8 +117,6 @@ public class ShadeInputConfig
     public ShadeBinding teleport = new();
     public ShadeBinding focus = new();
     public ShadeBinding sprint = new();
-    public ShadeBinding assistMode = new();
-    public ShadeBinding toggleAi = new();
     public ShadeBinding commandShade = new();
     public ShadeBinding debugDamageShade = new();
     public ShadeBinding debugHealShade = new();
@@ -150,8 +147,6 @@ public class ShadeInputConfig
         teleport = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.K), ShadeBindingOption.None());
         focus = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.H), ShadeBindingOption.None());
         sprint = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.LeftShift), ShadeBindingOption.None());
-        assistMode = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Alpha0), ShadeBindingOption.None());
-        toggleAi = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Alpha9), ShadeBindingOption.None());
         // Middle mouse and the left stick of the *first* pad: this is Hornet's control, not the
         // Shade player's, so it is pinned to device 0 rather than following controllerDeviceIndex.
         commandShade = new ShadeBinding(
@@ -184,11 +179,9 @@ public class ShadeInputConfig
         teleport = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickButton), ShadeBindingOption.None());
         focus = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action2), ShadeBindingOption.None());
         sprint = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightTrigger), ShadeBindingOption.None());
-        assistMode = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightStickButton), ShadeBindingOption.None());
         // Every pad button worth having is spoken for, so the AI toggle keeps its keyboard binding
         // rather than displacing one. A preset that left this holding the previous preset's value
         // would be worse than leaving it plainly on the keyboard.
-        toggleAi = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Alpha9), ShadeBindingOption.None());
         commandShade = new ShadeBinding(
             ShadeBindingOption.FromKey(KeyCode.Mouse2),
             ShadeBindingOption.FromControl(InputControlType.LeftStickButton, 0));
@@ -210,8 +203,6 @@ public class ShadeInputConfig
         teleport = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad3), ShadeBindingOption.None());
         focus = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.KeypadEnter), ShadeBindingOption.None());
         sprint = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad0), ShadeBindingOption.None());
-        assistMode = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad9), ShadeBindingOption.None());
-        toggleAi = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad7), ShadeBindingOption.None());
         commandShade = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Mouse2), ShadeBindingOption.None());
     }
 
@@ -236,8 +227,6 @@ public class ShadeInputConfig
         teleport = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickButton), ShadeBindingOption.None());
         focus = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action2), ShadeBindingOption.None());
         sprint = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightTrigger), ShadeBindingOption.None());
-        assistMode = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightStickButton), ShadeBindingOption.None());
-        toggleAi = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Alpha9), ShadeBindingOption.None());
         // The Shade owns pad 0 under this preset, so its left stick click is already Teleport.
         // Hornet is on the keyboard here, which leaves middle mouse as the whole binding.
         commandShade = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Mouse2), ShadeBindingOption.None());
@@ -270,8 +259,7 @@ public class ShadeInputConfig
         return BindingUsesController(moveLeft) || BindingUsesController(moveRight) || BindingUsesController(moveUp) ||
                BindingUsesController(moveDown) || BindingUsesController(fire) || BindingUsesController(nail) ||
                BindingUsesController(nailUp) || BindingUsesController(nailDown) || BindingUsesController(teleport) ||
-               BindingUsesController(focus) || BindingUsesController(sprint) || BindingUsesController(assistMode) ||
-               BindingUsesController(toggleAi) || BindingUsesController(commandShade);
+               BindingUsesController(focus) || BindingUsesController(sprint) || BindingUsesController(commandShade);
     }
 
     public bool IsControllerIndexInUse(int index)
@@ -290,8 +278,6 @@ public class ShadeInputConfig
                BindingUsesControllerIndex(teleport, fallbackIndex, index) ||
                BindingUsesControllerIndex(focus, fallbackIndex, index) ||
                BindingUsesControllerIndex(sprint, fallbackIndex, index) ||
-               BindingUsesControllerIndex(assistMode, fallbackIndex, index) ||
-               BindingUsesControllerIndex(toggleAi, fallbackIndex, index) ||
                BindingUsesControllerIndex(commandShade, fallbackIndex, index);
     }
 
@@ -308,8 +294,6 @@ public class ShadeInputConfig
         ShadeAction.Teleport => teleport,
         ShadeAction.Focus => focus,
         ShadeAction.Sprint => sprint,
-        ShadeAction.AssistMode => assistMode,
-        ShadeAction.ToggleAi => toggleAi,
         ShadeAction.CommandShade => commandShade,
         ShadeAction.DebugDamageShade => debugDamageShade,
         ShadeAction.DebugHealShade => debugHealShade,
@@ -355,12 +339,6 @@ public class ShadeInputConfig
                 break;
             case ShadeAction.Sprint:
                 sprint = binding;
-                break;
-            case ShadeAction.AssistMode:
-                assistMode = binding;
-                break;
-            case ShadeAction.ToggleAi:
-                toggleAi = binding;
                 break;
             case ShadeAction.CommandShade:
                 commandShade = binding;
@@ -418,8 +396,6 @@ public class ShadeInputConfig
         clone.teleport = CloneBinding(teleport);
         clone.focus = CloneBinding(focus);
         clone.sprint = CloneBinding(sprint);
-        clone.assistMode = CloneBinding(assistMode);
-        clone.toggleAi = CloneBinding(toggleAi);
         clone.commandShade = CloneBinding(commandShade);
         clone.debugDamageShade = CloneBinding(debugDamageShade);
         clone.debugHealShade = CloneBinding(debugHealShade);
@@ -447,8 +423,6 @@ public class ShadeInputConfig
         teleport = CloneBinding(other.teleport);
         focus = CloneBinding(other.focus);
         sprint = CloneBinding(other.sprint);
-        assistMode = CloneBinding(other.assistMode);
-        toggleAi = CloneBinding(other.toggleAi);
         commandShade = CloneBinding(other.commandShade);
         debugDamageShade = CloneBinding(other.debugDamageShade);
         debugHealShade = CloneBinding(other.debugHealShade);
@@ -766,6 +740,25 @@ public static class ShadeInput
     {
         if (key == KeyCode.None)
             return "Unbound";
+
+        // Unity numbers the mouse from zero, so the enum name renders as "Mouse 0" - which is
+        // nobody's name for the left button. The first three get what players call them; the rest
+        // keep a number, shifted up one so it agrees with how mice are labelled.
+        switch (key)
+        {
+            case KeyCode.Mouse0:
+                return "LMB";
+            case KeyCode.Mouse1:
+                return "RMB";
+            case KeyCode.Mouse2:
+                return "MMB";
+            case KeyCode.Mouse3:
+            case KeyCode.Mouse4:
+            case KeyCode.Mouse5:
+            case KeyCode.Mouse6:
+                return "Mouse " + ((int)key - (int)KeyCode.Mouse0 + 1).ToString(CultureInfo.InvariantCulture);
+        }
+
         return FormatEnumName(key.ToString());
     }
 

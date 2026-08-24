@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
@@ -116,6 +116,17 @@ namespace LegacyoftheAbyss.Diagnostics
 
         public BugReportPluginEntry[]? LoadedPlugins;
         public object? Config;
+
+        /// <summary>
+        /// Which row the settings menu cloned for its sliders, or why it could not find one.
+        /// <para>
+        /// Snapshotted rather than left to the log, because the menu is built within a couple of
+        /// seconds of launch and the log ring only keeps the last few hundred lines - by the time
+        /// anyone presses the hotkey to report that the sliders look wrong, the line that says which
+        /// slider they came from has long since aged out. Twice now that has cost a round trip.
+        /// </para>
+        /// </summary>
+        public string? MenuSliderTemplate;
     }
 
     /// <summary>
@@ -154,6 +165,7 @@ namespace LegacyoftheAbyss.Diagnostics
             TryRun(() => state.Fullscreen = Screen.fullScreen);
 
             TryRun(() => state.Scene = SceneManager.GetActiveScene().name);
+            TryRun(() => state.MenuSliderTemplate = ShadeSettingsMenu.LastSliderTemplateDescription);
 
             var gameManager = MenuStateUtility.TryGetGameManager();
             if (gameManager != null)

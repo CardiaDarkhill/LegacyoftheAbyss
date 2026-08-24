@@ -26,7 +26,11 @@ public partial class LegacyHelper
             sr = GetComponent<SpriteRenderer>();
             hitSet = new HashSet<Collider2D>();
             terrainLayer = LayerMask.NameToLayer("Terrain");
-            damage = Mathf.RoundToInt(damage * ModConfig.Instance.shadeDamageMultiplier);
+            // No damage multiplier here. The only spawner (SpawnProjectile) assigns damage
+            // straight after AddComponent, i.e. after this Awake has already run, so this only
+            // ever scaled the field's placeholder default - and now that the Shade's nail and
+            // its spells scale separately, applying the nail's multiplier to a fireball would
+            // be wrong even if it did reach anything. ComputeSpellDamageMultiplier owns it.
         }
 
         void Start()

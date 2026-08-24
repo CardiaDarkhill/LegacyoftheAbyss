@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -87,7 +87,7 @@ public partial class LegacyHelper
                 var pd = GameManager.instance != null ? GameManager.instance.playerData : null;
                 if (pd != null)
                 {
-                    int playerDerivedMax = Mathf.Max(1, (pd.maxHealth + 1) / 2);
+                    int playerDerivedMax = ModConfig.ComputeShadeMaskCount(pd.maxHealth);
                     computedMax = playerDerivedMax;
                     if (!hasSavedState || playerDerivedMax > shadeMaxHP)
                     {

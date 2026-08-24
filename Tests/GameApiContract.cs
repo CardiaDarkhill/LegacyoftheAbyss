@@ -111,6 +111,17 @@ public static class GameApiContract
         return match;
     }
 
+    /// <summary>A named private field the mod reads reflectively, with its expected type.</summary>
+    public static FieldInfo RequireField(Type owner, string name, Type fieldType, string because)
+    {
+        var field = owner.GetField(name, AnyInstance);
+        Assert.True(field != null, $"{owner.Name}.{name} does not exist. {because}\n{DescribeMembers(owner)}");
+        Assert.True(
+            field!.FieldType == fieldType,
+            $"{owner.Name}.{name} is {field.FieldType.Name}, not {fieldType.Name}. {because}");
+        return field;
+    }
+
     /// <summary>
     /// Names what a type actually has, so a failure says why rather than only that. This message is
     /// the difference between the two-round-trip version of a bug and the two-minute version.
@@ -177,6 +188,24 @@ public class GameApiContractTests
         }
 
         Assert.NotNull(type.GetMethod("OnEnter", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly));
+    }
+
+    /// <summary>
+    /// Hornet's needle and her silk skills carry separate damage multipliers, and the only thing
+    /// telling them apart at the point the damage is set is a private field on the damage object.
+    /// If any of these stops resolving, the split reads every hit as a silk skill and the Needle
+    /// slider silently does nothing - the exact silent no-op this file exists to catch.
+    /// </summary>
+    [Theory]
+    [InlineData("sourceIsHero")]
+    [InlineData("isHeroDamage")]
+    [InlineData("isNailAttack")]
+    public void HornetsDamageCanBeRecognisedAndClassified(string field)
+    {
+        GameApiContract.RequireField(
+            typeof(DamageEnemies), field, typeof(bool),
+            "Read by DamageEnemies_Start_Mod to decide whether a damage object is Hornet's, and "
+            + "whether it is a needle strike or a silk skill.");
     }
 
     [Fact]

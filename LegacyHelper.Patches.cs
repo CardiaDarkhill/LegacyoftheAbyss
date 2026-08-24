@@ -1279,17 +1279,48 @@ public partial class LegacyHelper
     [HarmonyPatch(typeof(DamageEnemies), "Start")]
     private class DamageEnemies_Start_Mod
     {
+        // All three are private on DamageEnemies and all three are read once per damage object
+        // spawned, so they are resolved once here rather than per call. Asserted in
+        // Tests/GameApiContract.cs - if any of these stops resolving, Hornet's damage sliders
+        // quietly stop distinguishing needle from silk skill, which is exactly the kind of
+        // silent no-op that costs a play session to notice.
+        private static readonly FieldInfo SourceIsHeroField =
+            typeof(DamageEnemies).GetField("sourceIsHero", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly FieldInfo IsHeroDamageField =
+            typeof(DamageEnemies).GetField("isHeroDamage", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly FieldInfo IsNailAttackField =
+            typeof(DamageEnemies).GetField("isNailAttack", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        private static bool ReadPrivateBool(FieldInfo field, DamageEnemies instance)
+        {
+            if (field == null)
+            {
+                return false;
+            }
+
+            try { return (bool)(field.GetValue(instance) ?? false); }
+            catch { return false; }
+        }
+
         private static void Postfix(DamageEnemies __instance)
         {
             try
             {
-                var t = typeof(DamageEnemies);
-                bool src = false; bool hero = false;
-                try { src = (bool)(t.GetField("sourceIsHero", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(__instance) ?? false); } catch { }
-                try { hero = (bool)(t.GetField("isHeroDamage", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(__instance) ?? false); } catch { }
+                bool src = ReadPrivateBool(SourceIsHeroField, __instance);
+                bool hero = ReadPrivateBool(IsHeroDamageField, __instance);
                 if (src || hero)
                 {
-                    __instance.damageDealt = Mathf.Max(1, Mathf.RoundToInt(__instance.damageDealt * ModConfig.Instance.hornetDamageMultiplier));
+                    // Needle strikes and everything else are multiplied separately so the
+                    // difficulty presets can weaken melee without touching silk skills. The
+                    // three conditions here are the same ones DamageEnemies itself uses to
+                    // decide whether a hit counts as a nail hit (see its DoDamage).
+                    bool isNeedle = __instance.attackType == AttackTypes.Nail
+                        || __instance.attackType == AttackTypes.NailBeam
+                        || ReadPrivateBool(IsNailAttackField, __instance);
+                    float multiplier = isNeedle
+                        ? ModConfig.Instance.hornetDamageMultiplier
+                        : ModConfig.Instance.hornetSilkSkillDamageMultiplier;
+                    __instance.damageDealt = Mathf.Max(1, Mathf.RoundToInt(__instance.damageDealt * multiplier));
                 }
             }
             catch { }

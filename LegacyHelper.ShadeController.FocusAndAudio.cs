@@ -119,7 +119,11 @@ public partial class LegacyHelper
             // Start focus when holding key with enough soul and missing HP
             if (!ShadeInput.IsActionHeld(ShadeAction.Focus)) return;
             if (isCastingSpell || isChannelingTeleport || inHardLeash || isInactive) return;
-            if (shadeHP >= shadeMaxHP) return; // already full
+            // Full masks normally refuses the channel, matching Hornet's own rule. "Full Masks
+            // Focus" lifts that so the Shade can spend SOUL purely to heal her - the Hornet heal
+            // is a side effect of the Shade healing itself, so without this it can never help her
+            // while it is undamaged.
+            if (shadeHP >= shadeMaxHP && !ModConfig.Instance.shadeFocusAtFullMasks) return;
             if (shadeSoul < focusSoulCost) return; // not enough soul
             if (focusHealingDisabled) return;
 

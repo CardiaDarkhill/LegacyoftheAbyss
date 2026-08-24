@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using System;
 using System.Collections;
 using System.Reflection;
@@ -61,7 +61,6 @@ public static partial class ShadeSettingsMenu
     private static readonly ManualLogSource log = BepInEx.Logging.Logger.CreateLogSource("ShadeSettingsMenu");
     private static bool loggedBuildAttempt;
     private static bool loggedMissingOptionsMenu;
-    private static bool loggedMissingSliderTemplate;
     private static bool loggedNullUI;
     private static bool loggedNoPauseMenu;
     private static bool loggedButtonAlreadyPresent;
@@ -76,6 +75,20 @@ public static partial class ShadeSettingsMenu
     private const float LabelColumnWidth = 420f;
     private const float ValueColumnWidth = 140f;
     private const float MenuFontScale = 1.5f;
+
+    /// <summary>Share of the screen width one of the plain list screens uses for its column.</summary>
+    private const float ListColumnWidthFraction = 0.66f;
+
+    /// <summary>Band left clear above a list screen's first row, as a share of the screen height.</summary>
+    private const float ListTopMarginFraction = 0.19f;
+
+    /// <summary>The matching band below its last row.</summary>
+    private const float ListBottomMarginFraction = 0.12f;
+
+    /// <summary>
+    /// How tall a shoulder-button prompt is drawn, as a share of the panel heading's height.
+    /// </summary>
+    private const float PanePromptHeightFraction = 0.85f;
     private static readonly Color ButtonNormalColor = new Color(1f, 1f, 1f, 0f);
     private static readonly Color ButtonHighlightColor = new Color(1f, 0.95f, 0.78f, 0.35f);
     private static readonly Color ButtonPressedColor = new Color(0.95f, 0.9f, 0.8f, 0.45f);
@@ -84,6 +97,12 @@ public static partial class ShadeSettingsMenu
     private static bool consumeNextToggle;
     private static readonly List<BindingMenuDriver> bindingDrivers = new();
     private static ShadeToggleDriver shadeToggleDriver;
+
+    /// <summary>
+    /// Which row the sliders were cloned from the last time the menu was built, or why none was
+    /// found. Read by the bug reporter - see BugReportState.MenuSliderTemplate.
+    /// </summary>
+    internal static string LastSliderTemplateDescription { get; private set; } = "not built yet";
 
     private static string GetShadeToggleLabel() => $"Shade Enabled: {(ModConfig.Instance.shadeEnabled ? "On" : "Off")}";
 
@@ -123,6 +142,7 @@ public static partial class ShadeSettingsMenu
     private static Sprite fallbackCharmSprite;
     private static CharmMenuController charmsController;
     private static SkinMenuController skinsController;
+    private static DifficultyMenuController difficultyController;
 
     private static void LogMenu(LogLevel level, string message)
     {

@@ -156,18 +156,6 @@ public partial class LegacyHelper
             PushShadeStatsToHud(suppressDamageAudio: true);
         }
 
-        private void HandleShadeAiToggleInput()
-        {
-            // ToggleAi is deliberately not one of the actions the AI drives, so this always reads
-            // real hardware and the player can never be locked out of switching it off.
-            if (!ShadeInput.WasActionPressed(ShadeAction.ToggleAi))
-            {
-                return;
-            }
-
-            SetShadeAiEnabled(!aiEnabled, persist: true);
-        }
-
         /// <summary>
         /// One frame of the driver: assemble what the brain is allowed to see, ask it what to do,
         /// and publish the answer as input. Runs immediately before <c>CaptureMovementInput</c> so

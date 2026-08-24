@@ -55,6 +55,13 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
     private const int MaxEquippedIcons = 11;
 
     private static readonly Color LockedIconColor = new Color(1f, 1f, 1f, 0.72f);
+
+    /// <summary>
+    /// How large an undiscovered charm's placeholder is drawn relative to a real charm icon. The
+    /// placeholder is a notch sprite, not charm art, and at full size it read as the biggest thing
+    /// in the grid.
+    /// </summary>
+    private static readonly Vector3 LockedIconScale = new Vector3(0.5f, 0.5f, 1f);
     private static readonly Color InactiveIconColor = new Color(1f, 1f, 1f, 0.3f);
     private static readonly Color EquippedIconColor = new Color(0.82f, 0.95f, 1f, 1f);
     private static readonly Color BrokenIconColor = new Color(1f, 0.64f, 0.64f, 1f);
@@ -790,7 +797,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
                 text.fontSharedMaterial = data.FontMaterial;
             }
 
-            text.fontStyle = data.FontStyle;
+            text.fontStyle = StripForcedUpperCase(data.FontStyle);
             text.fontSize = data.FontSize > 0f ? data.FontSize : Mathf.Max(fallbackSize, 1f);
             text.enableAutoSizing = data.EnableAutoSizing;
             if (data.EnableAutoSizing)
@@ -821,7 +828,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         {
             text.font = fallbackFont;
         }
-        text.fontStyle = fallbackStyle;
+        text.fontStyle = StripForcedUpperCase(fallbackStyle);
         text.fontSize = Mathf.Max(fallbackSize, 1f);
         text.enableAutoSizing = false;
         text.alignment = fallbackAlignment;
@@ -835,6 +842,17 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         text.richText = true;
         ClearAndApplyShadows(text, null);
     }
+
+    /// <summary>
+    /// Drops <see cref="FontStyles.UpperCase"/> from a style captured off a game text.
+    /// <para>
+    /// The templates this pane clones its text styling from carry it, so every heading here came out
+    /// as "EQUIPPED" and "NOTCHES" in flat capitals - which is not how the first game's inventory
+    /// read. Without the flag the Trajan face renders its lowercase as small capitals on its own,
+    /// which is the look being asked for, and is already what the charm titles beside them do.
+    /// </para>
+    /// </summary>
+    private static FontStyles StripForcedUpperCase(FontStyles style) => style & ~FontStyles.UpperCase;
 
     private static FontStyles ConvertFontStyle(FontStyle style) => style switch
     {

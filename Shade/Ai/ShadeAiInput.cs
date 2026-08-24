@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 
 using System;
 using UnityEngine;
@@ -51,8 +51,8 @@ namespace LegacyoftheAbyss.Shade.Ai
         /// them out is also what was asked for - there is no second player to take over.
         /// </para>
         /// <para>
-        /// Deliberately not on this list: the AI toggle and the command reticle, which are how the
-        /// player controls the AI rather than the Shade, and the developer keys. Charm-menu
+        /// Deliberately not on this list: the command reticle, which is how the player steers the
+        /// AI rather than the Shade, and the developer keys. Charm-menu
         /// navigation reuses the movement actions, so the lockout stands down whenever a Shade menu
         /// is open - see <see cref="Suppressed"/>.
         /// </para>
@@ -69,8 +69,7 @@ namespace LegacyoftheAbyss.Shade.Ai
             ShadeAction.NailDown,
             ShadeAction.Sprint,
             ShadeAction.Focus,
-            ShadeAction.Teleport,
-            ShadeAction.AssistMode
+            ShadeAction.Teleport
         };
 
         private static readonly float[] Values = new float[ActionCount];

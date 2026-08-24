@@ -251,7 +251,7 @@ public class ModConfig
     // can be killed; turn assist mode on yourself if you want an invincible Shade.
     public bool shadeAiEnabled = false;
     // Fraction of the Shade's theoretical maximum attack rate the AI is allowed to use. The
-    // nail cooldown is what the game permits, not what a person achieves while also dodging,
+    // nail cooldown is what the game permits,
     // and an AI swinging at the cap trivialises fights. Derived from the live cooldown, so
     // Quick Slash still speeds it up. Clamped 0.05-1.
     public float shadeAiAttackSpeedFraction = 0.5f;
@@ -273,8 +273,7 @@ public class ModConfig
     // Config-only. How many of the Shade's own nail hits one enemy has to survive before it is
     // worth a spell by itself. This stands in for a boss flag, because the game does not expose one:
     // HealthManager's enemy types are Regular/Shade/Armoured and the journal only knows
-    // Enemy/Other. An earlier flat "200 HP is a boss" test classified ordinary Ant enemies as
-    // bosses and burned a full meter on three fireballs at one of them. Clamped 1-100.
+    // Enemy/Other.
     public int shadeAiSpellWorthNailHits = 20;
     // While an AI drives the Shade there is no second player, so Hornet has no reason to be locked
     // to one input device. With this on, the keyboard/controller split the two-player presets set up
@@ -325,12 +324,32 @@ public class ModConfig
     public bool shadeSpriteSmoothing = false;
     public bool hornetKeyboardEnabled = false;
     public bool hornetControllerEnabled = true;
+
+    // --- Difficulty ------------------------------------------------------------------
+    // Four damage multipliers rather than one per character, because the presets below need
+    // to weaken melee without touching casts. Each is applied at the one place its damage is
+    // finally computed - see DamageEnemies_Start_Mod for Hornet's two (split on attackType)
+    // and ShadeController.Charms/Spells for the Shade's.
+    /// <summary>Multiplies Hornet's needle (and needle-derived) damage. Was the whole of her damage.</summary>
     public float hornetDamageMultiplier = 1f;
+    /// <summary>Multiplies everything of Hornet's that is not a needle strike - silk skills, tools, spells.</summary>
+    public float hornetSilkSkillDamageMultiplier = 1f;
+    /// <summary>Multiplies the Shade's nail. Was the whole of its damage, spells included.</summary>
     public float shadeDamageMultiplier = 1f;
+    /// <summary>Multiplies all six of the Shade's spells.</summary>
+    public float shadeSpellDamageMultiplier = 1f;
     public int bindHornetHeal = 3;
     public int bindShadeHeal = 2;
     public int focusHornetHeal = 1;
     public int focusShadeHeal = 1;
+    // The Shade's mask count as a share of Hornet's, rounded up, recomputed whenever she gains
+    // a mask. Stepped in tenths by the menu; the lowest step is not 10% but a flat one mask,
+    // because "10% of Hornet" is one mask for most of the game anyway and stops being one
+    // exactly when the run is hardest.
+    public float shadeMaskFraction = DefaultShadeMaskFraction;
+    // Whether the Shade may channel Focus while on full masks. Off matches Hornet's own rule;
+    // on lets it burn SOUL purely to heal her.
+    public bool shadeFocusAtFullMasks = false;
     public ShadeInputConfig shadeInput = ShadeInputConfig.CreateDefault();
 
     // --- Bug reporting ---------------------------------------------------------------
@@ -378,6 +397,42 @@ public class ModConfig
 
     /// <summary>Upper bound on <see cref="shadeShadowParticleIntensity"/>, enforced on load.</summary>
     public const float MaxShadowParticleIntensity = 2f;
+
+    /// <summary>Half of Hornet's masks, rounded up - what the Shade had before the setting existed.</summary>
+    public const float DefaultShadeMaskFraction = 0.5f;
+
+    /// <summary>
+    /// Lowest <see cref="shadeMaskFraction"/> step. Means "one mask, whatever Hornet has" rather
+    /// than a literal tenth - see the field's comment.
+    /// </summary>
+    public const float MinShadeMaskFraction = 0.1f;
+
+    /// <summary>
+    /// Computes the Shade's mask count from Hornet's. Rounds up, and never returns less than one.
+    /// <para>
+    /// Lives here rather than beside the Shade because three unrelated places need the same answer -
+    /// the controller's spawn-time baseline, its recompute when Hornet gains a mask, and the HUD's
+    /// own fallback when it has no explicit stats yet - and they were previously three copies of
+    /// <c>(maxHealth + 1) / 2</c> that would have had to be kept in step by hand.
+    /// </para>
+    /// </summary>
+    public static int ComputeShadeMaskCount(int hornetMaxMasks)
+    {
+        if (hornetMaxMasks <= 0)
+        {
+            return 0;
+        }
+
+        var config = Instance;
+        float fraction = Mathf.Clamp(config != null ? config.shadeMaskFraction : DefaultShadeMaskFraction, MinShadeMaskFraction, 1f);
+        if (fraction <= MinShadeMaskFraction + 0.001f)
+        {
+            // The lowest step is "Always 1", not a tenth. See shadeMaskFraction.
+            return 1;
+        }
+
+        return Mathf.Max(1, Mathf.CeilToInt(hornetMaxMasks * fraction));
+    }
 
     private static ModConfig? instance;
     private static readonly JsonSerializerSettings FallbackJsonSettings = new JsonSerializerSettings
@@ -431,6 +486,9 @@ public class ModConfig
             instance.shadeAiSelfHealBelow = Mathf.Clamp01(instance.shadeAiSelfHealBelow);
             instance.shadeAiHornetHealBelow = Mathf.Clamp01(instance.shadeAiHornetHealBelow);
             instance.shadeAiScanIntervalSeconds = Mathf.Clamp(instance.shadeAiScanIntervalSeconds, 0.05f, 2f);
+            // Snap to the menu's tenths as well as clamping: a hand-edited 0.55 would otherwise
+            // survive here and then jump the first time the slider is nudged.
+            instance.shadeMaskFraction = Mathf.Clamp(Mathf.Round(instance.shadeMaskFraction * 10f) / 10f, MinShadeMaskFraction, 1f);
         }
         catch
         {
@@ -542,4 +600,129 @@ public class ModConfig
         config = null;
         return false;
     }
+}
+
+
+
+/// <summary>
+/// The three difficulty presets the Difficulty menu offers, and the values each one stands for.
+/// <para>
+/// Each preset is the complete set of difficulty values, not a delta, so applying one always lands
+/// on a known state regardless of what was there before. <see cref="Identify"/> reads back the other
+/// way, so the menu can label a hand-tuned set as Custom without anything having to be stored.
+/// </para>
+/// </summary>
+public sealed class DifficultyPreset
+{
+    public const string Easy = "Easy";
+    public const string Normal = "Normal";
+    public const string Abyss = "Abyss";
+    public const string Custom = "Custom";
+
+    public string Name { get; private set; } = Custom;
+    public string Description { get; private set; } = string.Empty;
+    public float HornetNeedleDamage { get; private set; } = 1f;
+    public float HornetSilkSkillDamage { get; private set; } = 1f;
+    public float ShadeNailDamage { get; private set; } = 1f;
+    public float ShadeSpellDamage { get; private set; } = 1f;
+    public int BindHornetHeal { get; private set; } = 3;
+    public int BindShadeHeal { get; private set; } = 2;
+    public int FocusHornetHeal { get; private set; } = 1;
+    public int FocusShadeHeal { get; private set; } = 1;
+    public float ShadeMaskFraction { get; private set; } = ModConfig.DefaultShadeMaskFraction;
+    public bool ShadeFocusAtFullMasks { get; private set; }
+
+    public static readonly DifficultyPreset EasyPreset = new DifficultyPreset
+    {
+        Name = Easy,
+        Description = "Silksong as it ships, with the Shade helping. Nothing is weakened to pay for it, so fights resolve faster than they were built to."
+    };
+
+    public static readonly DifficultyPreset NormalPreset = new DifficultyPreset
+    {
+        Name = Normal,
+        Description = "Hornet and the Shade both deal 20% less damage and Hornet's Bind heals one mask less on each of them, aiming to keep the vanilla difficulty curve with a second fighter on the field.",
+        HornetNeedleDamage = 0.8f,
+        HornetSilkSkillDamage = 0.8f,
+        ShadeNailDamage = 0.8f,
+        ShadeSpellDamage = 0.8f,
+        BindHornetHeal = 2,
+        BindShadeHeal = 1
+    };
+
+    public static readonly DifficultyPreset AbyssPreset = new DifficultyPreset
+    {
+        Name = Abyss,
+        Description = "Needle and nail fall to 60%, the Shade carries fewer masks and its Focus no longer reaches Hornet. Demands sharper combat than vanilla Silksong, not just a longer fight.",
+        HornetNeedleDamage = 0.6f,
+        HornetSilkSkillDamage = 0.8f,
+        ShadeNailDamage = 0.6f,
+        ShadeSpellDamage = 0.8f,
+        BindHornetHeal = 2,
+        BindShadeHeal = 1,
+        FocusHornetHeal = 0,
+        ShadeMaskFraction = 0.4f
+    };
+
+    /// <summary>Every preset, in the order the menu cycles through them.</summary>
+    public static readonly DifficultyPreset[] All = { EasyPreset, NormalPreset, AbyssPreset };
+
+    /// <summary>Explanation shown for a set of values that matches no preset.</summary>
+    public const string CustomDescription = "Values tuned by hand. Selecting a preset replaces every difficulty setting on this screen.";
+
+    public void ApplyTo(ModConfig config)
+    {
+        if (config == null)
+        {
+            return;
+        }
+
+        config.hornetDamageMultiplier = HornetNeedleDamage;
+        config.hornetSilkSkillDamageMultiplier = HornetSilkSkillDamage;
+        config.shadeDamageMultiplier = ShadeNailDamage;
+        config.shadeSpellDamageMultiplier = ShadeSpellDamage;
+        config.bindHornetHeal = BindHornetHeal;
+        config.bindShadeHeal = BindShadeHeal;
+        config.focusHornetHeal = FocusHornetHeal;
+        config.focusShadeHeal = FocusShadeHeal;
+        config.shadeMaskFraction = ShadeMaskFraction;
+        config.shadeFocusAtFullMasks = ShadeFocusAtFullMasks;
+    }
+
+    public bool Matches(ModConfig config)
+    {
+        if (config == null)
+        {
+            return false;
+        }
+
+        return Mathf.Approximately(config.hornetDamageMultiplier, HornetNeedleDamage)
+            && Mathf.Approximately(config.hornetSilkSkillDamageMultiplier, HornetSilkSkillDamage)
+            && Mathf.Approximately(config.shadeDamageMultiplier, ShadeNailDamage)
+            && Mathf.Approximately(config.shadeSpellDamageMultiplier, ShadeSpellDamage)
+            && config.bindHornetHeal == BindHornetHeal
+            && config.bindShadeHeal == BindShadeHeal
+            && config.focusHornetHeal == FocusHornetHeal
+            && config.focusShadeHeal == FocusShadeHeal
+            && Mathf.Approximately(config.shadeMaskFraction, ShadeMaskFraction)
+            && config.shadeFocusAtFullMasks == ShadeFocusAtFullMasks;
+    }
+
+    /// <summary>The preset <paramref name="config"/> currently matches, or null for a custom set.</summary>
+    public static DifficultyPreset? Identify(ModConfig config)
+    {
+        foreach (var preset in All)
+        {
+            if (preset.Matches(config))
+            {
+                return preset;
+            }
+        }
+
+        return null;
+    }
+
+    public static string IdentifyName(ModConfig config) => Identify(config)?.Name ?? Custom;
+
+    public static string IdentifyDescription(ModConfig config) => Identify(config)?.Description ?? CustomDescription;
 }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -899,8 +899,11 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             {
                 statusRect.anchorMin = new Vector2(0f, 0.12f);
                 statusRect.anchorMax = new Vector2(1f, 0.24f);
-                statusRect.offsetMin = new Vector2(0f, 6f);
-                statusRect.offsetMax = new Vector2(-6f, 0f);
+                // Inset by the same margin the title and description use. Left flush against the
+                // panel edges, both "This charm has not been discovered." and the bench message ran
+                // out under the frame art on the right.
+                statusRect.offsetMin = new Vector2(detailHorizontalMargin, 6f);
+                statusRect.offsetMax = new Vector2(-detailHorizontalMargin, 0f);
             }
         }
 
@@ -920,8 +923,8 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             {
                 hintRect.anchorMin = new Vector2(0f, 0f);
                 hintRect.anchorMax = new Vector2(1f, 0.12f);
-                hintRect.offsetMin = new Vector2(0f, 2f);
-                hintRect.offsetMax = new Vector2(-6f, 0f);
+                hintRect.offsetMin = new Vector2(detailHorizontalMargin, 2f);
+                hintRect.offsetMax = new Vector2(-detailHorizontalMargin, 0f);
             }
         }
         SetTextValue(hintText, hintTextTMP, string.Empty);

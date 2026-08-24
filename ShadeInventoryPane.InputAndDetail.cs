@@ -1,10 +1,11 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using TeamCherry.NestedFadeGroup;
 using HarmonyLib;
+using InControl;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -264,21 +265,133 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
                !string.Equals(label, "Unbound", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string DescribeShadeSlashBinding()
+    /// <summary>
+    /// Every way the charm under the cursor can be equipped right now, as one label - "J / (A)".
+    /// <para>
+    /// This used to name a single key: the Shade's slash binding, first option only, whatever it
+    /// happened to be. That is wrong here for a reason particular to this pane - both players can
+    /// work it. The Shade equips with its own slash binding, and Hornet equips through the game's
+    /// Submit, which arrives via the <c>InventoryPaneInput.PressSubmit</c> patch. Naming one of them
+    /// tells the other player nothing.
+    /// </para>
+    /// <para>
+    /// Nor can this follow the last-used device the way a single-player prompt would, for the same
+    /// reason: with two people on the pane, the device that moved the cursor last is not necessarily
+    /// the device about to press equip. So every option that is actually available is listed, and a
+    /// controller binding is only listed while a controller is attached.
+    /// </para>
+    /// </summary>
+    private static string DescribeShadeEquipBindings()
+    {
+        var labels = new List<string>(3);
+
+        void Add(string? label)
+        {
+            if (!IsBindingLabelMeaningful(label))
+            {
+                return;
+            }
+
+            foreach (var existing in labels)
+            {
+                if (string.Equals(existing, label, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+            }
+
+            labels.Add(label!);
+        }
+
+        bool controllerAttached = IsAnyControllerAttached();
+
+        try
+        {
+            foreach (bool secondary in new[] { false, true })
+            {
+                var option = ShadeInput.GetBindingOption(ShadeAction.Nail, secondary);
+                if (option.type == ShadeBindingOptionType.Controller && !controllerAttached)
+                {
+                    continue;
+                }
+
+                Add(ShadeInput.DescribeBindingOption(option));
+            }
+        }
+        catch
+        {
+        }
+
+        // Hornet's own confirm. Only worth naming on a pad: on the keyboard the Shade's binding
+        // above is already a key, and two keys in the prompt is noise rather than information.
+        if (controllerAttached)
+        {
+            Add(DescribeHornetSubmitButton());
+        }
+
+        return labels.Count > 0 ? string.Join(" / ", labels) : string.Empty;
+    }
+
+    private static bool IsAnyControllerAttached()
     {
         try
         {
-            string primary = ShadeInput.DescribeBindingOption(ShadeInput.GetBindingOption(ShadeAction.Nail, secondary: false));
-            if (IsBindingLabelMeaningful(primary))
+            var devices = InputManager.Devices;
+            if (devices == null)
             {
-                return primary;
+                return false;
             }
 
-            string secondary = ShadeInput.DescribeBindingOption(ShadeInput.GetBindingOption(ShadeAction.Nail, secondary: true));
-            if (IsBindingLabelMeaningful(secondary))
+            foreach (var device in devices)
             {
-                return secondary;
+                if (device != null && device != InputDevice.Null && device.IsAttached)
+                {
+                    return true;
+                }
             }
+        }
+        catch
+        {
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The face-button label for Hornet's confirm, as the attached pad names it - "(A)" on an Xbox
+    /// controller, "(Cross)" on a PlayStation one. Taken from the device's own control handle rather
+    /// than from the InControl enum name, which would render as "Action 1".
+    /// </summary>
+    private static string DescribeHornetSubmitButton()
+    {
+        try
+        {
+            var device = InputManager.ActiveDevice;
+            if (device == null || device == InputDevice.Null || !device.IsAttached)
+            {
+                foreach (var candidate in InputManager.Devices)
+                {
+                    if (candidate != null && candidate != InputDevice.Null && candidate.IsAttached)
+                    {
+                        device = candidate;
+                        break;
+                    }
+                }
+            }
+
+            if (device == null || device == InputDevice.Null)
+            {
+                return string.Empty;
+            }
+
+            var control = device.GetControl(InputControlType.Action1);
+            string? handle = control?.Handle;
+            if (string.IsNullOrWhiteSpace(handle))
+            {
+                return string.Empty;
+            }
+
+            return "(" + handle!.Trim() + ")";
         }
         catch
         {
@@ -360,6 +473,9 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
 
             detailPreviewImage.color = color;
             UpdateDetailPreviewSize();
+            // Same reasoning as the grid: an undiscovered charm shows a notch sprite standing in for
+            // charm art, and blown up to preview size it is the largest thing on the panel.
+            detailPreviewImage.rectTransform.localScale = owned ? Vector3.one : LockedIconScale;
         }
         else
         {
@@ -419,7 +535,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         UpdateDetailPreview(definition, owned, equipped, broken);
 
         int notchCost = definition?.NotchCost ?? 0;
-        string bindingLabel = DescribeShadeSlashBinding();
+        string bindingLabel = DescribeShadeEquipBindings();
         string equipPrompt = BuildEquipPrompt(bindingLabel);
         string unequipPrompt = BuildUnequipPrompt(bindingLabel);
         string status;
@@ -433,7 +549,10 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         }
         else if (equipped)
         {
-            status = FormattableString.Invariant($"Equipped. {unequipPrompt}");
+            // No "Equipped." prefix. The charm is already sitting in the Equipped row above and lit
+            // in the notch strip beside it; the only thing this line has to add is how to take it
+            // off again.
+            status = unequipPrompt;
             if (overcharmed)
             {
                 status += " Shade is overcharmed.";

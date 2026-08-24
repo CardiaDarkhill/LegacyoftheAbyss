@@ -123,6 +123,36 @@ below all exist because something here silently did nothing.
   than through `Harmony.PatchAll`, which rethrows the first failure out of `Awake` and takes the HUD,
   the Shade and the bug reporter down with it. Do not switch back.
 
+## Borrowing the game's UI
+
+The pause-menu screens are built by cloning the game's own prefabs, and that has its own version of
+the failure mode above: **a clone brings everything, and what it brings is invisible until it draws
+on top of your own work.** Four rounds went on one slider.
+
+- **Read the look, do not clone the row.** A game option row is a label, a value readout, a layout
+  group and sometimes a toggle wrapped around the control you want. Three separate attempts to clone
+  one and delete the rest afterwards each missed something different, because each rested on a guess
+  about a hierarchy nobody had inspected - including that the game ships *two* text stacks (`TMPro`
+  and `TMProOld`), so naming one catches nothing. `CaptureSliderSkin` takes the four sprites off it
+  and rebuilds the row in `CreateSliderTemplate`, where the structure is known. Prefer that shape for
+  anything else borrowed from the game's UI.
+- **Search scenes, not `Resources.FindObjectsOfTypeAll` alone.** That call also returns prefab
+  assets, and their ordering is not stable. One run cloned a live audio row, the next cloned a
+  generic options-row prefab carrying a checkbox. Filter on `gameObject.scene.IsValid()`.
+- **A cloned `MenuButton` must be `MenuButtonType.Activate`.** Every other type calls
+  `ForceDeselect()` in `OnSubmit`, which clears the EventSystem's selection - so pressing any toggle
+  threw the highlight back to the screen's default row, and `ShowScreen` had nothing left to remember
+  when a row opened a sub-menu.
+- **A `ButtonSkin` is two halves.** `skin.sprite` is often a blank key cap with the letter in
+  `skin.symbol`, drawn on top; assign both, the way `ActionButtonIconBase.GetButtonIcon` does, or
+  keyboard prompts render as empty boxes. Resolve which skin by what is *plugged in*, not by
+  `lastActiveController` - that flaps as the player switches hands, and two people can be on these
+  screens at once.
+- **Do not assume where a helper put the thing you need.** `CreateSlider` returns the row's
+  selectable, which lives on the clone or on the row depending on what the template carried; a caller
+  deriving the row from `selectable.transform.parent` moved a whole panel instead. Hand the caller
+  what it needs explicitly.
+
 ## Diagnosing from a bug report
 
 The reports are the only instrument for anything that needs a live game, so treat gaps in them as
@@ -143,6 +173,12 @@ bugs in the tooling rather than as a reason to ask for another repro.
   collider on a boss and made an attack hitbox indistinguishable from a harmless detection range.
 - **Add the emitter before the next repro, not after.** If a report cannot answer the question, the
   fix is a new event category in the same turn.
+- **A decision made far from where the bug shows up belongs in the snapshot, not the log.** The
+  settings menu is built seconds after launch and the log ring keeps a few hundred lines, so by the
+  time anyone presses the hotkey to report that the sliders look wrong, the line naming which slider
+  they came from is long gone. Two round trips were spent guessing at it; one `Menu slider template`
+  row in `BugReportState` ended the guessing on the next report. `state.Config` covers settings the
+  same way - extend that pattern rather than adding another log line nobody will still have.
 - **Confirm an interception fired before believing it works.** "The bug persists" and "the fix never
   ran" look identical from the outside, and on this project they were confused repeatedly - once for
   two full rounds while a subsystem sat dead behind a failed reflective lookup. Every interception
@@ -168,6 +204,7 @@ For scale: this file went from 167 lines to 52 without losing a single distinct 
 it was explanation nobody had asked for.
 
 ## Additional tips
+- When diagnosing an issue, if required it is okay to ask the developer of provide a bug report under specific conditions, if that will remove guesswork from a solution.
 - Use the decompiled `Assembly-CSharp` sources to mirror in-game behaviour when implementing new features or Harmony patches.
 - Shade charms and abilities are centrally defined via `ShadeCharmDefinition` and `ShadeCharmStatBaseline`; extend these classes when adding new modifiers to keep stat calculations consistent.
 - Always validate gameplay logic with `dotnet build -c Release` and `dotnet test -c Release` before submitting changes.
