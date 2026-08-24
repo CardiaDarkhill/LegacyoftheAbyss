@@ -4,6 +4,7 @@ using System.Collections;
 using System.Reflection;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
@@ -37,212 +38,245 @@ public static partial class ShadeSettingsMenu
     }
 
     /// <summary>
-    /// The row every slider in this menu is built from: this file's structure, painted with the
-    /// game's sprites where <see cref="CaptureSliderSkin"/> found them and with a hairline fallback
-    /// where it did not.
-    /// </summary>
-    /// <summary>
-    /// The look of the game's slider, lifted off one of its rows: which sprites it draws its track,
-    /// its filled portion and its knob with, and how big they are.
+    /// The game's own slider, cloned whole.
     /// <para>
-    /// This exists because cloning the row itself did not work, three attempts running. The row is
-    /// not just a slider - it carries the game's own label and value readout, a layout group
-    /// arranging them, and on some builds a toggle - and every attempt to delete those afterwards
-    /// missed something, because each depended on a guess about the row's shape or about which of
-    /// the game's two text stacks it uses. Taking the four sprites and rebuilding the row here needs
-    /// no such guess: the structure is this file's, so nothing can come along for the ride.
+    /// The <see cref="Slider"/>'s own object, with everything on it that is not part of the slider
+    /// stripped off by <see cref="StripToSliderParts"/>.
+    /// <para>
+    /// Rebuilding the track, the fill and the knob by hand cost four rounds of reports - the knob
+    /// turned out to be a mostly-transparent sprite, quarter-turned, in a rect taller than the row,
+    /// hung well above its slide area, with the fill inset at one end and not the other. Every one
+    /// of those was a fresh guess at a rect that can simply be copied.
+    /// </para>
+    /// <para>
+    /// The other half of the lesson is that "the Slider's own object" carries no promise about what
+    /// is on it. On this build it also holds the game's label, its value readout, a full-row cursor
+    /// hotspot and a pair of selection fleurs - so the first clone put "Master Volume" and a stray
+    /// "10" across every row, the same symptom as cloning the row itself. Nothing here identifies a
+    /// part by name or by component type; the parts are found through the Slider's own references.
     /// </para>
     /// </summary>
-    private struct SliderSkin
+    private static GameObject CreateGameSliderTemplate(GameObject gameSlider)
     {
-        public bool Valid;
-        public bool HasTrack;
-        public Sprite TrackSprite;
-        public Image.Type TrackType;
-        public Color TrackColor;
-        public float TrackHeight;
-        public bool HasFill;
-        public Sprite FillSprite;
-        public Image.Type FillType;
-        public Color FillColor;
-        public Sprite HandleSprite;
-        public Color HandleColor;
-        public Vector2 HandleSize;
-
-        /// <summary>
-        /// How far the game turns its handle sprite. The art is authored pointing sideways and the
-        /// row rotates it to point down at the track - copy the sprite without this and you get a
-        /// left-pointing arrowhead sitting in the line instead of a chevron above it.
-        /// </summary>
-        public float HandleRotationZ;
-
-        /// <summary>
-        /// The game's own handle rect, already converted into this menu's units.
-        /// <para>
-        /// Sized from the rect rather than from the sprite's proportions, because the sprite is
-        /// mostly transparent padding: the visible chevron is about 15x17 inside a 58x122 rect. Fit
-        /// the rect to the art's aspect and the art comes out a fraction of the size it should be,
-        /// which is what "extremely small" meant.
-        /// </para>
-        /// </summary>
-        public float ScaleRatio;
-
-        public string Describe()
+        if (gameSlider == null)
         {
-            if (!Valid)
-            {
-                return "no game slider skin";
-            }
-
-            return FormattableString.Invariant(
-                $"track={SpriteName(TrackSprite)}@{TrackHeight:0.#}/{(HasTrack ? "solid" : "fallback")} fill={SpriteName(FillSprite)}/{(HasFill ? "solid" : "fallback")} handle={SpriteName(HandleSprite)}@{HandleSize.x:0.#}x{HandleSize.y:0.#} rot={HandleRotationZ:0.#} scale={ScaleRatio:0.000}");
+            return null;
         }
 
-        private static string SpriteName(Sprite sprite) => sprite != null ? sprite.name : "<none>";
-    }
-
-    private static SliderSkin gameSliderSkin;
-
-    /// <summary>
-    /// How thick the game draws its slider line, in its own units. Used only when the track's own
-    /// rect cannot be measured - an inactive screen may never have had a layout pass.
-    /// </summary>
-    private const float GameTrackHeight = 4f;
-
-    /// <summary>
-    /// Reads <see cref="SliderSkin"/> off a game slider row without instantiating anything. Every
-    /// piece is optional - whatever is missing keeps the hairline fallback this file draws.
-    /// </summary>
-    private static SliderSkin CaptureSliderSkin(GameObject template, GameObject ourScreen)
-    {
-        var skin = new SliderSkin
+        var source = gameSlider.GetComponent<Slider>();
+        if (source == null || source.fillRect == null || source.handleRect == null)
         {
-            TrackType = Image.Type.Sliced,
-            TrackColor = new Color(0.86f, 0.85f, 0.80f, 0.5f),
-            TrackHeight = 3f,
-            FillType = Image.Type.Sliced,
-            FillColor = new Color(0.96f, 0.95f, 0.90f, 0.95f),
-            HandleColor = new Color(1f, 0.98f, 0.92f, 1f),
-            HandleSize = new Vector2(8f, 26f),
-            ScaleRatio = 1f
-        };
-
-        if (template == null)
-        {
-            return skin;
+            RecordSliderTemplate(LastSliderTemplateDescription + " | not a usable Slider; drawing the plain fallback");
+            return null;
         }
 
+        GameObject holder = null;
         try
         {
-            var slider = template.GetComponentInChildren<Slider>(true);
-            if (slider == null)
+            // Both measurements are taken from the game's own slider, where it still sits in the
+            // hierarchy it was authored in. A clone hanging under a holder of its own has no such
+            // hierarchy, so anything it anchors to its parent measures against nothing.
+            gameSliderCanvasScale = ScaleRelativeToCanvas(gameSlider.transform);
+            var sourceRect = gameSlider.GetComponent<RectTransform>();
+            float height = sourceRect != null ? sourceRect.rect.height : 0f;
+            if (height <= 1f)
             {
-                return skin;
+                height = sourceRect != null ? Mathf.Max(1f, sourceRect.sizeDelta.y) : 1f;
             }
 
-            // The game's option screens and this mod's clones of the pause menu are drawn at
-            // different scales, so a size copied straight across renders at the wrong size. Measure
-            // the ratio between the two rather than assuming either.
-            skin.ScaleRatio = MeasureScaleRatio(slider.transform, ourScreen);
-            skin.TrackHeight = GameTrackHeight * skin.ScaleRatio;
+            // Where the line sits within the slider's own rect, so the clone can be hung with the
+            // line on the row's centre, level with the label, however the game arranged the rest of
+            // the rect around it. Measured off the fill's container rather than the fill: Slider
+            // drives the fill's own anchors, so its rect is whatever the current value made it.
+            var lineRect = source.fillRect.parent as RectTransform ?? source.fillRect;
+            float lineOffset = CentreOffsetWithin(lineRect, sourceRect);
+            string shape = DescribeSubtree(gameSlider.transform, 320);
 
-            var fillImage = slider.fillRect != null ? slider.fillRect.GetComponent<Image>() : null;
-            var handleImage = slider.handleRect != null ? slider.handleRect.GetComponent<Image>() : null;
+            // Built inside an inactive holder so the clone never wakes: the game's slider carries a
+            // MenuAudioSlider, whose Awake reaches for the audio settings this menu has no business
+            // touching. SanitizeSelectableHierarchy strips that and everything like it below.
+            holder = new GameObject("ShadeSliderTemplate");
+            holder.hideFlags = HideFlags.HideAndDontSave;
+            holder.SetActive(false);
+            holder.AddComponent<RectTransform>();
 
-            // The track has no property on Slider to read it from, so it is found by elimination:
-            // an Image under the slider that is neither the fill nor the handle, nor an ancestor of
-            // either (those are the Fill Area / Handle Slide Area containers).
-            Image trackImage = null;
-            foreach (var image in slider.GetComponentsInChildren<Image>(true))
+            var clone = Object.Instantiate(gameSlider, holder.transform, false);
+            clone.name = "Slider";
+            clone.hideFlags = HideFlags.HideAndDontSave;
+            clone.SetActive(true);
+
+            var slider = clone.GetComponent<Slider>();
+            var sliderRect = clone.GetComponent<RectTransform>();
+            if (slider == null || slider.fillRect == null || sliderRect == null)
             {
-                if (image == null || image == fillImage || image == handleImage)
-                {
-                    continue;
-                }
-
-                if (slider.fillRect != null && slider.fillRect.IsChildOf(image.transform))
-                {
-                    continue;
-                }
-
-                if (slider.handleRect != null && slider.handleRect.IsChildOf(image.transform))
-                {
-                    continue;
-                }
-
-                trackImage = image;
-                break;
+                Object.DestroyImmediate(holder);
+                RecordSliderTemplate(LastSliderTemplateDescription + " | clone came out empty; drawing the plain fallback");
+                return null;
             }
 
-            // A null sprite is not a miss here: the game draws both the track and the filled part
-            // of it as plain white quads, which is an Image with no sprite at all. Rejecting those
-            // is why two rounds of reports came back saying "track=<none> fill=<none>" while the
-            // game's own line was plainly visible.
-            if (trackImage != null)
-            {
-                skin.HasTrack = true;
-                skin.TrackSprite = trackImage.sprite;
-                skin.TrackType = trackImage.type;
-                skin.TrackColor = trackImage.color;
-                float height = MeasuredHeight(trackImage.rectTransform) * skin.ScaleRatio;
-                if (height > 0.5f)
-                {
-                    skin.TrackHeight = height;
-                }
-            }
+            StripToSliderParts(source, slider);
+            SanitizeSelectableHierarchy(clone);
 
-            if (fillImage != null)
-            {
-                skin.HasFill = true;
-                skin.FillSprite = fillImage.sprite;
-                skin.FillType = fillImage.type;
-                skin.FillColor = fillImage.color;
-            }
+            // Spans whatever width the row gives it, and keeps the game's own height, because that
+            // is what decides how tall the knob is drawn and how far above the line it sits.
+            sliderRect.anchorMin = new Vector2(0f, 0.5f);
+            sliderRect.anchorMax = new Vector2(1f, 0.5f);
+            sliderRect.pivot = new Vector2(0.5f, 0.5f);
+            sliderRect.sizeDelta = new Vector2(0f, height);
+            sliderRect.anchoredPosition = new Vector2(0f, -lineOffset);
 
-            if (handleImage != null)
-            {
-                skin.HandleSprite = handleImage.sprite;
-                skin.HandleColor = handleImage.color;
-                skin.HandleRotationZ = handleImage.rectTransform.localEulerAngles.z;
-
-                var size = MeasuredSize(handleImage.rectTransform) * skin.ScaleRatio;
-                if (size.x > 0.5f && size.y > 0.5f)
-                {
-                    skin.HandleSize = size;
-                }
-            }
-
-            skin.Valid = skin.HasTrack || skin.HasFill || skin.HandleSprite != null;
+            sliderTemplateIsGameClone = true;
+            string kept = DescribeSubtree(clone.transform, 320);
+            RecordSliderTemplate(FormattableString.Invariant(
+                $"{LastSliderTemplateDescription} | cloned {height:0.#} tall, line {lineOffset:0.#} off centre, drawn at {gameSliderCanvasScale:0.000} of canvas | from: {shape} | kept: {kept}"));
+            return holder;
         }
         catch (Exception e)
         {
-            LogMenuWarning($"Could not read the game slider's look: {e}");
-        }
+            LogMenuWarning($"Could not clone the game's slider: {e}");
+            if (holder != null)
+            {
+                Object.DestroyImmediate(holder);
+            }
 
-        return skin;
+            RecordSliderTemplate(LastSliderTemplateDescription + " | clone failed; drawing the plain fallback");
+            return null;
+        }
     }
 
     /// <summary>
-    /// How much bigger something has to be drawn here to look the size it does over there. One when
-    /// either transform cannot be read, so a failure leaves sizes alone rather than collapsing them.
+    /// Cuts a cloned slider down to the three things that are the slider: the track, the filled part
+    /// of it and the knob.
+    /// <para>
+    /// The fill and the knob are found through the Slider's own <c>fillRect</c> and <c>handleRect</c>
+    /// rather than by name, so nothing rests on what this build calls them. The track is found by
+    /// shape - it is whatever else is drawn the same size as the fill's container, which is what
+    /// sitting behind the fill means. That size is measured on the game's own slider and passed in:
+    /// a clone hanging under a holder of its own resolves its stretched rects against nothing. A build that draws no separate track matches nothing here and
+    /// simply ends up without one, which is a hairline missing rather than a row of someone else's
+    /// text across the screen.
+    /// </para>
     /// </summary>
-    private static float MeasureScaleRatio(Transform theirs, GameObject ourScreen)
+    private static void StripToSliderParts(Slider source, Slider clone)
+    {
+        if (source == null || clone == null || source.fillRect == null || clone.fillRect == null)
+        {
+            return;
+        }
+
+        var sourceRoot = source.transform;
+        var cloneRoot = clone.transform;
+        if (sourceRoot.childCount != cloneRoot.childCount)
+        {
+            // Instantiate copies the hierarchy exactly, so this cannot happen - but deciding on one
+            // tree and cutting the other is only safe while that holds, and cutting the wrong child
+            // is a worse outcome than leaving the clone whole.
+            LogMenuWarning("Cloned slider does not match the game's; leaving it whole.");
+            return;
+        }
+
+        // Decided on the game's own slider and applied to the clone by index. The clone hangs under
+        // a holder with no size, so any of its stretched rects measures zero there; the original
+        // still sits in the hierarchy it was authored in and measures properly.
+        var keep = new HashSet<Transform>();
+        KeepChain(source.fillRect, sourceRoot, keep);
+        KeepChain(source.handleRect, sourceRoot, keep);
+
+        var lineRect = source.fillRect.parent as RectTransform ?? source.fillRect;
+        Vector2 lineSize = lineRect.rect.size;
+
+        var doomed = new List<int>();
+        for (int i = 0; i < sourceRoot.childCount; i++)
+        {
+            var child = sourceRoot.GetChild(i);
+            if (child == null || keep.Contains(child))
+            {
+                continue;
+            }
+
+            if (LooksLikeTheTrack(child as RectTransform, lineSize))
+            {
+                continue;
+            }
+
+            doomed.Add(i);
+        }
+
+        // Back to front, because DestroyImmediate reindexes the children as it goes.
+        for (int i = doomed.Count - 1; i >= 0; i--)
+        {
+            Object.DestroyImmediate(cloneRoot.GetChild(doomed[i]).gameObject);
+        }
+
+        // Retargeted explicitly: whatever the game pointed this at may be one of the objects just
+        // destroyed, and a destroyed reference is not null as far as ?? is concerned.
+        var handleImage = clone.handleRect != null ? clone.handleRect.GetComponent<Image>() : null;
+        if (handleImage != null)
+        {
+            clone.targetGraphic = handleImage;
+        }
+    }
+
+    private static void KeepChain(RectTransform part, Transform root, HashSet<Transform> keep)
+    {
+        var cursor = part != null ? part.transform : null;
+        for (int depth = 0; depth < 8 && cursor != null && cursor != root; depth++)
+        {
+            keep.Add(cursor);
+            cursor = cursor.parent;
+        }
+    }
+
+    /// <summary>Drawn, and the same shape as the fill's container - so it is the line behind it.</summary>
+    private static bool LooksLikeTheTrack(RectTransform candidate, Vector2 lineSize)
+    {
+        if (candidate == null || candidate.GetComponent<Graphic>() == null)
+        {
+            return false;
+        }
+
+        if (lineSize.x <= 1f || lineSize.y <= 1f)
+        {
+            return false;
+        }
+
+        var size = candidate.rect.size;
+        return Mathf.Abs(size.y - lineSize.y) <= Mathf.Max(2f, lineSize.y * 0.4f)
+            && size.x >= lineSize.x * 0.5f
+            && size.x <= lineSize.x * 1.5f;
+    }
+
+    /// <summary>
+    /// How large something is drawn relative to the canvas it is on. One when that cannot be worked
+    /// out, so a failure copies sizes across unchanged rather than collapsing them.
+    /// </summary>
+    private static float ScaleRelativeToCanvas(Transform subject)
     {
         try
         {
-            if (theirs == null || ourScreen == null)
+            if (subject == null)
             {
                 return 1f;
             }
 
-            float theirScale = Mathf.Abs(theirs.lossyScale.x);
-            float ourScale = Mathf.Abs(ourScreen.transform.lossyScale.x);
-            if (theirScale < 0.0001f || ourScale < 0.0001f)
+            // includeInactive: the screens this is asked about have all just been deactivated.
+            var canvas = subject.GetComponentInParent<Canvas>(true);
+            var canvasTransform = canvas != null && canvas.rootCanvas != null
+                ? canvas.rootCanvas.transform
+                : canvas != null ? canvas.transform : null;
+            if (canvasTransform == null)
             {
                 return 1f;
             }
 
-            return Mathf.Clamp(theirScale / ourScale, 0.1f, 10f);
+            float ours = Mathf.Abs(subject.lossyScale.x);
+            float theirs = Mathf.Abs(canvasTransform.lossyScale.x);
+            if (ours < 0.0001f || theirs < 0.0001f)
+            {
+                return 1f;
+            }
+
+            return ours / theirs;
         }
         catch
         {
@@ -251,120 +285,227 @@ public static partial class ShadeSettingsMenu
     }
 
     /// <summary>
-    /// A RectTransform's height, preferring its laid-out rect and falling back to sizeDelta. An
-    /// inactive screen may never have had a layout pass, in which case rect is zero and sizeDelta is
-    /// the only thing that carries the authored size.
+    /// How much bigger the game's slider has to be built here to come out the size it is drawn at
+    /// on the game's own option screens.
+    /// <para>
+    /// These screens are drawn at about two thirds of the canvas, and the layout on them was given
+    /// correspondingly more local units to work in rather than being scaled back up - see
+    /// <c>StretchScreenOverCanvas</c>. So a rect copied straight off a screen that is drawn at full
+    /// size lands here at two thirds of the size it has over there. The game's line is a few units
+    /// thick to begin with; two thirds of a few units is a hairline.
+    /// </para>
     /// </summary>
-    private static float MeasuredHeight(RectTransform rect)
+    private static float SliderUnitScale
     {
-        if (rect == null)
+        get
+        {
+            if (!sliderTemplateIsGameClone || screenCanvasScale < 0.0001f)
+            {
+                return 1f;
+            }
+
+            return Mathf.Clamp(gameSliderCanvasScale / screenCanvasScale, 0.2f, 5f);
+        }
+    }
+
+    /// <summary>
+    /// Resizes a cloned rect and everything under it. Only sizeDelta and anchoredPosition are
+    /// touched, never localScale: a scaled rect still reports its unscaled size to the layout around
+    /// it, which would leave the row budgeting for a slider two thirds the size of the one drawn.
+    /// Anchors are left alone deliberately - Slider drives the fill's and the handle's every frame.
+    /// </summary>
+    private static void ScaleRectTree(RectTransform root, float factor)
+    {
+        if (root == null || Mathf.Approximately(factor, 1f))
+        {
+            return;
+        }
+
+        root.sizeDelta *= factor;
+        root.anchoredPosition *= factor;
+        for (int i = 0; i < root.childCount; i++)
+        {
+            ScaleRectTree(root.GetChild(i) as RectTransform, factor);
+        }
+    }
+
+    /// <summary>
+    /// A descendant rect's centre, in an ancestor's local units, relative to that ancestor's own
+    /// centre. Walked up the chain rather than taken through world space, because the screen this
+    /// is read from has never been shown and so has no meaningful world transform.
+    /// </summary>
+    private static float CentreOffsetWithin(RectTransform descendant, RectTransform ancestor)
+    {
+        if (descendant == null || ancestor == null)
         {
             return 0f;
         }
 
-        float height = rect.rect.height;
-        return height > 0.5f ? height : rect.sizeDelta.y;
+        // A RectTransform's local space is centred on its own pivot, so walking localPosition up the
+        // chain gives the descendant's pivot relative to the ancestor's pivot. Both ends are then
+        // corrected from pivot to centre.
+        float y = (0.5f - descendant.pivot.y) * descendant.rect.height;
+        var cursor = descendant;
+        for (int depth = 0; depth < 8 && cursor != null && cursor != ancestor; depth++)
+        {
+            y += cursor.localPosition.y;
+            cursor = cursor.parent as RectTransform;
+        }
+
+        if (cursor != ancestor)
+        {
+            return 0f;
+        }
+
+        return y - (0.5f - ancestor.pivot.y) * ancestor.rect.height;
     }
 
-    private static Vector2 MeasuredSize(RectTransform rect)
+    /// <summary>
+    /// What the clone actually came out as, for the bug reporter's snapshot. Every round of slider
+    /// reports so far was spent working out what was in a hierarchy nobody had looked at; one line
+    /// in the snapshot is cheaper than another round trip.
+    /// </summary>
+    private static string DescribeSubtree(Transform root, int budget)
     {
-        if (rect == null)
-        {
-            return Vector2.zero;
-        }
-
-        var size = rect.rect.size;
-        if (size.x <= 0.5f || size.y <= 0.5f)
-        {
-            size = rect.sizeDelta;
-        }
-
-        return size;
+        var builder = new StringBuilder();
+        AppendSubtree(root, builder, budget);
+        return builder.ToString();
     }
 
+    private static void AppendSubtree(Transform node, StringBuilder builder, int budget)
+    {
+        if (node == null || builder.Length > budget)
+        {
+            return;
+        }
+
+        if (builder.Length > 0)
+        {
+            builder.Append(' ');
+        }
+
+        builder.Append(node.name);
+        if (node is RectTransform rect)
+        {
+            builder.Append(FormattableString.Invariant(
+                $"[{rect.rect.width:0.#}x{rect.rect.height:0.#}@{rect.localPosition.y:0.#}"));
+            float turn = rect.localEulerAngles.z;
+            if (turn > 0.5f)
+            {
+                builder.Append(FormattableString.Invariant($"/{turn:0.#}deg"));
+            }
+
+            builder.Append(']');
+        }
+
+        var image = node.GetComponent<Image>();
+        if (image != null)
+        {
+            builder.Append(FormattableString.Invariant(
+                $"<{(image.sprite != null ? image.sprite.name : "plain")} a={image.color.a:0.00}>"));
+        }
+
+        for (int i = 0; i < node.childCount; i++)
+        {
+            AppendSubtree(node.GetChild(i), builder, budget);
+        }
+    }
+
+    /// <summary>How thick the fallback draws its line, and how big a knob it puts above it.</summary>
+    private const float FallbackTrackHeight = 4f;
+    private const float FallbackKnobWidth = 15f;
+    private const float FallbackKnobHeight = 17f;
+    private const float FallbackKnobGap = 9f;
+
+    /// <summary>
+    /// The line drawn when the game's own slider could not be found. Deliberately plain: it is what
+    /// a build whose UI this mod does not recognise falls back to, not a second attempt at matching
+    /// the game's look.
+    /// </summary>
     private static GameObject CreateDefaultSliderTemplate()
     {
+        // Authored in this menu's own units, so it wants no reconciling with the game's.
+        sliderTemplateIsGameClone = false;
+
         var root = new GameObject("DefaultSlider");
         root.hideFlags = HideFlags.HideAndDontSave;
         root.AddComponent<RectTransform>();
-        var selectable = root.AddComponent<MenuSelectable>();
+        root.AddComponent<MenuSelectable>();
+
+        const float trackHalf = FallbackTrackHeight * 0.5f;
+        const float knobBottom = trackHalf + FallbackKnobGap;
+        const float knobTop = knobBottom + FallbackKnobHeight;
 
         var sliderGo = new GameObject("Slider");
         sliderGo.transform.SetParent(root.transform, false);
         var sliderRt = sliderGo.AddComponent<RectTransform>();
-        sliderRt.sizeDelta = new Vector2(160f, 20f);
+        // Spans the row's width; tall enough to hold the knob above the line, and symmetric about
+        // the line so that centring the whole thing in the row puts the line on the row's centre.
+        sliderRt.anchorMin = new Vector2(0f, 0.5f);
+        sliderRt.anchorMax = new Vector2(1f, 0.5f);
+        sliderRt.pivot = new Vector2(0.5f, 0.5f);
+        sliderRt.sizeDelta = new Vector2(0f, knobTop * 2f);
+        sliderRt.anchoredPosition = Vector2.zero;
+
+        var uiSprite = GetFallbackSprite(ref fallbackSlicedSprite, "ShadeSettingsSliderBg", true);
 
         var background = new GameObject("Background");
         background.transform.SetParent(sliderGo.transform, false);
         var bgImage = background.AddComponent<Image>();
-        var uiSprite = GetFallbackSprite(ref fallbackSlicedSprite, "ShadeSettingsSliderBg", true);
-        var skin = gameSliderSkin;
-        float trackHalf = Mathf.Max(1f, skin.TrackHeight * 0.5f);
-        bgImage.sprite = skin.TrackSprite != null ? skin.TrackSprite : uiSprite;
-        bgImage.type = skin.TrackSprite != null ? skin.TrackType : Image.Type.Sliced;
-        // A hairline centred in the row, not a full-height plate.
-        bgImage.color = skin.TrackColor;
+        bgImage.sprite = uiSprite;
+        bgImage.type = Image.Type.Sliced;
+        bgImage.color = new Color(0.86f, 0.85f, 0.80f, 0.35f);
         var backgroundRt = background.GetComponent<RectTransform>();
         backgroundRt.anchorMin = new Vector2(0f, 0.5f);
         backgroundRt.anchorMax = new Vector2(1f, 0.5f);
         backgroundRt.offsetMin = new Vector2(0f, -trackHalf);
         backgroundRt.offsetMax = new Vector2(0f, trackHalf);
 
+        // Full width, both of these. The knob's centre travels the whole line and the fill runs out
+        // to meet it, which is how the game's own slider reads a value off the track.
         var fillArea = new GameObject("Fill Area");
         fillArea.transform.SetParent(sliderGo.transform, false);
         var fillAreaRt = fillArea.AddComponent<RectTransform>();
         fillAreaRt.anchorMin = new Vector2(0f, 0.5f);
         fillAreaRt.anchorMax = new Vector2(1f, 0.5f);
-        float knobWidth = skin.HandleSize.x;
-        float knobHeight = skin.HandleSize.y;
-        // A quarter turn either way swaps what the knob occupies horizontally and vertically.
-        bool knobTurned = Mathf.Abs(Mathf.Sin(skin.HandleRotationZ * Mathf.Deg2Rad)) > 0.5f;
-        float knobFootprint = knobTurned ? knobHeight : knobWidth;
-        float knobHalf = knobFootprint * 0.5f;
-
-        // Inset by half a knob at each end, matching the range the handle's centre actually travels.
-        // Insetting only the right, and by a whole knob, is why the chevron did not line up with the
-        // end of the filled part of the track.
-        fillAreaRt.offsetMin = new Vector2(knobHalf, -trackHalf);
-        fillAreaRt.offsetMax = new Vector2(-knobHalf, trackHalf);
+        fillAreaRt.offsetMin = new Vector2(0f, -trackHalf);
+        fillAreaRt.offsetMax = new Vector2(0f, trackHalf);
 
         var fill = new GameObject("Fill");
         fill.transform.SetParent(fillArea.transform, false);
         var fillImg = fill.AddComponent<Image>();
-        fillImg.sprite = skin.FillSprite != null ? skin.FillSprite : uiSprite;
-        fillImg.type = skin.FillSprite != null ? skin.FillType : Image.Type.Sliced;
-        fillImg.color = skin.FillColor;
+        fillImg.sprite = uiSprite;
+        fillImg.type = Image.Type.Sliced;
+        fillImg.color = new Color(0.96f, 0.95f, 0.90f, 0.95f);
         var fillRt = fill.GetComponent<RectTransform>();
-        fillRt.anchorMin = new Vector2(0f, 0f);
-        fillRt.anchorMax = new Vector2(1f, 1f);
+        fillRt.anchorMin = Vector2.zero;
+        fillRt.anchorMax = Vector2.one;
         fillRt.offsetMin = Vector2.zero;
         fillRt.offsetMax = Vector2.zero;
 
         var handleArea = new GameObject("Handle Slide Area");
         handleArea.transform.SetParent(sliderGo.transform, false);
         var handleAreaRt = handleArea.AddComponent<RectTransform>();
-        handleAreaRt.anchorMin = new Vector2(0f, 0f);
-        handleAreaRt.anchorMax = new Vector2(1f, 1f);
-        handleAreaRt.sizeDelta = new Vector2(-knobFootprint, 0f);
-        handleAreaRt.anchoredPosition = Vector2.zero;
+        handleAreaRt.anchorMin = new Vector2(0f, 0.5f);
+        handleAreaRt.anchorMax = new Vector2(1f, 0.5f);
+        handleAreaRt.offsetMin = new Vector2(0f, knobBottom);
+        handleAreaRt.offsetMax = new Vector2(0f, knobTop);
 
         var handle = new GameObject("Handle");
         handle.transform.SetParent(handleArea.transform, false);
         var handleImg = handle.AddComponent<Image>();
-        var knobSprite = GetFallbackSprite(ref fallbackKnobSprite, "ShadeSettingsSliderKnob", false);
-        handleImg.sprite = skin.HandleSprite != null ? skin.HandleSprite : knobSprite;
-        handleImg.color = skin.HandleColor;
+        handleImg.sprite = GetFallbackSprite(ref fallbackKnobSprite, "ShadeSettingsSliderKnob", false);
+        handleImg.color = new Color(1f, 0.98f, 0.92f, 1f);
         var handleRt = handle.GetComponent<RectTransform>();
-        handleRt.sizeDelta = new Vector2(knobWidth, knobHeight);
-        handleRt.localRotation = Quaternion.Euler(0f, 0f, skin.HandleRotationZ);
-        // Centred on the track, exactly as the game has it. The chevron appears above the line
-        // because the art sits near one end of a mostly-empty sprite, not because the rect is
-        // offset - nudging the rect as well pushed it into space.
+        // Slider drives the anchors to stretch this over the slide area's height, so sizeDelta.y is
+        // an adjustment to that height rather than a height of its own; zero leaves it filling the
+        // slide area, which is already the knob's height.
+        handleRt.sizeDelta = new Vector2(FallbackKnobWidth, 0f);
         handleRt.anchoredPosition = Vector2.zero;
 
         var slider = sliderGo.AddComponent<Slider>();
-        slider.fillRect = fill.GetComponent<RectTransform>();
-        slider.handleRect = handle.GetComponent<RectTransform>();
+        slider.fillRect = fillRt;
+        slider.handleRect = handleRt;
         slider.targetGraphic = handleImg;
         slider.direction = Slider.Direction.LeftToRight;
         slider.transition = Selectable.Transition.ColorTint;
@@ -1031,6 +1172,9 @@ public static partial class ShadeSettingsMenu
         }
 
         SanitizeSelectableHierarchy(go);
+        // Done per row rather than once on the template: the figure it needs is measured while the
+        // screens are set up, which happens after the template is built and before any row is.
+        ScaleRectTree(slider.GetComponent<RectTransform>(), SliderUnitScale);
         rowTransform = rowRect;
         Object.DestroyImmediate(slider.GetComponent<MenuAudioSlider>());
         Object.DestroyImmediate(slider.GetComponent<MenuPreventDeselect>());
@@ -1051,8 +1195,10 @@ public static partial class ShadeSettingsMenu
         sliderLe.minWidth = metrics.SliderWidth;
         sliderLe.preferredWidth = metrics.SliderWidth;
         sliderLe.flexibleWidth = 1f;
-        var sliderRect = slider.GetComponent<RectTransform>();
-        sliderRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, metrics.SliderWidth);
+        // The slider itself is anchored to stretch across this row slot, so it takes whatever width
+        // the layout settles on. Setting a width here instead would fight that: with stretched
+        // anchors sizeDelta.x is an inset from the parent, not a width, so a row wider or narrower
+        // than asked for came out with the track overhanging or stopping short.
 
         // value text to the right of slider
         var valueObj = new GameObject("Value");

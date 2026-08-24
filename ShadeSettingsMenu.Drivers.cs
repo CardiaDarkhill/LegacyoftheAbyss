@@ -943,6 +943,128 @@ public static partial class ShadeSettingsMenu
     }
 
     /// <summary>
+    /// Keeps a shoulder-button prompt showing the device the player is actually on.
+    /// <para>
+    /// This used to be resolved once, while the menu was built - which happens seconds after launch,
+    /// before a pad has necessarily been seen. Whatever it picked then it kept for the rest of the
+    /// session, so a player on a controller was shown the keyboard's square-bracket key caps and
+    /// nothing they did would change them. Two rounds of reports went on which device to ask about;
+    /// the answer was that asking once was the bug.
+    /// </para>
+    /// <para>
+    /// The game raises <c>InputHandler.RefreshActiveControllerEvent</c> whenever the active device
+    /// changes and redraws its own prompts on it. This does the same, and redraws on becoming
+    /// visible as well, for the changes that happened while the screen was closed.
+    /// </para>
+    /// </summary>
+    private sealed class PanePromptGlyphDriver : MonoBehaviour
+    {
+        private HeroActionButton action;
+        private Image glyph;
+        private Text symbol;
+        private LayoutElement slot;
+        private float size;
+        private InputHandler subscribed;
+
+        public void Initialize(HeroActionButton button, Image image, Text symbolText, LayoutElement layout, float glyphSize)
+        {
+            action = button;
+            glyph = image;
+            symbol = symbolText;
+            slot = layout;
+            size = glyphSize;
+            Refresh();
+        }
+
+        private void OnEnable()
+        {
+            Subscribe();
+            Refresh();
+        }
+
+        private void OnDisable()
+        {
+            Unsubscribe();
+        }
+
+        private void OnDestroy()
+        {
+            Unsubscribe();
+        }
+
+        private void Subscribe()
+        {
+            try
+            {
+                var handler = HornetInput.FindHandler();
+                if (handler == null || handler == subscribed)
+                {
+                    return;
+                }
+
+                Unsubscribe();
+                handler.RefreshActiveControllerEvent += Refresh;
+                subscribed = handler;
+            }
+            catch (Exception e)
+            {
+                LogMenuWarning($"Could not follow the active controller for the {action} prompt: {e}");
+            }
+        }
+
+        private void Unsubscribe()
+        {
+            if (subscribed == null)
+            {
+                return;
+            }
+
+            try
+            {
+                subscribed.RefreshActiveControllerEvent -= Refresh;
+            }
+            catch (Exception e)
+            {
+                LogMenuWarning($"Could not stop following the active controller for the {action} prompt: {e}");
+            }
+
+            subscribed = null;
+        }
+
+        private void Refresh()
+        {
+            var skin = ResolvePaneButtonSkin(action);
+
+            // A ButtonSkin is two halves and both are drawn: on a keyboard the sprite is a blank key
+            // cap with the letter in symbol, to go on top of it; on a pad the sprite is the whole
+            // glyph and there is no symbol. Drawing only the first is what produced empty boxes.
+            bool hasSprite = skin != null && skin.sprite != null;
+            bool hasSymbol = skin != null && !string.IsNullOrWhiteSpace(skin.symbol);
+
+            if (glyph != null)
+            {
+                glyph.sprite = hasSprite ? skin.sprite : null;
+                glyph.enabled = hasSprite;
+            }
+
+            if (symbol != null)
+            {
+                symbol.text = hasSymbol ? skin.symbol : string.Empty;
+                symbol.enabled = hasSymbol;
+            }
+
+            if (slot != null)
+            {
+                // A wide key cap is drawn wide; a pad glyph and a bare letter are square. The same
+                // three cases the game sizes its own prompt containers by.
+                float width = skin != null && skin.skinType == ButtonSkinType.WIDE ? size * 1.9f : size;
+                slot.preferredWidth = width;
+                slot.minWidth = width;
+            }
+        }
+    }
+
+    /// <summary>
     /// Moves the highlight between two columns of rows on a shoulder-button press.
     /// <para>
     /// The Difficulty screen's rows are almost all sliders, and a slider row eats Left and Right to

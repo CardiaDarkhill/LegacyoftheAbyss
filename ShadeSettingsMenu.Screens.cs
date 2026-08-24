@@ -164,6 +164,15 @@ public static partial class ShadeSettingsMenu
             float relativeX = ourScale.x / canvasScale.x;
             float relativeY = ourScale.y / canvasScale.y;
 
+            // Recorded before the early return below, so a build where the pause menu is not scaled
+            // records its 1 rather than leaving the last screen's figure standing. Anything copied
+            // in from elsewhere on the canvas has to be resized by this to come out the size it is
+            // drawn at over there - see SliderUnitScale.
+            if (relativeX > 0.0001f)
+            {
+                screenCanvasScale = relativeX;
+            }
+
             // Only ever grow. A screen already covering the canvas (or somehow larger than it) is
             // left exactly as the stretch left it, so this cannot shrink a layout that was fine.
             if (relativeX <= 0.0001f || relativeY <= 0.0001f || (relativeX >= 0.999f && relativeY >= 0.999f))
@@ -1326,11 +1335,9 @@ public static partial class ShadeSettingsMenu
     /// Draws the game's own shoulder-button glyph beside a panel heading, so the way across to the
     /// other panel is visible rather than something the player has to guess.
     /// <para>
-    /// A <c>ButtonSkin</c> is two halves, and drawing only the first is what produced the empty
-    /// boxes that got reported: on a keyboard the sprite is a blank key cap and the letter lives in
-    /// <c>symbol</c>, to be drawn on top of it. On a pad the sprite is the whole glyph and the
-    /// symbol is empty. <c>ActionButtonIconBase.GetButtonIcon</c> assigns both for exactly that
-    /// reason, and this does the same.
+    /// Both halves of the prompt are built here unconditionally and left for
+    /// <c>PanePromptGlyphDriver</c> to fill in, because which of them the current device needs is
+    /// not settled at build time and does not stay settled afterwards.
     /// </para>
     /// </summary>
     private static CanvasGroup CreatePaneSwitchPrompt(RectTransform parent, HeroActionButton action, float headerHeight)
@@ -1340,27 +1347,15 @@ public static partial class ShadeSettingsMenu
             return null;
         }
 
-        ButtonSkin skin = ResolvePaneButtonSkin(action);
-
-        bool hasSprite = skin != null && skin.sprite != null;
-        bool hasSymbol = skin != null && !string.IsNullOrWhiteSpace(skin.symbol);
-        if (!hasSprite && !hasSymbol)
-        {
-            return null;
-        }
-
         float size = headerHeight * PanePromptHeightFraction;
-        // A wide key cap is drawn wide; everything else is square. Same three cases the game sizes
-        // its own prompt containers by.
-        float width = skin != null && skin.skinType == ButtonSkinType.WIDE ? size * 1.9f : size;
 
         var prompt = new GameObject(action == HeroActionButton.MENU_PANE_LEFT ? "PaneLeftPrompt" : "PaneRightPrompt");
         var rect = prompt.AddComponent<RectTransform>();
         rect.SetParent(parent, false);
         var layout = prompt.AddComponent<LayoutElement>();
-        layout.preferredWidth = width;
+        layout.preferredWidth = size;
         layout.preferredHeight = size;
-        layout.minWidth = width;
+        layout.minWidth = size;
         layout.minHeight = size;
         layout.flexibleWidth = 0f;
 
@@ -1369,18 +1364,9 @@ public static partial class ShadeSettingsMenu
         var group = prompt.AddComponent<CanvasGroup>();
         group.alpha = 0f;
 
-        if (hasSprite)
-        {
-            var image = prompt.AddComponent<Image>();
-            image.sprite = skin.sprite;
-            image.preserveAspect = true;
-            image.raycastTarget = false;
-        }
-
-        if (!hasSymbol)
-        {
-            return group;
-        }
+        var image = prompt.AddComponent<Image>();
+        image.preserveAspect = true;
+        image.raycastTarget = false;
 
         // The symbol goes on its own child stretched over the cap, so it stays centred on the art
         // whatever size the cap ended up.
@@ -1394,19 +1380,15 @@ public static partial class ShadeSettingsMenu
         var symbolText = symbolObject.AddComponent<Text>();
         ApplyTextStyle(symbolText, sliderLabelStyle, TextAnchor.MiddleCenter, Color.white);
         symbolText.alignment = TextAnchor.MiddleCenter;
-        symbolText.text = skin.symbol;
         symbolText.raycastTarget = false;
         symbolText.horizontalOverflow = HorizontalWrapMode.Overflow;
         // Sized to the cap rather than to the menu's body size, which would overflow a key cap.
         symbolText.resizeTextForBestFit = true;
         symbolText.resizeTextMinSize = 8;
         symbolText.resizeTextMaxSize = Mathf.Max(9, Mathf.RoundToInt(size * 0.7f));
-        // No sprite behind it means nothing to sit inside, so it stands alone as plain text.
-        if (!hasSprite)
-        {
-            symbolText.resizeTextForBestFit = false;
-            ScaleTextElements(symbolObject, 0.7f);
-        }
+
+        var driver = prompt.AddComponent<PanePromptGlyphDriver>();
+        driver.Initialize(action, image, symbolText, layout, size);
 
         return group;
     }

@@ -119,13 +119,15 @@ public static partial class ShadeSettingsMenu
     }
 
     /// <summary>
-    /// Which shoulder-button glyph to draw: the pad's when one is plugged in, the keyboard's cap
-    /// otherwise.
+    /// Which shoulder-button glyph to draw, asked of the game rather than worked out here.
     /// <para>
-    /// Not <c>GetButtonSkinFor</c>, which picks by <c>lastActiveController</c>. On a machine with
-    /// both, that shows whichever device was touched last - so this menu drew the keyboard's square
-    /// bracket caps for a player who wanted the LB/RB the inventory shows them. It also flaps as the
-    /// player switches hands, and two people can be on these screens at once.
+    /// <c>GetButtonSkinFor</c> picks by the device the player last used, which is what every other
+    /// prompt in the game draws by - including the inventory's LB/RB, which is where this menu's
+    /// prompts were asked to match. An earlier version picked by what was plugged in instead, to
+    /// avoid following a player who had just brushed the keyboard; that turned out to be answering
+    /// the wrong question. The glyph was wrong because it was resolved once, seconds after launch,
+    /// and then kept for the session. <c>PanePromptGlyphDriver</c> re-asks whenever the answer can
+    /// have changed, so the simple question is the right one again.
     /// </para>
     /// </summary>
     internal static ButtonSkin ResolvePaneButtonSkin(HeroActionButton action)
@@ -145,9 +147,7 @@ public static partial class ShadeSettingsMenu
                 return null;
             }
 
-            return AnyControllerAttached()
-                ? skins.GetControllerButtonSkinFor(playerAction)
-                : skins.GetKeyboardSkinFor(playerAction);
+            return skins.GetButtonSkinFor(playerAction);
         }
         catch (Exception e)
         {
@@ -156,36 +156,15 @@ public static partial class ShadeSettingsMenu
         }
     }
 
-    private static bool AnyControllerAttached()
-    {
-        try
-        {
-            var devices = InControl.InputManager.Devices;
-            if (devices == null)
-            {
-                return false;
-            }
-
-            foreach (var device in devices)
-            {
-                if (device != null && device != InControl.InputDevice.Null && device.IsAttached)
-                {
-                    return true;
-                }
-            }
-        }
-        catch
-        {
-        }
-
-        return false;
-    }
-
     /// <summary>
-    /// Walks up from the object carrying the Slider to the row that should be cloned: the nearest
-    /// ancestor with a <see cref="MenuSelectable"/> (which is what carries the selection fleurs), or
-    /// the slider's own object when the row has none. Stops before leaving the row - an ancestor
-    /// holding a second Slider is a list of rows, not a row.
+    /// The <see cref="Slider"/>'s own object, and nothing above it.
+    /// <para>
+    /// What is above it is the row: the game's own label, its value readout and the layout group
+    /// arranging them. This used to walk up to the nearest MenuSelectable to pick those up as well,
+    /// on the reasoning that the row is what carries the selection fleurs - and every mod slider
+    /// then drew "Master Volume", "10" and a tick box over its own label. The fleurs this menu
+    /// draws itself.
+    /// </para>
     /// </summary>
     private static GameObject ResolveSliderTemplateRoot(GameObject sliderObject)
     {
@@ -194,26 +173,8 @@ public static partial class ShadeSettingsMenu
             return null;
         }
 
-        GameObject best = sliderObject;
-        var cursor = sliderObject.transform.parent;
-        for (int depth = 0; depth < 4 && cursor != null; depth++)
-        {
-            var candidate = cursor.gameObject;
-            if (candidate.GetComponentsInChildren<Slider>(true).Length > 1)
-            {
-                break;
-            }
-
-            if (candidate.GetComponent<MenuSelectable>() != null)
-            {
-                best = candidate;
-                break;
-            }
-
-            cursor = cursor.parent;
-        }
-
-        return best;
+        var slider = sliderObject.GetComponent<Slider>() ?? sliderObject.GetComponentInChildren<Slider>(true);
+        return slider != null ? slider.gameObject : null;
     }
 
     private static string DescribeHierarchyPath(Transform transform)
@@ -281,13 +242,10 @@ public static partial class ShadeSettingsMenu
             return;
         }
 
-        // The game's slider is read for its look, never cloned. See SliderSkin for why: its rows
-        // carry their own label, value and layout group, and three separate attempts at deleting
-        // those from a clone afterwards each missed something.
+        // The game's own Slider, cloned - but the Slider's object only, never the row around it.
+        // See CreateGameSliderTemplate for what each half of that sentence cost.
         var gameSlider = FindGameSliderTemplate(ui);
-        gameSliderSkin = CaptureSliderSkin(gameSlider, screenTemplate);
-        RecordSliderTemplate(LastSliderTemplateDescription + " | " + gameSliderSkin.Describe());
-        GameObject sliderTemplate = CreateDefaultSliderTemplate();
+        GameObject sliderTemplate = CreateGameSliderTemplate(gameSlider) ?? CreateDefaultSliderTemplate();
 
         // Only supplies a text style (toggle rows themselves are drawn as menu buttons), but the
         // same reasoning as the slider applies: the screen that actually carries toggles is Game

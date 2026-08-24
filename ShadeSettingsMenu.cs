@@ -88,7 +88,22 @@ public static partial class ShadeSettingsMenu
     /// <summary>
     /// How tall a shoulder-button prompt is drawn, as a share of the panel heading's height.
     /// </summary>
-    private const float PanePromptHeightFraction = 0.85f;
+    private const float PanePromptHeightFraction = 1f;
+
+    /// <summary>
+    /// How large these screens are drawn relative to the canvas, measured by
+    /// <c>StretchScreenOverCanvas</c> when each one is set up. The pause menu this menu is cloned
+    /// from sits in a part of the hierarchy that is scaled down - about two thirds on the install
+    /// this was measured on - so a local unit here is not a local unit on the game's own option
+    /// screens.
+    /// </summary>
+    private static float screenCanvasScale = 1f;
+
+    /// <summary>The same figure for the game's slider, so the two can be reconciled.</summary>
+    private static float gameSliderCanvasScale = 1f;
+
+    /// <summary>Whether the slider rows are the game's own, and so want that reconciling.</summary>
+    private static bool sliderTemplateIsGameClone;
     private static readonly Color ButtonNormalColor = new Color(1f, 1f, 1f, 0f);
     private static readonly Color ButtonHighlightColor = new Color(1f, 0.95f, 0.78f, 0.35f);
     private static readonly Color ButtonPressedColor = new Color(0.95f, 0.9f, 0.8f, 0.45f);

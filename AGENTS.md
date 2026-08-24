@@ -129,13 +129,25 @@ The pause-menu screens are built by cloning the game's own prefabs, and that has
 the failure mode above: **a clone brings everything, and what it brings is invisible until it draws
 on top of your own work.** Four rounds went on one slider.
 
-- **Read the look, do not clone the row.** A game option row is a label, a value readout, a layout
-  group and sometimes a toggle wrapped around the control you want. Three separate attempts to clone
-  one and delete the rest afterwards each missed something different, because each rested on a guess
-  about a hierarchy nobody had inspected - including that the game ships *two* text stacks (`TMPro`
-  and `TMProOld`), so naming one catches nothing. `CaptureSliderSkin` takes the four sprites off it
-  and rebuilds the row in `CreateSliderTemplate`, where the structure is known. Prefer that shape for
-  anything else borrowed from the game's UI.
+- **Clone the control, then cut it down through its own references.** Rebuilding a borrowed widget
+  by hand does not work - four rounds went on a slider that way, each a fresh guess about a rect (a
+  quarter-turned knob, mostly transparent padding, a fill inset at one end and not the other) that
+  could simply have been copied. Neither does picking an object and trusting what is on it: the row
+  above a slider holds the game's label, its value readout and sometimes a toggle, and `Slider`'s
+  *own* object turned out to hold a label, a value readout, a full-row cursor hotspot and a pair of
+  selection fleurs as well. Both produced the identical symptom - "Master Volume" and a stray "10"
+  across every row - seven rounds apart. What works is cloning and then keeping only what the
+  component itself points at: `StripToSliderParts` walks up from `fillRect` and `handleRect`, keeps
+  what else is drawn the same size as the fill's container, and destroys the rest. No part is
+  identified by name or by component type; the game ships *two* text stacks (`TMPro` and
+  `TMProOld`), so naming one catches nothing anyway.
+- **A clone measures against the hierarchy it came from.** Read sizes off the original, where its
+  parent still exists; a clone hung under a holder of your own resolves its stretched rects against
+  nothing, so they measure zero. Decide on the original and apply to the clone by child index. And
+  these screens are drawn at about two thirds of the canvas (see `StretchScreenOverCanvas`), so a
+  rect copied off a screen that is not lands here two thirds of the size it is drawn at over there -
+  `SliderUnitScale` reconciles the two. Resize the rects rather than setting `localScale`: a scaled
+  rect still reports its unscaled size to the layout around it.
 - **Search scenes, not `Resources.FindObjectsOfTypeAll` alone.** That call also returns prefab
   assets, and their ordering is not stable. One run cloned a live audio row, the next cloned a
   generic options-row prefab carrying a checkbox. Filter on `gameObject.scene.IsValid()`.
@@ -145,9 +157,13 @@ on top of your own work.** Four rounds went on one slider.
   when a row opened a sub-menu.
 - **A `ButtonSkin` is two halves.** `skin.sprite` is often a blank key cap with the letter in
   `skin.symbol`, drawn on top; assign both, the way `ActionButtonIconBase.GetButtonIcon` does, or
-  keyboard prompts render as empty boxes. Resolve which skin by what is *plugged in*, not by
-  `lastActiveController` - that flaps as the player switches hands, and two people can be on these
-  screens at once.
+  keyboard prompts render as empty boxes.
+- **Anything that depends on the input device has to be re-asked.** These screens are built seconds
+  after launch, before a pad has necessarily been seen, and then kept for the session - so a button
+  glyph resolved at build time showed keyboard key caps to a player on a controller for the rest of
+  the run. Two rounds went on *which* device to ask about before it was clear that asking once was
+  the bug. Subscribe to `InputHandler.RefreshActiveControllerEvent` and redraw on `OnEnable` as
+  well, for what changed while the screen was shut.
 - **Do not assume where a helper put the thing you need.** `CreateSlider` returns the row's
   selectable, which lives on the clone or on the row depending on what the template carried; a caller
   deriving the row from `selectable.transform.parent` moved a whole panel instead. Hand the caller
