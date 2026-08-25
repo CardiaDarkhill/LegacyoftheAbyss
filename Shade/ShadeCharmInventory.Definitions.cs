@@ -6,13 +6,9 @@ using UnityEngine;
 namespace LegacyoftheAbyss.Shade
 {
     /// <summary>
-    /// The shade's charm catalogue. This is data, not logic, and previously lived inline in
-    /// the <see cref="ShadeCharmInventory"/> constructor -- 655 lines of it.
-    ///
-    /// It stays an instance method rather than a static table because several charms
-    /// (Fury of the Fallen, Kingsoul, Hiveblood) close over mutable per-inventory state --
-    /// both captured locals and instance fields. A shared
-    /// static table would leak that state between instances.
+    /// The shade's charm catalogue: data, not logic. It stays an instance method rather than a
+    /// static table because several charms (Fury of the Fallen, Kingsoul, Hiveblood) close over
+    /// mutable per-inventory state, which a shared table would leak between instances.
     /// </summary>
     internal sealed partial class ShadeCharmInventory
     {
@@ -23,11 +19,10 @@ namespace LegacyoftheAbyss.Shade
             bool furyActive = false;
             float kingsoulTimer = 0f;
 
-            // TODO: Surface the shade's map position while Wayward Compass is equipped.
             definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.WaywardCompass),
                 displayName: "Wayward Compass",
-                description: "Whispers its location to the bearer whenever a map is open, allowing wanderers to pinpoint their current location.",
+                description: "Whispers of relics still lost to the dark. Marks the rooms holding treasures of the abyss the bearer has yet to claim, on any map they carry.",
                 notchCost: 1,
                 fallbackTint: new Color(0.74f, 0.77f, 0.83f),
                 enumId: ShadeCharmId.WaywardCompass,

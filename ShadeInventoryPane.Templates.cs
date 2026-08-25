@@ -599,11 +599,9 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
 
     private void OnDisable()
     {
-        // A pane that is still the pane list's current pane has no business being deactivated - the
-        // FSM only ever does that to the pane you just left, and PaneEnd would have run first. When
-        // it happens anyway (bug 4a: only when the Shade tab was entered from Inv), the cause is an
-        // ancestor going inactive and taking this object with it, so name the ancestor rather than
-        // just recording that it happened.
+        // The FSM only ever deactivates the pane you just left, and PaneEnd runs first - so this
+        // firing while still the current pane means an ancestor went inactive and took the pane
+        // with it. Name the ancestor rather than only recording that it happened.
         if (IsPaneActive)
         {
             LogUnexpectedDeactivation();
@@ -617,7 +615,14 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         ResetShadeInputState("OnDisable");
         StopAllCoroutines();
         ClearActiveCharmFlights();
-        ApplyOverlayVisibility(false);
+
+        // Not while a slide-out is running: the FSM deactivates the pane you just left partway
+        // through its own tween, and cutting the overlay here is what made the Charms tab vanish
+        // instead of sliding away.
+        if (overlaySlide == null || !overlaySlide.IsTransitioning)
+        {
+            ApplyOverlayVisibility(false);
+        }
         if (ReferenceEquals(activePane, this))
         {
             activePane = null;
@@ -633,25 +638,19 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
     /// </summary>
     private void LogUnexpectedDeactivation()
     {
-        try
+        var builder = new System.Text.StringBuilder("Shade pane deactivated while still the current pane. Ancestors:");
+        Transform node = transform;
+        while (node != null)
         {
-            var builder = new System.Text.StringBuilder("Shade pane deactivated while still the current pane. Ancestors:");
-            Transform node = transform;
-            while (node != null)
+            builder.Append(FormattableString.Invariant($" {node.name}(activeSelf={node.gameObject.activeSelf})"));
+            node = node.parent;
+            if (node != null)
             {
-                builder.Append(FormattableString.Invariant($" {node.name}(activeSelf={node.gameObject.activeSelf})"));
-                node = node.parent;
-                if (node != null)
-                {
-                    builder.Append(" <-");
-                }
+                builder.Append(" <-");
             }
+        }
 
-            LegacyHelper.LogInfo(builder.ToString());
-        }
-        catch
-        {
-        }
+        LegacyHelper.LogInfo(builder.ToString());
     }
 
     private void OnDestroy()
@@ -850,7 +849,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         {
             ShadeInventoryPaneIntegration.BindInput(this, attachedPaneList, captureFocus: true);
         }
-        ApplyOverlayVisibility(true);
+        SetOverlayVisibility(true, animate: true);
         RefreshAll();
         UpdateParentListLabel();
         ForceLayoutRebuild();
@@ -864,7 +863,12 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         isActive = false;
         labelPulseTimer = 0f;
         ResetShadeInputState("PaneEnd");
-        ApplyOverlayVisibility(false);
+
+        // The FSM calls PaneEnd both for a pane swap and on the way out of the inventory, and only
+        // the swap is animated. PlayerData.isInventoryOpen is cleared by SetIsInventoryOpen(false)
+        // before the close path reaches PaneEnd, which tells the two apart.
+        var playerData = PlayerData.instance;
+        SetOverlayVisibility(false, animate: playerData != null && playerData.isInventoryOpen);
         if (ReferenceEquals(activePane, this))
         {
             activePane = null;

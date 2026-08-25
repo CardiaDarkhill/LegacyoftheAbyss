@@ -312,6 +312,21 @@ public class ModConfig
     // character instead of an unlit overlay. Toggleable because it is the one visual change
     // here that depends on a game-side shader we do not control.
     public bool shadeUseHornetMaterial = true;
+    // Give the Shade a clone of Hornet's hero light. Scene darkness is a shader cutout fed by a
+    // camera that renders that object, so this is what lets the Shade be seen - and light its own
+    // surroundings - in a dark room away from Hornet.
+    public bool shadeLightEnabled = true;
+    // Both of these are the values reached when the Shade is clear of Hornet's own light. They
+    // fade to nothing as it closes on her, because two overlapping lights wash the pair out - so
+    // the Shade lights what she is not lighting rather than doubling up on what she is.
+    // Peak alpha multiplier on the cloned light. 1 matches Hornet; above that saturates it.
+    public float shadeLightIntensity = 2.5f;
+    // Peak radius multiplier, reached at the edge of Hornet's own light. 1 matches her radius.
+    public float shadeLightRadiusScale = 0.5f;
+    // World-unit distance from Hornet over which the fade above happens. 0 measures it from her
+    // own light instead, which reads larger than the light looks because these sprites carry a
+    // wide soft falloff.
+    public float shadeLightFalloffRadius = 10f;
     // Trailing black-wisp emitter that follows the Shade, scaled by its current SOUL.
     public bool shadeShadowParticlesEnabled = true;
     // Global multiplier on that emitter, 0 (off) to 2 (twice the tuned density).

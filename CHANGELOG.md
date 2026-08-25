@@ -7,6 +7,12 @@ controls it; the reasoning belongs in the commit and the code.
 
 ### Fixed
 
+- The Shade's charm menu now slides in and out with the same animation as every other inventory
+  tab, whether you reach it by cycling or by its hotkey, instead of snapping into place.
+- The Shade now lights dark rooms, so it stays visible when it wanders away from Hornet. Its light
+  fades in with distance from her and is absent at her side, where hers already covers it.
+  `shadeLightEnabled`, `shadeLightIntensity`, `shadeLightRadiusScale` and `shadeLightFalloffRadius`
+  control it.
 - The charm menu no longer runs its text out under the frame, no longer shows the notch cost of a
   charm you have not discovered, and draws undiscovered charms at a sensible size.
 - Charm menu headings are no longer shouted in full capitals.
@@ -32,6 +38,12 @@ controls it; the reasoning belongs in the commit and the code.
   the old always-on-top look.
 - Skin previews are now anti-aliased to look better when view up close.
 - You can now talk to Flick the Fixer after he fixes the Wishing Wall... somehow... I had this bug too and it just... went away at some point
+
+### Changed
+
+- **Wayward Compass** now marks the rooms holding Legacy of the Abyss charms and notches you have
+  not collected yet, on the quick map and the full map, instead of repeating the position Hornet's
+  own compass already shows. Pins only appear in areas whose map you own.
 
 ### Added
 

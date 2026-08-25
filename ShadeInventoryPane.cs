@@ -239,6 +239,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
     private Canvas? overlayCanvas;
     private CanvasScaler? overlayCanvasScaler;
     private GraphicRaycaster? overlayRaycaster;
+    private ShadeInventoryPaneSlide? overlaySlide;
     private readonly Vector3[] overlayWorldCorners = new Vector3[4];
 
     private Font? bodyFont;

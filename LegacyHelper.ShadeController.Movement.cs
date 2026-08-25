@@ -43,6 +43,7 @@ public partial class LegacyHelper
             // downed or her controls are locked, and the emitter has to be stopped when the Shade
             // goes dormant regardless of which branch this frame takes.
             UpdateShadowParticles();
+            EnsureShadeLight();
 
             if (hornetTransform == null) return;
 
@@ -250,7 +251,6 @@ public partial class LegacyHelper
             }
 
             CheckHazardOverlap();
-            SyncShadeLight();
             PersistIfChanged();
             CheckFocusReadySfx();
             UpdateSfxVolumes();
@@ -995,13 +995,12 @@ public partial class LegacyHelper
 
         /// <summary>
         /// Takes the Shade off screen for a scripted hold and puts it back afterwards. It keeps
-        /// updating and stays where it was - this hides it, it does not park or disable it, so a
-        /// hold that ends mid-parkour hands back a Shade exactly where the player left it.
+        /// updating and stays where it was, so a hold ending mid-parkour hands back a Shade exactly
+        /// where the player left it.
         /// <para>
-        /// Only the two visuals that are on unconditionally are touched. Everything else the Shade
-        /// draws - the focus aura, Baldur's Shell, spell effects - is already cancelled when the
-        /// control lock engages, so reaching for those as well would only fight the code that owns
-        /// them.
+        /// Only the two visuals that are on unconditionally are touched; everything else the Shade
+        /// draws is already cancelled when the control lock engages. The cloned hero light follows
+        /// <c>sr</c> in <c>SyncShadeLight</c>, so it needs no line here.
         /// </para>
         /// </summary>
         private void ApplyScriptedHoldVisibility(bool hidden)
@@ -1013,23 +1012,15 @@ public partial class LegacyHelper
 
             hiddenForScriptedHold = hidden;
 
-            try
+            if (sr)
             {
-                if (sr)
-                {
-                    sr.enabled = !hidden;
-                }
+                sr.enabled = !hidden;
             }
-            catch { }
 
-            try
+            if (shadowParticleRenderer)
             {
-                if (shadowParticleRenderer)
-                {
-                    shadowParticleRenderer.enabled = !hidden;
-                }
+                shadowParticleRenderer.enabled = !hidden;
             }
-            catch { }
         }
 
         private static bool HornetIsDowned()

@@ -316,6 +316,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
     private void ResetOverlayReferences()
     {
         overlayCanvasObject = null;
+        overlaySlide = null;
         overlayRoot = null;
         overlayCanvas = null;
         overlayCanvasScaler = null;
@@ -1020,33 +1021,19 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             return overlayRoot;
         }
 
-        GameObject? overlayObject = null;
-        try
-        {
-            overlayObject = new GameObject("ShadeInventoryOverlay", typeof(RectTransform));
-        }
-        catch
-        {
-            overlayObject = null;
-        }
-
-        if (overlayObject == null)
-        {
-            return null;
-        }
-
+        var overlayObject = new GameObject("ShadeInventoryOverlay", typeof(RectTransform));
         overlayCanvasObject = overlayObject;
         overlayObject.layer = gameObject.layer;
 
-        overlayRoot = overlayObject.GetComponent<RectTransform>();
-        overlayRoot.SetParent(null, false);
-        overlayRoot.anchorMin = Vector2.zero;
-        overlayRoot.anchorMax = Vector2.one;
-        overlayRoot.pivot = new Vector2(0.5f, 0.5f);
-        overlayRoot.offsetMin = Vector2.zero;
-        overlayRoot.offsetMax = Vector2.zero;
-        overlayRoot.localScale = Vector3.one;
-        overlayRoot.localPosition = Vector3.zero;
+        var canvasRect = overlayObject.GetComponent<RectTransform>();
+        canvasRect.SetParent(null, false);
+        canvasRect.anchorMin = Vector2.zero;
+        canvasRect.anchorMax = Vector2.one;
+        canvasRect.pivot = new Vector2(0.5f, 0.5f);
+        canvasRect.offsetMin = Vector2.zero;
+        canvasRect.offsetMax = Vector2.zero;
+        canvasRect.localScale = Vector3.one;
+        canvasRect.localPosition = Vector3.zero;
 
         overlayCanvas = overlayObject.AddComponent<Canvas>();
         overlayCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -1063,14 +1050,35 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         overlayRaycaster.ignoreReversedGraphics = false;
         overlayRaycaster.blockingObjects = GraphicRaycaster.BlockingObjects.None;
 
-        canvasGroup = overlayObject.GetComponent<CanvasGroup>();
-        if (canvasGroup == null)
+        // Everything the pane draws hangs off this container rather than off the canvas itself. A
+        // Canvas rewrites its own RectTransform to match the screen every frame, so an offset
+        // written there is discarded - which is why the pane slide moved nothing at all.
+        var slideObject = new GameObject("ShadeInventorySlide", typeof(RectTransform))
         {
-            canvasGroup = overlayObject.AddComponent<CanvasGroup>();
-        }
+            layer = overlayObject.layer
+        };
+
+        overlayRoot = slideObject.GetComponent<RectTransform>();
+        overlayRoot.SetParent(canvasRect, false);
+        overlayRoot.anchorMin = Vector2.zero;
+        overlayRoot.anchorMax = Vector2.one;
+        overlayRoot.pivot = new Vector2(0.5f, 0.5f);
+        overlayRoot.offsetMin = Vector2.zero;
+        overlayRoot.offsetMax = Vector2.zero;
+        overlayRoot.localScale = Vector3.one;
+        overlayRoot.anchoredPosition = Vector2.zero;
+
+        // On the container, not the canvas, so BuildUI finds it where it expects the content's
+        // group to be and does not add a second one.
+        canvasGroup = slideObject.AddComponent<CanvasGroup>();
         canvasGroup.alpha = 0f;
         canvasGroup.interactable = false;
         canvasGroup.blocksRaycasts = false;
+
+        // The driver lives on the canvas object, a scene root: the FSM deactivates the pane you
+        // just left while its slide-out is still running.
+        overlaySlide = overlayObject.AddComponent<ShadeInventoryPaneSlide>();
+        overlaySlide.Bind(this, overlayRoot, canvasGroup);
 
         UpdateOverlayCanvasScaler();
 
@@ -1089,16 +1097,10 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
 
         if (overlayCanvas != null)
         {
-            try
+            Rect pixelRect = overlayCanvas.pixelRect;
+            if (pixelRect.width > MinRootSizeThreshold && pixelRect.height > MinRootSizeThreshold)
             {
-                Rect pixelRect = overlayCanvas.pixelRect;
-                if (pixelRect.width > MinRootSizeThreshold && pixelRect.height > MinRootSizeThreshold)
-                {
-                    return new Vector2(pixelRect.width, pixelRect.height);
-                }
-            }
-            catch
-            {
+                return new Vector2(pixelRect.width, pixelRect.height);
             }
         }
 
@@ -1135,14 +1137,36 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
 
     private void ApplyOverlayVisibility(bool visible)
     {
+        SetOverlayVisibility(visible, animate: false);
+    }
+
+    /// <summary>
+    /// Shows or hides the overlay, sliding and fading it in step with the game's own pane tween
+    /// when <paramref name="animate"/> is set. Only a pane swap animates: opening and closing the
+    /// inventory is a cut for every pane, the Shade's included.
+    /// </summary>
+    private void SetOverlayVisibility(bool visible, bool animate)
+    {
         if (overlayRoot == null || canvasGroup == null)
         {
             return;
         }
 
-        canvasGroup.alpha = visible ? 1f : 0f;
-        canvasGroup.interactable = visible;
-        canvasGroup.blocksRaycasts = visible;
+        if (animate)
+        {
+            RefreshPaneSlideUnits();
+        }
+
+        if (overlaySlide != null)
+        {
+            overlaySlide.SetVisible(visible, animate);
+        }
+        else
+        {
+            canvasGroup.alpha = visible ? 1f : 0f;
+            canvasGroup.interactable = visible;
+            canvasGroup.blocksRaycasts = visible;
+        }
 
         if (overlayCanvas != null)
         {
@@ -1257,12 +1281,8 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             return;
         }
 
-        try { attachedPaneList.OpeningInventory -= HandleInventoryOpened; }
-        catch { }
-
-        try { attachedPaneList.ClosingInventory -= HandleInventoryClosed; }
-        catch { }
-
+        attachedPaneList.OpeningInventory -= HandleInventoryOpened;
+        attachedPaneList.ClosingInventory -= HandleInventoryClosed;
         attachedPaneList = null;
     }
 
@@ -1273,6 +1293,11 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             ApplyOverlayVisibility(false);
         }
     }
+
+    /// <summary>
+    /// Closing the inventory is a cut, not a slide - the game fades the whole inventory group out
+    /// rather than tweening panes past each other, so the overlay goes with it immediately.
+    /// </summary>
 
     private void HandleInventoryClosed()
     {

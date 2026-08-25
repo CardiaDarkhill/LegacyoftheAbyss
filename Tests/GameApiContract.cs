@@ -338,6 +338,25 @@ public class GameApiContractTests
     /// <c>[HarmonyPatch]</c> attribute threw <c>AmbiguousMatchException</c> out of <c>PatchAll</c> and
     /// took the whole mod down, so they are resolved by parameter shape instead.
     /// </summary>
+    /// <summary>
+    /// The Shade lights dark rooms by cloning Hornet's hero light, because scene darkness is a
+    /// shader cutout fed by a camera that renders that one object. If either accessor stops
+    /// resolving there is nothing to clone and the Shade goes invisible in the dark again.
+    /// </summary>
+    [Fact]
+    public void HornetsLightCanBeFoundToCloneFromIt()
+    {
+        GameApiContract.RequireField(
+            typeof(HeroController), "heroLight", GameApiContract.RequireType("HeroLight"),
+            "Cloned onto the Shade by EnsureShadeLight so it draws into the darkness cutout pass.");
+
+        // The renderer is NOT on the HeroLight component's own object - a GetComponent there
+        // returns null, which is how the Shade went a whole session with no light and one warning.
+        GameApiContract.RequireField(
+            GameApiContract.RequireType("HeroLight"), "spriteRenderer", typeof(UnityEngine.SpriteRenderer),
+            "ResolveHeroLight reads it to find the sprite to clone and to sample its colour each frame.");
+    }
+
     [Theory]
     [InlineData("TakeQuickDamage", false)]
     [InlineData("TakeDamage", true)]

@@ -661,25 +661,23 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             return false;
         }
 
-        try
-        {
-            Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(root, rect);
-            Vector3 center = bounds.center;
-            if (float.IsNaN(center.x) || float.IsNaN(center.y) ||
-                float.IsInfinity(center.x) || float.IsInfinity(center.y))
-            {
-                return false;
-            }
-
-            overlayPoint = new Vector2(center.x, center.y);
-            return true;
-        }
-        catch
+        Vector3 center = RectTransformUtility.CalculateRelativeRectTransformBounds(root, rect).center;
+        if (float.IsNaN(center.x) || float.IsNaN(center.y) ||
+            float.IsInfinity(center.x) || float.IsInfinity(center.y))
         {
             return false;
         }
+
+        overlayPoint = new Vector2(center.x, center.y);
+        return true;
     }
 
+    /// <summary>
+    /// Projects a world point into overlay-local space through the camera the point is drawn by.
+    /// Returns false rather than approximating - the overlay is its own screen-space canvas, so a
+    /// point that will not project has no position on it, and the callers all have a better
+    /// strategy left to try.
+    /// </summary>
     private bool TryProjectWorldPointToOverlay(
         RectTransform root,
         Vector3 worldPoint,
@@ -689,37 +687,20 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
     {
         overlayPoint = Vector2.zero;
 
-        try
+        Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(sourceCamera, worldPoint);
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(root, screenPoint, overlayCamera, out var localPoint))
         {
-            Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(sourceCamera, worldPoint);
-            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(root, screenPoint, overlayCamera, out var localPoint) &&
-                !float.IsNaN(localPoint.x) && !float.IsNaN(localPoint.y) &&
-                !float.IsInfinity(localPoint.x) && !float.IsInfinity(localPoint.y))
-            {
-                overlayPoint = localPoint;
-                return true;
-            }
-        }
-        catch
-        {
+            return false;
         }
 
-        try
+        if (float.IsNaN(localPoint.x) || float.IsNaN(localPoint.y) ||
+            float.IsInfinity(localPoint.x) || float.IsInfinity(localPoint.y))
         {
-            Vector3 local = root.InverseTransformPoint(worldPoint);
-            if (!float.IsNaN(local.x) && !float.IsNaN(local.y) &&
-                !float.IsInfinity(local.x) && !float.IsInfinity(local.y))
-            {
-                overlayPoint = new Vector2(local.x, local.y);
-                return true;
-            }
-        }
-        catch
-        {
+            return false;
         }
 
-        overlayPoint = Vector2.zero;
-        return false;
+        overlayPoint = localPoint;
+        return true;
     }
 
     private bool TryGetOverlayPosition(RectTransform rect, out Vector2 overlayPoint)
@@ -742,35 +723,8 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             relativeRoot = panelRoot;
         }
 
-        Canvas? rectCanvas = null;
-        try
-        {
-            rectCanvas = rect.GetComponentInParent<Canvas>();
-        }
-        catch
-        {
-            rectCanvas = null;
-        }
-
-        Camera? rectCamera = null;
-        if (rectCanvas != null && rectCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
-        {
-            rectCamera = rectCanvas.worldCamera;
-            if (rectCamera == null && rectCanvas.renderMode == RenderMode.WorldSpace)
-            {
-                rectCamera = Camera.main;
-            }
-        }
-
-        Camera? overlayCamera = null;
-        if (overlayCanvas != null && overlayCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
-        {
-            overlayCamera = overlayCanvas.worldCamera;
-            if (overlayCamera == null && overlayCanvas.renderMode == RenderMode.WorldSpace)
-            {
-                overlayCamera = Camera.main;
-            }
-        }
+        Camera? rectCamera = ResolveCanvasCamera(rect.GetComponentInParent<Canvas>());
+        Camera? overlayCamera = ResolveCanvasCamera(overlayCanvas);
 
         if (relativeRoot != null && TryGetOverlayRelativePoint(relativeRoot, rect, out overlayPoint))
         {
@@ -779,35 +733,14 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
                 return true;
             }
 
-            Vector3 worldPoint;
-            try
-            {
-                worldPoint = relativeRoot.TransformPoint(new Vector3(overlayPoint.x, overlayPoint.y, 0f));
-            }
-            catch
-            {
-                try
-                {
-                    worldPoint = rect.TransformPoint(rect.rect.center);
-                }
-                catch
-                {
-                    worldPoint = rect.position;
-                }
-            }
+            Vector3 worldPoint = relativeRoot.TransformPoint(new Vector3(overlayPoint.x, overlayPoint.y, 0f));
 
-            try
+            Vector3 overlayLocal = root.InverseTransformPoint(worldPoint);
+            if (!float.IsNaN(overlayLocal.x) && !float.IsNaN(overlayLocal.y) &&
+                !float.IsInfinity(overlayLocal.x) && !float.IsInfinity(overlayLocal.y))
             {
-                Vector3 overlayLocal = root.InverseTransformPoint(worldPoint);
-                if (!float.IsNaN(overlayLocal.x) && !float.IsNaN(overlayLocal.y) &&
-                    !float.IsInfinity(overlayLocal.x) && !float.IsInfinity(overlayLocal.y))
-                {
-                    overlayPoint = new Vector2(overlayLocal.x, overlayLocal.y);
-                    return true;
-                }
-            }
-            catch
-            {
+                overlayPoint = new Vector2(overlayLocal.x, overlayLocal.y);
+                return true;
             }
 
             if (TryProjectWorldPointToOverlay(root, worldPoint, rectCamera, overlayCamera, out var converted))
@@ -822,46 +755,13 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             return true;
         }
 
-        Vector3 worldCenter;
-        try
-        {
-            rect.GetWorldCorners(overlayWorldCorners);
-            worldCenter = (overlayWorldCorners[0] + overlayWorldCorners[2]) * 0.5f;
-        }
-        catch
-        {
-            try
-            {
-                worldCenter = rect.TransformPoint(rect.rect.center);
-            }
-            catch
-            {
-                worldCenter = rect.position;
-            }
-        }
+        rect.GetWorldCorners(overlayWorldCorners);
+        Vector3 worldCenter = (overlayWorldCorners[0] + overlayWorldCorners[2]) * 0.5f;
 
         if (TryProjectWorldPointToOverlay(root, worldCenter, rectCamera, overlayCamera, out var projected))
         {
             overlayPoint = projected;
             return true;
-        }
-
-        try
-        {
-            if (rect.transform.IsChildOf(root))
-            {
-                Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(root, rect);
-                Vector3 center = bounds.center;
-                if (!float.IsNaN(center.x) && !float.IsNaN(center.y) &&
-                    !float.IsInfinity(center.x) && !float.IsInfinity(center.y))
-                {
-                    overlayPoint = new Vector2(center.x, center.y);
-                    return true;
-                }
-            }
-        }
-        catch
-        {
         }
 
         overlayPoint = Vector2.zero;
@@ -1642,4 +1542,170 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             overcharmed);
     }
 
+    /// <summary>
+    /// The camera a canvas is drawn through, or null for a screen-space-overlay canvas (which is
+    /// what <see cref="RectTransformUtility"/> wants for one).
+    /// </summary>
+    private static Camera? ResolveCanvasCamera(Canvas? canvas)
+    {
+        if (canvas == null || canvas.renderMode == RenderMode.ScreenSpaceOverlay)
+        {
+            return null;
+        }
+
+        return canvas.worldCamera != null ? canvas.worldCamera : Camera.main;
+    }
+
+    /// <summary>
+    /// Pane travel either side of centre, in the inventory's own units - the "Inventory Control"
+    /// FSM's "Next Pane Start X". Read live in <see cref="RefreshPaneSlideUnits"/>; this is the
+    /// value the shipped FSM uses.
+    /// </summary>
+    private const float DefaultPaneSlideUnits = 31f;
+
+    private float paneSlideUnits = DefaultPaneSlideUnits;
+
+    internal void RefreshPaneSlideUnits()
+    {
+        if (attachedPaneList == null)
+        {
+            return;
+        }
+
+        var fsm = PlayMakerFSM.FindFsmOnGameObject(attachedPaneList.gameObject, "Inventory Control");
+        var startX = fsm != null ? fsm.FsmVariables.FindFsmFloat("Next Pane Start X") : null;
+        if (startX != null && Mathf.Abs(startX.Value) > 0.001f)
+        {
+            paneSlideUnits = Mathf.Abs(startX.Value);
+        }
+    }
+
+    /// <summary>
+    /// How far the pane GameObject currently sits from its resting place, as an overlay offset.
+    /// <para>
+    /// The Shade's content is drawn on its own screen-space canvas rather than under the pane
+    /// object, so the FSM tweens an empty transform. Reading that transform back and offsetting the
+    /// overlay by the same proportion reproduces the game's slide exactly, without re-timing it.
+    /// </para>
+    /// <para>
+    /// Converted by ratio, not by projecting through a camera. The inventory is not a screen-space
+    /// canvas and does not expose one we can resolve, so <c>WorldToScreenPoint</c> with the camera
+    /// we could find treated the pane's world position as if it were already in screen pixels and
+    /// returned a 15px "slide" on a 4K display - a real animation nobody could see. The pane rests
+    /// at local zero (the FSM's "Pane Final Pos") and travels <see cref="paneSlideUnits"/> either
+    /// side of it, which is one screen width.
+    /// </para>
+    /// </summary>
+    internal bool TryGetPaneSlideOffset(out Vector2 offset)
+    {
+        offset = Vector2.zero;
+
+        var root = overlayRoot;
+        if (root == null || paneSlideUnits <= 0.001f)
+        {
+            return false;
+        }
+
+        float fraction = transform.localPosition.x / paneSlideUnits;
+        offset = new Vector2(fraction * root.rect.width, 0f);
+        return true;
+    }
+}
+
+/// <summary>
+/// Drives the Shade pane overlay's fade and slide. It lives on the overlay canvas object - a scene
+/// root - rather than on the pane, because the FSM deactivates the pane you just left while its
+/// slide-out is still running, and a component on an inactive object stops receiving LateUpdate.
+/// </summary>
+internal sealed class ShadeInventoryPaneSlide : MonoBehaviour
+{
+    /// <summary>Slide length, from the "Tween Panes" state's iTweenMoveTo.</summary>
+    private const float SlideSeconds = 0.35f;
+
+    /// <summary>Fade length, from the FadeNestedFadeGroupV3 in the same state.</summary>
+    private const float FadeSeconds = 0.2f;
+
+    private ShadeInventoryPane? pane;
+    private RectTransform? overlayRoot;
+    private CanvasGroup? canvasGroup;
+
+    private float alpha;
+    private float fadeFrom;
+    private float fadeTo;
+    private float fadeRemaining;
+    private float slideRemaining;
+
+    internal bool IsTransitioning => fadeRemaining > 0f || slideRemaining > 0f;
+
+    internal void Bind(ShadeInventoryPane owner, RectTransform root, CanvasGroup group)
+    {
+        pane = owner;
+        overlayRoot = root;
+        canvasGroup = group;
+    }
+
+    internal void SetVisible(bool visible, bool animate)
+    {
+        if (canvasGroup == null || overlayRoot == null)
+        {
+            return;
+        }
+
+        fadeFrom = alpha;
+        fadeTo = visible ? 1f : 0f;
+        fadeRemaining = animate ? FadeSeconds : 0f;
+        slideRemaining = animate ? SlideSeconds : 0f;
+
+        if (!animate)
+        {
+            alpha = fadeTo;
+            overlayRoot.anchoredPosition = Vector2.zero;
+        }
+
+        Apply();
+    }
+
+    private void LateUpdate()
+    {
+        if (canvasGroup == null || overlayRoot == null)
+        {
+            return;
+        }
+
+        // Unscaled: the inventory runs with the game paused, and the FSM's own tweens are realtime.
+        float delta = Time.unscaledDeltaTime;
+
+        if (fadeRemaining > 0f)
+        {
+            fadeRemaining = Mathf.Max(0f, fadeRemaining - delta);
+            alpha = Mathf.Lerp(fadeTo, fadeFrom, fadeRemaining / FadeSeconds);
+        }
+        else
+        {
+            alpha = fadeTo;
+        }
+
+        if (slideRemaining > 0f)
+        {
+            slideRemaining = Mathf.Max(0f, slideRemaining - delta);
+            if (pane != null && pane.TryGetPaneSlideOffset(out var offset))
+            {
+                overlayRoot.anchoredPosition = offset;
+            }
+        }
+        else
+        {
+            overlayRoot.anchoredPosition = Vector2.zero;
+        }
+
+        Apply();
+    }
+
+    private void Apply()
+    {
+        canvasGroup!.alpha = alpha;
+        bool interactive = fadeTo > 0.5f;
+        canvasGroup.interactable = interactive;
+        canvasGroup.blocksRaycasts = interactive;
+    }
 }

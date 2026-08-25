@@ -493,11 +493,9 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         isBuilt = false;
 
         BuildUI();
-        if (wasActive && canvasGroup != null)
+        if (wasActive)
         {
-            canvasGroup.alpha = 1f;
-            canvasGroup.interactable = true;
-            canvasGroup.blocksRaycasts = true;
+            ApplyOverlayVisibility(true);
         }
         RefreshAll();
         if (entries.Count > 0)
@@ -544,10 +542,11 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             {
                 canvasGroup = rootRect.gameObject.AddComponent<CanvasGroup>();
             }
+
+            overlaySlide?.Bind(this, rootRect, canvasGroup);
         }
-        canvasGroup.alpha = 0f;
-        canvasGroup.interactable = false;
-        canvasGroup.blocksRaycasts = false;
+
+        ApplyOverlayVisibility(false);
 
         panelRoot = new GameObject("ShadePanel", typeof(RectTransform)).GetComponent<RectTransform>();
         panelRoot.gameObject.layer = rootRect.gameObject.layer;

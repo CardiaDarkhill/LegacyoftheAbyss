@@ -30,10 +30,11 @@ public partial class LegacyHelper
             }
 
             sr = GetComponent<SpriteRenderer>();
-            // Before LoadShadeSprites and SetupShadeLight: both the light quad and the child
-            // effect renderers copy their sorting from this renderer as they are created.
-            ApplyRenderingSettings();
+            // Scale first, sorting second: the child effect renderers copy their sorting from this
+            // renderer as they are created, and the cloned hero light sizes itself against the
+            // Shade's world scale.
             transform.localScale = Vector3.one * SpriteScale;
+            ApplyRenderingSettings();
             LoadShadeSprites();
             if (sr != null)
             {
@@ -72,7 +73,6 @@ public partial class LegacyHelper
             // Ensure the shade can act as a pogo surface for Hornet
             try { gameObject.tag = "Recoiler"; } catch { }
 
-            SetupShadeLight();
             cachedHud = UnityEngine.Object.FindFirstObjectByType<SimpleHUD>();
             PushSoulToHud();
             CheckHazardOverlap();

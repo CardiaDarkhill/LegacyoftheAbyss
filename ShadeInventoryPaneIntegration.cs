@@ -895,21 +895,11 @@ internal static class ShadeInventoryPaneIntegration
 
         var newList = panes.ToList();
 
-        // The shade pane MUST go on the end.
-        //
-        // InventoryPaneList.panes is an ArrayForEnum array: position i in the array *is*
-        // InventoryPaneList.PaneTypes value i, and the base game relies on that identity all over
-        // the place - GetPane(PaneTypes) indexes the array directly, InventoryPaneInput writes
-        // (int)PaneTypes into the "Target Pane Index" FSM variable which SetCurrentInventoryPane
-        // feeds straight to SetCurrentPane(index, ...), and ListenForInventoryShortcut compares a
-        // PaneTypes value against the FSM's array-space "Current Pane Num".
-        //
-        // Inserting mid-list (this used to drop the shade pane in just after Tools/Crests) shifts
-        // every later pane up one, so each of those numeric lookups silently resolves to the wrong
-        // pane: "open journal" landed on Quests, "open map" landed on Journal, and so on. Appending
-        // keeps indices 0..4 aligned with the enum and parks the shade at an index the enum never
-        // names, so nothing base-game addresses it numerically. It stays reachable by cycling
-        // left/right, which is the only way it was ever reachable anyway - no shortcut binds to it.
+        // Append, never insert. InventoryPaneList.panes is an ArrayForEnum array - index i *is*
+        // PaneTypes value i, and GetPane, "Target Pane Index" and ListenForInventoryShortcut all
+        // address panes by that number. Inserting mid-list shifts every later pane and silently
+        // sends each shortcut to the wrong tab. Appending parks the Shade at an index the enum
+        // never names; it stays reachable by cycling, which is the only route it ever had.
         newList.Add(shadePane);
         PanesField(paneList) = newList.ToArray();
         RefreshPaneListDisplay(paneList, newList);
@@ -920,16 +910,10 @@ internal static class ShadeInventoryPaneIntegration
     private static string? s_loggedPaneLayout;
 
     /// <summary>
-    /// Dumps the final pane order once per distinct layout, at Info level rather than behind the
-    /// logMenu flag.
-    /// <para>
-    /// Position <c>i</c> in <c>InventoryPaneList.panes</c> is <c>PaneTypes</c> value <c>i</c>, and the
-    /// base game addresses panes by that number from several places at once - the shortcut FSM's
-    /// hardcoded indices (Tools 1, Quests 2, Journal 3, Map 4), <c>GetPane(PaneTypes)</c>, and the
-    /// <c>Target Pane Index</c> variable <c>InventoryPaneInput</c> writes. If a shortcut opens the
-    /// wrong tab, this line is the fastest way to see whether the array actually lines up with the
-    /// enum, without guessing from in-game behaviour.
-    /// </para>
+    /// Dumps the final pane order once per distinct layout, at Info level rather than behind
+    /// <c>logMenu</c>: when a shortcut opens the wrong tab, this line says whether
+    /// <c>InventoryPaneList.panes</c> still lines up with <c>PaneTypes</c>, which is the cause
+    /// every time.
     /// </summary>
     private static void LogPaneLayout(List<InventoryPane> panes)
     {
@@ -1438,38 +1422,21 @@ internal static class ShadeInventoryPaneIntegration
     }
 
     /// <summary>
-    /// Jumps straight from whichever real pane <paramref name="sourceInput"/> belongs to over to the
-    /// appended Shade tab.
+    /// Jumps from whichever real pane <paramref name="sourceInput"/> belongs to over to the
+    /// appended Shade tab, by doing what <see cref="InventoryPaneInput.Update"/> does for a native
+    /// shortcut: write the "Inventory Control" FSM's "Target Pane Index" and send it "MOVE PANE TO".
     /// <para>
-    /// Two earlier versions of this got the mechanism wrong. The first called
-    /// <see cref="InventoryPaneList.SetCurrentPane"/> directly - correct for swapping *content*, but
-    /// it bypasses the "Inventory Control" PlayMaker FSM's own idea of the current pane entirely.
-    /// That FSM tracks three variables ("Current Pane", "Current Pane Num", "Prev Pane"), which
-    /// <c>SetNextInventoryPane</c> (driving LB/RB pane cycling) reads directly - a bare
-    /// <c>SetCurrentPane</c> call leaves them stale, so the next LB/RB press cycled from wherever the
-    /// player was *before* jumping to the Shade tab, not from the Shade tab itself.
+    /// Do not call <see cref="InventoryPaneList.SetCurrentPane"/> instead. Its C# body only swaps
+    /// pane <i>content</i>; the FSM's tracking variables ("Current Pane", "Current Pane Num", "Prev
+    /// Pane") and the visual teardown of the outgoing pane both live in FSM states a direct call
+    /// never enters, so the old pane stays superimposed and the next LB/RB press cycles from the
+    /// wrong tab.
     /// </para>
     /// <para>
-    /// The second version fixed that by hand-syncing those three variables to match
-    /// <c>SetCurrentInventoryPane</c>'s own bookkeeping - which fixed LB/RB, but the pane the player
-    /// left never actually disappeared, superimposed under the Shade pane's content on every tab, not
-    /// just Map. The reason: <c>SetCurrentPane</c>'s C# body only handles the *content* swap
-    /// (<c>PaneEnd()</c> / <c>PaneStart()</c>). The actual show/hide of the outgoing pane's own
-    /// GameObject runs through a *separate* FSM sequence ("Fade Panes"), which only runs when the FSM
-    /// is actually driven into it - which calling <c>SetCurrentPane</c> straight from C# never does,
-    /// no matter how faithfully the tracking variables are kept in sync afterward.
-    /// </para>
-    /// <para>
-    /// This version doesn't touch <c>SetCurrentPane</c> at all. It replicates exactly what
-    /// <see cref="InventoryPaneInput.Update"/>'s own open-state shortcut handling does for every real
-    /// shortcut (2-5) once the inventory is already open: set the FSM's "Target Pane Index" int
-    /// variable and send it the "MOVE PANE TO" event, letting the FSM drive its own full sequence
-    /// (content swap, tracking variables, *and* the Fade Panes visual teardown) exactly as a native
-    /// shortcut press would. "Target Pane Index" is a plain int - unlike the closed-state
-    /// <c>ListenForInventoryShortcut</c> action (which switches on a named <c>PaneTypes</c> enum and
-    /// throws for anything it doesn't recognize, which is why this still only works once the
-    /// inventory is already open), nothing here needs the Shade to have a named <c>PaneTypes</c>
-    /// value of its own.
+    /// Only works once the inventory is already open: the closed-state
+    /// <c>ListenForInventoryShortcut</c> action switches on a named <c>PaneTypes</c> value and
+    /// throws for anything it does not recognise, whereas "Target Pane Index" is a plain int that
+    /// the Shade's out-of-enum index fits.
     /// </para>
     /// </summary>
     internal static bool TryJumpToShadeTab(InventoryPaneInput sourceInput)
@@ -1602,21 +1569,15 @@ internal static class ShadeInventoryPaneIntegration
     }
 
     /// <summary>
-    /// Handles the five native inventory shortcuts for an input that is currently routed to the
-    /// Shade pane, returning true when the caller should skip <c>InventoryPaneInput.Update</c> for
-    /// this frame.
+    /// Handles the five native inventory shortcuts for an input currently routed to the Shade pane,
+    /// returning true when the caller should skip <c>InventoryPaneInput.Update</c> this frame.
     /// <para>
-    /// The Shade has no <c>PaneTypes</c> value, so its input component's <c>paneControl</c> has to
-    /// stay <c>None</c> - and <c>None</c> is the case <c>InventoryPaneInput.Update</c> reads as "the
-    /// player pressed this pane's own shortcut", which it answers with <c>PressCancel()</c>. Left
-    /// alone that means every one of keys 1-5 closes the whole inventory while the Shade tab is up,
-    /// instead of switching to the tab that was asked for. Doing the switch here, the same way the
-    /// native code does it for any other pane (write "Target Pane Index", send "MOVE PANE TO"),
-    /// gives the Shade tab the same shortcut behaviour every real tab has.
-    /// </para>
-    /// <para>
-    /// Requests for a pane that is missing or locked deliberately fall through to the native path,
-    /// which closes the inventory - that is what the base game does for an unavailable pane too.
+    /// The Shade has no <c>PaneTypes</c> value, so its <c>paneControl</c> stays <c>None</c> - which
+    /// <c>InventoryPaneInput.Update</c> reads as "the player pressed this pane's own shortcut" and
+    /// answers with <c>PressCancel()</c>, closing the inventory on all of keys 1-5. Switching here
+    /// the way the native code does gives the Shade tab the shortcut behaviour every real tab has.
+    /// Missing or locked panes fall through to the native path, which closes the inventory, exactly
+    /// as the base game does for an unavailable pane.
     /// </para>
     /// </summary>
     internal static bool TryHandleShadeTabPaneShortcut(InventoryPaneInput input)

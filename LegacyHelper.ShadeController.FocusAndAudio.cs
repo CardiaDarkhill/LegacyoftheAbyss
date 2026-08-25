@@ -749,112 +749,55 @@ public partial class LegacyHelper
             catch { }
         }
 
-        private void SetupShadeLight()
-        {
-            try
-            {
-                var lightGO = new GameObject("ShadeLightSimple");
-                lightGO.transform.SetParent(transform, false);
-                lightGO.transform.localPosition = Vector3.zero;
-                lightGO.transform.localRotation = Quaternion.identity;
-                EnsureSimpleLightResources();
-
-                var mf = lightGO.AddComponent<MeshFilter>();
-                mf.sharedMesh = s_simpleQuadMesh;
-                var mr = lightGO.AddComponent<MeshRenderer>();
-                mr.sharedMaterial = s_simpleAdditiveMat;
-                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                mr.receiveShadows = false;
-                var shadeSR = GetComponent<SpriteRenderer>();
-                mr.sortingLayerID = shadeSR ? shadeSR.sortingLayerID : 0;
-                mr.sortingOrder = shadeSR ? (shadeSR.sortingOrder - 1) : -1;
-                lightGO.transform.localScale = new Vector3(simpleLightSize, simpleLightSize, 1f);
-                shadeLightRenderers = new Renderer[] { mr };
-            }
-            catch { }
-        }
-
-        private void SyncShadeLight()
-        {
-            try
-            {
-                if (shadeLightRenderers == null) return;
-                var shadeSR = GetComponent<SpriteRenderer>();
-                int baseLayer = shadeSR ? shadeSR.sortingLayerID : 0;
-                int baseOrder = shadeSR ? shadeSR.sortingOrder : 0;
-                foreach (var r in shadeLightRenderers)
-                {
-                    if (!r) continue;
-                    // Re-asserted every frame, so the scripted-hold check has to live here rather
-                    // than in ApplyScriptedHoldVisibility - a one-shot disable would be undone on
-                    // the very next tick and the Shade's glow would sit there through the cutscene.
-                    r.enabled = !hiddenForScriptedHold;
-                    r.sortingLayerID = baseLayer;
-                    r.sortingOrder = baseOrder - 1;
-                }
-                // Keep focus aura sorted just below the shade sprite as well
-                if (focusAuraRenderer)
-                {
-                    focusAuraRenderer.sortingLayerID = baseLayer;
-                    focusAuraRenderer.sortingOrder = baseOrder - 2;
-                }
-            }
-            catch { }
-        }
-
+        /// <summary>Radial-falloff quad shared by the focus aura. Built once, on first use.</summary>
         private static void EnsureSimpleLightResources()
         {
-            try
+            if (s_simpleQuadMesh == null)
             {
-                if (s_simpleQuadMesh == null)
+                s_simpleQuadMesh = new Mesh
                 {
-                    s_simpleQuadMesh = new Mesh();
-                    s_simpleQuadMesh.name = "ShadeLightQuad";
-                    s_simpleQuadMesh.vertices = new Vector3[]
+                    name = "ShadeLightQuad",
+                    vertices = new Vector3[]
                     {
                         new Vector3(-0.5f, -0.5f, 0f),
                         new Vector3( 0.5f, -0.5f, 0f),
                         new Vector3(-0.5f,  0.5f, 0f),
                         new Vector3( 0.5f,  0.5f, 0f)
-                    };
-                    s_simpleQuadMesh.uv = new Vector2[] {
-                        new Vector2(0,0), new Vector2(1,0), new Vector2(0,1), new Vector2(1,1)
-                    };
-                    s_simpleQuadMesh.triangles = new int[] { 0, 2, 1, 2, 3, 1 };
-                    s_simpleQuadMesh.RecalculateNormals();
-                }
-                if (s_simpleLightTex == null)
-                {
-                    int size = 128;
-                    s_simpleLightTex = new Texture2D(size, size, TextureFormat.ARGB32, false);
-                    s_simpleLightTex.filterMode = FilterMode.Bilinear;
-                    for (int y = 0; y < size; y++)
-                    {
-                        for (int x = 0; x < size; x++)
-                        {
-                            float nx = (x + 0.5f) / size * 2f - 1f;
-                            float ny = (y + 0.5f) / size * 2f - 1f;
-                            float r = Mathf.Sqrt(nx * nx + ny * ny);
-                            float a = Mathf.Clamp01(1f - r);
-                            a = Mathf.Pow(a, 3.5f) * 0.55f;
-                            s_simpleLightTex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
-                        }
-                    }
-                    s_simpleLightTex.Apply();
-                }
-                if (s_simpleAdditiveMat == null)
-                {
-                    var shader = Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Transparent");
-                    s_simpleAdditiveMat = new Material(shader)
-                    {
-                        name = "ShadeLightAdditiveMat",
-                        mainTexture = s_simpleLightTex,
-                        renderQueue = 3000
-                    };
-                    try { s_simpleAdditiveMat.SetColor("_Color", new Color(1f, 1f, 1f, 0.35f)); } catch { }
-                }
+                    },
+                    uv = new Vector2[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 1), new Vector2(1, 1) },
+                    triangles = new int[] { 0, 2, 1, 2, 3, 1 }
+                };
+                s_simpleQuadMesh.RecalculateNormals();
             }
-            catch { }
+
+            if (s_simpleLightTex == null)
+            {
+                const int size = 128;
+                s_simpleLightTex = new Texture2D(size, size, TextureFormat.ARGB32, false) { filterMode = FilterMode.Bilinear };
+                for (int y = 0; y < size; y++)
+                {
+                    for (int x = 0; x < size; x++)
+                    {
+                        float nx = (x + 0.5f) / size * 2f - 1f;
+                        float ny = (y + 0.5f) / size * 2f - 1f;
+                        float a = Mathf.Clamp01(1f - Mathf.Sqrt(nx * nx + ny * ny));
+                        s_simpleLightTex.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.Pow(a, 3.5f) * 0.55f));
+                    }
+                }
+                s_simpleLightTex.Apply();
+            }
+
+            if (s_simpleAdditiveMat == null)
+            {
+                var shader = Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Transparent");
+                s_simpleAdditiveMat = new Material(shader)
+                {
+                    name = "ShadeLightAdditiveMat",
+                    mainTexture = s_simpleLightTex,
+                    renderQueue = 3000
+                };
+                s_simpleAdditiveMat.SetColor("_Color", new Color(1f, 1f, 1f, 0.35f));
+            }
         }
 
         private static bool IsTerrainHazard(GlobalEnums.HazardType hz)

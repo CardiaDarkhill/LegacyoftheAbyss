@@ -185,17 +185,7 @@ public partial class SimpleHUD
 
     private static bool TryLoadImage(Texture2D tex, byte[] bytes)
     {
-        try
-        {
-            var t = Type.GetType("UnityEngine.ImageConversion, UnityEngine.ImageConversionModule");
-            if (t != null)
-            {
-                var m = t.GetMethod("LoadImage", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(Texture2D), typeof(byte[]), typeof(bool) }, null);
-                if (m != null) { m.Invoke(null, new object[] { tex, bytes, false }); return true; }
-            }
-        }
-        catch { }
-        return false;
+        return ImageConversion.LoadImage(tex, bytes, false);
     }
 }
 
