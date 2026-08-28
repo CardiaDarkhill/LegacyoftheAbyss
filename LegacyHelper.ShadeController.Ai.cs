@@ -748,7 +748,7 @@ public partial class LegacyHelper
         {
             var scan = aiScanner.Stats;
             return FormattableString.Invariant(
-                $"scan=found:{scan.Found}/alive:{scan.Tracked}/far:{scan.OutOfRange}/seen:{scan.Returned - scan.Blocked}/blocked:{scan.Blocked}");
+                $"scan=found:{scan.Found}/alive:{scan.Tracked}/dormant:{scan.Dormant}/far:{scan.OutOfRange}/seen:{scan.Returned - scan.Blocked}/blocked:{scan.Blocked}");
         }
 
         private static string DescribeAiAction(ShadeAiAction action) => action switch

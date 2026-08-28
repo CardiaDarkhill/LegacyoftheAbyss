@@ -101,14 +101,8 @@ namespace LegacyoftheAbyss.Shade.Ai
     }
 
     /// <summary>
-    /// A tally of what the last scan threw away and why.
-    /// <para>
-    /// Exists because a report could not answer "the Shade sees no enemies - which check dropped
-    /// them?". Three filters were added on speculation to stop the Shade slashing a wall, two of
-    /// them were wrong, and the report that caught it could only say <c>0 enemies in range</c>.
-    /// That is exactly the ambiguity between "the code never ran", "it ran and chose not to act" and
-    /// "the situation never arose" that costs a round trip every time.
-    /// </para>
+    /// A tally of what the last scan threw away and why, so a report saying the Shade sees no
+    /// enemies also says which check dropped them.
     /// </summary>
     internal struct ShadeAiScanStats
     {
@@ -117,6 +111,9 @@ namespace LegacyoftheAbyss.Shade.Ai
 
         /// <summary>Of those, still alive and enabled this frame.</summary>
         internal int Tracked;
+
+        /// <summary>Skipped this frame as gauntlet enemies whose wave has not started.</summary>
+        internal int Dormant;
 
         /// <summary>Dropped this frame for being further away than the scan radius.</summary>
         internal int OutOfRange;

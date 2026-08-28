@@ -408,6 +408,18 @@ public partial class LegacyHelper
         }
 
         /// <summary>
+        /// A gate action's refusal branch: its public <c>FsmEvent</c> field named "cannot"
+        /// something. Internal so <c>GameApiContract</c> asserts this lookup rather than a copy of
+        /// it - a test that resolves the field its own way passes while the real one is dead.
+        /// </summary>
+        internal static FieldInfo FindRefusalEventField(FieldInfo[] fields)
+        {
+            return fields.FirstOrDefault(f =>
+                f.FieldType == typeof(FsmEvent) &&
+                f.Name.Contains("cannot", StringComparison.OrdinalIgnoreCase));
+        }
+
+        /// <summary>
         /// Sends a gate action down its "cannot" branch and closes it out. Shared by both gate
         /// families, which have the same shape: an event target, a refusal event, and a <c>Finish</c>
         /// that has to be called because the action's own body never runs.
@@ -426,9 +438,7 @@ public partial class LegacyHelper
 
                 var fields = action.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance);
 
-                var refuseField = fields.FirstOrDefault(f =>
-                    f.FieldType == typeof(FsmEvent) &&
-                    f.Name.IndexOf("cannot", StringComparison.OrdinalIgnoreCase) >= 0);
+                var refuseField = FindRefusalEventField(fields);
                 if (refuseField?.GetValue(action) is not FsmEvent refuseEvent || refuseEvent == null)
                 {
                     return false;

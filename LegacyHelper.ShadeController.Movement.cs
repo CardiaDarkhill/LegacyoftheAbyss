@@ -14,10 +14,6 @@ public partial class LegacyHelper
 {
     public partial class ShadeController : MonoBehaviour
     {
-        // Resolved once. InArenaFight is reached every frame through AdjustLeashForCamera.
-        private static readonly FieldInfo s_battleSceneStartedField =
-            typeof(BattleScene).GetField("started", BindingFlags.Instance | BindingFlags.NonPublic);
-
         private void Update()
         {
             // Ahead of every early return below and of every read: last frame's synthesised input
@@ -37,6 +33,25 @@ public partial class LegacyHelper
                 {
                     pendingCharmLoadoutRecompute = true;
                 }
+            }
+
+            if (baselineStatsInitialized)
+            {
+                // Ahead of the pause gate, so the baseline is standing before the pause menu can
+                // resize the Shade, and Hornet's max health is tracked whether paused or not.
+                if (!GameIsPaused())
+                {
+                    pausedHealthBaseline = -1;
+                }
+                else if (pausedHealthBaseline < 0)
+                {
+                    pausedHealthBaseline = GetTotalCurrentHealth();
+                }
+
+                // Hornet's max health is not fixed for a run: mask shards raise it, and a debug menu
+                // or later content can change it outright. The Shade's max is derived from hers, so
+                // it has to follow rather than being fixed at the value Awake happened to see.
+                RefreshDerivedMaskCount();
             }
 
             // Ahead of every early return below: the wisps should keep drifting while Hornet is
@@ -1394,22 +1409,15 @@ public partial class LegacyHelper
         private bool InArenaFight()
         {
             if (BossSceneController.IsBossScene) return true;
-            try
+
+            battleCheckTimer -= Time.deltaTime;
+            if (battleCheckTimer <= 0f || cachedBattle == null)
             {
-                battleCheckTimer -= Time.deltaTime;
-                if (battleCheckTimer <= 0f || cachedBattle == null)
-                {
-                    cachedBattle = UnityEngine.Object.FindFirstObjectByType<BattleScene>();
-                    battleCheckTimer = 1f;
-                }
-                if (cachedBattle != null && s_battleSceneStartedField != null)
-                {
-                    if ((bool)s_battleSceneStartedField.GetValue(cachedBattle))
-                        return true;
-                }
+                cachedBattle = UnityEngine.Object.FindFirstObjectByType<BattleScene>();
+                battleCheckTimer = 1f;
             }
-            catch { }
-            return false;
+
+            return ShadeAiBattleScenes.HasStarted(cachedBattle);
         }
 
         /// <summary>Leash multiplier while an AI drives the Shade. See the note in the body.</summary>

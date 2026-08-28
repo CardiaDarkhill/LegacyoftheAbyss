@@ -23,7 +23,7 @@ public static class HornetInput
     /// have reported "not there" for a binding that was working fine all along.
     /// </para>
     /// </summary>
-    private static void LogBindings(string label, PlayerAction action)
+    private static void LogBindings(string label, PlayerAction? action)
     {
         if (action == null)
         {
@@ -427,25 +427,12 @@ public static class HornetInput
         {
             handler.ResetDefaultControllerButtonBindings();
 
-            // Best-effort only, for whatever UI reads these labels directly (e.g. a native rebind
-            // screen). InputHandler.MapKeyboardLayoutFromGameSettings (called internally by the reset
-            // above) is *supposed* to restore the keyboard side of the 5 inventory-open actions from
-            // these same settings, but confirmed via logging that it doesn't actually pick this up -
-            // seeding it and reading it back off the same object showed the correct value, yet the
-            // resulting action still ended up with zero keyboard bindings. Not chasing that further:
-            // EnsureShadeInventoryBindings below adds the real, functional keyboard binding directly.
-            var gm = GameManager.instance;
-            var settings = gm != null ? gm.gameSettings : null;
-            if (settings != null)
-            {
-                settings.inventoryKey = Key.Key1.ToString();
-                settings.inventoryToolsKey = Key.Key2.ToString();
-                settings.inventoryQuestsKey = Key.Key3.ToString();
-                settings.inventoryJournalKey = Key.Key4.ToString();
-                settings.inventoryMapKey = Key.Key5.ToString();
-                try { settings.SaveKeyboardSettings(); } catch { }
-            }
-
+            // Deliberately does not touch gameSettings' keyboard keys. This preset puts Hornet on
+            // the controller and leaves the keyboard to the Shade; the Shade's 1-5 come from
+            // EnsureShadeInventoryBindings, on the actions directly, and it runs on every
+            // InputHandler awake/update too - so the binding survives a fresh boot on its own.
+            // Writing gameSettings here would persist 1-5 over the player's real keyboard inventory
+            // keys via SaveKeyboardSettings, which outlives the mod.
             EnsureShadeInventoryBindings(handler.inputActions);
             LogBindings("ApplyControllerDefaults: OpenInventory", handler.inputActions?.OpenInventory);
         }

@@ -295,6 +295,13 @@ public partial class LegacyHelper
         private float baseHitKnockbackForce;
         private int baseShadeMaxHP;
 
+        /// <summary>
+        /// Combined health the Shade had when the game was paused, or -1 while unpaused. The mask
+        /// fraction setting resizes the live Shade as the player steps it, so this is what a resize
+        /// restores from - see <see cref="RefreshDerivedMaskCount"/>.
+        /// </summary>
+        private int pausedHealthBaseline = -1;
+
         private int charmFocusHealBonus;
         private int charmHornetFocusHealBonus;
         private float charmFocusTimeMultiplier = 1f;

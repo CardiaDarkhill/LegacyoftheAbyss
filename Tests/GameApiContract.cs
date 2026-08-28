@@ -178,11 +178,7 @@ public class GameApiContractTests
         var type = GameApiContract.RequireType(name);
         var fields = type.GetFields(BindingFlags.Public | BindingFlags.Instance);
 
-        bool refusable = fields.Any(f =>
-            f.FieldType == typeof(HutongGames.PlayMaker.FsmEvent) &&
-            f.Name.IndexOf("cannot", StringComparison.OrdinalIgnoreCase) >= 0);
-
-        if (!refusable)
+        if (LegacyHelper.ShadeGrabRetargeting.FindRefusalEventField(fields) == null)
         {
             Assert.Fail($"{name} has no 'cannot' branch; refusing it would strand the FSM.\n{GameApiContract.DescribeMembers(type)}");
         }
@@ -334,11 +330,6 @@ public class GameApiContractTests
     }
 
     /// <summary>
-    /// How the mod finds the hero-damage entry points it patches. Naming them through a
-    /// <c>[HarmonyPatch]</c> attribute threw <c>AmbiguousMatchException</c> out of <c>PatchAll</c> and
-    /// took the whole mod down, so they are resolved by parameter shape instead.
-    /// </summary>
-    /// <summary>
     /// The Shade lights dark rooms by cloning Hornet's hero light, because scene darkness is a
     /// shader cutout fed by a camera that renders that one object. If either accessor stops
     /// resolving there is nothing to clone and the Shade goes invisible in the dark again.
@@ -355,6 +346,20 @@ public class GameApiContractTests
         GameApiContract.RequireField(
             GameApiContract.RequireType("HeroLight"), "spriteRenderer", typeof(UnityEngine.SpriteRenderer),
             "ResolveHeroLight reads it to find the sprite to clone and to sample its colour each frame.");
+    }
+
+    /// <summary>
+    /// A gauntlet keeps its unspawned waves in the scene as active objects with live
+    /// HealthManagers, so the Shade's target scan has to ask whether the battle is running - and
+    /// nothing public answers that. If this stops resolving the scan reads every wave as live and
+    /// the Shade goes back to slashing invisible enemies.
+    /// </summary>
+    [Fact]
+    public void ARunningGauntletCanBeToldFromAWaitingOne()
+    {
+        GameApiContract.RequireField(
+            typeof(BattleScene), "started", typeof(bool),
+            "ShadeAiBattleScenes.HasStarted reads it to tell a live wave from one still queued.");
     }
 
     [Theory]

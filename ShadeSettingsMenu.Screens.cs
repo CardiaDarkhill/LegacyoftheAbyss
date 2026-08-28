@@ -1444,7 +1444,7 @@ public static partial class ShadeSettingsMenu
         {
             var shade = LegacyHelper.ShadeController.ActiveInstance;
             if (shade != null)
-                shade.RefreshMaskCountFromConfig();
+                shade.RefreshDerivedMaskCount();
         }
         catch (Exception e)
         {

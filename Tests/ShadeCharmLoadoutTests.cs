@@ -88,4 +88,26 @@ public class ShadeCharmLoadoutTests
         Assert.True(snapshot.AbilityOverrides.EnableShriek.HasValue);
         Assert.True(snapshot.AbilityOverrides.EnableShriek!.Value);
     }
+
+    /// <summary>
+    /// Stepping the mask fraction option resizes the live Shade at every step, and the option's
+    /// list wraps through "Always 1". Without a paused baseline to refill from, a player cycling
+    /// back to the setting they started on was left permanently on 1 health.
+    /// </summary>
+    [Theory]
+    // Unpaused: a resize never heals, whatever the Shade has lost.
+    [InlineData(1, -1, 0)]
+    [InlineData(5, -1, 0)]
+    // Paused: put back exactly what the earlier steps of this menu visit clamped away.
+    [InlineData(1, 5, 4)]
+    [InlineData(4, 5, 1)]
+    // Nothing to put back, and never a negative fill when the Shade is above its baseline.
+    [InlineData(5, 5, 0)]
+    [InlineData(6, 5, 0)]
+    public void AResizeOnlyRefillsWhatThePauseMenuTookAway(int currentHealth, int pausedBaseline, int expected)
+    {
+        Assert.Equal(
+            expected,
+            LegacyHelper.ShadeController.ResolveResizeRefill(currentHealth, pausedBaseline));
+    }
 }

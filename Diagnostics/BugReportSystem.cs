@@ -422,21 +422,37 @@ namespace LegacyoftheAbyss.Diagnostics
                 return;
             }
 
-            if (sample.HeroHp != last.HeroHp)
+            if (sample.HeroHp != last.HeroHp || sample.HeroMaxHp != last.HeroMaxHp)
             {
                 RecordEvent(
                     "hero-health",
-                    sample.HeroHp < last.HeroHp ? "Hornet took damage" : "Hornet healed",
-                    FormattableString.Invariant($"{last.HeroHp} -> {sample.HeroHp} of {sample.HeroMaxHp}"));
+                    DescribeHealthChange("Hornet", last.HeroHp, last.HeroMaxHp, sample.HeroHp, sample.HeroMaxHp),
+                    FormattableString.Invariant($"{last.HeroHp}/{last.HeroMaxHp} -> {sample.HeroHp}/{sample.HeroMaxHp}"));
             }
 
-            if (sample.ShadePresent && last.ShadePresent && sample.ShadeHp != last.ShadeHp)
+            if (sample.ShadePresent && last.ShadePresent
+                && (sample.ShadeHp != last.ShadeHp || sample.ShadeMaxHp != last.ShadeMaxHp))
             {
                 RecordEvent(
                     "shade-health",
-                    sample.ShadeHp < last.ShadeHp ? "Shade took damage" : "Shade healed",
-                    FormattableString.Invariant($"{last.ShadeHp} -> {sample.ShadeHp} of {sample.ShadeMaxHp}"));
+                    DescribeHealthChange("Shade", last.ShadeHp, last.ShadeMaxHp, sample.ShadeHp, sample.ShadeMaxHp),
+                    FormattableString.Invariant($"{last.ShadeHp}/{last.ShadeMaxHp} -> {sample.ShadeHp}/{sample.ShadeMaxHp}"));
             }
+        }
+
+        /// <summary>
+        /// Names a health change. A moved maximum means the mask count was re-derived, not that
+        /// anything hit - reporting that as "took damage" is what sent one report looking for a
+        /// source of damage that never existed.
+        /// </summary>
+        private static string DescribeHealthChange(string who, int lastHp, int lastMax, int hp, int max)
+        {
+            if (max != lastMax)
+            {
+                return who + (max < lastMax ? " max health fell" : " max health rose");
+            }
+
+            return who + (hp < lastHp ? " took damage" : " healed");
         }
 
         /// <summary>

@@ -7,6 +7,16 @@ controls it; the reasoning belongs in the commit and the code.
 
 ### Fixed
 
+- Cycling the Shade's mask setting in the Difficulty menu no longer leaves it on 1 health. The
+  Shade now unpauses with the health it had when you paused, or its new maximum, whichever is
+  lower.
+- The Shade's maximum health now follows Hornet's while you play, instead of being fixed when it
+  spawned.
+- The controller preset no longer overwrites your saved keyboard inventory keys with 1-5. The
+  Shade still gets those keys; they are bound to it directly rather than through the game's
+  own keyboard settings.
+- The Shade no longer attacks enemies from a gauntlet wave that has not started yet. Those
+  enemies sit in the scene invisible and inert, and the Shade would stand slashing at nothing.
 - The Shade's charm menu now slides in and out with the same animation as every other inventory
   tab, whether you reach it by cycling or by its hotkey, instead of snapping into place.
 - The Shade now lights dark rooms, so it stays visible when it wanders away from Hornet. Its light
