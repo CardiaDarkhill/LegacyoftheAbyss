@@ -362,10 +362,149 @@ public class GameApiContractTests
             "ShadeAiBattleScenes.HasStarted reads it to tell a live wave from one still queued.");
     }
 
+    /// <summary>
+    /// The Shade's slash is a clone of Hornet's, rebuilt through these private members. None of them
+    /// is optional: a clone that keeps Hornet's activateOnSlash chain fires her other slashes, one
+    /// that keeps her scale is drawn at the wrong size, and one whose travel component still points
+    /// at her re-orients every time she turns around.
+    /// </summary>
+    [Theory]
+    [InlineData(typeof(NailAttackBase), "activateOnSlash", typeof(UnityEngine.GameObject[]))]
+    [InlineData(typeof(NailAttackBase), "hc", typeof(HeroController))]
+    [InlineData(typeof(NailSlashTravel), "hc", typeof(HeroController))]
+    [InlineData(typeof(NailSlashTravel), "initialLocalPos", typeof(UnityEngine.Vector3))]
+    [InlineData(typeof(NailSlashTravel), "initialLocalScale", typeof(UnityEngine.Vector3))]
+    [InlineData(typeof(NailSlashTravel), "travelDistance", typeof(UnityEngine.Vector2))]
+    public void TheShadeSlashCanBeRebuiltFromHornets(Type owner, string field, Type fieldType)
+    {
+        GameApiContract.RequireField(
+            owner, field, fieldType,
+            "ConfigureSpawnedSlash and AdoptSlashAfterFrame rewrite it so the clone belongs to the "
+            + "Shade rather than to Hornet.");
+    }
+
+    /// <summary>
+    /// The menu check reads the backing field because <c>UIManager.instance</c> logs an error and
+    /// scans the scene when nothing is registered, and the check runs every frame.
+    /// </summary>
+    [Fact]
+    public void TheUiManagerCanBeReadWithoutTheLoggingAccessor()
+    {
+        var field = typeof(UIManager).GetField("_instance", BindingFlags.Static | BindingFlags.NonPublic);
+
+        Assert.True(field != null, "UIManager._instance is gone; MenuStateUtility would fall back to nothing and the Shade would act during menus.");
+        Assert.Equal(typeof(UIManager), field!.FieldType);
+    }
+
+    /// <summary>
+    /// <c>PlayerData.instance</c> builds a blank singleton when none exists, so the menu check asks
+    /// <c>HasInstance</c> first rather than creating save data as a side effect of a read.
+    /// </summary>
+    [Fact]
+    public void PlayerDataCanBeTestedForWithoutCreatingIt()
+    {
+        GameApiContract.RequireMethod(
+            typeof(PlayerData), "get_HasInstance",
+            "TryGetPlayerData asks it before touching instance, which would otherwise deserialize a new PlayerData.");
+    }
+
+    /// <summary>
+    /// Read every frame to tell a scripted hold from one of Hornet's own moves. The public
+
+    /// <c>GameCameras.instance</c> logs an error and <c>SilentInstance</c> falls back to a scene scan
+    /// when nothing is registered, so the backing field is read directly instead.
+    /// </summary>
+    [Fact]
+    public void TheCameraRigCanBeReadWithoutTheLoggingAccessor()
+    {
+        var field = typeof(GameCameras).GetField("_instance", BindingFlags.Static | BindingFlags.NonPublic);
+
+        Assert.True(field != null, "GameCameras._instance is gone; the scripted-hold check would read null every frame and the Shade would never notice a cutscene.");
+        Assert.Equal(typeof(GameCameras), field!.FieldType);
+
+        GameApiContract.RequireMethod(
+            typeof(GameCameras), "get_IsHudVisible",
+            "IsGameHudHidden reads it as the tiebreaker for whether the game took the moment away.");
+    }
+
+    /// <summary>
+    /// The Wanderer crest's slash prefabs are reachable only through these arrays - nothing public
+    /// maps a Config back to the ConfigGroup holding its prefabs. If they stop resolving the shaman
+    /// moveset silently falls back to the plain nail slash.
+    /// </summary>
+    [Theory]
+    [InlineData("configs")]
+    [InlineData("specialConfigs")]
+    public void TheCrestSlashPrefabsCanBeFound(string field)
+    {
+        GameApiContract.RequireField(
+            typeof(HeroController), field, typeof(HeroController.ConfigGroup[]),
+            "FindShamanConfigGroup searches it for the ConfigGroup matching the spell crest's config.");
+    }
+
+    /// <summary>
+    /// NailAttackBase caches the slash's scale separately from the transform and reads it back
+    /// mid-animation, so orienting the clone means writing both.
+    /// </summary>
+
+    [Theory]
+    [InlineData("scale")]
+    [InlineData("longNeedleScale")]
+    public void TheSlashScaleCachesCanBeRewritten(string field)
+    {
+        GameApiContract.RequireField(
+            typeof(NailAttackBase), field, typeof(UnityEngine.Vector3),
+            "ApplyBaseSlashOrientation writes it so the slash keeps the Shade's size once the "
+            + "animation reads the cached value back.");
+    }
+
+    /// <summary>
+    /// The travel component subscribes itself to Hornet's flip event in Awake. The Shade's clone has
+    /// to be taken back off it, and there is no public unsubscribe - the handler has to be rebuilt
+    /// from the private method to be removed.
+    /// </summary>
+    [Fact]
+    public void TheSlashCanBeUnsubscribedFromHornetsFlip()
+    {
+        var handler = GameApiContract.RequireMethod(
+            typeof(NailSlashTravel), "OnHeroFlipped",
+            "DetachHeroFlipHandler rebuilds this delegate to remove it from HeroController.FlippedSprite.");
+
+        Assert.Empty(handler.GetParameters());
+        Assert.Equal(typeof(void), handler.ReturnType);
+
+        var flipped = typeof(HeroController).GetEvent("FlippedSprite");
+        Assert.True(flipped != null, "HeroController.FlippedSprite is gone; the Shade's slash would keep re-orienting with Hornet.");
+        Assert.Equal(typeof(Action), flipped!.EventHandlerType);
+    }
+
+    /// <summary>
+    /// Every field the Shade's slash rewrites on a cloned damager to stop it counting as Hornet's
+    /// nail. A lookup that stops resolving here leaves the Shade generating her silk, or dealing her
+    /// damage figure instead of its own.
+    /// </summary>
+    [Theory]
+    [InlineData("direction", typeof(float))]
+    [InlineData("moveDirection", typeof(bool))]
+    [InlineData("flipDirectionIfBehind", typeof(bool))]
+    [InlineData("forwardVector", typeof(UnityEngine.Vector2))]
+    [InlineData("ignoreNailPosition", typeof(bool))]
+    [InlineData("doesNotGenerateSilk", typeof(bool))]
+    [InlineData("useNailDamage", typeof(bool))]
+    [InlineData("damageDealt", typeof(int))]
+    public void AClonedDamagerCanBeRetargetedAtEnemies(string field, Type fieldType)
+    {
+        GameApiContract.RequireField(
+            typeof(DamageEnemies), field, fieldType,
+            "RetargetDamagers writes it so the Shade's slash damages enemies without reading as "
+            + "one of Hornet's nail strikes.");
+    }
+
     [Theory]
     [InlineData("TakeQuickDamage", false)]
     [InlineData("TakeDamage", true)]
     public void TheHeroDamageResolverFindsOnlyBindableMethods(string name, bool requireSource)
+
     {
         var methods = LegacyHelper.FindHeroDamageMethods(name, requireSource).ToList();
 

@@ -119,9 +119,8 @@ public partial class LegacyHelper
             if (hazardCooldown > 0f) hazardCooldown = Mathf.Max(0f, hazardCooldown - Time.deltaTime);
             if (hurtCooldown > 0f) hurtCooldown = Mathf.Max(0f, hurtCooldown - Time.deltaTime);
             if (damageStaggerTimer > 0f) damageStaggerTimer = Mathf.Max(0f, damageStaggerTimer - Time.deltaTime);
-            // Assist mode and the AI switch used to be polled here as rebindable hotkeys. Both now
-            // live only in the pause menu - assist mode on the Difficulty screen, the AI on its own
-            // screen - so there is nothing to read every frame and no binding to mis-hit mid-fight.
+            // Assist mode and the AI switch are pause-menu settings, not hotkeys: nothing to poll
+            // every frame, and no binding to mis-hit mid-fight.
 
             if (sceneProtectionActive)
             {
@@ -329,25 +328,17 @@ public partial class LegacyHelper
             catch { }
         }
 
-        /// <summary>
-        /// Turns assist mode on or off, with the spawn-protection deferral that has to happen either
-        /// way.
-        /// <para>
-        /// Extracted from the hotkey handler when the AI briefly forced assist mode on. It no longer
-        /// does - the AI fights on the same terms the player does - but the extraction is worth
-        /// keeping: the deferral below is subtle and belongs in one place rather than inline in
-        /// Update.
-        /// </para>
-        /// </summary>
         /// <summary>Whether assist mode is on right now. Read by the Difficulty menu's toggle.</summary>
         internal bool GetAssistModeEnabled() => assistModeEnabled;
 
-        /// <summary>
-        /// Public face of <see cref="SetAssistModeEnabled"/>, for the Difficulty menu. Assist mode
-        /// used to be reachable only through a hotkey, which is why the setter was private.
-        /// </summary>
+        /// <summary>Public face of <see cref="SetAssistModeEnabled"/>, for the Difficulty menu.</summary>
         internal void SetAssistMode(bool enabled) => SetAssistModeEnabled(enabled);
 
+        /// <summary>
+        /// Turns assist mode on or off, together with the spawn-protection deferral that has to
+        /// happen either way. Kept in one place rather than inline in <c>Update</c> because that
+        /// deferral is subtle and has two callers.
+        /// </summary>
         private void SetAssistModeEnabled(bool enabled)
         {
             if (assistModeEnabled == enabled)
@@ -729,9 +720,8 @@ public partial class LegacyHelper
         /// </summary>
         private static bool IsInOwnMove(HeroControllerStates c)
         {
-            try
-            {
-                return c.mantling
+            return c != null
+                && (c.mantling
                     || c.mantleRecovery
                     || c.inUpdraft
                     || c.isBinding
@@ -739,12 +729,7 @@ public partial class LegacyHelper
                     || c.isToolThrowing
                     // The game's own name for "an FSM she asked for is driving her": it gates whether
                     // a fresh move may interrupt this one, so a scripted hold never carries it.
-                    || c.isInCancelableFSMMove;
-            }
-            catch
-            {
-                return false;
-            }
+                    || c.isInCancelableFSMMove);
         }
 
         /// <summary>
@@ -756,30 +741,9 @@ public partial class LegacyHelper
         /// </summary>
         private static bool IsHeldByInteraction()
         {
-            try
-            {
-                if (InteractManager.BlockingInteractable != null)
-                {
-                    return true;
-                }
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                // The full-screen prompt canvas, which is not an interactable but holds her the same way.
-                if (GenericMessageCanvas.IsActive)
-                {
-                    return true;
-                }
-            }
-            catch
-            {
-            }
-
-            return false;
+            // GenericMessageCanvas is the full-screen prompt: not an interactable, but it holds her
+            // the same way.
+            return InteractManager.BlockingInteractable != null || GenericMessageCanvas.IsActive;
         }
 
         /// <summary>
@@ -791,41 +755,18 @@ public partial class LegacyHelper
         /// </summary>
         private static bool IsInCutscene(GameManager gm)
         {
-            try
+            if (!ReferenceEquals(gm, null) && gm.GameState == GameState.CUTSCENE)
             {
-                if (!ReferenceEquals(gm, null) && gm.GameState == GameState.CUTSCENE)
-                {
-                    return true;
-                }
-            }
-            catch
-            {
+                return true;
             }
 
-            try
+            if (InGameCutsceneInfo.IsInCutscene)
             {
-                if (InGameCutsceneInfo.IsInCutscene)
-                {
-                    return true;
-                }
-            }
-            catch
-            {
+                return true;
             }
 
-            try
-            {
-                var cameras = TryGetGameCameras();
-                if (!ReferenceEquals(cameras, null) && cameras.IsInCinematic)
-                {
-                    return true;
-                }
-            }
-            catch
-            {
-            }
-
-            return false;
+            var cameras = TryGetGameCameras();
+            return !ReferenceEquals(cameras, null) && cameras.IsInCinematic;
         }
 
         /// <summary>
@@ -840,26 +781,14 @@ public partial class LegacyHelper
         /// every movement move - which is precisely why those stopped reading as scripted holds.
         /// </para>
         /// <para>
-        /// A false negative here degrades to the Shade simply carrying on as normal, which is what it
-        /// did before this feature existed. That is the right way round for the failure to fall.
+        /// A false negative here degrades to the Shade simply carrying on as normal, which is the
+        /// right way round for the failure to fall.
         /// </para>
         /// </summary>
         private static bool IsGameHudHidden()
         {
-            try
-            {
-                var cameras = TryGetGameCameras();
-                if (ReferenceEquals(cameras, null))
-                {
-                    return false;
-                }
-
-                return !cameras.IsHudVisible;
-            }
-            catch
-            {
-                return false;
-            }
+            var cameras = TryGetGameCameras();
+            return !ReferenceEquals(cameras, null) && !cameras.IsHudVisible;
         }
 
         private static FieldInfo s_gameCamerasInstanceField;
@@ -872,20 +801,16 @@ public partial class LegacyHelper
         /// </summary>
         private static GameCameras TryGetGameCameras()
         {
-            if (!s_gameCamerasInstanceFieldResolved)
-            {
-                s_gameCamerasInstanceFieldResolved = true;
-                try
-                {
-                    s_gameCamerasInstanceField = typeof(GameCameras).GetField("_instance", BindingFlags.Static | BindingFlags.NonPublic);
-                }
-                catch
-                {
-                }
-            }
-
+            // Guarded because reading the static field runs GameCameras' type initializer, which
+            // reaches into the engine and so throws outside a player loop.
             try
             {
+                if (!s_gameCamerasInstanceFieldResolved)
+                {
+                    s_gameCamerasInstanceFieldResolved = true;
+                    s_gameCamerasInstanceField = typeof(GameCameras).GetField("_instance", BindingFlags.Static | BindingFlags.NonPublic);
+                }
+
                 return s_gameCamerasInstanceField?.GetValue(null) as GameCameras;
             }
             catch
@@ -893,6 +818,7 @@ public partial class LegacyHelper
                 return null;
             }
         }
+
 
         /// <summary>
         /// Holds off reporting a lock until it has lasted <see cref="ControlLockGraceSeconds"/>.

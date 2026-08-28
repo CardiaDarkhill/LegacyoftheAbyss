@@ -266,56 +266,26 @@ internal static class ShadeInventoryPaneIntegration
 
         if (!copyGridLayout)
         {
-            try
+            foreach (var existing in destination.GetComponents<GridLayoutGroup>())
             {
-                var existingGrids = destination.GetComponents<GridLayoutGroup>();
-                if (existingGrids != null)
-                {
-                    foreach (var existing in existingGrids)
-                    {
-                        if (existing == null)
-                        {
-                            continue;
-                        }
-
-                        try { UnityEngine.Object.Destroy(existing); }
-                        catch { }
-                    }
-                }
-            }
-            catch
-            {
+                if (existing != null) UnityEngine.Object.Destroy(existing);
             }
         }
 
         if (!copyLayoutGroups)
         {
-            try
+            foreach (var group in destination.GetComponents<LayoutGroup>())
             {
-                var existingGroups = destination.GetComponents<LayoutGroup>();
-                if (existingGroups != null)
+                // The grids were already dealt with above; do not destroy them twice.
+                if (group == null || (!copyGridLayout && group is GridLayoutGroup))
                 {
-                    foreach (var group in existingGroups)
-                    {
-                        if (group == null)
-                        {
-                            continue;
-                        }
-
-                        if (!copyGridLayout && group is GridLayoutGroup)
-                        {
-                            continue;
-                        }
-
-                        try { UnityEngine.Object.Destroy(group); }
-                        catch { }
-                    }
+                    continue;
                 }
-            }
-            catch
-            {
+
+                UnityEngine.Object.Destroy(group);
             }
         }
+
 
         if (source == null)
         {
@@ -392,14 +362,7 @@ internal static class ShadeInventoryPaneIntegration
             return;
         }
 
-        try
-        {
-            var value = new LocalisedString(string.Empty, string.IsNullOrEmpty(label) ? string.Empty : label);
-            DisplayNameField(pane) = value;
-        }
-        catch
-        {
-        }
+        DisplayNameField(pane) = new LocalisedString(string.Empty, label ?? string.Empty);
     }
 
     private sealed class TemplateSyncHost : MonoBehaviour
@@ -651,18 +614,7 @@ internal static class ShadeInventoryPaneIntegration
             return;
         }
 
-        InventoryPaneListDisplay? display = null;
-        if (PaneListDisplayField != null)
-        {
-            try
-            {
-                display = PaneListDisplayField(paneList);
-            }
-            catch
-            {
-                display = null;
-            }
-        }
+        var display = PaneListDisplayField != null ? PaneListDisplayField(paneList) : null;
         if (display == null)
         {
             return;
@@ -691,19 +643,16 @@ internal static class ShadeInventoryPaneIntegration
     /// Keeps the Shade pane a <i>sibling</i> of the real panes rather than letting it end up nested
     /// inside one of them.
     /// <para>
-    /// The parent is derived from the template pane, via
-    /// <c>ShadeInventoryPane.ResolveTemplateRootRectTransform</c>. When a pane's own transform is not
-    /// a <c>RectTransform</c> that resolver walks into the pane's children looking for one, so
-    /// <c>templateRect.parent</c> can land <i>inside</i> the template pane instead of beside it.
-    /// A Shade pane parented there inherits that pane's active state: the inventory FSM deactivates
-    /// the pane you came from at the end of its transition (roughly a second later, after
-    /// <c>Tween Panes</c> and <c>Pane Final Pos</c>), and the Shade pane goes inactive along with it -
-    /// producing an <c>OnDisable</c> with no matching <c>PaneEnd</c>, from that one source pane only.
+    /// The parent comes from <c>ShadeInventoryPane.ResolveTemplateRootRectTransform</c>, which walks
+    /// into a pane's children when the pane's own transform is not a <c>RectTransform</c> - so
+    /// <c>templateRect.parent</c> can land <i>inside</i> the template pane rather than beside it. A
+    /// Shade pane parented there inherits that pane's active state, and goes inactive with it when
+    /// the inventory FSM deactivates the pane you came from, producing an <c>OnDisable</c> with no
+    /// matching <c>PaneEnd</c> from that one source pane.
     /// </para>
     /// <para>
-    /// Walking up to the first ancestor that is not itself a pane (or inside one) is a no-op when the
-    /// resolved parent was already the panes' shared container, so this costs nothing in the healthy
-    /// case.
+    /// Walking up to the first ancestor that is not itself a pane is a no-op when the resolved
+    /// parent was already the panes' shared container.
     /// </para>
     /// </summary>
     private static Transform? ResolvePaneSiblingParent(Transform? candidate, InventoryPane templatePane, InventoryPane[] panes)
@@ -713,27 +662,22 @@ internal static class ShadeInventoryPaneIntegration
             return candidate;
         }
 
-        try
+        Transform? node = candidate;
+        while (node != null && IsInsideAnyPane(node, panes))
         {
-            Transform? node = candidate;
-            while (node != null && IsInsideAnyPane(node, panes))
-            {
-                node = node.parent;
-            }
-
-            if (node != null && node != candidate)
-            {
-                ShadeInventoryPane.LogMenuEvent(FormattableString.Invariant(
-                    $"Shade pane parent moved out of '{candidate.name}' to '{node.name}' to keep it a sibling of the real panes"));
-                return node;
-            }
-        }
-        catch
-        {
+            node = node.parent;
         }
 
-        return candidate;
+        if (node == null || node == candidate)
+        {
+            return candidate;
+        }
+
+        ShadeInventoryPane.LogMenuEvent(FormattableString.Invariant(
+            $"Shade pane parent moved out of '{candidate.name}' to '{node.name}' to keep it a sibling of the real panes"));
+        return node;
     }
+
 
     private static bool IsInsideAnyPane(Transform node, InventoryPane[] panes)
     {
@@ -951,71 +895,28 @@ internal static class ShadeInventoryPaneIntegration
         }
     }
 
+    /// <summary>Reads a bool field that may not have resolved against this build of the game.</summary>
     private static bool TryGetBool(FieldInfo? field, InventoryPaneInput input, bool defaultValue)
     {
-        if (field == null)
-        {
-            return defaultValue;
-        }
-
-        try
-        {
-            object? value = field.GetValue(input);
-            if (value is bool flag)
-            {
-                return flag;
-            }
-        }
-        catch
-        {
-        }
-
-        return defaultValue;
+        return field?.GetValue(input) is bool flag ? flag : defaultValue;
     }
 
+    /// <summary>
+    /// What an input looked like before the Shade pane borrowed it, so
+    /// <see cref="RestoreSingleInput"/> can put it back exactly.
+    /// </summary>
     private static InputBindingSnapshot CreateSnapshot(InventoryPaneInput input)
     {
-        InventoryPaneBase? pane = null;
-        if (PaneField != null)
-        {
-            try { pane = PaneField.GetValue(input) as InventoryPaneBase; }
-            catch { pane = null; }
-        }
-
-        InventoryPaneList? paneList = null;
-        if (PaneListField != null)
-        {
-            try { paneList = PaneListField.GetValue(input) as InventoryPaneList; }
-            catch { paneList = null; }
-        }
-
-        bool allowHorizontal = TryGetBool(AllowHorizontalField, input, true);
-        bool allowVertical = TryGetBool(AllowVerticalField, input, true);
-        bool allowRepeat = TryGetBool(AllowRepeatField, input, false);
-        bool allowRepeatSubmit = TryGetBool(AllowRepeatSubmitField, input, false);
-        bool allowRightStick = TryGetBool(AllowRightStickField, input, false);
-
-        InventoryPaneList.PaneTypes paneControl = InventoryPaneList.PaneTypes.None;
-        if (PaneControlField != null)
-        {
-            try { paneControl = PaneControlField(input); }
-            catch { paneControl = InventoryPaneList.PaneTypes.None; }
-        }
-
-        bool enabled = false;
-        try { enabled = input.enabled; }
-        catch { enabled = false; }
-
         return new InputBindingSnapshot(
-            pane,
-            paneList,
-            allowHorizontal,
-            allowVertical,
-            allowRepeat,
-            allowRepeatSubmit,
-            allowRightStick,
-            paneControl,
-            enabled);
+            PaneField?.GetValue(input) as InventoryPaneBase,
+            PaneListField?.GetValue(input) as InventoryPaneList,
+            TryGetBool(AllowHorizontalField, input, true),
+            TryGetBool(AllowVerticalField, input, true),
+            TryGetBool(AllowRepeatField, input, false),
+            TryGetBool(AllowRepeatSubmitField, input, false),
+            TryGetBool(AllowRightStickField, input, false),
+            PaneControlField != null ? PaneControlField(input) : InventoryPaneList.PaneTypes.None,
+            input.enabled);
     }
 
     private static void StoreOriginalBinding(InventoryPaneInput input)
@@ -1025,36 +926,26 @@ internal static class ShadeInventoryPaneIntegration
             return;
         }
 
-        try
-        {
-            OriginalInputBindings[input] = CreateSnapshot(input);
-        }
-        catch
-        {
-        }
+        OriginalInputBindings[input] = CreateSnapshot(input);
     }
 
     /// <summary>
     /// Points <paramref name="input"/> at the Shade pane's input conventions.
     /// <para>
     /// <paramref name="isLocal"/> gates the one setting that must <b>not</b> be applied to a borrowed
-    /// input: <c>paneControl</c>. That field is what <c>InventoryPaneInput.Update</c> switches on to
-    /// tell "the player pressed *this* pane's own shortcut, so close the inventory" from "the player
-    /// pressed a *different* pane's shortcut, so switch to it" - and its
-    /// <c>PaneTypes.None</c> case means <i>every</i> shortcut is treated as this pane's own, i.e.
-    /// unconditionally cancel. Writing None onto the real panes' inputs (which is what this used to
-    /// do to every input it captured) therefore left a live trap: if the restore that was supposed to
-    /// put each pane's own value back ever failed to run - and an unexplained extra enable/disable
-    /// cycle on the Shade pane meant it sometimes didn't - all six inventory shortcuts closed the
+    /// input: <c>paneControl</c>. <c>InventoryPaneInput.Update</c> switches on it to tell "the player
+    /// pressed *this* pane's own shortcut, so close the inventory" from "the player pressed a
+    /// *different* pane's shortcut, so switch to it", and its <c>PaneTypes.None</c> case treats
+    /// <i>every</i> shortcut as this pane's own - an unconditional cancel. Write None onto the real
+    /// panes' inputs and a single missed restore leaves all six inventory shortcuts closing the
     /// inventory instead of switching tabs, on every tab, for the rest of the session.
     /// </para>
     /// <para>
-    /// Nothing needed that write. Submit/Direction routing to the Shade goes through the <c>pane</c>
-    /// field (see the <c>PressSubmit</c>/<c>PressDirection</c> patches, which resolve the pane, not
-    /// the pane control), so a borrowed input keeps working for the Shade with its own
-    /// <c>paneControl</c> left exactly as its pane shipped it - and a missed restore can no longer
-    /// break anything, because there is nothing to restore.
+    /// Nothing needs that write: Submit/Direction routing to the Shade goes through the <c>pane</c>
+    /// field, so a borrowed input keeps working with its own <c>paneControl</c> untouched - and a
+    /// missed restore cannot break anything, because there is nothing to restore.
     /// </para>
+
     /// </summary>
     private static void ApplyShadeInputSettings(InventoryPaneInput input, bool isLocal)
     {
@@ -1118,67 +1009,35 @@ internal static class ShadeInventoryPaneIntegration
             return;
         }
 
-        try
+        if (OriginalInputBindings.TryGetValue(input, out var snapshot))
         {
-            if (OriginalInputBindings.TryGetValue(input, out var snapshot))
+            if (ModConfig.Instance.logMenu)
             {
-                if (ModConfig.Instance.logMenu)
-                {
-                    try
-                    {
-                        InventoryPaneList.PaneTypes live = InventoryPaneList.PaneTypes.None;
-                        if (PaneControlField != null)
-                        {
-                            try { live = PaneControlField(input); }
-                            catch { }
-                        }
-
-                        string restoredPane = snapshot.Pane != null ? snapshot.Pane.name : "<null>";
-                        LegacyHelper.LogInfo(FormattableString.Invariant(
-                            $"RestoreSingleInput {input.gameObject?.name}: paneControl {live} -> {snapshot.PaneControl}, pane -> {restoredPane}, enabled -> {snapshot.Enabled}"));
-                    }
-                    catch
-                    {
-                    }
-                }
-
-                if (PaneField != null)
-                {
-                    try { PaneField.SetValue(input, snapshot.Pane); }
-                    catch { }
-                }
-
-                if (PaneListField != null)
-                {
-                    try { PaneListField.SetValue(input, snapshot.PaneList); }
-                    catch { }
-                }
-
-                AllowHorizontalField?.SetValue(input, snapshot.AllowHorizontal);
-                AllowVerticalField?.SetValue(input, snapshot.AllowVertical);
-                AllowRepeatField?.SetValue(input, snapshot.AllowRepeat);
-                AllowRepeatSubmitField?.SetValue(input, snapshot.AllowRepeatSubmit);
-                AllowRightStickField?.SetValue(input, snapshot.AllowRightStick);
-
-                if (PaneControlField != null)
-                {
-                    try { PaneControlField(input) = snapshot.PaneControl; }
-                    catch { }
-                }
-
-                try { input.enabled = snapshot.Enabled; }
-                catch { }
-
-                OriginalInputBindings.Remove(input);
+                var live = PaneControlField != null ? PaneControlField(input) : InventoryPaneList.PaneTypes.None;
+                string restoredPane = snapshot.Pane != null ? snapshot.Pane.name : "<null>";
+                LegacyHelper.LogInfo(FormattableString.Invariant(
+                    $"RestoreSingleInput {input.gameObject?.name}: paneControl {live} -> {snapshot.PaneControl}, pane -> {restoredPane}, enabled -> {snapshot.Enabled}"));
             }
-            else if (PaneField != null)
+
+            PaneField?.SetValue(input, snapshot.Pane);
+            PaneListField?.SetValue(input, snapshot.PaneList);
+            AllowHorizontalField?.SetValue(input, snapshot.AllowHorizontal);
+            AllowVerticalField?.SetValue(input, snapshot.AllowVertical);
+            AllowRepeatField?.SetValue(input, snapshot.AllowRepeat);
+            AllowRepeatSubmitField?.SetValue(input, snapshot.AllowRepeatSubmit);
+            AllowRightStickField?.SetValue(input, snapshot.AllowRightStick);
+
+            if (PaneControlField != null)
             {
-                try { PaneField.SetValue(input, null); }
-                catch { }
+                PaneControlField(input) = snapshot.PaneControl;
             }
+
+            input.enabled = snapshot.Enabled;
+            OriginalInputBindings.Remove(input);
         }
-        catch
+        else
         {
+            PaneField?.SetValue(input, null);
         }
 
         if (shadePane != null)
@@ -1211,13 +1070,12 @@ internal static class ShadeInventoryPaneIntegration
     /// Puts back any input that still holds a snapshot but is no longer tracked against a live Shade
     /// pane.
     /// <para>
-    /// <see cref="CapturedInputs"/> is per-pane bookkeeping that can be dropped without the matching
-    /// restore ever running - <see cref="BindInput"/> used to clear it outright when re-capturing,
-    /// and a Shade pane destroyed out from under it takes its entry with it. Every input orphaned
-    /// that way keeps the Shade's settings and its <c>pane</c> pointing at a pane that is no longer
-    /// showing. <see cref="OriginalInputBindings"/> still holds the truth for each of them, so once
-    /// no Shade pane is holding a capture at all, anything left in there is by definition a leak and
-    /// can be restored unconditionally.
+    /// <see cref="CapturedInputs"/> is per-pane bookkeeping that can be dropped without its matching
+    /// restore running - a Shade pane destroyed out from under it takes its entry along. An input
+    /// orphaned that way keeps the Shade's settings and points its <c>pane</c> at a pane that is no
+    /// longer showing. <see cref="OriginalInputBindings"/> still holds the truth for each, so once no
+    /// Shade pane holds a capture at all, whatever remains there is by definition a leak and can be
+    /// restored unconditionally.
     /// </para>
     /// </summary>
     private static void RestoreOrphanedInputs()

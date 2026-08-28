@@ -12,13 +12,11 @@ public partial class LegacyHelper
     /// <summary>
     /// Makes an attack land on whoever is standing in it, Hornet and the Shade alike.
     /// <para>
-    /// The sibling of <see cref="EnemyAiRetargeting"/>, and the second half of the same idea. That one
-    /// redirects where an enemy <i>goes</i>; this one decides who an attack <i>lands on</i> once it
-    /// gets there. Lace's cross slash is the case it was written for: it marks a circular area and, if
-    /// anything is inside it, teleports the hero to the centre, multi-hits, then slams. The area check
-    /// does not care who tripped it, and every effect after it is aimed at <c>HeroController</c> by
-    /// name - so with the Shade in the circle, Hornet was dragged thirteen units across the room into
-    /// an attack she was nowhere near.
+    /// The sibling of <see cref="EnemyAiRetargeting"/>: that one redirects where an enemy <i>goes</i>,
+    /// this one decides who an attack <i>lands on</i>. Lace's cross slash is the shape to keep in mind
+    /// - it marks a circular area, teleports the hero to the centre of it, multi-hits and slams, and
+    /// every effect after the area check is aimed at <c>HeroController</c> by name regardless of who
+    /// tripped it.
     /// </para>
     /// <para>
     /// The question asked is occupancy, not preference: is Hornet in this attack, and is the Shade,
@@ -50,12 +48,9 @@ public partial class LegacyHelper
         };
 
         /// <summary>
-        /// Actions that ask <c>HeroController.CanBeGrabbed</c> - its only two callers anywhere.
-        /// <para>
-        /// Kept for grabs that route through it, though no boss observed so far actually does: Lace's
-        /// cross slash goes through the damage gate above instead. Both sets are cheap to patch and
-        /// share the same refusal, so covering both costs little.
-        /// </para>
+        /// Actions that ask <c>HeroController.CanBeGrabbed</c> - its only two callers anywhere. No
+        /// boss observed so far routes a grab through them, but they share the refusal path with the
+        /// damage gates and cost little to cover.
         /// </summary>
         private static readonly HashSet<string> GrabGateActionNames = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -68,13 +63,9 @@ public partial class LegacyHelper
         // --- the rule ---------------------------------------------------------------------------
 
         /// <summary>
-        /// Who is standing in an attack, asked separately for each of them.
-        /// <para>
-        /// An earlier version keyed off which of the two the boss was fighting and swapped one for the
-        /// other, expressing "the Shade was hit" as a stretch of immunity for Hornet. That cannot
-        /// represent both of them standing in the same circle, and spared her hits she should have
-        /// taken. Nothing here is time-based; the only question is who is in the attack.
-        /// </para>
+        /// Who is standing in an attack, asked separately for each of them. Nothing here is
+        /// time-based: expressing "the Shade was hit" as a stretch of immunity for Hornet cannot
+        /// represent both of them in the same circle, and spares her hits she should have taken.
         /// </summary>
         internal readonly struct Occupancy
         {
@@ -90,14 +81,10 @@ public partial class LegacyHelper
             internal bool ShadeInside { get; }
 
             /// <summary>
-            /// Whether Hornet's side of the reading means anything - that a hurtbox was found, was
-            /// switched on, and could be tested against the attack.
-            /// <para>
-            /// Without this the two unlike answers "she was measured, and she is outside it" and
-            /// "she could not be measured at all" arrive as the same <c>false</c>, and every caller
-            /// below reads the second as the first. That reads a failure to measure as grounds to
-            /// take a hit away from her, which is the one direction this must never fail in.
-            /// </para>
+            /// Whether Hornet's side of the reading means anything - a hurtbox was found, switched on,
+            /// and testable against the attack. Without it "measured, and outside" and "not measurable
+            /// at all" arrive as the same <c>false</c>, which turns a failed reading into grounds to
+            /// take a hit away from her - the one direction this must never fail in.
             /// </summary>
             internal bool HornetMeasurable { get; }
 
@@ -175,9 +162,7 @@ public partial class LegacyHelper
                 return cached.Value;
             }
 
-            Collider2D[] colliders;
-            try { colliders = attack.GetComponentsInChildren<Collider2D>(false); }
-            catch { colliders = Array.Empty<Collider2D>(); }
+            var colliders = attack.GetComponentsInChildren<Collider2D>(false);
 
             if (s_attackColliders.Count > 64)
             {
@@ -190,13 +175,9 @@ public partial class LegacyHelper
 
         /// <summary>
         /// Whether <paramref name="victim"/> is geometrically inside one of the attack's hitboxes.
-        /// <para>
-        /// <c>Collider2D.Distance</c> rather than <c>IsTouching</c>, and the difference is a bug it
-        /// replaced: <c>IsTouching</c> answers "are these in contact <i>as far as the physics system
-        /// is concerned</i>", which consults the layer collision matrix. The Shade's body sits on
-        /// Default and these hitboxes elsewhere, pairs that do not interact, so it reported "not
-        /// touching" no matter where the Shade stood. <c>Distance</c> is pure geometry.
-        /// </para>
+        /// Must stay <c>Collider2D.Distance</c>, which is pure geometry: <c>IsTouching</c> consults
+        /// the layer collision matrix, and the Shade's body sits on Default while these hitboxes do
+        /// not, so it reports "not touching" wherever the Shade stands.
         /// </summary>
         private static bool IsInsideAttack(GameObject attack, Collider2D victim, out string matched)
         {
@@ -214,16 +195,10 @@ public partial class LegacyHelper
                     continue;
                 }
 
-                try
+                if (collider.Distance(victim).isOverlapped)
                 {
-                    if (collider.Distance(victim).isOverlapped)
-                    {
-                        matched = collider.name;
-                        return true;
-                    }
-                }
-                catch
-                {
+                    matched = collider.name;
+                    return true;
                 }
             }
 
@@ -231,35 +206,18 @@ public partial class LegacyHelper
         }
 
         /// <summary>
-        /// Whether a collider is part of the attack rather than part of the boss noticing you.
-        /// <para>
-        /// A boss carries arena-sized detection volumes - battle ranges, alert ranges - alongside its
-        /// hitboxes, and they are the same kind of trigger on the same layer. Counting those made
-        /// Hornet read as "inside the attack" from anywhere in the room. <c>TrackTriggerObjects</c>
-        /// marks a volume as a detector, and a hitbox is always a trigger, so between them the two
-        /// tests separate the sets cleanly.
-        /// </para>
+        /// Whether a collider is part of the attack rather than part of the boss noticing you. A boss
+        /// carries arena-sized detection volumes - battle and alert ranges - as the same kind of
+        /// trigger on the same layer as its hitboxes, and counting those reads Hornet as "inside the
+        /// attack" from anywhere in the room. <c>TrackTriggerObjects</c> marks a detector and a hitbox
+        /// is always a trigger, so the two tests separate the sets cleanly.
         /// </summary>
         private static bool IsAttackHitbox(Collider2D collider)
         {
-            if (collider == null || !collider.enabled || !collider.isTrigger)
-            {
-                return false;
-            }
-
-            try
-            {
-                if (collider.GetComponent<TrackTriggerObjects>() != null)
-                {
-                    return false;
-                }
-            }
-            catch
-            {
-                return false;
-            }
-
-            return true;
+            return collider != null
+                && collider.enabled
+                && collider.isTrigger
+                && collider.GetComponent<TrackTriggerObjects>() == null;
         }
 
         private static Collider2D ResolveHornetHurtbox()
@@ -277,18 +235,11 @@ public partial class LegacyHelper
         }
 
         /// <summary>
-        /// Whether the damage names Hornet herself, or something she hangs off, as its source.
-        /// <para>
-        /// Occupancy cannot answer for an attack that is Hornet: <see cref="IsInsideAttack"/> skips
-        /// the victim's own collider, and when the attack is her hierarchy the only hitbox that could
-        /// have matched her <i>is</i> that collider - so she reads as outside her own attack every
-        /// time, and any Shade stood on her takes the hit instead. Damage sourced at her is hers by
-        /// definition, so it is settled here rather than measured.
-        /// </para>
-        /// <para>
-        /// Nothing in the game damages Hornet this way; a debug menu's "hurt me" does, which is how it
-        /// was found, and that is reason enough for the case to have an answer of its own.
-        /// </para>
+        /// Whether the damage names Hornet herself, or something she hangs off, as its source. Settled
+        /// here rather than measured, because occupancy cannot answer it: <see cref="IsInsideAttack"/>
+        /// skips the victim's own collider, so when the attack is her own hierarchy she reads as
+        /// outside it every time and a Shade stood on her takes the hit. Reached by debug-menu damage
+        /// rather than by anything the game itself does.
         /// </summary>
         private static bool IsHornetsOwn(GameObject source)
         {
@@ -317,19 +268,18 @@ public partial class LegacyHelper
         }
 
         /// <summary>
-        /// Measures occupancy of one attack. <paramref name="attack"/> is the object actually
-        /// delivering the effect and nothing above it - an earlier version widened this to the boss's
-        /// <c>HealthManager</c>, which put every hitbox the boss owns into one bucket, so anyone in
-        /// melee read as "inside the attack" and every reading came back <i>both inside</i>.
+        /// Measures occupancy of one attack. <paramref name="attack"/> must be the object actually
+        /// delivering the effect and nothing above it: widening to the boss's <c>HealthManager</c>
+        /// puts every hitbox the boss owns in one bucket, and every reading comes back <i>both
+        /// inside</i>.
         /// </summary>
         private static Occupancy MeasureOccupancy(GameObject attack)
         {
             var hornetHurtbox = ResolveHornetHurtbox();
 
-            // A hurtbox that is missing or switched off cannot place her either way. It is off only
-            // while she is dying - HeroBoxOff has no other caller - so this is a guard rather than a
-            // path anything ordinarily takes, but it is the guard that keeps a failed reading from
-            // being spent on her behalf.
+            // A hurtbox that is missing or switched off cannot place her either way. Off only while
+            // she is dying (HeroBoxOff has no other caller), but it keeps a failed reading from being
+            // spent on her behalf.
             bool hornetMeasurable = hornetHurtbox != null && hornetHurtbox.enabled;
             bool hornetInside = false;
             string hornetHitbox = null;
@@ -368,18 +318,13 @@ public partial class LegacyHelper
         // --- applying it ------------------------------------------------------------------------
 
         /// <summary>
-        /// Hands a hit to the Shade, when the Shade has no other way to receive it.
-        /// <para>
-        /// Most attacks reach the Shade on their own: it finds the <see cref="DamageHero"/> on the
-        /// collider it is overlapping and takes the hit through its ordinary damage path. Applying a
-        /// second copy here would hurt it twice, so those are left alone.
-        /// </para>
+        /// Hands a hit to the Shade, when the Shade has no other way to receive it. Most attacks reach
+        /// it on their own through the <see cref="DamageHero"/> on the collider it overlaps, and a
+        /// second copy here would hurt it twice - so those are left alone.
         /// <para>
         /// The ones that need this carry no damage component on the hitbox at all, because the FSM
-        /// damages the hero by calling <c>HeroController</c> directly. Lace's cross slash is one, and
-        /// the Shade had only ever been receiving it by accident - through a parent walk-up that
-        /// attributed the boss's body contact to every child trigger. Correcting that attribution left
-        /// the Shade completely immune to the attack until this was added.
+        /// calls <c>HeroController</c> directly. Lace's cross slash is one, and without this it cannot
+        /// touch the Shade at all.
         /// </para>
         /// </summary>
         private static string GiveTheShadeItsHit(GameObject attack, int knownAmount = 0)
@@ -468,12 +413,11 @@ public partial class LegacyHelper
 
         /// <summary>
         /// Gives the Shade its share of an attack, and refuses the hero's when she is not in it.
-        /// <para>
-        /// Suppressing the damage call alone was not enough: it is one action in a state that also
-        /// broadcasts <c>HERO DAMAGED</c> and <c>WOUND START</c>, so Hornet lost no health but still
-        /// played the whole hit reaction. Refusing the gate keeps the FSM out of that state entirely.
-        /// </para>
+        /// Refuses at the gate rather than suppressing the damage call: that call is one action in a
+        /// state which also broadcasts <c>HERO DAMAGED</c> and <c>WOUND START</c>, so suppressing it
+        /// alone costs Hornet no health but still plays the whole hit reaction.
         /// </summary>
+
         private static bool GatePrefix(FsmStateAction __instance)
         {
             try

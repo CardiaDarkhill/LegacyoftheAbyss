@@ -32,16 +32,10 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             return rect;
         }
 
-        try
+        rect = template.GetComponent<RectTransform>();
+        if (rect != null)
         {
-            rect = template.GetComponent<RectTransform>();
-            if (rect != null)
-            {
-                return rect;
-            }
-        }
-        catch
-        {
+            return rect;
         }
 
         RectTransform? matchByName = null;
@@ -50,16 +44,8 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         RectTransform? scoredCandidate = null;
         int scoredCandidateValue = int.MinValue;
 
-        RectTransform[]? rects = null;
-        try
-        {
-            rects = template.GetComponentsInChildren<RectTransform>(true);
-        }
-        catch
-        {
-        }
-
-        if (rects != null && rects.Length > 0)
+        var rects = template.GetComponentsInChildren<RectTransform>(true);
+        if (rects.Length > 0)
         {
             foreach (var candidate in rects)
             {
@@ -123,18 +109,12 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
                     matchDirectChild = candidate;
                 }
 
-                try
+                if (candidate != null && candidate.GetComponent<InventoryPane>() == template)
                 {
-                    var paneComponent = candidate != null ? candidate.GetComponent<InventoryPane>() : null;
-                    if (paneComponent != null && paneComponent == template)
-                    {
-                        rect = candidate;
-                        break;
-                    }
+                    rect = candidate;
+                    break;
                 }
-                catch
-                {
-                }
+
 
                 string name = candidate != null ? candidate.gameObject.name : string.Empty;
                 if (!string.IsNullOrEmpty(name))
@@ -617,8 +597,8 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         ClearActiveCharmFlights();
 
         // Not while a slide-out is running: the FSM deactivates the pane you just left partway
-        // through its own tween, and cutting the overlay here is what made the Charms tab vanish
-        // instead of sliding away.
+        // through its own tween, so cutting the overlay here makes the Charms tab vanish instead of
+        // sliding away.
         if (overlaySlide == null || !overlaySlide.IsTransitioning)
         {
             ApplyOverlayVisibility(false);

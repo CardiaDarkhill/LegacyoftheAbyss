@@ -133,8 +133,8 @@ public partial class LegacyHelper
             shamanUpSlashTemplate = null;
             shamanDownSlashTemplate = null;
             shamanSlashConfigSource = null;
-            shamanDownSlashType = HeroControllerConfig.DownSlashTypes.Slash;
             carefreeMelodyEquipped = false;
+
             carefreeMelodyChance = 0f;
             voidHeartEvadeActive = false;
             DisableCarefreeMelodyEffect();
@@ -773,6 +773,27 @@ public partial class LegacyHelper
             {
                 return false;
             }
+        }
+
+        private int GetHornetNailDamage()
+        {
+            try
+            {
+                var gm = GameManager.instance;
+                var pd = gm != null ? gm.playerData : null;
+                if (pd == null) return 5;
+                int baseDmg = Mathf.Max(1, pd.nailDamage);
+                bool bound = false;
+                try { bound = BossSequenceController.BoundNail; } catch { bound = false; }
+                if (bound)
+                {
+                    int boundVal = 0;
+                    try { boundVal = BossSequenceController.BoundNailDamage; } catch { boundVal = baseDmg; }
+                    return Mathf.Min(baseDmg, Mathf.Max(1, boundVal));
+                }
+                return baseDmg;
+            }
+            catch { return 5; }
         }
     }
 }

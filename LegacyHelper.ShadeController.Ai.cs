@@ -84,11 +84,10 @@ public partial class LegacyHelper
         /// Switches the driver on or off. <paramref name="persist"/> is false when this is restoring
         /// a state config already holds, so startup does not rewrite the file it just read.
         /// <para>
-        /// This deliberately does not touch assist mode. An earlier version forced the Shade
-        /// invincible whenever the AI drove it, which meant the AI simply played the game for the
-        /// player: it shredded everything and could not be punished for any of it. The AI now fights
-        /// on the same terms the player does, and anyone who wants an invincible Shade can still
-        /// turn assist mode on themselves.
+        /// This deliberately does not touch assist mode. Forcing the Shade invincible while the AI
+        /// drives it means the AI plays the game for the player - shredding everything, punishable
+        /// for none of it. The AI fights on the same terms the player does, and anyone who wants an
+        /// invincible Shade can turn assist mode on themselves.
         /// </para>
         /// </summary>
         internal void SetShadeAiEnabled(bool enabled, bool persist)
@@ -131,26 +130,14 @@ public partial class LegacyHelper
                 }
             }
 
-            try
-            {
-                LegacyoftheAbyss.Diagnostics.BugReportSystem.RecordEvent(
-                    "shade-ai",
-                    enabled ? "AI enabled" : "AI disabled",
-                    FormattableString.Invariant($"assistMode={assistModeEnabled} canTakeDamage={canTakeDamage} persist={persist}"));
-            }
-            catch
-            {
-            }
+            LegacyoftheAbyss.Diagnostics.BugReportSystem.RecordEvent(
+                "shade-ai",
+                enabled ? "AI enabled" : "AI disabled",
+                FormattableString.Invariant($"assistMode={assistModeEnabled} canTakeDamage={canTakeDamage} persist={persist}"));
 
-            try
+            if (ModConfig.Instance.logShade)
             {
-                if (ModConfig.Instance.logShade)
-                {
-                    LegacyHelper.LogInfo(enabled ? "Shade AI enabled." : "Shade AI disabled.");
-                }
-            }
-            catch
-            {
+                LegacyHelper.LogInfo(enabled ? "Shade AI enabled." : "Shade AI disabled.");
             }
 
             PushShadeStatsToHud(suppressDamageAudio: true);
@@ -411,19 +398,9 @@ public partial class LegacyHelper
         /// </summary>
         private float GetAiBodyRadius()
         {
-            try
-            {
-                if (bodyCol != null && bodyCol)
-                {
-                    return Mathf.Clamp(bodyCol.bounds.extents.x, 0.2f, 2f);
-                }
-            }
-            catch
-            {
-            }
-
-            return 0.45f;
+            return bodyCol ? Mathf.Clamp(bodyCol.bounds.extents.x, 0.2f, 2f) : 0.45f;
         }
+
 
         /// <summary>
         /// Gives up on an order the Shade cannot honour.

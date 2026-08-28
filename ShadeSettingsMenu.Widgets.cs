@@ -38,22 +38,19 @@ public static partial class ShadeSettingsMenu
     }
 
     /// <summary>
-    /// The game's own slider, cloned whole.
+    /// The game's own slider, cloned whole: the <see cref="Slider"/>'s object with everything that is
+    /// not part of the slider stripped off by <see cref="StripToSliderParts"/>.
     /// <para>
-    /// The <see cref="Slider"/>'s own object, with everything on it that is not part of the slider
-    /// stripped off by <see cref="StripToSliderParts"/>.
-    /// <para>
-    /// Rebuilding the track, the fill and the knob by hand cost four rounds of reports - the knob
-    /// turned out to be a mostly-transparent sprite, quarter-turned, in a rect taller than the row,
-    /// hung well above its slide area, with the fill inset at one end and not the other. Every one
-    /// of those was a fresh guess at a rect that can simply be copied.
+    /// Clone rather than rebuild. The knob is a mostly-transparent sprite, quarter-turned, in a rect
+    /// taller than its row and hung well above its slide area, with the fill inset at one end only -
+    /// every one of those is a rect that can be copied instead of guessed at.
     /// </para>
     /// <para>
-    /// The other half of the lesson is that "the Slider's own object" carries no promise about what
-    /// is on it. On this build it also holds the game's label, its value readout, a full-row cursor
-    /// hotspot and a pair of selection fleurs - so the first clone put "Master Volume" and a stray
-    /// "10" across every row, the same symptom as cloning the row itself. Nothing here identifies a
-    /// part by name or by component type; the parts are found through the Slider's own references.
+    /// "The Slider's own object" promises nothing about what else is on it: on this build it also
+    /// carries the game's label, its value readout, a full-row cursor hotspot and a pair of selection
+    /// fleurs, which is how a clone ends up with "Master Volume" and a stray "10" on every row.
+    /// Identify nothing by name or component type - the game ships two text stacks - and reach the
+    /// parts through the Slider's own references instead.
     /// </para>
     /// </summary>
     private static GameObject CreateGameSliderTemplate(GameObject gameSlider)
@@ -1064,9 +1061,8 @@ public static partial class ShadeSettingsMenu
     }
 
     /// <summary>
-    /// Column widths for one slider row. The Difficulty screen puts sliders inside half-width
-    /// panels, where the full-width defaults do not fit, so the three columns are parameters rather
-    /// than the constants they used to be.
+    /// Column widths for one slider row. Parameters rather than constants because the Difficulty
+    /// screen puts sliders inside half-width panels, where full-width defaults do not fit.
     /// </summary>
     private struct SliderRowMetrics
     {
@@ -1121,9 +1117,9 @@ public static partial class ShadeSettingsMenu
 
     /// <param name="rowTransform">
     /// The row this built, for callers that position rows themselves. Handed back rather than left
-    /// to be derived from the returned selectable's parent: where the selectable lives depends on
-    /// whether the cloned template carried a MenuSelectable of its own, and a caller that assumed
-    /// one arrangement moved the whole panel instead of the row when it turned out to be the other.
+    /// to be derived from the returned selectable's parent: the selectable sits on the row or on the
+    /// clone depending on whether the template carried a MenuSelectable of its own, so deriving it
+    /// moves a whole panel when the guess is wrong.
     /// </param>
     private static MenuSelectable CreateSlider(Transform parent, GameObject template, MenuButton buttonTemplate, string label, float min, float max, float value, System.Action<float> onChange, CancelTarget cancelTarget, SliderRowMetrics metrics, out RectTransform rowTransform, bool whole = false)
     {
@@ -1325,10 +1321,9 @@ public static partial class ShadeSettingsMenu
     /// A yes/no row. Rendered as an ordinary menu button whose label reads
     /// <c>"Something: On"</c>, rather than as a checkbox square.
     /// <para>
-    /// It used to clone the game's Toggle prefab and sit a little square next to a label. Two
-    /// problems with that: it was a second visual language for the same idea the Shade Enabled row
-    /// already expressed in words, and a Toggle clone carries none of the selection fleurs a
-    /// MenuButton clone does, so those rows were also the ones that looked unselected.
+    /// Not a clone of the game's Toggle prefab: that is a second visual language for what the other
+    /// rows already say in words, and a Toggle clone carries none of the selection fleurs a
+    /// MenuButton clone does, so those rows are the ones that look permanently unselected.
     /// </para>
     /// </summary>
     private static MenuSelectable CreateToggle(Transform parent, MenuButton buttonTemplate, string label, bool value, System.Action<bool> onChange, CancelTarget cancelTarget)

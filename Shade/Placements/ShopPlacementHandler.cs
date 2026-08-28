@@ -449,46 +449,22 @@ namespace LegacyoftheAbyss.Shade
             string ownerName = owner.name ?? string.Empty;
             string typeName = owner.GetType().FullName ?? owner.GetType().Name;
             string hierarchyPath = ShadeCharmPlacementHelpers.GetHierarchyPath(owner.transform) ?? string.Empty;
-            string sceneName = string.Empty;
-            string scenePath = string.Empty;
-
-            try
-            {
-                var scene = owner.gameObject.scene;
-                sceneName = scene.name ?? string.Empty;
-                scenePath = scene.path ?? string.Empty;
-            }
-            catch
-            {
-            }
+            var scene = owner.gameObject.scene;
+            string sceneName = scene.name ?? string.Empty;
+            string scenePath = scene.path ?? string.Empty;
 
             string title = string.Empty;
-            try
+            if (owner is SimpleShopMenuOwner menuOwner)
             {
-                if (owner is SimpleShopMenuOwner menuOwner)
-                {
-                    title = menuOwner.ShopTitle ?? string.Empty;
-                }
-                else if (ShopOwnerTitleField != null && owner is ShopOwnerBase)
-                {
-                    if (ShopOwnerTitleField.GetValue(owner) is LocalisedString localised)
-                    {
-                        title = $"{localised.Sheet}:{localised.Key}";
-                    }
-                }
+                title = menuOwner.ShopTitle ?? string.Empty;
             }
-            catch
+            else if (owner is ShopOwnerBase && ShopOwnerTitleField?.GetValue(owner) is LocalisedString localised)
             {
+                title = $"{localised.Sheet}:{localised.Key}";
             }
 
-            string rootName = string.Empty;
-            try
-            {
-                rootName = owner.transform?.root?.name ?? string.Empty;
-            }
-            catch
-            {
-            }
+            string rootName = owner.transform?.root?.name ?? string.Empty;
+
 
             return string.Join("|", new[]
             {

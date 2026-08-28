@@ -5,15 +5,12 @@ using UnityEngine;
 namespace LegacyoftheAbyss.Shade.Ai
 {
     /// <summary>
-    /// Every distance and threshold the brain reasons with, in one place and passed in rather than
-    /// read from <see cref="ModConfig"/> inside the decision, so a test can drive the brain with
-    /// values it chose.
+    /// Every distance and threshold the brain reasons with, passed in rather than read from
+    /// <see cref="ModConfig"/> inside the decision so tests can drive the brain with chosen values.
     /// <para>
-    /// The geometry numbers are deliberately a little tighter than the hitboxes they stand in for.
-    /// The cone Shriek actually spawns is 12 units at 95 degrees
-    /// (<c>LegacyHelper.ShadeController.Spells.cs</c>); asking for 11 at 84 means an enemy the brain
-    /// counted is still inside the cone by the time the cast animation finishes and the collider
-    /// appears, rather than one frame outside it.
+    /// Geometry numbers are deliberately tighter than the hitboxes they stand in for: Shriek spawns
+    /// a 12-unit, 95-degree cone, so asking for 11 at 84 keeps a counted enemy inside the cone by
+    /// the time the cast animation finishes and the collider appears.
     /// </para>
     /// </summary>
     internal readonly struct ShadeAiTuning
@@ -22,9 +19,8 @@ namespace LegacyoftheAbyss.Shade.Ai
         internal float EngageRadius { get; init; }
 
         /// <summary>
-        /// Fraction of the soft leash the brain will use. Standing exactly on the soft leash means
-        /// Hornet is already pulling the Shade backwards while it tries to close, which reads as the
-        /// Shade fighting its own movement.
+        /// Fraction of the soft leash the brain will use. Standing exactly on it means Hornet pulls
+        /// the Shade backwards while it closes, which reads as the Shade fighting its own movement.
         /// </summary>
         internal float LeashUsableFraction { get; init; }
 
@@ -45,12 +41,8 @@ namespace LegacyoftheAbyss.Shade.Ai
 
         /// <summary>
         /// How far off the Shade's own height an enemy may be and still be hit by a side slash.
-        /// <para>
-        /// Sized against the slash the Shade actually spawns: Hornet's slash prefab comes out around
-        /// 2.1 units tall in world scale, so the blade covers roughly a unit either side of centre.
-        /// This was 1.6, which claimed half again as much reach as exists and had the AI swinging
-        /// sideways at enemies it could not touch.
-        /// </para>
+        /// Sized against the slash prefab, which comes out around 2.1 units tall in world scale, so
+        /// the blade covers roughly a unit either side of centre.
         /// </summary>
         internal float NailVerticalTolerance { get; init; }
 
@@ -78,7 +70,7 @@ namespace LegacyoftheAbyss.Shade.Ai
         /// <summary>How far above the Shade an enemy may be and still be caught by the slam.</summary>
         internal float QuakeAboveReach { get; init; }
 
-        /// <summary>"Multiple basic enemies" from the Stage 1 brief. Two is multiple.</summary>
+        /// <summary>How many enemies count as a cluster worth spending a spell on.</summary>
         internal int MinClusterForSpell { get; init; }
 
         /// <summary>How long a target commitment stands before another candidate may take it.</summary>
@@ -86,10 +78,9 @@ namespace LegacyoftheAbyss.Shade.Ai
 
         /// <summary>
         /// How much better a candidate must be before the Shade drops what it is fighting, as a
-        /// fraction of the committed target's score. Same dead band idea as
-        /// <see cref="ShadeAggroTargeting.PreferShade"/>, and for the same reason: an enemy pair at
-        /// almost equal range would otherwise be swapped between every interval, and the Shade would
-        /// walk back and forth hitting neither.
+        /// fraction of the committed target's score. Same dead band as
+        /// <see cref="ShadeAggroTargeting.PreferShade"/>: without it an enemy pair at near-equal
+        /// range swaps every interval and the Shade walks back and forth hitting neither.
         /// </summary>
         internal float TargetSwitchMargin { get; init; }
 
@@ -98,25 +89,16 @@ namespace LegacyoftheAbyss.Shade.Ai
 
         /// <summary>
         /// How many of the Shade's own nail hits an enemy has to survive before a single-target spell
-        /// is worth the SOUL.
-        /// <para>
-        /// This replaced a flat "hp >= 200" test, which shipped a bug: ordinary Ant enemies in
-        /// Ant_05b clear 200 HP comfortably, so the AI classified them as bosses and burned its
-        /// whole meter on three fireballs at one of them. Counting in hits instead of hit points
-        /// scales with the Shade's damage and its charms, and there is no per-enemy boss flag
-        /// anywhere in the game assembly to use instead - <c>BossSceneController.bosses</c> is the
-        /// only authoritative source and its own tooltip says scenes routinely leave it empty.
-        /// </para>
+        /// is worth the SOUL. Counted in hits rather than hit points so it scales with the Shade's
+        /// damage and charms; the game assembly exposes no per-enemy boss flag to use instead, as
+        /// <c>BossSceneController.bosses</c> is routinely left empty.
         /// </summary>
         internal int BossNailHits { get; init; }
 
         /// <summary>
         /// How far from the edge of a damaging volume the Shade tries to stay once it can be hurt.
-        /// <para>
-        /// Must stay below <see cref="StrikeStandoff"/>. An enemy body is itself a <c>DamageHero</c>
-        /// volume, so a standoff wider than the strike point would make every melee target its own
-        /// no-go zone and the Shade would refuse to approach anything it was trying to hit.
-        /// </para>
+        /// Must stay below <see cref="StrikeStandoff"/>: an enemy body is itself a <c>DamageHero</c>
+        /// volume, so a wider standoff makes every melee target its own no-go zone.
         /// </summary>
         internal float ThreatStandoff { get; init; }
 
@@ -127,13 +109,9 @@ namespace LegacyoftheAbyss.Shade.Ai
         internal float EscortHeightAbove { get; init; }
 
         /// <summary>
-        /// How far below her it drops while she is airborne.
-        /// <para>
-        /// Sized against the pogo target rather than picked for looks: that is a 1.45-tall capsule
-        /// centred on the Shade (<c>EnsurePogoTarget</c>), so its top face sits about 0.7 above the
-        /// Shade and a down-slash has to reach roughly this minus that. Too far below and the pogo
-        /// is unreachable; too close and the Shade is inside her.
-        /// </para>
+        /// How far below her it drops while she is airborne. Sized against the pogo target, a
+        /// 1.45-tall capsule centred on the Shade (<c>EnsurePogoTarget</c>) whose top face sits about
+        /// 0.7 above it: too far below and the pogo is unreachable, too close and the Shade is inside her.
         /// </summary>
         internal float EscortHeightBelow { get; init; }
 
@@ -176,9 +154,8 @@ namespace LegacyoftheAbyss.Shade.Ai
         };
 
         /// <summary>
-        /// The player-facing subset. Everything else is a geometry constant that tracks a hitbox we
-        /// do not control, so exposing it would only let a config file drift out of sync with the
-        /// collider it is describing.
+        /// The player-facing subset. Everything else is a geometry constant tracking a hitbox we do
+        /// not control, so exposing it would only let config drift out of sync with that collider.
         /// </summary>
         internal static ShadeAiTuning FromConfig(ModConfig? config)
         {

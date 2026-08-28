@@ -432,6 +432,16 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         LogMenuEvent($"ForceImmediateRefresh: entries={entries.Count}, inventoryNull={inventory == null}");
     }
 
+    /// <summary>
+    /// A usable pixel size for the pane's own canvas, tried from the most specific source to the
+    /// least. <paramref name="source"/> names whichever answered, because a pane drawn at the wrong
+    /// size looks the same however it got there and the snapshot has to say which reading was used.
+    /// <para>
+    /// Each source is guarded separately: they are statics on engine types, so any of them can throw
+    /// rather than return a bad number, and the point of a ladder is that one rung failing moves on
+    /// to the next.
+    /// </para>
+    /// </summary>
     private static Vector2 DetermineStandaloneFallbackSize(RectTransform root, out string source)
     {
         source = "default";
@@ -440,13 +450,16 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             return DefaultStandaloneRootSize;
         }
 
+        static bool Usable(float width, float height)
+            => width >= MinRootSizeThreshold && height >= MinRootSizeThreshold;
+
         try
         {
             var canvas = root.GetComponentInParent<Canvas>();
             if (canvas != null)
             {
                 var rect = canvas.pixelRect;
-                if (rect.width >= MinRootSizeThreshold && rect.height >= MinRootSizeThreshold)
+                if (Usable(rect.width, rect.height))
                 {
                     source = "canvas.pixelRect";
                     return new Vector2(rect.width, rect.height);
@@ -459,22 +472,14 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
 
         try
         {
-            float width = Screen.width;
-            float height = Screen.height;
-            if (width >= MinRootSizeThreshold && height >= MinRootSizeThreshold)
+            if (Usable(Screen.width, Screen.height))
             {
                 source = "screen";
-                return new Vector2(width, height);
+                return new Vector2(Screen.width, Screen.height);
             }
-        }
-        catch
-        {
-        }
 
-        try
-        {
             var resolution = Screen.currentResolution;
-            if (resolution.width >= MinRootSizeThreshold && resolution.height >= MinRootSizeThreshold)
+            if (Usable(resolution.width, resolution.height))
             {
                 source = "screen.currentResolution";
                 return new Vector2(resolution.width, resolution.height);
@@ -487,7 +492,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         try
         {
             var display = Display.main;
-            if (display != null && display.systemWidth >= MinRootSizeThreshold && display.systemHeight >= MinRootSizeThreshold)
+            if (display != null && Usable(display.systemWidth, display.systemHeight))
             {
                 source = "display";
                 return new Vector2(display.systemWidth, display.systemHeight);
@@ -1262,16 +1267,11 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
 
         attachedPaneList = paneList;
 
-        try { attachedPaneList.OpeningInventory += HandleInventoryOpened; }
-        catch { }
+        attachedPaneList.OpeningInventory += HandleInventoryOpened;
+        attachedPaneList.ClosingInventory += HandleInventoryClosed;
 
-        try { attachedPaneList.ClosingInventory += HandleInventoryClosed; }
-        catch { }
+        ShadeInventoryPaneIntegration.BindInput(this, attachedPaneList, captureFocus: IsPaneActive);
 
-        if (attachedPaneList != null)
-        {
-            ShadeInventoryPaneIntegration.BindInput(this, attachedPaneList, captureFocus: IsPaneActive);
-        }
     }
 
     private void DetachPaneList()

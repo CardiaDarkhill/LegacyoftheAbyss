@@ -134,7 +134,7 @@ namespace LegacyoftheAbyss.Shade.Ai
                     stats.Blocked++;
                 }
 
-                targets.Add(new ShadeAiTarget(entry.Id, position, radius, entry.Health.hp, entry.IsBoss, visible));
+                targets.Add(new ShadeAiTarget(entry.Id, position, radius, entry.IsBoss, visible));
             }
 
             stats.Returned = targets.Count;
@@ -202,16 +202,13 @@ namespace LegacyoftheAbyss.Shade.Ai
         }
 
         /// <summary>
-        /// Whether an enemy is still worth tracking: alive, and present in the scene.
-        /// <para>
-        /// Deliberately only that. An earlier version also rejected on <c>IsInvincible</c> (raised
-        /// routinely mid-attack), on a disabled body collider (also routine, and
-        /// <see cref="ResolvePlacement"/> already falls back to the transform) and on
-        /// <c>Renderer.isVisible</c> (a camera-culling flag) - together they stopped the Shade
-        /// attacking anything at all. Terrain in the way is <see cref="HasLineOfSight"/>'s job, and a
-        /// gauntlet wave that has not started is handled in <see cref="Collect"/>. Do not add filters
-        /// here without evidence from <see cref="ShadeAiScanStats"/>.
-        /// </para>
+        /// Whether an enemy is still worth tracking: alive, and present in the scene. Deliberately
+        /// only that - <c>IsInvincible</c> is raised routinely mid-attack, a disabled body collider
+        /// is routine and <see cref="ResolvePlacement"/> already falls back to the transform, and
+        /// <c>Renderer.isVisible</c> is a camera-culling flag; filtering on them leaves the Shade
+        /// attacking nothing. Terrain is <see cref="HasLineOfSight"/>'s job and an unstarted gauntlet
+        /// wave is <see cref="Collect"/>'s. Do not add filters here without
+        /// <see cref="ShadeAiScanStats"/> evidence.
         /// </summary>
         private static bool IsAttackable(Entry entry)
         {
@@ -269,13 +266,10 @@ namespace LegacyoftheAbyss.Shade.Ai
         }
 
         /// <summary>
-        /// Whether one enemy on its own justifies a spell.
-        /// <para>
-        /// There is no per-enemy boss flag in the game assembly, so this asks whether the enemy would
-        /// survive a long stretch of ordinary nail hits instead. Measuring in hits rather than hit
-        /// points keeps it honest as the Shade's damage changes with charms - the flat 200 HP test
-        /// this replaced classified ordinary Ant enemies as bosses.
-        /// </para>
+        /// Whether one enemy on its own justifies a spell. There is no per-enemy boss flag in the
+        /// game assembly, so this asks whether it would survive a long stretch of ordinary nail hits.
+        /// The threshold is derived in hits rather than hit points so it tracks the Shade's damage as
+        /// charms change it; a flat HP figure classifies ordinary enemies as bosses.
         /// </summary>
         private static bool IsSpellWorthy(HealthManager health, HealthManager[]? declaredBosses, int spellWorthHealth)
         {

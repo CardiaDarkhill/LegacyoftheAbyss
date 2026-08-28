@@ -2,447 +2,125 @@
 using System;
 using System.Reflection;
 using GlobalEnums;
-using UnityEngine;
-using UnityEngine.EventSystems;
 
+/// <summary>
+/// "Is the player sitting in a menu?" - asked from several places that must not act while one is
+/// open, and answered from whichever of the game's own notions of menu state can be reached.
+/// <para>
+/// Every accessor here reads a plain managed field first and only then falls back to a singleton
+/// accessor that scans the scene. That ordering is not just about cost: <c>FindObjectOfType</c> is
+/// an extern call, so the fallbacks throw <c>SecurityException</c> outside a Unity player loop, and
+/// the pure-managed tests covering this reach the answer without ever touching them. The remaining
+/// catches exist for that boundary - degrade to "no menu open" rather than take a test host down.
+/// </para>
+/// </summary>
 internal static class MenuStateUtility
 {
     internal static GameManager TryGetGameManager()
     {
-        try
+        // UnsafeInstance is a bare read of the backing field; SilentInstance scans when that is
+        // empty, and is preferred over `instance`, which logs an error every call besides.
+        var gm = GameManager.UnsafeInstance;
+        if (!ReferenceEquals(gm, null))
         {
-            var gm = GameManager.UnsafeInstance;
-            if (!ReferenceEquals(gm, null))
-            {
-                return gm;
-            }
-        }
-        catch
-        {
+            return gm;
         }
 
         try
         {
-            var field = typeof(GameManager).GetField("_instance", BindingFlags.Static | BindingFlags.NonPublic);
-            if (field != null)
-            {
-                var value = field.GetValue(null) as GameManager;
-                if (!ReferenceEquals(value, null))
-                {
-                    return value;
-                }
-            }
+            gm = GameManager.SilentInstance;
+            return ReferenceEquals(gm, null) ? null : gm;
         }
         catch
         {
+            return null;
         }
-
-        try
-        {
-            var gm = GameManager.instance;
-            if (!ReferenceEquals(gm, null))
-            {
-                return gm;
-            }
-        }
-        catch
-        {
-        }
-
-        return null;
     }
 
+    private static FieldInfo s_uiManagerInstanceField;
+    private static bool s_uiManagerInstanceFieldResolved;
+
+    /// <summary>
+    /// The <c>UIManager</c>, preferring the one the <c>GameManager</c> already holds. Unlike
+    /// <c>GameManager</c> it offers no silent accessor, so the backing field is read reflectively
+    /// before falling back to the one that scans and logs.
+    /// <para>
+    /// Both fallbacks sit inside the guard, not just the accessor: touching any static on
+    /// <c>UIManager</c> runs its type initializer, which calls <c>Animator.StringToHash</c> and so
+    /// throws outside a player loop even for the reflective read.
+    /// </para>
+    /// </summary>
     internal static UIManager TryGetUiManager(GameManager gm)
     {
-        try
+        if (!ReferenceEquals(gm, null) && !ReferenceEquals(gm.ui, null))
         {
-            if (!ReferenceEquals(gm, null))
-            {
-                var manager = gm.ui;
-                if (!ReferenceEquals(manager, null))
-                {
-                    return manager;
-                }
-            }
-        }
-        catch
-        {
+            return gm.ui;
         }
 
         try
         {
-            var field = typeof(UIManager).GetField("_instance", BindingFlags.Static | BindingFlags.NonPublic);
-            if (field != null)
+            if (!s_uiManagerInstanceFieldResolved)
             {
-                var value = field.GetValue(null) as UIManager;
-                if (!ReferenceEquals(value, null))
-                {
-                    return value;
-                }
+                s_uiManagerInstanceFieldResolved = true;
+                s_uiManagerInstanceField = typeof(UIManager).GetField("_instance", BindingFlags.Static | BindingFlags.NonPublic);
             }
-        }
-        catch
-        {
-        }
 
-        try
-        {
+            if (s_uiManagerInstanceField?.GetValue(null) is UIManager cached && !ReferenceEquals(cached, null))
+            {
+                return cached;
+            }
+
             var ui = UIManager.instance;
-            if (!ReferenceEquals(ui, null))
-            {
-                return ui;
-            }
+            return ReferenceEquals(ui, null) ? null : ui;
         }
         catch
         {
+            return null;
         }
+    }
 
-        return null;
+    /// <summary>
+    /// Deliberately not <c>PlayerData.instance</c>, which deserializes a blank singleton when none
+    /// exists. A question about menu state must not create save data as a side effect.
+    /// </summary>
+    internal static PlayerData TryGetPlayerData()
+    {
+        return PlayerData.HasInstance ? PlayerData.instance : null;
     }
 
     internal static bool IsMenuActive(GameManager gm = null, UIManager ui = null)
     {
-        try
+        if (ShadeSettingsMenu.IsShowing)
         {
-            if (ShadeSettingsMenu.IsShowing)
+            return true;
+        }
+
+        gm ??= TryGetGameManager();
+
+        if (!ReferenceEquals(gm, null))
+        {
+            if (gm.isPaused || gm.IsGamePaused())
+            {
+                return true;
+            }
+
+            // The inventory is a PlayMaker FSM, and its own state name knows a pane is opening
+            // before the UI state does.
+            var inventoryFsm = gm.inventoryFSM;
+            if (inventoryFsm != null && IsMenuStateName(inventoryFsm.ActiveStateName))
             {
                 return true;
             }
         }
-        catch
-        {
-        }
-
-        if (ReferenceEquals(gm, null))
-        {
-            gm = TryGetGameManager();
-        }
-
-        if (!ReferenceEquals(gm, null))
-        {
-            try
-            {
-                if (gm.isPaused)
-                {
-                    return true;
-                }
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                if (gm.IsGamePaused())
-                {
-                    return true;
-                }
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                var inventoryState = TryGetInventoryStateName(gm);
-                if (IsMenuStateName(inventoryState))
-                {
-                    return true;
-                }
-            }
-            catch
-            {
-            }
-        }
 
         var playerData = TryGetPlayerData();
-        if (!ReferenceEquals(playerData, null))
+        if (!ReferenceEquals(playerData, null) && playerData.isInventoryOpen)
         {
-            try
-            {
-                if (playerData.isInventoryOpen)
-                {
-                    return true;
-                }
-            }
-            catch
-            {
-            }
+            return true;
         }
 
-        if (ReferenceEquals(ui, null))
-        {
-            ui = TryGetUiManager(gm);
-        }
-
-        if (!ReferenceEquals(ui, null))
-        {
-            string uiStateName = null;
-            bool hasUiState = false;
-
-            try
-            {
-                uiStateName = TryGetUiStateName(ui);
-                hasUiState = !string.IsNullOrEmpty(uiStateName);
-                if (hasUiState && IsMenuStateName(uiStateName))
-                {
-                    return true;
-                }
-            }
-            catch
-            {
-                hasUiState = false;
-                uiStateName = null;
-            }
-
-            try
-            {
-                var menuStateName = TryGetMenuStateName(ui);
-                if (IsMenuStateName(menuStateName) && !hasUiState)
-                {
-                    return true;
-                }
-            }
-            catch
-            {
-            }
-        }
-
-        return false;
-    }
-
-    internal static string TryGetUiStateName(UIManager ui)
-    {
-        if (ReferenceEquals(ui, null))
-        {
-            return null;
-        }
-
-        try
-        {
-            var type = ui.GetType();
-            while (type != null)
-            {
-                var field = type.GetField("uiState", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
-                if (field != null)
-                {
-                    return ConvertStateValueToName(field.GetValue(ui));
-                }
-                type = type.BaseType;
-            }
-        }
-        catch
-        {
-        }
-
-        try
-        {
-            var type = ui.GetType();
-            while (type != null)
-            {
-                var property = type.GetProperty("uiState", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
-                if (property != null && property.GetIndexParameters().Length == 0)
-                {
-                    return ConvertStateValueToName(property.GetValue(ui, null));
-                }
-                type = type.BaseType;
-            }
-        }
-        catch
-        {
-        }
-
-        return null;
-    }
-
-    internal static string TryGetMenuStateName(UIManager ui)
-    {
-        if (ReferenceEquals(ui, null))
-        {
-            return null;
-        }
-
-        try
-        {
-            var type = ui.GetType();
-            while (type != null)
-            {
-                var field = type.GetField("menuState", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
-                if (field != null)
-                {
-                    return ConvertStateValueToName(field.GetValue(ui));
-                }
-
-                var property = type.GetProperty("menuState", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
-                if (property != null && property.GetIndexParameters().Length == 0)
-                {
-                    return ConvertStateValueToName(property.GetValue(ui, null));
-                }
-
-                type = type.BaseType;
-            }
-        }
-        catch
-        {
-        }
-
-        return null;
-    }
-
-    internal static string TryGetInventoryStateName(GameManager gm)
-    {
-        if (ReferenceEquals(gm, null))
-        {
-            return null;
-        }
-
-        try
-        {
-            var type = gm.GetType();
-            while (type != null)
-            {
-                var property = type.GetProperty("inventoryFSM", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
-                if (property != null && property.GetIndexParameters().Length == 0)
-                {
-                    var value = property.GetValue(gm, null);
-                    var stateName = TryGetPlaymakerStateName(value);
-                    if (!string.IsNullOrEmpty(stateName))
-                    {
-                        return stateName;
-                    }
-                }
-
-                var field = type.GetField("inventoryFSM", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
-                if (field != null)
-                {
-                    var value = field.GetValue(gm);
-                    var stateName = TryGetPlaymakerStateName(value);
-                    if (!string.IsNullOrEmpty(stateName))
-                    {
-                        return stateName;
-                    }
-                }
-
-                type = type.BaseType;
-            }
-        }
-        catch
-        {
-        }
-
-        return null;
-    }
-
-    internal static PlayerData TryGetPlayerData()
-    {
-        try
-        {
-            var field = typeof(PlayerData).GetField("_instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            if (field != null)
-            {
-                var existing = field.GetValue(null) as PlayerData;
-                if (!ReferenceEquals(existing, null))
-                {
-                    return existing;
-                }
-            }
-        }
-        catch
-        {
-        }
-
-        try
-        {
-            return PlayerData.instance;
-        }
-        catch
-        {
-        }
-
-        return null;
-    }
-
-    private static string ConvertStateValueToName(object value)
-    {
-        if (value == null)
-        {
-            return null;
-        }
-
-        try
-        {
-            if (value is string str)
-            {
-                return str;
-            }
-
-            if (value is UIState state)
-            {
-                return state.ToString();
-            }
-
-            if (value is Enum enumValue)
-            {
-                return enumValue.ToString();
-            }
-
-            if (value is int raw)
-            {
-                return ((UIState)raw).ToString();
-            }
-        }
-        catch
-        {
-        }
-
-        return value.ToString();
-    }
-
-    private static string TryGetPlaymakerStateName(object fsm)
-    {
-        if (fsm == null)
-        {
-            return null;
-        }
-
-        try
-        {
-            var type = fsm.GetType();
-            object machine = null;
-
-            var property = type.GetProperty("Fsm", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (property != null && property.GetIndexParameters().Length == 0)
-            {
-                machine = property.GetValue(fsm, null);
-            }
-
-            if (machine == null)
-            {
-                var field = type.GetField("fsm", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (field != null)
-                {
-                    machine = field.GetValue(fsm);
-                }
-            }
-
-            if (machine != null)
-            {
-                var stateProperty = machine.GetType().GetProperty("ActiveStateName", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (stateProperty != null && stateProperty.GetIndexParameters().Length == 0)
-                {
-                    var state = stateProperty.GetValue(machine, null) as string;
-                    if (!string.IsNullOrEmpty(state))
-                    {
-                        return state;
-                    }
-                }
-            }
-        }
-        catch
-        {
-        }
-
-        return null;
+        ui ??= TryGetUiManager(gm);
+        return !ReferenceEquals(ui, null) && IsMenuState(ui.uiState);
     }
 
     internal static bool IsMenuState(UIState state)

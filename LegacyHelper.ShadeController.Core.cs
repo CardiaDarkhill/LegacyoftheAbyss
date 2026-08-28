@@ -44,7 +44,7 @@ public partial class LegacyHelper
                     sr.sprite = floatAnimFrames[0];
                 else if (inactiveSprite != null)
                     sr.sprite = inactiveSprite;
-                var c = sr.color; c.a = 0.9f; sr.color = c;
+                SetSpriteAlpha(SpriteAlphaIdle);
             }
 
             baseMaxDistance = maxDistance;
@@ -134,12 +134,12 @@ public partial class LegacyHelper
             // The synthesised input is static and outlives this component. Leaving a direction held
             // on the way out would hand it straight to the pause-menu panes, which navigate on the
             // same actions.
-            try { LegacyoftheAbyss.Shade.Ai.ShadeAiInput.Clear(); } catch { }
-            try { DestroyShadeAiReticle(); } catch { }
+            LegacyoftheAbyss.Shade.Ai.ShadeAiInput.Clear();
+            DestroyShadeAiReticle();
 
             try
             {
-                try { aggroProxyTracker?.ForceExitTrackedRemaskers(); } catch { }
+                aggroProxyTracker?.ForceExitTrackedRemaskers();
                 if (sceneProtectionSuppressingPersistence)
                 {
                     ExitPersistenceSuppression();
@@ -309,7 +309,7 @@ public partial class LegacyHelper
                 {
                     if (!desiredActive)
                     {
-                        try { aggroProxyTracker?.ForceExitTrackedRemaskers(); } catch { }
+                        aggroProxyTracker?.ForceExitTrackedRemaskers();
                     }
                     aggroProxyCollider.enabled = desiredActive;
                 }
@@ -399,13 +399,16 @@ public partial class LegacyHelper
             applyingCharmLoadout = true;
             try
             {
+                // One charm's hook must not abort the rest of the loadout, so each is isolated and
+                // its failure named - a charm that silently stops applying is indistinguishable from
+                // one whose effect is simply subtle.
                 if (removedCharms.Length > 0)
                 {
                     var removedContext = new ShadeCharmContext(this, previousSnapshot);
                     foreach (var removed in removedCharms)
                     {
                         try { removed.Hooks.OnRemoved?.Invoke(removedContext); }
-                        catch { }
+                        catch (Exception ex) { LegacyHelper.LogWarning($"Charm '{removed.Id}' OnRemoved failed: {ex}"); }
                     }
                 }
 
@@ -415,9 +418,10 @@ public partial class LegacyHelper
                     foreach (var applied in equippedCharms)
                     {
                         try { applied.Hooks.OnApplied?.Invoke(appliedContext); }
-                        catch { }
+                        catch (Exception ex) { LegacyHelper.LogWarning($"Charm '{applied.Id}' OnApplied failed: {ex}"); }
                     }
                 }
+
             }
             finally
             {
@@ -810,8 +814,9 @@ public partial class LegacyHelper
                 inactivePulseSr.gameObject.SetActive(false);
             }
 
-            var c = sr.color; c.a = 0.9f; sr.color = c;
+            SetSpriteAlpha(SpriteAlphaIdle);
             Sprite[] frames = (Mathf.Abs(lastMoveDelta.x) > 0.01f) ? floatAnimFrames : idleAnimFrames;
+
             if (frames == null || frames.Length == 0) return;
 
             if (currentAnimFrames != frames)

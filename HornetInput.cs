@@ -126,9 +126,14 @@ public static class HornetInput
     }
 
     /// <summary>
-    /// Resolves the game's InputHandler, preferring the singleton and falling back through
-    /// GameManager and finally a scene scan. Shared with ShadeInventoryPane, which had a
-    /// byte-identical private copy of this cascade.
+    /// The <see cref="InputHandler"/>, cheapest source first: the registered singleton, then the one
+    /// the <c>GameManager</c> holds, then a scene scan. Shared with <c>ShadeInventoryPane</c>, which
+    /// must not grow its own copy of the cascade.
+    /// <para>
+    /// Each step is guarded separately because every one of them touches a static on a game type,
+    /// and those run type initializers that call into the engine - so they throw rather than return
+    /// null outside a player loop. Falling through to "no handler" is the intended outcome there.
+    /// </para>
     /// </summary>
     internal static InputHandler? FindHandler()
     {
@@ -158,17 +163,10 @@ public static class HornetInput
         }
         catch
         {
-            try
-            {
-                return Object.FindAnyObjectByType<InputHandler>();
-            }
-            catch
-            {
-            }
+            return null;
         }
-
-        return null;
     }
+
 
     /// <summary>
     /// Whether the Shade AI is currently standing in for the second player, in which case the
@@ -442,27 +440,6 @@ public static class HornetInput
     }
 
     /// <summary>
-    /// Idempotently ensures whichever device Hornet is *not* currently using has a working binding
-    /// on the 5 inventory-open actions, for the Shade. Deliberately does not touch Hornet's own
-    /// bindings at all - unlike <see cref="ApplyKeyboardDefaults"/>/<see cref="ApplyControllerDefaults"/>,
-    /// which only ever run from an explicit preset-button click in the mod's settings menu, this is
-    /// meant to be called from somewhere that runs automatically (see the call in
-    /// <c>LegacyHelper.MenuInputBridge.EnsureBindings</c>, which fires both at
-    /// <c>InputHandler.OnAwake</c> and on every subsequent <c>InputHandler.OnUpdateHeroActions</c>).
-    /// <para>
-    /// Without this, a fresh game launch that loads a persisted "Hornet on keyboard" (or controller)
-    /// config correctly restores Hornet's own bindings through the base game's own settings-load path
-    /// - but the Shade's *extra* binding on these same actions only ever lived inside the two preset
-    /// methods above, so on a fresh boot the Shade's device had no way to open the inventory at all
-    /// until the player re-clicked a preset that session.
-    /// </para>
-    /// <para>
-    /// <c>PlayerAction.AddBinding</c> already no-ops when an equal binding is already present
-    /// (<c>BindingSource.Equals</c> compares by value - the key or control, not by reference), so
-    /// calling this repeatedly (every <c>OnUpdateHeroActions</c>) does not accumulate duplicates.
-    /// </para>
-    /// </summary>
-    /// <summary>
     /// Every control any supported pad uses for "open inventory", bound as a set rather than picked
     /// per platform.
     /// <para>
@@ -470,18 +447,16 @@ public static class HornetInput
     /// <c>Back</c> for a 360 pad, <c>View</c>+<c>Back</c> for Xbox One/Series, <c>TouchPadButton</c>
     /// for PS4/PS5, <c>Minus</c> for Switch, <c>Select</c> for PS3 and unknown pads - and
     /// <see cref="ApplyLeftSideLayout"/> destroys whichever it picked, because binding Key1 to
-    /// <c>OpenInventory</c> goes through <c>ClearBindings()</c> first. The Shade's replacement used to
-    /// re-add only <c>Back</c> and <c>Select</c>, which meant that on an Xbox One pad - whose button
-    /// is <c>View</c> - the Shade's controller had no working inventory binding at all after the
-    /// keyboard preset was applied. Hence "the Shade can't open the inventory on controller",
-    /// unaccompanied by any log line, because there was genuinely nothing to fire.
+    /// <c>OpenInventory</c> goes through <c>ClearBindings()</c> first. Re-adding a subset leaves
+    /// whichever pads use the missing control with no inventory binding and nothing in the log,
+    /// because there is genuinely nothing to fire.
     /// </para>
     /// <para>
     /// Binding all of them is safe and cheaper than detecting the pad: a control the device does not
-    /// have simply never reads as pressed (<c>InputDevice.GetControl</c> returns
-    /// <c>InputControl.Null</c>), and <c>AddBinding</c> no-ops on an equal binding that is already
-    /// present. Note such a binding is invisible in <c>PlayerAction.Bindings</c> for the same reason -
-    /// see <c>InputDeviceBlocker.IsDrivingAllowedHeroAction</c>, which is why nothing reads that list.
+    /// have never reads as pressed (<c>InputDevice.GetControl</c> returns <c>InputControl.Null</c>),
+    /// and <c>AddBinding</c> no-ops on an equal binding already present. Such a binding is invisible
+    /// in <c>PlayerAction.Bindings</c> for the same reason - see
+    /// <c>InputDeviceBlocker.IsDrivingAllowedHeroAction</c>, which is why nothing reads that list.
     /// </para>
     /// </summary>
     private static readonly InputControlType[] ShadeInventoryControls =
@@ -493,6 +468,19 @@ public static class HornetInput
         InputControlType.Minus
     };
 
+    /// <summary>
+    /// Idempotently gives whichever device Hornet is <i>not</i> using a working binding on the five
+    /// inventory-open actions, for the Shade. Deliberately leaves Hornet's own bindings alone.
+    /// <para>
+    /// Safe to call automatically and repeatedly - <c>LegacyHelper.MenuInputBridge.EnsureBindings</c>
+    /// fires it at <c>InputHandler.OnAwake</c> and on every <c>OnUpdateHeroActions</c> - because
+    /// <c>PlayerAction.AddBinding</c> no-ops on an equal binding, comparing by value rather than
+    /// reference. That automatic call is the point: <see cref="ApplyKeyboardDefaults"/> and
+    /// <see cref="ApplyControllerDefaults"/> only run from a preset click in the settings menu, so a
+    /// binding that lived only in them left the Shade's device unable to open the inventory on a
+    /// fresh boot until the player clicked a preset.
+    /// </para>
+    /// </summary>
     internal static void EnsureShadeInventoryBindings(HeroActions? actions)
     {
         if (actions == null)

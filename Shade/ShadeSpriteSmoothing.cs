@@ -17,10 +17,9 @@ namespace LegacyoftheAbyss.Shade
     /// whatever magnification remains.
     /// </para>
     /// <para>
-    /// An earlier version point-upscaled by a whole number and then blurred the result. That
-    /// destroyed the source anti-aliasing and only partially rebuilt it: smooth, but visibly softer
-    /// than the art supports. Do not reintroduce it - resampling directly is both cheaper and
-    /// sharper.
+    /// Do not point-upscale by a whole number and blur the result: that destroys the source
+    /// anti-aliasing and only partially rebuilds it, giving something smooth but visibly softer than
+    /// the art supports. Resampling directly is both cheaper and sharper.
     /// </para>
     /// <para>
     /// All operations work on <see cref="Color32"/> spans rather than <c>Texture2D</c> so they can

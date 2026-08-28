@@ -8,19 +8,13 @@ namespace LegacyoftheAbyss.Shade.Ai
 {
     /// <summary>
     /// Turns "I want to be over there" into "so head this way", going around terrain instead of into
-    /// it.
+    /// it. The Shade is a solid body - non-trigger collider on a layer that collides with the level
+    /// (<c>SetupPhysics</c>) - so steering straight at a destination grinds along any wall between.
     /// <para>
-    /// The Shade is a solid body, not a ghost - its collider is non-trigger and it sits on a layer
-    /// that collides with the level (<c>SetupPhysics</c>). Steering straight at a destination
-    /// therefore does exactly what it sounds like against a corner: it presses into the wall and
-    /// grinds along it until something else changes.
-    /// </para>
-    /// <para>
-    /// This is local steering, not a path search: it sweeps the direct line and, if that is blocked,
-    /// fans outward until it finds a heading that is not. That is enough for corners, pillars and
-    /// doorways, which is what was asked for. It is <b>not</b> enough for a concave trap - a dead-end
-    /// alcove facing away from the target will still hold it, because nothing here searches beyond
-    /// what one sweep can see. Real routing needs the level-geometry work deferred to Stage 3.
+    /// Local steering, not a path search: it sweeps the direct line and, if blocked, fans outward
+    /// until it finds a heading that is not. Enough for corners, pillars and doorways; <b>not</b>
+    /// enough for a concave trap, since nothing here searches beyond what one sweep can see. A
+    /// dead-end alcove facing away from the target will still hold it.
     /// </para>
     /// </summary>
     internal sealed class ShadeAiNavigator
@@ -29,16 +23,11 @@ namespace LegacyoftheAbyss.Shade.Ai
         private const float MaxProbeDistance = 7f;
 
         /// <summary>
-        /// How far a detour has to be clear before it is worth taking - much less than
-        /// <see cref="MaxProbeDistance"/>.
-        /// <para>
-        /// Both were the same number, and that is what made the Shade route around a ledge as though
-        /// it were a building. Near anything wide, a shallow detour is blocked somewhere in the next
-        /// seven units even though its first two are open, so the fan rejected every shallow heading
-        /// and settled on the perpendicular one - which reads as "it went to the far side of the
-        /// screen to get past a platform". A detour only has to clear the corner in front of it; the
-        /// heading is re-derived every frame, so what lies beyond is next frame's problem.
-        /// </para>
+        /// How far a detour has to be clear before it is worth taking. Must stay well below
+        /// <see cref="MaxProbeDistance"/>: a detour only has to clear the corner in front of it, and
+        /// the heading is re-derived every frame. Probing the full distance rejects every shallow
+        /// heading near anything wide and settles on the perpendicular one, routing around a ledge
+        /// as though it were a building.
         /// </summary>
         private const float DetourProbeDistance = 2.5f;
 
@@ -46,32 +35,23 @@ namespace LegacyoftheAbyss.Shade.Ai
         private const float FanStepDegrees = 22.5f;
 
         /// <summary>
-        /// How far round the fan may reach. Ninety degrees - straight along the face of whatever is
-        /// in the way - and no further: past that the Shade is heading away from where it wants to
-        /// be, which is a decision for <see cref="TrackProgress"/> to force after the shallow ways
-        /// round have actually been shown not to work, not one to take on the first blocked frame.
+        /// How far round the fan may reach. Ninety degrees - along the face of whatever is in the way
+        /// - and no further: past that the Shade heads away from where it wants to be, which is
+        /// <see cref="TrackProgress"/>'s call once the shallow detours have been shown not to work.
         /// </summary>
         private const int FanSteps = 4;
 
         /// <summary>
-        /// How long the direct line has to stay clear before a detour is dropped.
-        /// <para>
-        /// This used to be <see cref="SideCommitSeconds"/>, which is tuned for something else
-        /// entirely - how long to stay committed to a side so the Shade does not vibrate between two
-        /// equal detours. Spending that long carrying on sideways after the way ahead had opened is
-        /// the rest of the overshoot. Long enough to ignore a single clear frame at a ledge lip,
-        /// short enough not to sail past the gap.
-        /// </para>
+        /// How long the direct line has to stay clear before a detour is dropped. Long enough to
+        /// ignore a single clear frame at a ledge lip, short enough not to sail past the gap. Not
+        /// <see cref="SideCommitSeconds"/>, which answers a different question.
         /// </summary>
         private const float DirectClearSeconds = 0.15f;
 
         /// <summary>
         /// How long a chosen way round an obstacle stands before the other side may be considered.
-        /// <para>
-        /// Without it the Shade picks left and right on alternate frames at any obstacle whose two
-        /// detours are near enough in length, and vibrates on the spot instead of going round. Same
-        /// dead-band reasoning as the target commitment.
-        /// </para>
+        /// Without it the Shade alternates left and right every frame at any obstacle whose two
+        /// detours are near equal, vibrating on the spot instead of going round.
         /// </summary>
         private const float SideCommitSeconds = 0.8f;
 
@@ -87,9 +67,8 @@ namespace LegacyoftheAbyss.Shade.Ai
         private int committedSide;
         private float sideCommitUntil;
 
-        // The chosen detour is latched, not just the side it was on. Recomputing the whole fan every
-        // frame is what let the Shade bounce: at a ledge lip the direct line flickers between blocked
-        // and clear as it drifts, and each flip threw the detour away and started again.
+        // The chosen detour is latched, not just the side it was on: at a ledge lip the direct line
+        // flickers between blocked and clear, and recomputing the fan on each flip makes it bounce.
         private Vector2 committedHeading;
         private float headingCommitUntil;
 
@@ -157,8 +136,7 @@ namespace LegacyoftheAbyss.Shade.Ai
 
             if (!Blocked(origin, direct, probe, bodyRadius, threats, threatStandoff))
             {
-                // The direct line is open. Only drop the detour once it has been open long enough to
-                // trust - a single clear frame at a ledge lip is how the bouncing started.
+                // Only drop the detour once the direct line has been open long enough to trust.
                 if (directClearSince <= 0f)
                 {
                     directClearSince = time;
@@ -217,13 +195,9 @@ namespace LegacyoftheAbyss.Shade.Ai
         }
 
         /// <summary>
-        /// Watches whether the destination is actually getting closer.
-        /// <para>
-        /// Local steering has no way to know a detour leads nowhere; it can only notice, after the
-        /// fact, that it is no nearer than it was. A ledge is the case that matters - going round the
-        /// wrong side of one is not blocked, it is just endless - so when nothing has improved for a
-        /// while the committed side is thrown away and the other one gets a turn.
-        /// </para>
+        /// Watches whether the destination is actually getting closer. Local steering cannot know a
+        /// detour leads nowhere, only notice afterwards that it is no nearer - the wrong way round a
+        /// ledge is not blocked, just endless - so a stalled side is dropped for the other one.
         /// </summary>
         private void TrackProgress(float distance, float time)
         {
@@ -317,20 +291,16 @@ namespace LegacyoftheAbyss.Shade.Ai
         }
 
         /// <summary>
-        /// Walks a destination back toward the Shade until it is somewhere the Shade could actually
-        /// stand, or gives up and returns the origin.
+        /// Walks a destination back toward the Shade until it is somewhere the Shade could stand, or
+        /// gives up and returns the origin. Threat avoidance pushes destinations out of hitboxes with
+        /// no idea where the walls are, so in a closed boss arena it can land one inside the wall.
         /// <para>
-        /// Threat avoidance pushes a destination out of a hitbox with no idea where the walls are, so
-        /// in a boss arena - where the attack volumes are large and the room is closed - it can land
-        /// the destination inside the arena wall. The Shade then grinds against the edge trying to
-        /// reach a point it is never going to reach, which is what the arena-edge report was.
-        /// </para>
-        /// <para>
-        /// Pulling back along the line rather than searching outward is deliberate: it keeps the
-        /// destination in the direction the brain wanted, so a legitimate target round a corner is
-        /// left alone (it is not <i>inside</i> anything) and only genuinely unstandable points move.
+        /// Pulls back along the line rather than searching outward, so the destination stays in the
+        /// direction the brain wanted: a target round a corner is not <i>inside</i> anything and is
+        /// left alone, and only genuinely unstandable points move.
         /// </para>
         /// </summary>
+
         internal static Vector2 PullBackToStandable(Vector2 origin, Vector2 desired, Func<Vector2, bool> blocked, int steps = 5)
         {
             if (blocked == null || !blocked(desired))

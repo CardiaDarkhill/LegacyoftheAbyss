@@ -255,8 +255,9 @@ public partial class SimpleHUD
             var pt = p.PropertyType;
             if (pt == null) continue;
 
-            // Each branch reads the property at most once; the previous version could
-            // call GetValue three times for the same property.
+            // Each branch reads the property at most once - the type tests come first so GetValue is
+            // not called once per candidate type.
+
             if (typeof(AudioClip).IsAssignableFrom(pt))
             {
                 collect(p.GetValue(action, null) as AudioClip);

@@ -8,28 +8,25 @@ using Xunit;
 /// The Shade AI: target selection, the approach, which slash reaches, when SOUL is worth spending,
 /// staying out of what would hurt, and healing.
 /// <para>
-/// The brain is the whole of the decision and touches no Unity object, which is the reason it was
-/// written as a separate class - everything below would otherwise only be verifiable by playing the
-/// game and watching. The driver around it (<c>LegacyHelper.ShadeController.Ai.cs</c>) is the part
-/// that still needs a play session: it needs a live scene, a <c>HealthManager</c> and a Shade.
+/// The brain is the whole of the decision and touches no Unity object, which is why it is a separate
+/// class. The driver around it (<c>LegacyHelper.ShadeController.Ai.cs</c>) still needs a play
+/// session: it wants a live scene, a <c>HealthManager</c> and a Shade.
 /// </para>
 /// </summary>
 public class ShadeAiBrainTests
 {
     private static readonly ShadeAiTuning Tuning = ShadeAiTuning.Default;
 
-    private const int BasicHp = 20;
-    private const int BossHp = 400;
-
     private static ShadeAiTarget Basic(int id, float x, float y, float radius = 0.5f)
-        => new ShadeAiTarget(id, new Vector2(x, y), radius, BasicHp, false, true);
+        => new ShadeAiTarget(id, new Vector2(x, y), radius, false, true);
 
     private static ShadeAiTarget Boss(int id, float x, float y, float radius = 0.5f)
-        => new ShadeAiTarget(id, new Vector2(x, y), radius, BossHp, true, true);
+        => new ShadeAiTarget(id, new Vector2(x, y), radius, true, true);
 
     /// <summary>An enemy behind terrain. Present, alive, and not a target.</summary>
     private static ShadeAiTarget Hidden(int id, float x, float y, float radius = 0.5f)
-        => new ShadeAiTarget(id, new Vector2(x, y), radius, BasicHp, false, false);
+        => new ShadeAiTarget(id, new Vector2(x, y), radius, false, false);
+
 
     private static ShadeAiThreat Threat(float x, float y, float radius)
         => new ShadeAiThreat(new Vector2(x, y), radius);

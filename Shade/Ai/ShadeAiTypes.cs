@@ -35,10 +35,7 @@ namespace LegacyoftheAbyss.Shade.Ai
         NoTargets,
         /// <summary>A target exists but every candidate sits outside the leash Hornet allows.</summary>
         OutOfLeash,
-        /// <summary>
-        /// Candidates exist but nothing can be seen from here - they are behind terrain. Its own
-        /// reason because it is the state that produced the "Shade is attacking the wall" report.
-        /// </summary>
+        /// <summary>Candidates exist but all are behind terrain, so the Shade would swing at a wall.</summary>
         NoLineOfSight,
         /// <summary>Closing on the committed target.</summary>
         Approaching,
@@ -65,12 +62,11 @@ namespace LegacyoftheAbyss.Shade.Ai
     /// <summary>One enemy the Shade could hit, flattened out of its <c>HealthManager</c>.</summary>
     internal readonly struct ShadeAiTarget
     {
-        internal ShadeAiTarget(int id, Vector2 position, float radius, int hp, bool isBoss, bool hasLineOfSight)
+        internal ShadeAiTarget(int id, Vector2 position, float radius, bool isBoss, bool hasLineOfSight)
         {
             Id = id;
             Position = position;
             Radius = radius;
-            Hp = hp;
             IsBoss = isBoss;
             HasLineOfSight = hasLineOfSight;
         }
@@ -84,19 +80,14 @@ namespace LegacyoftheAbyss.Shade.Ai
         /// <summary>Half-extent of that collider, so reach checks account for a large enemy's body.</summary>
         internal float Radius { get; }
 
-        internal int Hp { get; }
-
+        /// <summary>Whether this enemy alone justifies a spell; see <c>IsSpellWorthy</c>.</summary>
         internal bool IsBoss { get; }
 
         /// <summary>
-        /// False when terrain sits between the Shade and this enemy.
-        /// <para>
-        /// Not a nicety. Two bug reports came out of its absence: the Shade slashing a wall for
-        /// twenty seconds at an enemy on the other side of it, and three fireballs spent on
-        /// something the projectile could never have reached. Nothing unseeable is a target, and
-        /// nothing unseeable is counted toward a cast.
-        /// </para>
+        /// False when terrain sits between the Shade and this enemy. Nothing unseeable is a target,
+        /// and nothing unseeable is counted toward a cast.
         /// </summary>
+
         internal bool HasLineOfSight { get; }
     }
 

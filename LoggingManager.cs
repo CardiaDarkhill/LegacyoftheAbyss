@@ -54,8 +54,9 @@ internal static class LoggingManager
             succeeded ? "took damage" : "avoided damage",
             source);
 
-        // Gate first. This previously sat below the console write, so the console was
-        // spammed regardless of the setting and the message string was always allocated.
+        // Gate before the console write, so a disabled setting costs neither the spam nor the
+        // message-string allocation.
+
         if (!ModConfig.Instance.logDamage) return;
 
         Initialize();

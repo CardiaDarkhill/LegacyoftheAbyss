@@ -23,6 +23,13 @@ namespace LegacyoftheAbyss.Diagnostics
     /// sampling and stays reachable during scene loads - which is when a good share of the bugs worth
     /// reporting actually happen.
     /// </para>
+    /// <para>
+    /// <b>The broad catches around state sampling are deliberate.</b> This reads a great deal of game
+    /// state on a timer, including during scene loads when half of it is mid-transition, and a
+    /// diagnostic that can take the game down with it is worse than no diagnostic. A sample that
+    /// cannot be taken is left blank; only guards around calls that genuinely cannot throw are worth
+    /// removing here.
+    /// </para>
     /// </summary>
     internal sealed class BugReportSystem : MonoBehaviour
     {
@@ -177,14 +184,9 @@ namespace LegacyoftheAbyss.Diagnostics
                 return;
             }
 
-            try
-            {
-                UnityEngine.Object.Destroy(instance.gameObject);
-            }
-            catch
-            {
-            }
+            UnityEngine.Object.Destroy(instance.gameObject);
         }
+
 
         private void Awake()
         {

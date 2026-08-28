@@ -11,9 +11,7 @@ namespace LegacyoftheAbyss.Shade.Ai
     /// <para>
     /// Deliberately free of Unity object access. Everything it needs arrives in a
     /// <see cref="ShadeAiSnapshot"/> and everything it decides leaves in a <see cref="ShadeAiPlan"/>,
-    /// so the interesting half of the feature is covered by <c>Tests/ShadeAiBrainTests.cs</c> rather
-    /// than only by play sessions - which, for a mod that patches an assembly we do not control, is
-    /// the difference between a five-second diagnosis and a lost evening.
+    /// so <c>Tests/ShadeAiBrainTests.cs</c> covers it without a running engine.
     /// </para>
     /// <para>
     /// The only instance state is the target commitment. Everything else is derived per frame.
@@ -48,8 +46,8 @@ namespace LegacyoftheAbyss.Shade.Ai
             var tuning = snapshot.Tuning;
             float leashRadius = Mathf.Max(1f, snapshot.SoftLeashRadius * tuning.LeashUsableFraction);
 
-            // 1. Healing. Focus is a channel that pins the Shade in place, so it
-            //    only starts somewhere with more clearance than simply standing would need.
+            // Focus is a channel that pins the Shade in place, so it only starts somewhere with more
+            // clearance than simply standing would need.
             if (ShouldHeal(snapshot))
             {
                 var healPlan = BuildHealPlan(snapshot, leashRadius, tuning);
@@ -59,9 +57,8 @@ namespace LegacyoftheAbyss.Shade.Ai
                 }
             }
 
-            // 3. An order from the player outranks the Shade's own choice of where to be. It still
-            //    defends itself where it stands - a Shade told to hold a doorway that then refuses to
-            //    swing at what walks into it would be worse than useless.
+            // A player order outranks the Shade's own choice of where to be, but it still defends
+            // itself where it stands.
             if (snapshot.HasCommand)
             {
                 return MarkEvading(snapshot, BuildCommandPlan(snapshot, leashRadius, tuning));
@@ -77,19 +74,10 @@ namespace LegacyoftheAbyss.Shade.Ai
 
         /// <summary>
         /// Notes that the Shade is standing in something that will hurt it, and stops it swinging
-        /// while it is.
-        /// <para>
-        /// This used to be a branch of its own that replaced the destination with "straight back the
-        /// way you came", and that was a bug with a very clear symptom: an enemy standing between the
-        /// Shade and where it was told to go made the trip impossible. It would approach, enter the
-        /// enemy's body hitbox, be sent back, approach again, and never arrive - and the moment the
-        /// enemy died the same order completed fine.
-        /// </para>
-        /// <para>
-        /// Every destination this brain produces has already been pushed clear of threats, so simply
-        /// continuing toward it <i>is</i> the way out of one. Getting round the enemy on the way is
-        /// the navigator's job, which treats a hitbox as an obstacle exactly like a wall.
-        /// </para>
+        /// while it is. Deliberately leaves the destination alone: every destination this brain
+        /// produces has already been pushed clear of threats, so continuing toward it <i>is</i> the
+        /// way out of one, and routing round the enemy en route is the navigator's job. Backing off
+        /// instead makes any enemy between the Shade and its destination an impassable wall.
         /// </summary>
         private static ShadeAiPlan MarkEvading(in ShadeAiSnapshot snapshot, ShadeAiPlan plan)
         {
@@ -132,9 +120,8 @@ namespace LegacyoftheAbyss.Shade.Ai
             {
                 var candidate = targets[i];
 
-                // Nothing behind terrain is a target. This is the whole of the "Shade is attacking
-                // the wall over and over" report: an enemy on the far side of a wall was the nearest
-                // thing in range, so the Shade walked up to the wall and swung at it forever.
+                // Nothing behind terrain is a target, or the Shade walks up to the wall in front of
+                // the nearest enemy and swings at it forever.
                 if (!candidate.HasLineOfSight)
                 {
                     sawBlocked = true;
@@ -236,7 +223,7 @@ namespace LegacyoftheAbyss.Shade.Ai
 
         private ShadeAiPlan BuildCombatPlan(in ShadeAiSnapshot snapshot, float leashRadius, in ShadeAiTuning tuning, in ShadeAiTarget target)
         {
-            // 3. A spell that already lands from here.
+            // A spell that already lands from here.
             var spell = ChooseSpell(snapshot, snapshot.ShadePosition, target, out var spellReason, out int spellCount, out bool soulBlocked);
             if (spell != ShadeAiAction.None)
             {
@@ -250,9 +237,8 @@ namespace LegacyoftheAbyss.Shade.Ai
                 return castPlan;
             }
 
-            // 4. A spell that would land from somewhere the Shade can reach in less time than the
-            //    swing it would otherwise be making. Stepping two units to catch three enemies in one
-            //    cone beats hitting one of them with the nail.
+            // A spell that would land from somewhere reachable in less time than the swing it would
+            // otherwise be making: two units to catch three enemies in one cone beats one nail hit.
             if (TryFindCastPosition(snapshot, target, leashRadius, out Vector2 castPosition, out int castCount))
             {
                 var movePlan = BuildMovementPlan(snapshot, castPosition, tuning);
@@ -264,7 +250,7 @@ namespace LegacyoftheAbyss.Shade.Ai
                 return movePlan;
             }
 
-            // 5. Otherwise close on it and swing.
+            // Otherwise close on it and swing.
             Vector2 strikePoint = ComputeStrikePoint(snapshot, target);
             strikePoint = ClampToLeash(strikePoint, snapshot.HornetPosition, leashRadius);
             if (snapshot.CanTakeDamage)
@@ -293,9 +279,8 @@ namespace LegacyoftheAbyss.Shade.Ai
             }
             else if (strikeDistance <= tuning.ArriveDeadzone)
             {
-                // In position with nothing off cooldown. Named separately from Approaching because
-                // "the Shade is standing next to an enemy doing nothing" has two very different
-                // causes and they look identical from outside.
+                // In position with nothing off cooldown. Named apart from Approaching so a report
+                // can tell the two causes of "standing next to an enemy doing nothing" apart.
                 plan.Reason = ShadeAiReason.Cooldown;
             }
             else
@@ -309,13 +294,9 @@ namespace LegacyoftheAbyss.Shade.Ai
         // --- Escorting ----------------------------------------------------------------------
 
         /// <summary>
-        /// Where the Shade waits when it has nothing to fight.
-        /// <para>
-        /// On the ground it sits behind and above Hornet - out of the way of whatever she is walking
-        /// into, and clear of her own nail arc. In the air that inverts to ahead and below, which is
-        /// the useful half: a Shade under the far side of a jump is a platform, and Hornet can turn a
-        /// gap she would not otherwise clear into a pogo off it.
-        /// </para>
+        /// Where the Shade waits when it has nothing to fight. On the ground: behind and above
+        /// Hornet, clear of whatever she is walking into and of her own nail arc. Airborne that
+        /// inverts to ahead and below, where the Shade doubles as a pogo platform over a gap.
         /// </summary>
         internal static Vector2 ComputeEscortPoint(in ShadeAiSnapshot snapshot, int sideSign, int verticalSign)
         {
@@ -325,13 +306,9 @@ namespace LegacyoftheAbyss.Shade.Ai
         }
 
         /// <summary>
-        /// The escort point, moved if standing there would hurt.
-        /// <para>
-        /// Tries the three other corners before giving up and pushing clear, because a corner is a
-        /// place the Shade is meant to be and an arbitrary point outside a spike field is not. The
-        /// mirrored corners are ordered so the horizontal flip comes first: it keeps the Shade at the
-        /// height it wanted, which is the half of the position that matters for a pogo.
-        /// </para>
+        /// The escort point, moved if standing there would hurt. Tries the three other corners before
+        /// pushing clear, since a corner is a place the Shade is meant to be and an arbitrary point
+        /// outside a spike field is not. Horizontal flip comes first, keeping the height a pogo needs.
         /// </summary>
         internal static Vector2 ResolveEscortPoint(in ShadeAiSnapshot snapshot, float leashRadius)
         {
@@ -373,8 +350,7 @@ namespace LegacyoftheAbyss.Shade.Ai
         {
             var plan = BuildMovementPlan(snapshot, ResolveEscortPoint(snapshot, leashRadius), tuning);
             plan.Reason = reason;
-            // Look the way Hornet is looking. Nothing reads it while there is no target, but a Shade
-            // that keeps the facing of its last kill while trailing her reads as broken.
+            // Look the way Hornet is looking; keeping the facing of the last kill reads as broken.
             plan.FaceX = snapshot.HornetFacing >= 0 ? 1 : -1;
             return plan;
         }
@@ -543,14 +519,9 @@ namespace LegacyoftheAbyss.Shade.Ai
         // --- Healing ------------------------------------------------------------------------
 
         /// <summary>
-        /// Whether a Focus is worth starting.
-        /// <para>
-        /// Note this can return true for a Shade on full masks, when only Hornet is hurt. Whether
-        /// anything comes of that is <c>HandleFocus</c>'s call, not the brain's: by default it
-        /// refuses to channel at full health, and only the "Full Masks Focus" difficulty setting
-        /// lets the channel start purely to heal her. Healing Hornet is a side effect of the Shade
-        /// healing itself while she is nearby, not something Focus can be aimed at her on its own.
-        /// </para>
+        /// Whether a Focus is worth starting. Can return true for a Shade on full masks when only
+        /// Hornet is hurt; whether anything comes of that is <c>HandleFocus</c>'s call, which by
+        /// default refuses to channel at full health unless "Full Masks Focus" is set.
         /// </summary>
         internal static bool ShouldHeal(in ShadeAiSnapshot snapshot)
         {
@@ -559,10 +530,9 @@ namespace LegacyoftheAbyss.Shade.Ai
                 return false;
             }
 
-            // A channel already under way is seen through rather than re-argued. Focus drains SOUL
-            // the whole time it channels and refunds none of it if it is dropped, so a brain that
-            // reconsidered every frame would spend the meter on channels it never finished the
-            // moment the health fraction sat near its own threshold.
+            // A channel under way is seen through rather than re-argued: Focus drains SOUL through
+            // the channel and refunds none of it, so a health fraction sitting near the threshold
+            // would otherwise bleed the meter on channels that never finish.
             if (snapshot.IsFocusing)
             {
                 return snapshot.Soul > 0;
@@ -585,8 +555,7 @@ namespace LegacyoftheAbyss.Shade.Ai
         /// </summary>
         private static ShadeAiPlan? BuildHealPlan(in ShadeAiSnapshot snapshot, float leashRadius, in ShadeAiTuning tuning)
         {
-            // Stand close enough that the completed channel reaches Hornet too. It costs nothing when
-            // she is already near, and a heal that only covers the Shade is half a heal.
+            // Stand close enough that the completed channel reaches Hornet too.
             Vector2 healSpot = snapshot.ShadePosition;
             float toHornet = Vector2.Distance(snapshot.ShadePosition, snapshot.HornetPosition);
             float wantedRange = Mathf.Max(0.5f, snapshot.FocusHealRange * 0.6f);
@@ -610,11 +579,9 @@ namespace LegacyoftheAbyss.Shade.Ai
             bool arrived = snapshot.IsFocusing
                 || Vector2.Distance(healSpot, snapshot.ShadePosition) <= tuning.ArriveDeadzone;
 
-            // Starting a channel wants room to spare; continuing one only wants to not be standing
-            // in something. Focus drains SOUL the whole time and refunds none of it, so abandoning a
-            // channel at eighty percent costs eighty percent of a heal and buys nothing - which is
-            // exactly what a threat drifting into the wider margin used to do. Once the meter is
-            // being spent, only something that would actually land is worth stopping for.
+            // Starting a channel wants room to spare; continuing one only wants to not be standing in
+            // something. Dropping a channel refunds no SOUL, so once the meter is being spent only a
+            // threat that would actually land is worth stopping for.
             float margin = snapshot.IsFocusing ? tuning.ThreatStandoff : tuning.ThreatStandoff + HealSafetyMargin;
             bool clear = !snapshot.CanTakeDamage
                 || IsSafeAt(snapshot.ShadePosition, snapshot.Threats, margin);
@@ -634,18 +601,11 @@ namespace LegacyoftheAbyss.Shade.Ai
         // --- Slashes ------------------------------------------------------------------------
 
         /// <summary>
-        /// Which slash, if any, reaches the enemy from where the Shade is standing.
-        /// <para>
-        /// The axis the enemy actually lies on decides first. An earlier version tested sideways
-        /// before anything else and took it whenever the enemy was within the side slash's vertical
-        /// band at all, so an enemy up and to the left got swung at sideways and missed - the band is
-        /// how far the blade reaches vertically, not a claim that a horizontal swing covers the whole
-        /// of it. Diagonal enemies were the visible symptom.
-        /// </para>
-        /// <para>
-        /// When neither slash reaches, returning None is the point: the caller falls through to
-        /// approaching, and the Shade lines itself up instead of swinging at air.
-        /// </para>
+        /// Which slash, if any, reaches the enemy from where the Shade is standing. The axis the
+        /// enemy mostly lies on decides first: the vertical band is how far the blade reaches, not a
+        /// claim that a horizontal swing covers all of it, so testing sideways first misses anything
+        /// diagonal. Returning None makes the caller fall through to approaching rather than swing
+        /// at air.
         /// </summary>
         internal static ShadeAiAction ChooseNailDirection(Vector2 delta, float targetRadius, in ShadeAiTuning tuning)
         {
@@ -748,21 +708,20 @@ namespace LegacyoftheAbyss.Shade.Ai
 
         /// <summary>
         /// Looks for somewhere nearby a spell would land from, and returns it when the Shade can get
-        /// there in less time than the swing it would otherwise be making. Two units to the left to
-        /// catch three enemies in one cone is a better use of that time than one nail hit on one of
-        /// them.
+        /// there in less time than the swing it would otherwise be making.
         /// <para>
         /// Candidates are derived from the enemies themselves - below a group for the upward cone,
         /// above it for the ground slam, level with it for the projectile - rather than swept blindly
         /// around the Shade, which keeps this to a handful of evaluations per frame.
         /// </para>
         /// <para>
-        /// Line of sight is taken from where the Shade is standing now, not from the candidate: the
-        /// candidate is by definition less than one attack away, and re-testing it would mean
-        /// raycasting per probe per frame. Being slightly conservative here is the right side to err
-        /// on - it can decline a cast that would have worked, never take one that could not.
+        /// Line of sight is taken from where the Shade stands now, not from the candidate, which is
+        /// by definition less than one attack away; re-testing would cost a raycast per probe per
+        /// frame. The error that leaves is the safe one - it can decline a cast that would have
+        /// worked, never take one that could not.
         /// </para>
         /// </summary>
+
         internal bool TryFindCastPosition(in ShadeAiSnapshot snapshot, in ShadeAiTarget target, float leashRadius, out Vector2 position, out int count)
         {
             position = snapshot.ShadePosition;

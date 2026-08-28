@@ -945,11 +945,10 @@ public static partial class ShadeSettingsMenu
     /// <summary>
     /// Keeps a shoulder-button prompt showing the device the player is actually on.
     /// <para>
-    /// This used to be resolved once, while the menu was built - which happens seconds after launch,
-    /// before a pad has necessarily been seen. Whatever it picked then it kept for the rest of the
-    /// session, so a player on a controller was shown the keyboard's square-bracket key caps and
-    /// nothing they did would change them. Two rounds of reports went on which device to ask about;
-    /// the answer was that asking once was the bug.
+    /// Resolving this once at build time is the trap: the menu is built seconds after launch, before
+    /// a pad has necessarily been seen, and whatever it picks is then kept for the session - showing
+    /// a controller player keyboard key caps that nothing will change. The device to ask about was
+    /// never the problem; asking only once was.
     /// </para>
     /// <para>
     /// The game raises <c>InputHandler.RefreshActiveControllerEvent</c> whenever the active device
@@ -1551,28 +1550,17 @@ public static partial class ShadeSettingsMenu
     }
 
     /// <summary>
-    /// Keeps whatever is currently keyboard/controller-focused inside <see cref="content"/>
-    /// scrolled into view within <see cref="viewport"/>. Needed because the Controls screen's
-    /// binding list can be taller than the screen (see BuildControlsMenu) -- without this,
-    /// navigating to a row below the fold would move focus there with no visual feedback.
-    /// Scrolls through the ScrollRect's own API (not by poking content.anchoredPosition
-    /// directly) so the visible scrollbar handle stays in sync with keyboard/controller nav,
-    /// not just mouse dragging.
-    /// </summary>
-    /// <summary>
-    /// Re-runs a navigation-wiring action once, after Unity's own deferred Start() call on
-    /// this GameObject has had a chance to run.
-    ///
-    /// MenuButtonList.Start() unconditionally calls its own SetupActive(), which -- for any
-    /// selectable left in Navigation.Mode.Explicit -- overwrites selectOnUp/selectOnDown
-    /// with "the previous/next entry in its flat entries array", regardless of what those
-    /// were set to beforehand. It never touches selectOnLeft/selectOnRight. Since
-    /// BuildControlsMenu's own SetupButtonList call to SetupActive() runs while every
-    /// selectable is still in Automatic mode (so that first call is a no-op for Up/Down),
-    /// the *next* call -- Unity's own deferred Start(), which fires later, after this
-    /// GameObject/screen has actually gone active -- is the one that clobbers whatever
-    /// explicit 2D grid was configured. LateUpdate is guaranteed by Unity to run after every
-    /// Start()/Update() that fired this frame, so reapplying there reliably wins.
+    /// Re-runs a navigation-wiring action once, after Unity's own deferred <c>Start()</c> on this
+    /// GameObject has had its chance.
+    /// <para>
+    /// <c>MenuButtonList.Start()</c> calls <c>SetupActive()</c>, which overwrites
+    /// <c>selectOnUp</c>/<c>selectOnDown</c> on any selectable left in <c>Navigation.Mode.Explicit</c>
+    /// with the previous/next entry of its flat array. <c>SetupButtonList</c> calls
+    /// <c>SetupActive()</c> while every selectable is still Automatic, so that first call is a no-op
+    /// for Up/Down and Unity's later <c>Start()</c> is the one that clobbers an explicit 2D grid.
+    /// <c>LateUpdate</c> is guaranteed to run after every <c>Start()</c> that fired this frame, so
+    /// reapplying there wins.
+    /// </para>
     /// </summary>
     private sealed class DeferredNavigationReapplyDriver : MonoBehaviour
     {
@@ -1595,9 +1583,17 @@ public static partial class ShadeSettingsMenu
         }
     }
 
+    /// <summary>
+    /// Keeps the keyboard/controller-focused element inside <see cref="content"/> scrolled into view
+    /// within <see cref="viewport"/> - the Controls screen's binding list can be taller than the
+    /// screen, and navigating below the fold otherwise moves focus with no visual feedback. Scrolls
+    /// through the <c>ScrollRect</c>'s own API rather than poking <c>content.anchoredPosition</c>, so
+    /// the visible scrollbar handle stays in sync with pad navigation and not just mouse dragging.
+    /// </summary>
     private sealed class ScrollIntoViewDriver : MonoBehaviour
     {
         public ScrollRect scrollRect;
+
         public RectTransform viewport;
         public RectTransform content;
 

@@ -268,11 +268,10 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
     /// <summary>
     /// Every way the charm under the cursor can be equipped right now, as one label - "J / (A)".
     /// <para>
-    /// This used to name a single key: the Shade's slash binding, first option only, whatever it
-    /// happened to be. That is wrong here for a reason particular to this pane - both players can
-    /// work it. The Shade equips with its own slash binding, and Hornet equips through the game's
-    /// Submit, which arrives via the <c>InventoryPaneInput.PressSubmit</c> patch. Naming one of them
-    /// tells the other player nothing.
+    /// Naming a single key is wrong here for a reason particular to this pane: both players can work
+    /// it. The Shade equips with its own slash binding, Hornet through the game's Submit (arriving
+    /// via the <c>InventoryPaneInput.PressSubmit</c> patch), and naming either tells the other player
+    /// nothing.
     /// </para>
     /// <para>
     /// Nor can this follow the last-used device the way a single-player prompt would, for the same

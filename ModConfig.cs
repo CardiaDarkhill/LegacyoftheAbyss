@@ -427,8 +427,8 @@ public class ModConfig
     /// <para>
     /// Lives here rather than beside the Shade because three unrelated places need the same answer -
     /// the controller's spawn-time baseline, its recompute when Hornet gains a mask, and the HUD's
-    /// own fallback when it has no explicit stats yet - and they were previously three copies of
-    /// <c>(maxHealth + 1) / 2</c> that would have had to be kept in step by hand.
+    /// fallback before it has explicit stats. Keep it in one place; three copies of
+    /// <c>(maxHealth + 1) / 2</c> have to be kept in step by hand.
     /// </para>
     /// </summary>
     public static int ComputeShadeMaskCount(int hornetMaxMasks)

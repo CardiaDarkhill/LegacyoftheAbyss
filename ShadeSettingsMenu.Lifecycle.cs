@@ -17,21 +17,19 @@ public static partial class ShadeSettingsMenu
     /// <summary>
     /// Finds the row to clone for a slider: one of the base game's volume sliders.
     /// <para>
-    /// Two earlier attempts at this both came back empty and left every slider in the mod as the
-    /// bare Unity fallback. The first searched <c>optionsMenuScreen</c>, which is the list of
-    /// category buttons and carries no slider at all. The second added the Audio/Video/Brightness
-    /// screens but still went looking for a <c>MenuSelectable</c> with a <c>Slider</c> underneath it,
-    /// which assumes a row shape nothing here had verified.
+    /// Searches from the component that can only exist on a volume slider, rather than walking a
+    /// <c>UIManager</c> screen field down to a <c>Slider</c>. Screen fields are the wrong way round -
+    /// <c>optionsMenuScreen</c> is the category button list and holds no slider at all - and any
+    /// walk down to one assumes a row shape nothing here has verified.
+    /// <see cref="Resources.FindObjectsOfTypeAll{T}"/> also sees inactive objects, which all of these
+    /// are while the game is not on that screen.
     /// </para>
     /// <para>
-    /// So this asks the question the other way round and starts from the component that can only
-    /// exist on a volume slider. <see cref="Resources.FindObjectsOfTypeAll{T}"/> sees inactive
-    /// objects, which every one of these is while the game is not on that screen, and does not care
-    /// which <c>UIManager</c> field happens to be wired. The result is logged unconditionally,
-    /// because "the slider template was not found" is otherwise indistinguishable from "it was found
-    /// and still looks wrong".
+    /// The result is logged unconditionally: "the template was not found" is otherwise
+    /// indistinguishable from "it was found and still looks wrong".
     /// </para>
     /// </summary>
+
     private static GameObject FindGameSliderTemplate(UIManager ui)
     {
         try
@@ -122,12 +120,10 @@ public static partial class ShadeSettingsMenu
     /// Which shoulder-button glyph to draw, asked of the game rather than worked out here.
     /// <para>
     /// <c>GetButtonSkinFor</c> picks by the device the player last used, which is what every other
-    /// prompt in the game draws by - including the inventory's LB/RB, which is where this menu's
-    /// prompts were asked to match. An earlier version picked by what was plugged in instead, to
-    /// avoid following a player who had just brushed the keyboard; that turned out to be answering
-    /// the wrong question. The glyph was wrong because it was resolved once, seconds after launch,
-    /// and then kept for the session. <c>PanePromptGlyphDriver</c> re-asks whenever the answer can
-    /// have changed, so the simple question is the right one again.
+    /// prompt in the game draws by - including the inventory's LB/RB, which these are meant to match.
+    /// Do not substitute "what is plugged in" to avoid following a stray keyboard press: a stale
+    /// glyph is a staleness problem, not a question problem, and <c>PanePromptGlyphDriver</c> already
+    /// re-asks whenever the answer can have changed.
     /// </para>
     /// </summary>
     internal static ButtonSkin ResolvePaneButtonSkin(HeroActionButton action)
@@ -159,11 +155,11 @@ public static partial class ShadeSettingsMenu
     /// <summary>
     /// The <see cref="Slider"/>'s own object, and nothing above it.
     /// <para>
-    /// What is above it is the row: the game's own label, its value readout and the layout group
-    /// arranging them. This used to walk up to the nearest MenuSelectable to pick those up as well,
-    /// on the reasoning that the row is what carries the selection fleurs - and every mod slider
-    /// then drew "Master Volume", "10" and a tick box over its own label. The fleurs this menu
-    /// draws itself.
+    /// Above it is the row: the game's own label, its value readout, and the layout group arranging
+    /// them. Do not walk up to the nearest MenuSelectable to capture the row's selection fleurs -
+    /// this menu draws its own - or every slider carries "Master Volume", "10" and a tick box over
+    /// its own label.
+
     /// </para>
     /// </summary>
     private static GameObject ResolveSliderTemplateRoot(GameObject sliderObject)

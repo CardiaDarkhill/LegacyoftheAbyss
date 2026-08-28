@@ -273,7 +273,6 @@ public partial class LegacyHelper
         private GameObject shamanHorizontalAltSlashTemplate;
         private GameObject shamanUpSlashTemplate;
         private GameObject shamanDownSlashTemplate;
-        private HeroControllerConfig.DownSlashTypes shamanDownSlashType = HeroControllerConfig.DownSlashTypes.Slash;
         private HeroControllerConfig shamanSlashConfigSource;
         private bool carefreeMelodyEquipped;
         private float carefreeMelodyChance;

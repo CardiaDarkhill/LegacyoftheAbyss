@@ -10,52 +10,22 @@ using UnityEngine;
 public partial class LegacyHelper
 {
     /// <summary>
-    /// Makes alerted enemies actually come after the Shade, by swapping the target out from under
-    /// the enemy-AI actions that read it.
+    /// Makes an alert range the Shade is standing in actually <i>report</i> the Shade, so an enemy
+    /// can notice it at all. The half below <see cref="EnemyAiRetargeting"/>, and the one that has to
+    /// work first: redirecting an enemy's target means nothing while it never leaves idle.
     /// <para>
-    /// The obvious reading of this problem - 184 files reference <c>HeroController.instance</c>, so
-    /// every enemy script needs rewriting - turns out to be the wrong place to look. Almost none of
-    /// those references are enemies locating the player; they are things done <i>to</i> the hero
-    /// (damage, cState, invulnerability, input blocking). Silksong's enemy AI is PlayMaker-driven,
-    /// and the actions that move an enemy toward something are a single tagged set: PlayMaker's
-    /// <c>ActionCategory("Enemy AI")</c>, 63 types, of which the ones that matter here share one
-    /// shape - an <c>FsmOwnerDefault</c> for the enemy itself and an <c>FsmGameObject</c> for what it
-    /// is chasing, facing, or firing at (<c>ChaseObject*</c>, <c>FaceObject*</c>, <c>DistanceFly*</c>,
-    /// <c>FireAtTarget</c>, <c>GetAngleToTarget2D</c>, and so on).
+    /// <c>TrackTriggerObjects</c> admits an object into <c>insideGameObjects</c> only if it passes
+    /// the range's <c>ignoreLayers</c>/<c>tagIncludeList</c>/<c>tagExcludeList</c>, which the Shade's
+    /// aggro proxy does not - so <c>InsideCount</c> reads 0, <c>IsInside</c> false, and
+    /// <c>GetClosestInside</c> null however close it stands. <c>AlertRange_FixedUpdate_Patch</c>
+    /// covers <c>AlertRange.IsHeroInRange()</c>; these cover the FSMs that count a range's contents
+    /// or ask for the closest thing in it instead.
     /// </para>
     /// <para>
-    /// So the interception point is that one field. When an enemy-AI action is about to run and its
-    /// target is Hornet, and <see cref="ShadeAggroTargeting"/> says this enemy should be going for
-    /// the Shade instead, the field is pointed at the Shade for the duration of the call and put back
-    /// afterwards. The enemy's own logic is untouched - it chases what it is told to chase.
-    /// </para>
-    /// <para>
-    /// Borrow-and-restore rather than a permanent write, because an <c>FsmGameObject</c> field can be
-    /// bound to a shared FSM variable; leaving the Shade in it would corrupt the enemy's own state and
-    /// outlive the action. The pair is carried through Harmony's <c>__state</c>, so a restore is
-    /// bound to the same invocation that borrowed.
-    /// </para>
-    /// </summary>
-    /// <summary>
-    /// Makes an alert range that the Shade is standing in actually <i>report</i> the Shade, so an
-    /// enemy can notice it in the first place.
-    /// <para>
-    /// This is the half below <see cref="EnemyAiRetargeting"/>, and it is the one that has to work
-    /// first: redirecting an enemy's target is meaningless while the enemy never leaves its idle
-    /// state. <c>TrackTriggerObjects</c> only admits an object into <c>insideGameObjects</c> if it
-    /// passes the range's <c>ignoreLayers</c>/<c>tagIncludeList</c>/<c>tagExcludeList</c>, which the
-    /// Shade's aggro proxy does not - so <c>InsideCount</c> reads 0, <c>IsInside</c> reads false, and
-    /// <c>GetClosestInside</c> returns null however close the Shade is.
-    /// <c>AlertRange_FixedUpdate_Patch</c> already covers the one question
-    /// <c>AlertRange.IsHeroInRange()</c> answers, but an FSM that instead counts what is in a range,
-    /// or asks what the closest thing in it is, was still seeing an empty range.
-    /// </para>
-    /// <para>
-    /// Scoped to <c>AlertRange</c> rather than every <c>TrackTriggerObjects</c>. The base class backs
-    /// plenty of things that have nothing to do with enemies noticing the player, and inflating their
-    /// counts would be a change with no upside; <c>AlertRange</c> is the enemy-alerting subclass, and
-    /// it inherits these members rather than overriding them, so patching the base and filtering here
-    /// reaches exactly the intended set.
+    /// Scoped to <c>AlertRange</c> rather than every <c>TrackTriggerObjects</c>: the base class backs
+    /// plenty that has nothing to do with noticing the player, and inflating those counts would be a
+    /// change with no upside. <c>AlertRange</c> inherits these members rather than overriding them,
+    /// so patching the base and filtering here reaches exactly the intended set.
     /// </para>
     /// </summary>
     [HarmonyPatch(typeof(TrackTriggerObjects), nameof(TrackTriggerObjects.InsideCount), MethodType.Getter)]
@@ -173,16 +143,40 @@ public partial class LegacyHelper
         }
     }
 
+    /// <summary>
+    /// Makes alerted enemies come after the Shade, by swapping the target out from under the
+    /// enemy-AI actions that read it.
+    /// <para>
+    /// The interception point is one field. Silksong's enemy AI is PlayMaker-driven, and the actions
+    /// that move an enemy toward something share a shape: an <c>FsmOwnerDefault</c> for the enemy and
+    /// an <c>FsmGameObject</c> for what it chases, faces or fires at (<c>ChaseObject*</c>,
+    /// <c>FaceObject*</c>, <c>DistanceFly*</c>, <c>FireAtTarget</c>, and so on). When such an action
+    /// is about to run against Hornet and <see cref="ShadeAggroTargeting"/> says this enemy should
+    /// prefer the Shade, that field is pointed at the Shade for the call and put back after. The
+    /// enemy's own logic is untouched - it chases what it is told to chase.
+    /// </para>
+    /// <para>
+    /// Borrow-and-restore rather than a permanent write: an <c>FsmGameObject</c> field can be bound
+    /// to a shared FSM variable, so leaving the Shade in it would corrupt the enemy's own state and
+    /// outlive the action. The pair rides Harmony's <c>__state</c>, binding each restore to the
+    /// invocation that borrowed.
+    /// </para>
+    /// <para>
+    /// Note the hero-side references are a red herring: most of the 184 files naming
+    /// <c>HeroController.instance</c> do things <i>to</i> the hero - damage, cState, invulnerability,
+    /// input blocking - rather than locating her.
+    /// </para>
+    /// </summary>
     /// <remarks>
-    /// Deliberately <b>not</b> a <c>[HarmonyPatch]</c> class, and so not picked up by
-    /// <c>PatchAll()</c>. <c>PatchAll</c> is all-or-nothing: one patch class that throws while being
-    /// applied aborts the whole call, and every patch class it had not reached yet silently never
-    /// gets installed - which presents as unrelated parts of the mod breaking at once, with nothing
-    /// in the log tying them together. This one resolves its own targets by reflection over the game
-    /// assembly and patches around a hundred methods, so it is by far the likeliest to throw. It is
-    /// applied separately by <see cref="Apply"/> instead, per method, after <c>PatchAll</c> has
-    /// finished, so the worst it can cost is itself.
+    /// Deliberately <b>not</b> a <c>[HarmonyPatch]</c> class, so <c>PatchAll()</c> does not pick it
+    /// up. <c>PatchAll</c> is all-or-nothing: one class that throws while being applied aborts the
+    /// call and every class it had not yet reached goes uninstalled, which presents as unrelated
+    /// parts of the mod breaking at once with nothing in the log tying them together. This one
+    /// resolves its targets reflectively and patches around a hundred methods, so it is the likeliest
+    /// to throw; <see cref="Apply"/> installs it per method after <c>PatchAll</c> has finished, so
+    /// the worst it can cost is itself.
     /// </remarks>
+
     internal static class EnemyAiRetargeting
     {
         /// <summary>

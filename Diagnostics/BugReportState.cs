@@ -120,10 +120,10 @@ namespace LegacyoftheAbyss.Diagnostics
         /// <summary>
         /// Which row the settings menu cloned for its sliders, or why it could not find one.
         /// <para>
-        /// Snapshotted rather than left to the log, because the menu is built within a couple of
-        /// seconds of launch and the log ring only keeps the last few hundred lines - by the time
-        /// anyone presses the hotkey to report that the sliders look wrong, the line that says which
-        /// slider they came from has long since aged out. Twice now that has cost a round trip.
+        /// Snapshotted rather than left to the log: the menu is built within a couple of seconds of
+        /// launch and the log ring keeps only the last few hundred lines, so by the time anyone
+        /// reports that the sliders look wrong, the line naming the template has long since aged out.
+
         /// </para>
         /// </summary>
         public string? MenuSliderTemplate;
