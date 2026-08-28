@@ -32,7 +32,7 @@ public static partial class ShadeSettingsMenu
         }
         if (skinsScreen != null)
         {
-            var s = CreateMenuButton(content, buttonTemplate, "Skins", () => ShowScreen(skinsScreen), CancelTarget.PauseMenu);
+            var s = CreateMenuButton(content, buttonTemplate, "Characters", () => ShowScreen(skinsScreen), CancelTarget.PauseMenu);
             if (s != null) selectables.Add(s);
         }
         if (shadeAiScreen != null)
@@ -493,14 +493,10 @@ public static partial class ShadeSettingsMenu
                 ModConfig.Instance.shadeAiEnabled = v;
                 // Apply to the Shade standing in the scene right now rather than waiting for a
                 // respawn. persist:false because this menu owns the value and saves it on close.
-                try
+                foreach (var shade in LegacyHelper.ShadeController.ActiveInstances)
                 {
-                    var shade = LegacyHelper.ShadeController.ActiveInstance;
                     if (shade != null)
                         shade.SetShadeAiEnabled(v, persist: false);
-                }
-                catch
-                {
                 }
             }, CancelTarget.ShadeMain),
             "Let the Shade fight by itself. It picks targets, attacks, steps out of danger and heals you both. It can be killed, so you will need to revive it.");

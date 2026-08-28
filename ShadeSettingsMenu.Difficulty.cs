@@ -485,13 +485,15 @@ public static partial class ShadeSettingsMenu
     {
         try
         {
-            var shade = LegacyHelper.ShadeController.ActiveInstance;
-            if (shade != null)
-                shade.RefreshDerivedMaskCount();
+            foreach (var shade in LegacyHelper.ShadeController.ActiveInstances)
+            {
+                if (shade != null)
+                    shade.RefreshDerivedMaskCount();
+            }
         }
         catch (Exception e)
         {
-            LogMenuWarning($"Could not apply the Shade mask setting to the live Shade: {e}");
+            LogMenuWarning($"Could not apply the Shade mask setting to the live Shades: {e}");
         }
     }
 
@@ -499,7 +501,8 @@ public static partial class ShadeSettingsMenu
     {
         try
         {
-            var shade = LegacyHelper.ShadeController.ActiveInstance;
+            // Assist mode is one setting shared by every Shade, so the primary answers for all.
+            var shade = LegacyHelper.ShadeController.PrimaryInstance;
             if (shade != null)
                 return shade.GetAssistModeEnabled();
 
@@ -517,9 +520,15 @@ public static partial class ShadeSettingsMenu
     {
         try
         {
-            var shade = LegacyHelper.ShadeController.ActiveInstance;
-            if (shade != null)
-                shade.SetAssistMode(enabled);
+            var shades = LegacyHelper.ShadeController.ActiveInstances;
+            if (shades.Count > 0)
+            {
+                foreach (var shade in shades)
+                {
+                    if (shade != null)
+                        shade.SetAssistMode(enabled);
+                }
+            }
             else
                 LogMenuWarning("Assist mode was changed with no Shade in the scene; nothing to apply it to.");
         }

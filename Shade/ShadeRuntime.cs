@@ -26,9 +26,12 @@ namespace LegacyoftheAbyss.Shade
         internal const string BenchLockedMessage = "Rest at a bench to change the shade's charms.";
         private const string VoidHeartUnlockSceneName = "Song_Tower_Destroyed";
 
-        private static readonly ShadePersistentState s_persistentState = new ShadePersistentState();
+        // The primary companion's state. Secondary companions own their own; this static API is the
+        // primary's view of the registry, kept so the mod's existing call sites read unchanged.
+        private static ShadePersistentState s_persistentState => ShadeCompanionRegistry.Primary.State;
+        private static ShadeCharmInventory s_charmInventory => ShadeCompanionRegistry.Primary.Charms;
+
         private static readonly ShadeSaveSlotRepository s_saveSlots = new ShadeSaveSlotRepository();
-        private static readonly ShadeCharmInventory s_charmInventory = CreateCharmInventory();
         private static readonly Queue<ShadeUnlockNotification> s_notificationQueue = new();
         private static readonly HashSet<string> s_seenNotificationKeys = new(StringComparer.OrdinalIgnoreCase);
         private static int s_activeSlot;
@@ -47,11 +50,15 @@ namespace LegacyoftheAbyss.Shade
             (6, "shade::spell_progress::6", "Shade's Shade Shriek reached full potential."),
         };
 
-        private static ShadeCharmInventory CreateCharmInventory()
+        static ShadeRuntime()
         {
-            var inventory = new ShadeCharmInventory();
-            inventory.StateChanged += HandleCharmInventoryChanged;
-            return inventory;
+            foreach (var companion in ShadeCompanionRegistry.All)
+            {
+                companion.CharmsChanged += HandleCharmInventoryChanged;
+            }
+
+            ShadeCompanionRegistry.CompanionAdded += c => c.CharmsChanged += HandleCharmInventoryChanged;
+            ShadeCompanionRegistry.CompanionRemoved += c => c.CharmsChanged -= HandleCharmInventoryChanged;
         }
 
         public static event Action? NotificationsChanged;
@@ -670,7 +677,7 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
-        private static void HandleCharmInventoryChanged()
+        private static void HandleCharmInventoryChanged(ShadeCompanion companion)
         {
             // Re-entrancy guard: this fires from inside ShadeCharmInventory while the inventory is
             // being loaded *from* the slot, and writing straight back is at best redundant.
@@ -679,14 +686,19 @@ namespace LegacyoftheAbyss.Shade
                 return;
             }
 
-            EnsureActiveSlotForInventoryWrite();
-
-            if (!s_debugUnlockAllCharmsActive)
+            // Only the primary's charms occupy the save slot's charm record. Secondary companions
+            // keep their loadout in memory until ShadeSaveSlotRepository grows a companion dimension.
+            if (companion.IsPrimary)
             {
-                PersistInventoryToSlot(s_activeSlot);
+                EnsureActiveSlotForInventoryWrite();
+
+                if (!s_debugUnlockAllCharmsActive)
+                {
+                    PersistInventoryToSlot(s_activeSlot);
+                }
             }
 
-            LegacyHelper.RequestShadeLoadoutRecompute();
+            LegacyHelper.RequestShadeLoadoutRecompute(companion.Id);
         }
 
         /// <summary>

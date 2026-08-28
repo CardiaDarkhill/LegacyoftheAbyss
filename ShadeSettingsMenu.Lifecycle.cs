@@ -348,7 +348,7 @@ public static partial class ShadeSettingsMenu
         }
         if (skinsScreen != null)
         {
-            skinsScreen.gameObject.name = "ShadeSettingsSkins";
+            skinsScreen.gameObject.name = "ShadeSettingsCharacters";
             skinsScreen.gameObject.SetActive(false);
             InitializeScreen(skinsScreen);
             allScreens.Add(skinsScreen);
@@ -388,7 +388,7 @@ public static partial class ShadeSettingsMenu
         BuildDifficultyMenu(ui, difficultyScreen, sliderTemplate, buttonTemplate);
         if (IncludeLegacyCharmMenu && charmsScreen != null)
             BuildCharmsMenu(ui, charmsScreen, buttonTemplate);
-        BuildSkinsMenu(ui, skinsScreen, buttonTemplate);
+        BuildCharactersMenu(ui, skinsScreen, buttonTemplate);
         BuildControlsMenu(ui, controlsScreen, buttonTemplate);
         BuildLoggingMenu(ui, loggingScreen, buttonTemplate);
         BuildShadeAiMenu(ui, shadeAiScreen, sliderTemplate, buttonTemplate);

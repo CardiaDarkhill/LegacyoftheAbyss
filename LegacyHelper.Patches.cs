@@ -779,16 +779,20 @@ public partial class LegacyHelper
                 if (!ModConfig.Instance.shadeEnabled)
                     return;
 
-                if (ModConfig.Instance.shadeEnabled && helper != null)
+                bool healedAny = false;
+                foreach (var companion in ShadeCompanionRegistry.All)
                 {
-                    var sc = helper.GetComponent<ShadeController>();
-                    if (sc != null)
-                    {
-                        sc.FullHealOnRespawn();
-                        SaveShadeState(sc.GetCurrentNormalHP(), sc.GetMaxNormalHP(), sc.GetCurrentLifeblood(), sc.GetMaxLifeblood(), sc.GetShadeSoul(), sc.GetCanTakeDamage(), sc.GetBaseMaxHP());
-                        return;
-                    }
+                    var sc = companion.Controller;
+                    if (sc == null)
+                        continue;
+
+                    sc.FullHealOnRespawn();
+                    SaveShadeState(companion, sc.GetCurrentNormalHP(), sc.GetMaxNormalHP(), sc.GetCurrentLifeblood(), sc.GetMaxLifeblood(), sc.GetShadeSoul(), sc.GetCanTakeDamage(), sc.GetBaseMaxHP());
+                    healedAny = true;
                 }
+
+                if (healedAny)
+                    return;
                 // Fallback: refill the saved state so the next spawn comes back whole
                 if (ShadeRuntime.PersistentState.HasData)
                 {
@@ -1217,14 +1221,14 @@ public partial class LegacyHelper
                 if (!ModConfig.Instance.shadeEnabled)
                     return;
 
-                if (ModConfig.Instance.shadeEnabled && helper != null)
+                foreach (var companion in ShadeCompanionRegistry.All)
                 {
-                    var sc = helper.GetComponent<ShadeController>();
-                    if (sc != null)
-                    {
-                        sc.FullHealFromBench();
-                        SaveShadeState(sc.GetCurrentNormalHP(), sc.GetMaxNormalHP(), sc.GetCurrentLifeblood(), sc.GetMaxLifeblood(), sc.GetShadeSoul(), sc.GetCanTakeDamage(), sc.GetBaseMaxHP());
-                    }
+                    var sc = companion.Controller;
+                    if (sc == null)
+                        continue;
+
+                    sc.FullHealFromBench();
+                    SaveShadeState(companion, sc.GetCurrentNormalHP(), sc.GetMaxNormalHP(), sc.GetCurrentLifeblood(), sc.GetMaxLifeblood(), sc.GetShadeSoul(), sc.GetCanTakeDamage(), sc.GetBaseMaxHP());
                 }
             }
             catch { }
@@ -1388,12 +1392,12 @@ public partial class LegacyHelper
         {
             try
             {
-                if (ModConfig.Instance.shadeEnabled && helper != null)
+                if (ModConfig.Instance.shadeEnabled)
                 {
-                    var sc = helper.GetComponent<ShadeController>();
-                    if (sc != null)
+                    var heroTransform = __instance != null ? __instance.transform : null;
+                    foreach (var sc in ActiveShadeControllers())
                     {
-                        sc.ApplyBindHealFromHornet(__instance != null ? __instance.transform : null);
+                        sc.ApplyBindHealFromHornet(heroTransform);
                     }
                 }
             }

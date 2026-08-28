@@ -41,7 +41,7 @@ public partial class LegacyHelper
                 shadeMaxHP = baseShadeMaxHP;
                 ResetCharmDerivedStats();
 
-                var inventory = ShadeRuntime.Charms;
+                var inventory = OwnCharms;
                 var loadout = inventory?.GetEquippedDefinitions();
                 ApplyCharmLoadout(loadout);
 

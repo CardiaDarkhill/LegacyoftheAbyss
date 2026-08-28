@@ -229,11 +229,36 @@ public partial class LegacyHelper
         internal bool IsAggroEligible => !isInactive && isActiveAndEnabled && !assistModeEnabled;
 
         /// <summary>
-        /// The Shade currently in the scene, or null. Maintained by <c>Start</c>/<c>OnDestroy</c> so
-        /// per-frame callers (notably <see cref="ShadeAggroTargeting"/>, which runs off enemy AI
-        /// actions) don't have to scan the scene to find it.
+        /// Every Shade currently in the scene, in spawn order. Maintained by <c>Start</c>/<c>OnDestroy</c>
+        /// so per-frame callers (notably <see cref="ShadeAggroTargeting"/>, which runs off enemy AI
+        /// actions) don't have to scan the scene to find them.
         /// </summary>
-        internal static ShadeController ActiveInstance { get; private set; }
+        private static readonly List<ShadeController> s_activeInstances = new List<ShadeController>();
+
+        internal static IReadOnlyList<ShadeController> ActiveInstances => s_activeInstances;
+
+        /// <summary>
+        /// The primary companion's Shade, or null. Only for queries that genuinely concern one Shade
+        /// — a broadcast (a setting change, an enemy picking a target) must walk
+        /// <see cref="ActiveInstances"/> instead, or it silently ignores every Shade but the first.
+        /// </summary>
+        internal static ShadeController PrimaryInstance
+            => ShadeCompanionRegistry.Primary.Controller;
+
+        /// <summary>The companion whose state this controller reads and writes.</summary>
+        internal ShadeCompanion Companion { get; private set; }
+
+        internal void BindCompanion(ShadeCompanion companion)
+        {
+            Companion = companion;
+        }
+
+        /// <summary>
+        /// This Shade's own charms. Companions equip independently, so anything scaling this Shade's
+        /// stats or damage must read here rather than from <see cref="ShadeRuntime.Charms"/>, which
+        /// is the primary's. Falls back to the primary for a controller spawned outside the registry.
+        /// </summary>
+        private ShadeCharmInventory OwnCharms => Companion?.Charms ?? ShadeRuntime.Charms;
         private bool isDying;
         private Coroutine deathRoutine;
 

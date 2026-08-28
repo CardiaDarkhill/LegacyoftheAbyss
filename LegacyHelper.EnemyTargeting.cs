@@ -382,8 +382,7 @@ public partial class LegacyHelper
 
             try
             {
-                var shadeObject = ShadeAggroTargeting.GetShadeTarget();
-                if (shadeObject == null)
+                if (!ShadeAggroTargeting.HasEligibleShade())
                 {
                     return;
                 }
@@ -401,6 +400,7 @@ public partial class LegacyHelper
 
                 var heroTransform = hero.transform;
                 GameObject enemy = null;
+                GameObject shadeObject = null;
                 bool resolvedEnemy = false;
                 bool shouldRetarget = false;
 
@@ -423,7 +423,10 @@ public partial class LegacyHelper
                     {
                         resolvedEnemy = true;
                         enemy = ResolveEnemy(__instance);
-                        shouldRetarget = ShadeAggroTargeting.ShouldTargetShade(enemy, shadeObject);
+                        // Picked per enemy, not once per frame: the nearest Shade differs between them.
+                        shadeObject = ShadeAggroTargeting.GetShadeTargetFor(enemy);
+                        shouldRetarget = shadeObject != null
+                            && ShadeAggroTargeting.ShouldTargetShade(enemy, shadeObject);
                     }
 
                     if (!shouldRetarget)

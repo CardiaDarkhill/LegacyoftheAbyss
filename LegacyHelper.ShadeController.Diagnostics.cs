@@ -120,7 +120,7 @@ public partial class LegacyHelper
 
             try
             {
-                var charms = ShadeRuntime.Charms;
+                var charms = OwnCharms;
                 if (charms != null)
                 {
                     var equipped = new List<string>();

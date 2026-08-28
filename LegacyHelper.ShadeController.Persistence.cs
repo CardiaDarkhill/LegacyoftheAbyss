@@ -103,6 +103,21 @@ public partial class LegacyHelper
 
         public void Init(Transform hornet) { hornetTransform = hornet; }
 
+        /// <summary>
+        /// Writes this Shade's health and soul to its own companion. Falls back to the primary's
+        /// state only for a controller spawned outside the registry, which the tests do.
+        /// </summary>
+        private void SaveOwnState(bool damageState)
+        {
+            if (Companion != null)
+            {
+                LegacyHelper.SaveShadeState(Companion, shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax, shadeSoul, damageState, baseShadeMaxHP);
+                return;
+            }
+
+            LegacyHelper.SaveShadeState(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax, shadeSoul, damageState, baseShadeMaxHP);
+        }
+
         private void PersistIfChanged()
         {
             if (persistenceSuppressionDepth > 0)
@@ -117,7 +132,7 @@ public partial class LegacyHelper
                 || lastSavedSoul != shadeSoul
                 || lastSavedCanTakeDamage != canTakeDamage)
             {
-                LegacyHelper.SaveShadeState(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax, shadeSoul, canTakeDamage, baseShadeMaxHP);
+                SaveOwnState(canTakeDamage);
                 lastSavedHP = shadeHP;
                 lastSavedMax = shadeMaxHP;
                 lastSavedLifeblood = shadeLifeblood;
@@ -165,48 +180,51 @@ public partial class LegacyHelper
             EnsureHudSyncScheduled();
         }
 
+        /// <summary>
+        /// Whether this Shade drives the shared HUD. Only one can: the readouts hold a single
+        /// Shade's masks and soul, so a second one pushing to them would overwrite the first every
+        /// frame. Secondary companions keep their state and wait for a HUD of their own.
+        /// </summary>
+        private bool OwnsHud => Companion == null || Companion.IsPrimary;
+
         private void TryFlushHudSync()
         {
             var hud = ResolveHud();
-            if (!hud)
+            if (!hud || !OwnsHud)
             {
                 return;
             }
 
-            try
+            if (pendingHudStatsSync)
             {
-                if (pendingHudStatsSync)
+                if (pendingHudSuppressDamageSfx)
                 {
-                    if (pendingHudSuppressDamageSfx)
-                    {
-                        hud.SuppressNextShadeDamageSfx();
-                    }
-
-                    hud.SetShadeStats(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax);
-                    pendingHudStatsSync = false;
-                    pendingHudSuppressDamageSfx = false;
+                    hud.SuppressNextShadeDamageSfx();
                 }
 
-                if (pendingHudAssistSync)
-                {
-                    hud.SetShadeAssistMode(assistModeEnabled);
-                    pendingHudAssistSync = false;
-                }
-
-                if (pendingHudOvercharmSync)
-                {
-                    hud.SetShadeOvercharmed(ShadeRuntime.Charms?.IsOvercharmed ?? false);
-                    pendingHudOvercharmSync = false;
-                }
-
-                if (pendingHudSoulSync)
-                {
-                    hud.SetShadeSoul(shadeSoul, shadeSoulMax);
-                    pendingHudSoulSync = false;
-                }
+                hud.SetShadeStats(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax);
+                pendingHudStatsSync = false;
+                pendingHudSuppressDamageSfx = false;
             }
-            catch
+
+            if (pendingHudAssistSync)
             {
+                hud.SetShadeAssistMode(assistModeEnabled);
+                pendingHudAssistSync = false;
+            }
+
+            if (pendingHudOvercharmSync)
+            {
+                // This Shade's own charms, not the primary's - they equip independently.
+                var charms = OwnCharms;
+                hud.SetShadeOvercharmed(charms?.IsOvercharmed ?? false);
+                pendingHudOvercharmSync = false;
+            }
+
+            if (pendingHudSoulSync)
+            {
+                hud.SetShadeSoul(shadeSoul, shadeSoulMax);
+                pendingHudSoulSync = false;
             }
         }
 

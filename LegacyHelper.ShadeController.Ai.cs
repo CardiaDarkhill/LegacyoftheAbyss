@@ -49,7 +49,7 @@ public partial class LegacyHelper
             {
                 try
                 {
-                    var shade = ActiveInstance;
+                    var shade = PrimaryInstance;
                     return shade != null ? shade.aiEnabled : ModConfig.Instance.shadeAiEnabled;
                 }
                 catch

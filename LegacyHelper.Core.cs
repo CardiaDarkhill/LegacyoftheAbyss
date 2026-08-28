@@ -16,7 +16,6 @@ using UnityEngine.SceneManagement;
 [BepInPlugin("com.legacyoftheabyss.helper", "Legacy of the Abyss - Helper", LegacyoftheAbyss.PluginInfo.PLUGIN_VERSION)]
 public partial class LegacyHelper : BaseUnityPlugin
 {
-    private static GameObject helper;
     private static SimpleHUD hud;
     private static bool registeredEnterSceneHandler;
     private bool loggedMissingUI;
@@ -48,6 +47,11 @@ public partial class LegacyHelper : BaseUnityPlugin
     internal static void SaveShadeState(int curHp, int maxHp, int lifebloodCur, int lifebloodMax, int soul, bool? canTakeDamage = null, int? baseMaxHp = null)
     {
         ShadeRuntime.CaptureState(curHp, maxHp, lifebloodCur, lifebloodMax, soul, canTakeDamage, baseMaxHp);
+    }
+
+    internal static void SaveShadeState(ShadeCompanion companion, int curHp, int maxHp, int lifebloodCur, int lifebloodMax, int soul, bool? canTakeDamage = null, int? baseMaxHp = null)
+    {
+        companion.State.Capture(curHp, maxHp, lifebloodCur, lifebloodMax, soul, canTakeDamage, baseMaxHp);
     }
 
     // Called when Hornet gains a new spell. Advances Shade's unlock/upgrade track.
@@ -137,6 +141,7 @@ public partial class LegacyHelper : BaseUnityPlugin
     {
         Instance = this;
         ModConfig.Load();
+        ShadeCharacterManager.ApplyConfigToRegistry();
         LoggingManager.Initialize(Logger);
         LegacyoftheAbyss.Diagnostics.BugReportSystem.Install(Logger);
         var harmony = new Harmony("com.legacyoftheabyss.helper");
@@ -409,79 +414,88 @@ public partial class LegacyHelper : BaseUnityPlugin
         }
     }
 
+    /// <summary>Despawns every companion. Used when the shade is switched off or the save is left.</summary>
     private static void DestroyShadeInstance()
     {
-        if (helper == null)
+        foreach (var companion in ShadeCompanionRegistry.All)
+        {
+            DestroyShadeInstance(companion);
+        }
+    }
+
+    private static void DestroyShadeInstance(ShadeCompanion companion)
+    {
+        if (companion.Body == null)
             return;
 
-        try
-        {
-            UnityEngine.Object.Destroy(helper);
-        }
-        catch
-        {
-        }
-
-        helper = null;
+        UnityEngine.Object.Destroy(companion.Body);
+        companion.Body = null;
+        companion.Controller = null;
     }
 
     private static void SpawnShadeAtPosition(Vector3 pos)
+        => SpawnShadeAtPosition(ShadeCompanionRegistry.Primary, pos);
+
+    private static void SpawnShadeAtPosition(ShadeCompanion companion, Vector3 pos)
     {
         var gm = GameManager.instance;
         if (gm == null || gm.hero_ctrl == null) return;
 
         if (!ModConfig.Instance.shadeEnabled)
         {
-            DestroyShadeInstance();
+            DestroyShadeInstance(companion);
             return;
         }
 
-        if (helper != null)
+        if (companion.Body != null)
         {
-            try
+            var sc = companion.Controller;
+            if (sc != null)
             {
-                var sc = helper.GetComponent<ShadeController>();
-                if (sc != null)
-                {
-                    sc.TeleportToPosition(pos);
-                    // Hornet's renderer is a new instance in the new scene, so the layer/material
-                    // the Shade inherited from the previous one has to be re-derived.
-                    sc.ApplyRenderingSettings();
-                    sc.SuppressHazardDamage(SceneSpawnProtectionSeconds);
-                    sc.ApplySceneTransitionProtection(SceneSpawnProtectionSeconds);
-                    sc.TriggerSpawnEntrance();
-                    SaveShadeState(sc.GetCurrentNormalHP(), sc.GetMaxNormalHP(), sc.GetCurrentLifeblood(), sc.GetMaxLifeblood(), sc.GetShadeSoul(), sc.GetCanTakeDamage(), sc.GetBaseMaxHP());
-                    RequestShadeLoadoutRecompute();
-                }
-                else
-                {
-                    helper.transform.position = pos;
-                }
+                sc.TeleportToPosition(pos);
+                // Hornet's renderer is a new instance in the new scene, so the layer/material
+                // the Shade inherited from the previous one has to be re-derived.
+                sc.ApplyRenderingSettings();
+                sc.SuppressHazardDamage(SceneSpawnProtectionSeconds);
+                sc.ApplySceneTransitionProtection(SceneSpawnProtectionSeconds);
+                sc.TriggerSpawnEntrance();
+                SaveShadeState(companion, sc.GetCurrentNormalHP(), sc.GetMaxNormalHP(), sc.GetCurrentLifeblood(), sc.GetMaxLifeblood(), sc.GetShadeSoul(), sc.GetCanTakeDamage(), sc.GetBaseMaxHP());
+                RequestShadeLoadoutRecompute(companion.Id);
             }
-            catch { }
+            else
+            {
+                companion.Body.transform.position = pos;
+            }
+
             return;
         }
 
-        // Create fresh helper at the captured position
-        helper = new GameObject("HelperShade");
-        try { helper.tag = "Recoiler"; } catch { }
-        helper.transform.position = pos;
+        var body = new GameObject(companion.IsPrimary ? "HelperShade" : $"HelperShade{companion.Id}");
+        // Setting an undefined tag throws, and an untagged body silently loses pogo response.
+        try { body.tag = "Recoiler"; }
+        catch (UnityException e) { LogWarning($"Shade body could not take the Recoiler tag; pogo will not respond: {e.Message}"); }
+        body.transform.position = pos;
+        companion.Body = body;
 
-        var scNew = helper.AddComponent<ShadeController>();
+        var scNew = body.AddComponent<ShadeController>();
+        companion.Controller = scNew;
+        scNew.BindCompanion(companion);
         scNew.Init(gm.hero_ctrl.transform);
-        if (ShadeRuntime.TryGetPersistentState(out var savedHp, out var savedMax, out var savedLifeblood, out var savedLifebloodMax, out var savedSoul, out var savedCanTakeDamage, out var savedBaseMax))
+
+        var saved = companion.State;
+        if (saved.HasData)
         {
-            scNew.RestorePersistentState(savedHp, savedMax, savedBaseMax, savedLifeblood, savedLifebloodMax, savedSoul, savedCanTakeDamage);
+            scNew.RestorePersistentState(saved.CurrentHP, saved.MaxHP, saved.BaseMaxHP, saved.CurrentLifeblood, saved.LifebloodMax, saved.Soul, saved.CanTakeDamage);
         }
 
         scNew.SuppressHazardDamage(SceneSpawnProtectionSeconds);
         scNew.ApplySceneTransitionProtection(SceneSpawnProtectionSeconds);
 
-        var sr = helper.AddComponent<SpriteRenderer>();
+        var sr = body.AddComponent<SpriteRenderer>();
         ApplyShadeSpriteRendering(sr);
 
         scNew.TriggerSpawnEntrance();
-        RequestShadeLoadoutRecompute();
+        RequestShadeLoadoutRecompute(companion.Id);
     }
 
     internal static void SetShadeEnabled(bool enabled)
@@ -535,38 +549,49 @@ public partial class LegacyHelper : BaseUnityPlugin
 
     internal static void RefreshShadeSkin()
     {
-        try
+        foreach (var controller in ActiveShadeControllers())
         {
-            if (helper != null)
-            {
-                var controller = helper.GetComponent<ShadeController>();
-                controller?.ReloadSkinSprites();
-            }
-        }
-        catch
-        {
+            controller.ReloadSkinSprites();
         }
     }
 
+    /// <summary>
+    /// Applies a character to one companion slot and respawns its body, because the two characters
+    /// render through different backends and cannot be swapped on a live GameObject.
+    /// </summary>
+    internal static void SetShadeCharacter(int companionId, ShadeCharacterId character)
+    {
+        if (!ShadeCharacterManager.Select(companionId, character))
+        {
+            return;
+        }
+
+        if (!ShadeCompanionRegistry.TryGet(companionId, out var companion) || companion.Body == null)
+        {
+            return;
+        }
+
+        var position = companion.Body.transform.position;
+        DestroyShadeInstance(companion);
+        SpawnShadeAtPosition(companion, position);
+    }
+
+    /// <summary>Recomputes every spawned companion's charm loadout.</summary>
     internal static void RequestShadeLoadoutRecompute()
     {
-        try
+        foreach (var companion in ShadeCompanionRegistry.All)
         {
-            if (helper != null)
-            {
-                var controller = helper.GetComponent<ShadeController>();
-                if (controller != null)
-                {
-                    controller.QueueCharmLoadoutRecompute();
-                }
-            }
+            companion.Controller?.QueueCharmLoadoutRecompute();
         }
-        catch (Exception e)
+
+        ShadeSettingsMenu.NotifyCharmLoadoutChanged();
+    }
+
+    internal static void RequestShadeLoadoutRecompute(int companionId)
+    {
+        if (ShadeCompanionRegistry.TryGet(companionId, out var companion))
         {
-            if (ModConfig.Instance.logGeneral)
-            {
-                Instance?.Logger?.LogWarning($"Failed to recompute shade charm loadout: {e}");
-            }
+            companion.Controller?.QueueCharmLoadoutRecompute();
         }
 
         ShadeSettingsMenu.NotifyCharmLoadoutChanged();
@@ -574,8 +599,20 @@ public partial class LegacyHelper : BaseUnityPlugin
 
     internal static bool TryGetShadeController(out ShadeController controller)
     {
-        controller = helper != null ? helper.GetComponent<ShadeController>() : null;
+        controller = ShadeCompanionRegistry.Primary.Controller;
         return controller != null;
+    }
+
+    /// <summary>Every spawned companion's controller, in slot order.</summary>
+    internal static IEnumerable<ShadeController> ActiveShadeControllers()
+    {
+        foreach (var companion in ShadeCompanionRegistry.All)
+        {
+            if (companion.Controller != null)
+            {
+                yield return companion.Controller;
+            }
+        }
     }
 
     /// <summary>

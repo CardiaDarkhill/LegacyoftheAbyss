@@ -1161,7 +1161,7 @@ public partial class LegacyHelper
                 return 0;
             }
 
-            var charms = ShadeRuntime.Charms;
+            var charms = OwnCharms;
             if (charms != null && charms.IsOvercharmed)
             {
                 return Mathf.Max(1, Mathf.CeilToInt(baseDamage * 2f));

@@ -18,7 +18,11 @@ public partial class LegacyHelper
 
         private void Start()
         {
-            ActiveInstance = this;
+            if (!s_activeInstances.Contains(this))
+            {
+                s_activeInstances.Add(this);
+            }
+
             SetupPhysics();
             if (hornetTransform == null)
             {
@@ -126,9 +130,10 @@ public partial class LegacyHelper
 
         private void OnDestroy()
         {
-            if (ReferenceEquals(ActiveInstance, this))
+            s_activeInstances.Remove(this);
+            if (Companion != null && ReferenceEquals(Companion.Controller, this))
             {
-                ActiveInstance = null;
+                Companion.Controller = null;
             }
 
             // The synthesised input is static and outlives this component. Leaving a direction held
@@ -147,14 +152,7 @@ public partial class LegacyHelper
                 }
 
                 bool desiredDamageState = sceneProtectionActive ? sceneProtectionDesiredDamageState : canTakeDamage;
-                LegacyHelper.SaveShadeState(
-                    shadeHP,
-                    shadeMaxHP,
-                    shadeLifeblood,
-                    shadeLifebloodMax,
-                    shadeSoul,
-                    desiredDamageState,
-                    baseShadeMaxHP);
+                SaveOwnState(desiredDamageState);
             }
             catch
             {

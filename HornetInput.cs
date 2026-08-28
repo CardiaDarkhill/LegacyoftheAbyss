@@ -182,7 +182,7 @@ public static class HornetInput
                 return false;
             }
 
-            var shade = LegacyHelper.ShadeController.ActiveInstance;
+            var shade = LegacyHelper.ShadeController.PrimaryInstance;
             return shade != null ? shade.ShadeAiEnabled : cfg.shadeAiEnabled;
         }
         catch

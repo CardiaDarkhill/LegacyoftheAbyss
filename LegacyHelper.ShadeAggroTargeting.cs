@@ -55,27 +55,65 @@ internal static class ShadeAggroTargeting
     /// The Shade's GameObject if it is currently a legitimate target, else null. Fast enough to call
     /// as the first check on a per-frame path: it is a static reference plus a handful of bools.
     /// </summary>
-    internal static GameObject GetShadeTarget()
+    internal static bool HasEligibleShade()
     {
-        try
+        if (!ModConfig.Instance.shadeEnemyTargetingEnabled)
         {
-            if (!ModConfig.Instance.shadeEnemyTargetingEnabled)
-            {
-                return null;
-            }
-
-            var shade = LegacyHelper.ShadeController.ActiveInstance;
-            if (shade == null || !shade.IsAggroEligible)
-            {
-                return null;
-            }
-
-            return shade.gameObject;
+            return false;
         }
-        catch
+
+        var instances = LegacyHelper.ShadeController.ActiveInstances;
+        for (int i = 0; i < instances.Count; i++)
+        {
+            if (instances[i] != null && instances[i].IsAggroEligible)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The eligible Shade closest to <paramref name="enemy"/>, or null. With more than one Shade in
+    /// the scene an enemy aims at the nearest rather than at whichever happened to spawn first.
+    /// </summary>
+    internal static GameObject GetShadeTargetFor(GameObject enemy)
+    {
+        if (!ModConfig.Instance.shadeEnemyTargetingEnabled)
         {
             return null;
         }
+
+        var instances = LegacyHelper.ShadeController.ActiveInstances;
+        bool haveOrigin = enemy != null;
+        Vector2 origin = haveOrigin ? (Vector2)enemy.transform.position : Vector2.zero;
+
+        GameObject best = null;
+        float bestSqr = float.MaxValue;
+
+        for (int i = 0; i < instances.Count; i++)
+        {
+            var shade = instances[i];
+            if (shade == null || !shade.IsAggroEligible)
+            {
+                continue;
+            }
+
+            if (!haveOrigin)
+            {
+                return shade.gameObject;
+            }
+
+            float sqr = ((Vector2)shade.transform.position - origin).sqrMagnitude;
+            if (sqr < bestSqr)
+            {
+                bestSqr = sqr;
+                best = shade.gameObject;
+            }
+        }
+
+        return best;
     }
 
     /// <summary>

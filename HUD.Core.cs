@@ -160,12 +160,10 @@ public partial class SimpleHUD : MonoBehaviour
             {
                 if (shadeSoulOverride)
                 {
-                    try
+                    foreach (var sc in LegacyHelper.ShadeController.ActiveInstances)
                     {
-                        var sc = UnityEngine.Object.FindFirstObjectByType<LegacyHelper.ShadeController>();
                         if (sc != null) sc.shadeSoul = Mathf.Min(sc.shadeSoul + 11, sc.shadeSoulMax);
                     }
-                    catch { }
                     shadeSoul = Mathf.Min(shadeSoul + 11f, Mathf.Max(1f, shadeSoulMax));
                     if (ModConfig.Instance.logHud)
                     {
@@ -187,12 +185,10 @@ public partial class SimpleHUD : MonoBehaviour
             {
                 if (shadeSoulOverride)
                 {
-                    try
+                    foreach (var sc in LegacyHelper.ShadeController.ActiveInstances)
                     {
-                        var sc = UnityEngine.Object.FindFirstObjectByType<LegacyHelper.ShadeController>();
                         if (sc != null) sc.shadeSoul = Mathf.Max(sc.shadeSoul - 11, 0);
                     }
-                    catch { }
                     shadeSoul = Mathf.Max(shadeSoul - 11f, 0f);
                     if (ModConfig.Instance.logHud)
                     {
@@ -214,12 +210,10 @@ public partial class SimpleHUD : MonoBehaviour
             {
                 if (shadeSoulOverride)
                 {
-                    try
+                    foreach (var sc in LegacyHelper.ShadeController.ActiveInstances)
                     {
-                        var sc = UnityEngine.Object.FindFirstObjectByType<LegacyHelper.ShadeController>();
                         if (sc != null) sc.shadeSoul = 0;
                     }
-                    catch { }
                     shadeSoul = 0f;
                     if (ModConfig.Instance.logHud)
                     {

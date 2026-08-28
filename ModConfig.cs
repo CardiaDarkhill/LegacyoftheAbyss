@@ -294,6 +294,14 @@ public class ModConfig
 
     public string shadeSkin = "Default";
 
+    // Which character each companion slot wears, indexed by slot id (0 is the original Shade).
+    // Shorter than the companion count, or holding an unknown name, falls back to the Shade.
+    // Replace, not the default Auto: Newtonsoft appends into a collection that already holds
+    // items, so a field initializer here would prepend its defaults to every loaded config and
+    // shift every companion onto the wrong character.
+    [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+    public List<string> companionCharacters = new List<string>();
+
     // --- Shade rendering -------------------------------------------------------------
     // These have no pause-menu screen: they are read once at startup and applied whenever the
     // Shade next spawns, so editing config.json and relaunching is the whole workflow.
