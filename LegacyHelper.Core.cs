@@ -571,6 +571,8 @@ public partial class LegacyHelper : BaseUnityPlugin
             return;
         }
 
+        ShadeSettingsMenu.NotifyCharacterChanged();
+
         var position = companion.Body.transform.position;
         DestroyShadeInstance(companion);
         SpawnShadeAtPosition(companion, position);

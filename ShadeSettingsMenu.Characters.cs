@@ -521,6 +521,21 @@ public static partial class ShadeSettingsMenu
     /// Rebuilds the Characters screen in place after a character switch, because the skin rows
     /// beneath belong to the character and are created at build time.
     /// </summary>
+    /// <summary>
+    /// Rebuilds every screen whose contents depend on which character is equipped. The Controls
+    /// screen is one of them: the two characters do not share a control scheme, and it is built
+    /// once at launch.
+    /// </summary>
+    internal static void NotifyCharacterChanged()
+    {
+        RebuildCharactersScreen();
+
+        if (controlsScreen != null && charactersButtonTemplate != null)
+        {
+            BuildControlsMenu(charactersUi, controlsScreen, charactersButtonTemplate);
+        }
+    }
+
     private static void RebuildCharactersScreen()
     {
         if (skinsScreen == null || charactersButtonTemplate == null)

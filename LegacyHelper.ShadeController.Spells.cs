@@ -122,6 +122,34 @@ public partial class LegacyHelper
             catch { }
         }
 
+        /// <summary>The wind-up currently running, so a room change can stop it releasing.</summary>
+        private Coroutine activeSpellCast;
+
+        private void TrackSpellCast(Coroutine routine)
+        {
+            activeSpellCast = routine;
+        }
+
+        /// <summary>
+        /// Drops a spell that is still winding up. Called when the Shade is moved between rooms:
+        /// the controller is reused rather than rebuilt, so without this the coroutine picks up
+        /// again in the new room and fires from wherever the body was set down.
+        /// </summary>
+        internal void CancelSpellCasts()
+        {
+            if (activeSpellCast != null)
+            {
+                StopCoroutine(activeSpellCast);
+                activeSpellCast = null;
+            }
+
+            if (isCastingSpell)
+            {
+                isCastingSpell = false;
+                currentAnimFrames = null;
+            }
+        }
+
         private void HandleFire()
         {
             fireTimer -= Time.deltaTime;
@@ -134,7 +162,7 @@ public partial class LegacyHelper
             shadeSoul = Mathf.Max(0, shadeSoul - projectileSoulCost);
             PushSoulToHud();
             CheckHazardOverlap();
-            StartCoroutine(FireballCastRoutine());
+            TrackSpellCast(StartCoroutine(FireballCastRoutine()));
         }
 
         private void HandleShriek()
@@ -149,7 +177,7 @@ public partial class LegacyHelper
             shadeSoul = Mathf.Max(0, shadeSoul - shriekSoulCost);
             PushSoulToHud();
             CheckHazardOverlap();
-            StartCoroutine(ShriekCastRoutine());
+            TrackSpellCast(StartCoroutine(ShriekCastRoutine()));
         }
 
         private IEnumerator FireballCastRoutine()
@@ -242,7 +270,7 @@ public partial class LegacyHelper
             bool upgraded = IsDescendingDarkUpgraded();
             TryPlayQuakePrepareSfx();
             int dmg = ComputeSpellDamageMultiplier(3f, upgraded); // Descending Dark base 3x
-            StartCoroutine(DescendingDarkRoutine(dmg, upgraded));
+            TrackSpellCast(StartCoroutine(DescendingDarkRoutine(dmg, upgraded)));
         }
 
         // Spell progression helpers.

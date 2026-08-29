@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using BepInEx.Logging;
+using LegacyoftheAbyss.Shade;
 
 // The Controls screen: the binding rows and the navigation wiring between their columns.
 public static partial class ShadeSettingsMenu
@@ -315,22 +316,39 @@ public static partial class ShadeSettingsMenu
             return null;
         }
 
+        // The rows follow the equipped character, because the two do not share a control scheme.
+        // The Shade needs a button per slash direction: it flies, so it is always holding a
+        // movement direction and could never aim a slash with the stick. The Knight walks, aims
+        // with the stick as it does in Hollow Knight, and spends the freed down-slash button on
+        // Jump instead.
+        bool knightScheme = ShadeCharacterManager
+            .GetSelected(ShadeCompanionRegistry.PrimaryId).Moveset == ShadeMoveset.Knight;
+
         var bindingRowList = new List<(ShadeAction action, string label)>
         {
             (ShadeAction.MoveLeft, "Move Left"),
             (ShadeAction.MoveRight, "Move Right"),
             (ShadeAction.MoveUp, "Move Up"),
             (ShadeAction.MoveDown, "Move Down"),
-            (ShadeAction.Nail, "Side Slash"),
-            (ShadeAction.NailUp, "Up Slash"),
-            (ShadeAction.NailDown, "Down Slash"),
-            (ShadeAction.Fire, "Spellcast"),
-            (ShadeAction.Teleport, "Teleport"),
-            (ShadeAction.Focus, "Focus"),
-            (ShadeAction.Sprint, "Sprint / Dash"),
-            (ShadeAction.Jump, "Jump (Knight)"),
-            (ShadeAction.CommandShade, "Command Shade")
         };
+
+        if (knightScheme)
+        {
+            bindingRowList.Add((ShadeAction.Nail, "Attack"));
+            bindingRowList.Add((ShadeAction.NailDown, "Jump"));
+        }
+        else
+        {
+            bindingRowList.Add((ShadeAction.Nail, "Side Slash"));
+            bindingRowList.Add((ShadeAction.NailUp, "Up Slash"));
+            bindingRowList.Add((ShadeAction.NailDown, "Down Slash"));
+        }
+
+        bindingRowList.Add((ShadeAction.Fire, "Spellcast"));
+        bindingRowList.Add((ShadeAction.Teleport, "Teleport"));
+        bindingRowList.Add((ShadeAction.Focus, "Focus"));
+        bindingRowList.Add((ShadeAction.Sprint, knightScheme ? "Dash" : "Sprint"));
+        bindingRowList.Add((ShadeAction.CommandShade, "Command Shade"));
 
         // Only surfaced while the "Debug Keys" toggle in Debug Options is on -- these bind
         // the developer HP/soul cheats in SimpleHUD.HandleDebugKeys, otherwise invisible.

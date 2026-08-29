@@ -732,6 +732,12 @@ public partial class LegacyHelper
                 // New scene: the previous scene's colliders are gone along with their
                 // ignore state, so the memo must not carry over.
                 ResetCollisionIgnoreMemo();
+
+                // The controller survives a room change - the body is teleported, not rebuilt - so a
+                // spell cast still in its wind-up coroutine resumes on the other side and releases
+                // wherever the Shade has been put down. That is the stray Shade Soul that appeared
+                // across the room on every transition.
+                CancelSpellCasts();
             }
             sceneProtectionActive = true;
             sceneProtectionDesiredDamageState = !assistModeEnabled;

@@ -9,6 +9,10 @@ public partial class LegacyHelper
         /// <summary>Base tint of a wisp before the SOUL-driven alpha lift. Near-black with a faint violet cast.</summary>
         private static readonly Color ShadowWispColor = new Color(0.05f, 0.03f, 0.08f, 0.62f);
 
+        /// <summary>Upward drift of a wisp. Reversed briefly by the Shade Cloak absorb flourish.</summary>
+        private const float ShadowWispRiseMin = 0.25f;
+        private const float ShadowWispRiseMax = 0.6f;
+
         private const float ShadowWispMinSize = 0.20f;
         private const float ShadowWispMaxSize = 0.46f;
 
@@ -80,7 +84,7 @@ public partial class LegacyHelper
                 // 1.5x transform scale.
                 velocity.space = ParticleSystemSimulationSpace.World;
                 velocity.x = 0f;
-                velocity.y = new ParticleSystem.MinMaxCurve(0.25f, 0.6f);
+                velocity.y = new ParticleSystem.MinMaxCurve(ShadowWispRiseMin, ShadowWispRiseMax);
                 velocity.z = 0f;
 
                 var color = shadowParticlePs.colorOverLifetime;
@@ -266,7 +270,11 @@ public partial class LegacyHelper
                 return;
             }
 
-            float target = ShadeVisualTuning.SoulFraction(shadeSoul, shadeSoulMax);
+            // Once Shade Cloak is unlocked the wisps report its cooldown instead of SOUL, at full
+            // strength - see UpdateShadeCloakCooldown.
+            float target = TryGetShadeCloakParticleDrive(out float cloakDrive)
+                ? cloakDrive
+                : ShadeVisualTuning.SoulFraction(shadeSoul, shadeSoulMax);
             shadowSoulFraction = Mathf.MoveTowards(
                 shadowSoulFraction,
                 target,
@@ -295,6 +303,14 @@ public partial class LegacyHelper
                 catch
                 {
                 }
+            }
+
+            if (shadeCloakAbsorbTimer <= 0f && shadowParticlePs != null)
+            {
+                // Put back what the absorb flourish reversed, or the wisps stay sucked inward.
+                var restore = shadowParticlePs.velocityOverLifetime;
+                restore.radial = 0f;
+                restore.y = new ParticleSystem.MinMaxCurve(ShadowWispRiseMin, ShadowWispRiseMax);
             }
 
             if (!shadowParticlePs.isEmitting)

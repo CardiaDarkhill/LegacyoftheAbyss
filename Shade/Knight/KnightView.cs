@@ -20,7 +20,10 @@ namespace LegacyoftheAbyss.Shade.Knight
         internal const string ClipDash = "Dash";
         internal const string ClipWallSlide = "Wall Slide";
         internal const string ClipDoubleJump = "Double Jump";
-        internal const string ClipCollect = "Collect Normal";
+        internal const string ClipCollect = "Collect Normal 1";
+        internal const string ClipShadeCloak = "Shadow Dash";
+        internal const string ClipShadeCloakReady = "Shadow Recharge";
+        internal const string ClipMap = "Map Open";
 
         private static readonly System.Collections.Generic.HashSet<string> s_missingClips = new();
 
@@ -81,6 +84,16 @@ namespace LegacyoftheAbyss.Shade.Knight
                 return false;
             }
 
+            // The prefab ships its animator switched off - it expects Hollow Knight's own
+            // HeroController to drive it. Without this the clips resolve and Play is accepted, but
+            // tk2d never ticks them on, so the Knight holds whatever frame it was left on and reads
+            // as having no animation at all.
+            animator.enabled = true;
+            if (!animator.gameObject.activeSelf)
+            {
+                animator.gameObject.SetActive(true);
+            }
+
             // The body transform is already scaled and the rig is its child, so the prefab's own
             // scale is the baseline - scaling by the body's own factor again multiplied the two and
             // produced a Knight several times the intended size. What the prefab ships at still
@@ -133,6 +146,14 @@ namespace LegacyoftheAbyss.Shade.Knight
                 Destroy(fsm);
             }
 
+            // Before the Rigidbody2D goes: this one holds a reference to it and calls IsAwake every
+            // frame, so removing the body underneath it threw a NullReferenceException per frame
+            // for the rest of the session.
+            foreach (var particleScale in instance.GetComponentsInChildren<SetParticleScale>(true))
+            {
+                Destroy(particleScale);
+            }
+
             foreach (var body in instance.GetComponentsInChildren<Rigidbody2D>(true))
             {
                 Destroy(body);
@@ -167,6 +188,79 @@ namespace LegacyoftheAbyss.Shade.Knight
 
         /// <summary>Whether the rig is currently drawing. The Shade answers this with its renderer.</summary>
         internal bool IsVisible => rig != null && rig.gameObject.activeSelf;
+
+        // Monarch Wings ride on their own child of the rig, which DisableStrayRenderers switched off
+        // along with the glow. Found by name because the rig gives no other handle on it; a miss
+        // costs the flourish and is reported once rather than throwing.
+        private static readonly string[] WingNames = { "Wings", "Double Jump", "Monarch Wings", "dj_wings" };
+        private Transform? wings;
+        private bool wingsResolved;
+        private float wingsHideAt;
+
+        /// <summary>
+        /// Shows the Monarch Wings for the length of the double jump. They are part of the rig
+        /// rather than a separate effect, so this re-enables what the strip pass turned off instead
+        /// of building anything.
+        /// </summary>
+        internal void FlashMonarchWings(float seconds = 0.45f)
+        {
+            var found = ResolveWings();
+            if (found == null)
+            {
+                return;
+            }
+
+            foreach (var renderer in found.GetComponentsInChildren<Renderer>(true))
+            {
+                renderer.enabled = true;
+            }
+
+            found.gameObject.SetActive(true);
+            wingsHideAt = Time.time + seconds;
+        }
+
+        private Transform? ResolveWings()
+        {
+            if (wingsResolved)
+            {
+                return wings;
+            }
+
+            wingsResolved = true;
+            if (rig == null)
+            {
+                return null;
+            }
+
+            foreach (var child in rig.GetComponentsInChildren<Transform>(true))
+            {
+                foreach (var name in WingNames)
+                {
+                    if (string.Equals(child.name, name, System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        wings = child;
+                        return wings;
+                    }
+                }
+            }
+
+            LegacyHelper.LogWarning(
+                $"Knight Monarch Wings found none of: {string.Join(", ", WingNames)}. "
+                + "Check the Knight bundle row on a bug report for the child names the rig carries.");
+            return null;
+        }
+
+        private void Update()
+        {
+            if (wings != null && wingsHideAt > 0f && Time.time >= wingsHideAt)
+            {
+                wingsHideAt = 0f;
+                foreach (var renderer in wings.GetComponentsInChildren<Renderer>(true))
+                {
+                    renderer.enabled = false;
+                }
+            }
+        }
 
         internal void SetVisible(bool visible)
         {
@@ -236,7 +330,10 @@ namespace LegacyoftheAbyss.Shade.Knight
                 return;
             }
 
-            if (!restart && currentClip == clipName && animator.IsPlaying(clipName))
+            // Guarded on what was last asked for rather than on IsPlaying: if the animator ever
+            // reports not-playing while holding the clip, an IsPlaying guard re-Plays every frame
+            // and the animation restarts from frame zero forever, which looks like a frozen sprite.
+            if (!restart && currentClip == clipName)
             {
                 return;
             }

@@ -134,6 +134,15 @@ namespace LegacyoftheAbyss.Diagnostics
         /// broken - so the reason travels with the report rather than being guessed at.
         /// </summary>
         public string? CoopCamera;
+
+        /// <summary>
+        /// What the Knight's asset bundle turned out to contain. Recorded here rather than only
+        /// logged because it is written once at first load and the log ring does not keep it.
+        /// </summary>
+        public string? KnightBundle;
+
+        /// <summary>Which Knight sound each effect resolved to, or MISSING.</summary>
+        public string? KnightAudio;
     }
 
     /// <summary>
@@ -174,6 +183,8 @@ namespace LegacyoftheAbyss.Diagnostics
             TryRun(() => state.Scene = SceneManager.GetActiveScene().name);
             TryRun(() => state.MenuSliderTemplate = ShadeSettingsMenu.LastSliderTemplateDescription);
             TryRun(() => state.CoopCamera = LegacyHelper.CompanionCameraBias.DescribeState());
+            TryRun(() => state.KnightBundle = LegacyoftheAbyss.Shade.Knight.KnightAssets.Inventory);
+            TryRun(() => state.KnightAudio = LegacyoftheAbyss.Shade.Knight.KnightAudio.Report);
 
             var gameManager = MenuStateUtility.TryGetGameManager();
             if (gameManager != null)

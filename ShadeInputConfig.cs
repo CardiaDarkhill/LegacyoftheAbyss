@@ -18,8 +18,6 @@ public enum ShadeAction
     Teleport,
     Focus,
     Sprint,
-    /// <summary>Only the Knight uses this - the Shade flies and has nothing to jump with.</summary>
-    Jump,
     /// <summary>
     /// Opens the targeting reticle that tells an AI-driven Shade where to stand. Bound on Hornet's
     /// side of the controls rather than the Shade's, because in AI mode nobody is holding the
@@ -119,7 +117,6 @@ public class ShadeInputConfig
     public ShadeBinding teleport = new();
     public ShadeBinding focus = new();
     public ShadeBinding sprint = new();
-    public ShadeBinding jump = new();
     public ShadeBinding commandShade = new();
     public ShadeBinding debugDamageShade = new();
     public ShadeBinding debugHealShade = new();
@@ -150,7 +147,6 @@ public class ShadeInputConfig
         teleport = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.K), ShadeBindingOption.None());
         focus = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.H), ShadeBindingOption.None());
         sprint = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.LeftShift), ShadeBindingOption.None());
-        jump = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.L), ShadeBindingOption.None());
         // Middle mouse and the left stick of the *first* pad: this is Hornet's control, not the
         // Shade player's, so it is pinned to device 0 rather than following controllerDeviceIndex.
         commandShade = new ShadeBinding(
@@ -183,7 +179,6 @@ public class ShadeInputConfig
         teleport = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickButton), ShadeBindingOption.None());
         focus = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action2), ShadeBindingOption.None());
         sprint = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightTrigger), ShadeBindingOption.None());
-        jump = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftBumper), ShadeBindingOption.None());
         // Every pad button worth having is spoken for, so the AI toggle keeps its keyboard binding
         // rather than displacing one. A preset that left this holding the previous preset's value
         // would be worse than leaving it plainly on the keyboard.
@@ -208,7 +203,6 @@ public class ShadeInputConfig
         teleport = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad3), ShadeBindingOption.None());
         focus = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.KeypadEnter), ShadeBindingOption.None());
         sprint = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad0), ShadeBindingOption.None());
-        jump = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.KeypadPeriod), ShadeBindingOption.None());
         commandShade = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Mouse2), ShadeBindingOption.None());
     }
 
@@ -233,7 +227,6 @@ public class ShadeInputConfig
         teleport = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickButton), ShadeBindingOption.None());
         focus = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action2), ShadeBindingOption.None());
         sprint = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightTrigger), ShadeBindingOption.None());
-        jump = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftBumper), ShadeBindingOption.None());
         // The Shade owns pad 0 under this preset, so its left stick click is already Teleport.
         // Hornet is on the keyboard here, which leaves middle mouse as the whole binding.
         commandShade = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Mouse2), ShadeBindingOption.None());
@@ -301,7 +294,6 @@ public class ShadeInputConfig
         ShadeAction.Teleport => teleport,
         ShadeAction.Focus => focus,
         ShadeAction.Sprint => sprint,
-        ShadeAction.Jump => jump,
         ShadeAction.CommandShade => commandShade,
         ShadeAction.DebugDamageShade => debugDamageShade,
         ShadeAction.DebugHealShade => debugHealShade,
@@ -347,9 +339,6 @@ public class ShadeInputConfig
                 break;
             case ShadeAction.Sprint:
                 sprint = binding;
-                break;
-            case ShadeAction.Jump:
-                jump = binding;
                 break;
             case ShadeAction.CommandShade:
                 commandShade = binding;
@@ -407,7 +396,6 @@ public class ShadeInputConfig
         clone.teleport = CloneBinding(teleport);
         clone.focus = CloneBinding(focus);
         clone.sprint = CloneBinding(sprint);
-        clone.jump = CloneBinding(jump);
         clone.commandShade = CloneBinding(commandShade);
         clone.debugDamageShade = CloneBinding(debugDamageShade);
         clone.debugHealShade = CloneBinding(debugHealShade);
@@ -435,7 +423,6 @@ public class ShadeInputConfig
         teleport = CloneBinding(other.teleport);
         focus = CloneBinding(other.focus);
         sprint = CloneBinding(other.sprint);
-        jump = CloneBinding(other.jump);
         commandShade = CloneBinding(other.commandShade);
         debugDamageShade = CloneBinding(other.debugDamageShade);
         debugHealShade = CloneBinding(other.debugHealShade);

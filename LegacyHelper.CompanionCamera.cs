@@ -91,14 +91,14 @@ public partial class LegacyHelper
 
         private const float SmoothTime = 0.35f;
 
-        /// <summary>
-        /// How much of the way to the midpoint the camera goes. 1 frames both equally; less keeps
-        /// the shot weighted toward Hornet, who is the one whose room this is.
-        /// </summary>
-        private const float MidpointShare = 0.5f;
-
         /// <summary>Kept clear at the frame edge so neither character rides the very edge.</summary>
         private const float EdgeMargin = 3.5f;
+
+        /// <summary>
+        /// The furthest the shot may drift off Hornet, as a share of the frame. A fixed margin let
+        /// her be pushed most of the way to the edge once the companion was far enough out.
+        /// </summary>
+        private const float MaxLeanFraction = 0.45f;
 
         // The unzoomed field of view, taken the first time the camera is widened so it can be put
         // back exactly. Captured lazily because the game sets it per scene.
@@ -106,13 +106,21 @@ public partial class LegacyHelper
         private static bool s_haveBaseFieldOfView;
         private static float s_lastWrittenFieldOfView;
 
+        // The projection is what actually widens the shot; see ApplyZoom.
+        private static Matrix4x4 s_baseProjection;
+        private static Matrix4x4 s_lastWrittenProjection;
+        private static bool s_haveBaseProjection;
+        private static bool s_projectionScaled;
+        private static bool s_cullHooked;
+        private static float s_wantedZoom = 1f;
+        private static float s_appliedZoom = 1f;
+
         // Why the lean is or is not doing anything, for the bug reporter. Every stage below can
         // decline for a legitimate reason, and from outside they all look identical to the feature
         // being broken - which is exactly how this shipped inert twice.
         private static bool s_patchApplied;
         private static bool s_patchUnavailable;
         private static string s_lastDecision = "not evaluated yet";
-        private static string s_zoomNote = string.Empty;
 
         internal static void MarkPatchApplied() => s_patchApplied = true;
 
@@ -132,7 +140,7 @@ public partial class LegacyHelper
             }
 
             return FormattableString.Invariant(
-                $"enabled={ModConfig.Instance.companionCameraBiasEnabled}, offset={s_offset}, zoom={s_zoom:0.###}, {s_lastDecision}{s_zoomNote}");
+                $"enabled={ModConfig.Instance.companionCameraBiasEnabled}, offset={s_offset}, zoom wanted={s_zoom:0.###} applied={(s_projectionScaled ? s_appliedZoom : 1f):0.###}, {s_lastDecision}");
         }
 
         internal static void Reset()
@@ -179,26 +187,91 @@ public partial class LegacyHelper
 
             Vector2 separation = (Vector2)companion.transform.position - (Vector2)heroPosition;
 
-            // Lean halfway toward the companion, capped so neither character leaves the shot.
-            float maxX = Mathf.Max(0f, view.width * 0.5f - EdgeMargin);
-            float maxY = Mathf.Max(0f, view.height * 0.5f - EdgeMargin);
-            var offset = new Vector2(
-                Mathf.Clamp(separation.x * MidpointShare, -maxX, maxX),
-                Mathf.Clamp(separation.y * MidpointShare, -maxY, maxY));
+            float halfWidth = view.width * 0.5f;
+            float halfHeight = view.height * 0.5f;
 
-            // With the shot centred between them each sits half the separation from the middle, so
-            // widen only once that no longer fits - and never by more than the configured share.
-            float neededHalfWidth = Mathf.Abs(separation.x) * 0.5f + EdgeMargin;
-            float neededHalfHeight = Mathf.Abs(separation.y) * 0.5f + EdgeMargin;
-            float zoom = Mathf.Max(
-                neededHalfWidth / Mathf.Max(0.001f, view.width * 0.5f),
-                neededHalfHeight / Mathf.Max(0.001f, view.height * 0.5f));
+            // How far from centre a character can sit and still read as comfortably on screen.
+            float comfortX = Mathf.Max(0.001f, halfWidth - EdgeMargin);
+            float comfortY = Mathf.Max(0.001f, halfHeight - EdgeMargin);
+
+            // Lean only by what is needed to bring the companion inside that, rather than by half
+            // the separation regardless. Leaning while both already fit is what pulled the shot off
+            // a level boundary and wasted the room above Hornet.
+            float wantedX = Mathf.Max(0f, Mathf.Abs(separation.x) - comfortX) * Mathf.Sign(separation.x);
+            float wantedY = Mathf.Max(0f, Mathf.Abs(separation.y) - comfortY) * Mathf.Sign(separation.y);
+
+            // Capped as a share of the frame rather than by a fixed margin, so Hornet stays well
+            // inside the shot instead of being pushed most of the way to the edge.
+            float maxLeanX = halfWidth * MaxLeanFraction;
+            float maxLeanY = halfHeight * MaxLeanFraction;
+            var offset = new Vector2(
+                Mathf.Clamp(wantedX, -maxLeanX, maxLeanX),
+                Mathf.Clamp(wantedY, -maxLeanY, maxLeanY));
+
+            // Whatever the capped lean could not cover, widen the view to cover instead.
+            float companionFromCentreX = Mathf.Abs(separation.x - offset.x);
+            float companionFromCentreY = Mathf.Abs(separation.y - offset.y);
+            float zoom = Mathf.Max(companionFromCentreX / comfortX, companionFromCentreY / comfortY);
 
             float maxZoom = 1f + Mathf.Max(0f, ModConfig.Instance.companionCameraMaxZoom);
             zoom = Mathf.Clamp(zoom, 1f, maxZoom);
 
             s_lastDecision = FormattableString.Invariant($"leaning by {offset}, separation {separation}");
             return new Framing { Offset = offset, ZoomScale = zoom };
+        }
+
+        /// <summary>
+        /// How far from Hornet a companion may roam before it genuinely cannot be shown any more.
+        /// <para>
+        /// This is the box the camera can <em>eventually</em> cover, not the one it is covering
+        /// right now: the furthest it will lean, plus the widest it will zoom. The leash has to use
+        /// this rather than the live frame, or it stops the companion at the current edge - which
+        /// is the very thing that would have made the camera lean and zoom further. That deadlock
+        /// is what "fighting the leash" was.
+        /// </para>
+        /// <para>
+        /// So the companion briefly outruns the visible frame while the camera catches up over the
+        /// smoothing time, which is the intended trade: the alternative is it never gets the room
+        /// at all.
+        /// </para>
+        /// </summary>
+        internal static bool TryGetCompanionRoam(Vector3 heroPosition, Vector2 extents, float margin, out Rect roam)
+        {
+            roam = default;
+            if (!TryGetCameraViewBounds(heroPosition, out var view))
+            {
+                return false;
+            }
+
+            // The live frame already carries whatever zoom is applied; take it back out so the
+            // headroom is measured once rather than compounding with itself.
+            float applied = s_projectionScaled ? Mathf.Max(0.001f, s_appliedZoom) : 1f;
+            float baseHalfWidth = view.width * 0.5f / applied;
+            float baseHalfHeight = view.height * 0.5f / applied;
+
+            float maxZoom = ModConfig.Instance.companionCameraBiasEnabled
+                ? 1f + Mathf.Max(0f, ModConfig.Instance.companionCameraMaxZoom)
+                : 1f;
+            float lean = ModConfig.Instance.companionCameraBiasEnabled ? MaxLeanFraction : 0f;
+
+            // Measured against the frame as it will be once widened, not as it is now: the lean is
+            // capped as a share of the live frame, so a lean cap taken from the unzoomed one gave
+            // away a slice of reach that the zoom was about to provide.
+            float zoomedHalfWidth = baseHalfWidth * maxZoom;
+            float zoomedHalfHeight = baseHalfHeight * maxZoom;
+
+            float reachX = zoomedHalfWidth * lean + (zoomedHalfWidth - margin - extents.x);
+            float reachY = zoomedHalfHeight * lean + (zoomedHalfHeight - margin - extents.y);
+
+            reachX = Mathf.Max(0f, reachX);
+            reachY = Mathf.Max(0f, reachY);
+
+            roam = new Rect(
+                heroPosition.x - reachX,
+                heroPosition.y - reachY,
+                reachX * 2f,
+                reachY * 2f);
+            return true;
         }
 
         /// <summary>
@@ -240,22 +313,31 @@ public partial class LegacyHelper
         }
 
         /// <summary>
-        /// Widens the view by raising the camera's field of view.
+        /// Widens the view.
         /// <para>
-        /// Field of view rather than pulling the camera back, because the darkness pass copies
-        /// <c>mainCamera.fieldOfView</c> onto its own camera every frame - so the cutout that lets
-        /// the characters be seen in a dark room widens with the shot for free. Moving the camera
-        /// instead would leave the two disagreeing.
+        /// Field of view alone does not do it: tk2d assigns <c>projectionMatrix</c> outright in
+        /// <c>UpdateCameraMatrix</c>, and an explicitly set projection makes <c>fieldOfView</c>
+        /// inert. The bug reporter caught exactly that - "fov re-baselined" every frame while the
+        /// requested zoom sat at its cap doing nothing. So the projection itself is scaled, at
+        /// <c>onPreCull</c>, the last point before the camera draws and after everything that
+        /// writes it has run.
+        /// </para>
+        /// <para>
+        /// The field of view is still written alongside, because the darkness pass copies
+        /// <c>mainCamera.fieldOfView</c> onto its own camera; that keeps the darkness cutout the
+        /// size of the widened shot rather than lighting the wrong area.
         /// </para>
         /// </summary>
         private static void ApplyZoom(float scale)
         {
-            var cameras = GameCameras.instance;
-            var camera = cameras != null ? cameras.mainCamera : null;
+            var camera = ResolveMainCamera();
             if (camera == null)
             {
                 return;
             }
+
+            EnsureCullHook();
+            s_wantedZoom = scale;
 
             if (!s_haveBaseFieldOfView)
             {
@@ -265,11 +347,9 @@ public partial class LegacyHelper
             }
             else if (!Mathf.Approximately(camera.fieldOfView, s_lastWrittenFieldOfView))
             {
-                // Something else owns the field of view - tk2d rewrites it in UpdateCameraMatrix,
-                // and the game changes it per scene. Re-baseline off whatever it set rather than
-                // stacking our zoom on top of a value we did not write, and say so in the report.
+                // Whoever owns the field of view has written it again; re-baseline off their value
+                // rather than stacking on one we did not write.
                 s_baseFieldOfView = camera.fieldOfView;
-                s_zoomNote = ", fov re-baselined (something else is writing it)";
             }
 
             // Visible height at a given depth goes with tan(fov/2), so scaling the view means
@@ -281,19 +361,89 @@ public partial class LegacyHelper
             s_lastWrittenFieldOfView = target;
         }
 
-        private static void RestoreFieldOfView()
+        private static Camera ResolveMainCamera()
         {
-            if (!s_haveBaseFieldOfView)
+            var cameras = GameCameras.instance;
+            return cameras != null ? cameras.mainCamera : null;
+        }
+
+        private static void EnsureCullHook()
+        {
+            if (s_cullHooked)
             {
                 return;
             }
 
-            var cameras = GameCameras.instance;
-            var camera = cameras != null ? cameras.mainCamera : null;
-            if (camera != null)
+            Camera.onPreCull += ApplyProjectionZoom;
+            s_cullHooked = true;
+        }
+
+        /// <summary>
+        /// Scales the projection the frame is actually drawn with. Fires for every camera, so it
+        /// checks it has the gameplay one; re-bases whenever the matrix is not the one it last
+        /// wrote, so a recomputed projection replaces the zoom rather than compounding with it.
+        /// </summary>
+        private static void ApplyProjectionZoom(Camera camera)
+        {
+            if (camera == null || camera != ResolveMainCamera())
+            {
+                return;
+            }
+
+            Matrix4x4 current = camera.projectionMatrix;
+            if (!s_haveBaseProjection || current != s_lastWrittenProjection)
+            {
+                s_baseProjection = current;
+                s_haveBaseProjection = true;
+            }
+
+            if (Mathf.Approximately(s_wantedZoom, 1f))
+            {
+                if (s_projectionScaled)
+                {
+                    camera.projectionMatrix = s_baseProjection;
+                    s_lastWrittenProjection = s_baseProjection;
+                    s_projectionScaled = false;
+                    s_appliedZoom = 1f;
+                }
+
+                return;
+            }
+
+            // Widening the frustum is dividing the two scale terms: more world at the same depth.
+            // Both axes together, so the aspect is untouched.
+            Matrix4x4 scaled = s_baseProjection;
+            scaled.m00 = s_baseProjection.m00 / s_wantedZoom;
+            scaled.m11 = s_baseProjection.m11 / s_wantedZoom;
+
+            camera.projectionMatrix = scaled;
+            s_lastWrittenProjection = scaled;
+            s_projectionScaled = true;
+            s_appliedZoom = s_wantedZoom;
+        }
+
+        private static void RestoreFieldOfView()
+        {
+            s_wantedZoom = 1f;
+
+            var camera = ResolveMainCamera();
+            if (camera == null)
+            {
+                return;
+            }
+
+            if (s_haveBaseFieldOfView)
             {
                 camera.fieldOfView = s_baseFieldOfView;
                 s_lastWrittenFieldOfView = s_baseFieldOfView;
+            }
+
+            if (s_projectionScaled && s_haveBaseProjection)
+            {
+                camera.projectionMatrix = s_baseProjection;
+                s_lastWrittenProjection = s_baseProjection;
+                s_projectionScaled = false;
+                s_appliedZoom = 1f;
             }
         }
     }

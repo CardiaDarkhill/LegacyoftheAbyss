@@ -85,7 +85,72 @@ namespace LegacyoftheAbyss.Shade.Knight
             LoadShaderMap();
             PreparePrefabs();
             BeginShaderScan();
+            LogBundleContents();
             return true;
+        }
+
+        /// <summary>What the bundle turned out to contain, for <c>BugReportState</c>.</summary>
+        internal static string Inventory { get; private set; } = "bundle not loaded";
+
+        /// <summary>
+        /// Records the animation, audio and prefab names the bundle carries. Kept on the state
+        /// snapshot rather than only logged: this happens once at first load, and the log ring is a
+        /// few hundred lines, so by the time anyone files a report it has long scrolled away -
+        /// which is exactly what happened the first time it was asked for.
+        /// </summary>
+        private static void LogBundleContents()
+        {
+            if (s_bundle == null)
+            {
+                return;
+            }
+
+            var clips = new List<string>();
+            foreach (var prefab in s_prefabs.Values)
+            {
+                foreach (var animator in prefab.GetComponentsInChildren<tk2dSpriteAnimator>(true))
+                {
+                    var library = animator.Library;
+                    if (library?.clips == null)
+                    {
+                        continue;
+                    }
+
+                    foreach (var clip in library.clips)
+                    {
+                        if (clip != null && !string.IsNullOrEmpty(clip.name) && !clips.Contains(clip.name))
+                        {
+                            clips.Add(clip.name);
+                        }
+                    }
+                }
+            }
+
+            clips.Sort();
+
+            var audio = new List<string>();
+            foreach (var clip in s_bundle.LoadAllAssets<AudioClip>())
+            {
+                if (clip != null && !string.IsNullOrEmpty(clip.name))
+                {
+                    audio.Add(clip.name);
+                }
+            }
+
+            audio.Sort();
+
+            var roots = new List<string>(s_prefabs.Keys);
+            roots.Sort();
+
+            Inventory =
+                $"anims ({clips.Count}): {string.Join(", ", clips)}"
+                + $" | audio ({audio.Count}): {string.Join(", ", audio)}"
+                + $" | prefabs ({roots.Count}): {string.Join(", ", roots)}";
+
+            if (ModConfig.Instance.logShade)
+            {
+                LegacyHelper.LogInfo("Knight bundle contents: " + Inventory);
+            }
         }
 
         /// <summary>

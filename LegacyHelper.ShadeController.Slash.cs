@@ -156,17 +156,33 @@ public partial class LegacyHelper
             nailTimer -= Time.deltaTime;
             if (nailTimer > 0f) return;
 
-            float forcedV = 0f;
-            bool pressed = ShadeInput.WasActionPressed(ShadeAction.Nail);
-            if (ShadeInput.WasActionPressed(ShadeAction.NailUp))
+            float forcedV;
+            bool pressed;
+
+            if (UsesGroundedMovement)
             {
-                pressed = true;
-                forcedV = 1f;
+                // The Knight aims its slash with the movement stick, as it does in Hollow Knight and
+                // as Hornet does here. The Shade needs its own up/down buttons because a flying
+                // character is always holding a direction; a walking one is not, so the compromise
+                // is unnecessary - and it frees the down-slash button to be Jump.
+                pressed = ShadeInput.WasActionPressed(ShadeAction.Nail);
+                float aim = capturedMoveInput.y;
+                forcedV = aim > 0.5f ? 1f : (aim < -0.5f ? -1f : 0f);
             }
-            else if (ShadeInput.WasActionPressed(ShadeAction.NailDown))
+            else
             {
-                pressed = true;
-                forcedV = -1f;
+                forcedV = 0f;
+                pressed = ShadeInput.WasActionPressed(ShadeAction.Nail);
+                if (ShadeInput.WasActionPressed(ShadeAction.NailUp))
+                {
+                    pressed = true;
+                    forcedV = 1f;
+                }
+                else if (ShadeInput.WasActionPressed(ShadeAction.NailDown))
+                {
+                    pressed = true;
+                    forcedV = -1f;
+                }
             }
             if (pressed)
             {

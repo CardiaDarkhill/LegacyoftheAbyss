@@ -22,6 +22,13 @@ controls it; the reasoning belongs in the commit and the code.
   the camera to stay on Hornet; `companionCameraMaxZoom` sets how far it may widen.
 - The Knight carries a brighter light than the Shade. `knightLightRadiusMultiplier` and
   `knightLightIntensityMultiplier` control it.
+- The Knight controls like the Knight: attacks are aimed with the movement stick, the freed
+  down-slash button is Jump, and the Controls screen shows the scheme for whichever character is
+  equipped. It takes out its own map on the quick map, and has its Monarch Wings and Shade Cloak
+  animations from Hollow Knight.
+- Shade Cloak now has a cooldown, and the shadow wisps are its readout: they gather while it
+  recharges and are drawn back into the body the moment it is ready. The Shade adopts the same tell
+  once it reaches Shade Cloak.
 - Shade AI is unavailable while the Knight is equipped and reads as such in the menu — it steers by
   synthesising input, which cannot drive a character that has to jump and climb. Your setting is
   kept and returns with the Shade.

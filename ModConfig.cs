@@ -350,8 +350,10 @@ public class ModConfig
     // no viewport support - so confining the Knight to the visible area is what stands in for it.
     public bool knightCameraLeashEnabled = true;
     // World units held back from the screen edge, so the Knight stops just inside it rather than
-    // half off it.
-    public float knightCameraLeashMargin = 1.5f;
+    // half off it. Small on purpose: this margin plus the Knight's own half-height is the band of
+    // visible screen it can never reach, and the frame is much shorter than it is wide, so a
+    // generous value reads as a wall with room clearly left above it.
+    public float knightCameraLeashMargin = 0.75f;
     // Pull the camera toward the midpoint between Hornet and whichever companion is out, so both
     // stay on screen for longer before the leash above bites. Biases the camera's follow target, so
     // scene bounds, lock areas and the game's own damping all still apply. Applies to the Shade as

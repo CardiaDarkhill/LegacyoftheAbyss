@@ -367,6 +367,16 @@ namespace LegacyoftheAbyss.Diagnostics
                 Row(builder, "Co-op camera", state.CoopCamera);
             }
 
+            if (!string.IsNullOrEmpty(state.KnightBundle))
+            {
+                Row(builder, "Knight bundle", state.KnightBundle);
+            }
+
+            if (!string.IsNullOrEmpty(state.KnightAudio))
+            {
+                Row(builder, "Knight audio", state.KnightAudio);
+            }
+
             builder.AppendLine();
 
             var hero = state.Hero;

@@ -17,6 +17,12 @@ public partial class LegacyHelper
         private const float KnightDashSpeed = 20f;
         private const float KnightDashSeconds = 0.25f;
         private const float KnightDashCooldownSeconds = 0.6f;
+
+        /// <summary>
+        /// Shade Cloak's own cooldown, separate from and longer than the plain dash's, as it is in
+        /// Hollow Knight. The shadow particles are its readout: see ShadeCloakOnCooldown.
+        /// </summary>
+        private const float ShadeCloakCooldownSeconds = 1.5f;
         private const float KnightWallSlideSpeed = 6f;
         private const float KnightWallJumpSpeed = 13f;
         private const float KnightWallJumpLockSeconds = 0.18f;
@@ -24,6 +30,13 @@ public partial class LegacyHelper
         private const float KnightGroundProbe = 0.12f;
         private const float KnightCoyoteSeconds = 0.09f;
         private const float KnightJumpBufferSeconds = 0.12f;
+
+        /// <summary>
+        /// The Knight jumps on the button the Shade uses for its down slash. It has no down-slash
+        /// button of its own - the slash is aimed with the movement stick - so the slot is free,
+        /// and reusing it avoids inventing a default that collides with Hornet's own controls.
+        /// </summary>
+        private const ShadeAction KnightJumpAction = ShadeAction.NailDown;
 
         /// <summary>Distance past the hard leash at which the Knight is put back beside Hornet.</summary>
         private const float KnightLeashSnapPadding = 6f;
@@ -47,6 +60,14 @@ public partial class LegacyHelper
         private bool knightDashSpentInAir;
         private float knightWallJumpLockTimer;
         private float knightLandTimer;
+
+        /// <summary>Holds a scripted pose - the map, currently - against the movement animation.</summary>
+        private bool knightMapOpen;
+
+        internal void SetKnightMapOpen(bool open)
+        {
+            knightMapOpen = open;
+        }
 
         /// <summary>
         /// Whether this companion walks rather than floats. The Shade flies on a leash with gravity
@@ -303,7 +324,7 @@ public partial class LegacyHelper
             knightDashCooldownTimer = Mathf.Max(0f, knightDashCooldownTimer - dt);
             knightLandTimer = Mathf.Max(0f, knightLandTimer - dt);
 
-            if (ShadeInput.WasActionPressed(ShadeAction.Jump))
+            if (ShadeInput.WasActionPressed(KnightJumpAction))
             {
                 knightJumpBufferTimer = KnightJumpBufferSeconds;
             }
@@ -337,7 +358,7 @@ public partial class LegacyHelper
             }
 
             // Holding jump keeps thrust for a moment - Hollow Knight's variable jump height.
-            if (allowInput && knightJumpHoldTimer > 0f && ShadeInput.IsActionHeld(ShadeAction.Jump))
+            if (allowInput && knightJumpHoldTimer > 0f && ShadeInput.IsActionHeld(KnightJumpAction))
             {
                 knightJumpHoldTimer -= dt;
                 knightVerticalVelocity = KnightJumpSpeed;
@@ -385,6 +406,8 @@ public partial class LegacyHelper
                 knightVerticalVelocity = KnightJumpSpeed;
                 knightJumpHoldTimer = KnightJumpHoldSeconds;
                 knightView?.Play(KnightView.ClipDoubleJump, restart: true);
+                knightView?.FlashMonarchWings();
+                KnightAudio.PlayWings();
                 return true;
             }
 
@@ -411,6 +434,10 @@ public partial class LegacyHelper
                 return;
             }
 
+            // Shade Cloak carries its own, longer cooldown; while it is recharging the Knight still
+            // has the plain Mothwing dash, exactly as in Hollow Knight.
+            bool cloakReady = knightAbilities.ShadeCloak && !ShadeCloakOnCooldown;
+
             // One dash per airtime until the ground or a wall gives it back.
             if (!knightGrounded && knightDashSpentInAir)
             {
@@ -420,7 +447,7 @@ public partial class LegacyHelper
             knightDashDirection = Mathf.Abs(horizontal) > 0.1f ? (int)Mathf.Sign(horizontal) : facing;
             knightDashTimer = KnightDashSeconds;
             knightDashCooldownTimer = KnightDashCooldownSeconds;
-            knightDashIsShadeCloak = knightAbilities.ShadeCloak;
+            knightDashIsShadeCloak = cloakReady;
             knightVerticalVelocity = 0f;
             knightJumpHoldTimer = 0f;
 
@@ -432,9 +459,15 @@ public partial class LegacyHelper
             if (knightDashIsShadeCloak)
             {
                 SetKnightIntangible(true);
+                BeginShadeCloakCooldown();
+                knightView?.Play(KnightView.ClipShadeCloak, restart: true);
+                KnightAudio.PlayShadeCloak();
             }
-
-            knightView?.Play(KnightView.ClipDash, restart: true);
+            else
+            {
+                knightView?.Play(KnightView.ClipDash, restart: true);
+                KnightAudio.PlayDash();
+            }
         }
 
         /// <summary>
@@ -546,25 +579,33 @@ public partial class LegacyHelper
                 return;
             }
 
-            Vector3 position = transform.position;
-            if (!TryGetCameraViewBounds(position, out var view))
+            var hero = HeroController.UnsafeInstance;
+            if (hero == null)
             {
                 return;
             }
 
-            // Hold back by the margin plus the Knight's own half-size, so it stops fully inside the
-            // frame rather than with half of itself past the edge.
+            Vector3 position = transform.position;
+
+            // Measured against everything the camera can still do - the furthest it will lean plus
+            // the widest it will zoom - rather than against the frame as it stands. Clamping to the
+            // live frame stopped the Knight at the very edge that would have made the camera lean
+            // and zoom further, so the two deadlocked and the Knight had to fight the leash.
             Vector2 extents = bodyCol != null ? (Vector2)bodyCol.bounds.extents : new Vector2(0.5f, 0.75f);
             float margin = Mathf.Max(0f, ModConfig.Instance.knightCameraLeashMargin);
+            if (!CompanionCameraBias.TryGetCompanionRoam(hero.transform.position, extents, margin, out var roam))
+            {
+                return;
+            }
 
-            float minX = view.xMin + extents.x + margin;
-            float maxX = view.xMax - extents.x - margin;
-            float minY = view.yMin + extents.y + margin;
-            float maxY = view.yMax - extents.y - margin;
+            float minX = roam.xMin;
+            float maxX = roam.xMax;
+            float minY = roam.yMin;
+            float maxY = roam.yMax;
 
-            // A view smaller than the Knight would invert these; centre it rather than fight.
-            if (minX > maxX) minX = maxX = view.center.x;
-            if (minY > maxY) minY = maxY = view.center.y;
+            // A box smaller than the Knight would invert these; centre it rather than fight.
+            if (minX > maxX) minX = maxX = roam.center.x;
+            if (minY > maxY) minY = maxY = roam.center.y;
 
             float clampedX = Mathf.Clamp(position.x, minX, maxX);
             float clampedY = Mathf.Clamp(position.y, minY, maxY);
@@ -683,6 +724,14 @@ public partial class LegacyHelper
             }
 
             knightView.SetFacing(facing);
+
+            // A scripted pose outranks the movement state, or the walk cycle stamps over it next
+            // frame. Only while grounded: the Knight should not be reading a map mid-fall.
+            if (knightMapOpen && knightGrounded)
+            {
+                knightView.Play(KnightView.ClipMap);
+                return;
+            }
 
             // Once the animator has a frame, sit the rig's feet on the collider's base.
             if (bodyCol != null)
