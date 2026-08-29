@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
@@ -143,6 +143,19 @@ namespace LegacyoftheAbyss.Diagnostics
 
         /// <summary>Which Knight sound each effect resolved to, or MISSING.</summary>
         public string? KnightAudio;
+
+        /// <summary>
+        /// The last charm-grid layout exception, if one has happened. Its callers sit inside the
+        /// game's own inventory flow, so a throw there used to take the whole inventory screen with
+        /// it rather than just the pane.
+        /// </summary>
+        public string? ShadePaneLayoutFailure;
+
+        /// <summary>What Hornet's inventory/map actions are bound to right now.</summary>
+        public string? HeroMenuBindings;
+
+        /// <summary>Where the last few inventory-open presses got to. See <c>InventoryOpenProbe</c>.</summary>
+        public string? InventoryProbe;
     }
 
     /// <summary>
@@ -185,6 +198,9 @@ namespace LegacyoftheAbyss.Diagnostics
             TryRun(() => state.CoopCamera = LegacyHelper.CompanionCameraBias.DescribeState());
             TryRun(() => state.KnightBundle = LegacyoftheAbyss.Shade.Knight.KnightAssets.Inventory);
             TryRun(() => state.KnightAudio = LegacyoftheAbyss.Shade.Knight.KnightAudio.Report);
+            TryRun(() => state.ShadePaneLayoutFailure = ShadeInventoryPane.LastLayoutFailure);
+            TryRun(() => state.HeroMenuBindings = LegacyHelper.InputDeviceBlocker.DescribeHeroMenuBindings());
+            TryRun(() => state.InventoryProbe = InventoryOpenProbe.Describe());
 
             var gameManager = MenuStateUtility.TryGetGameManager();
             if (gameManager != null)

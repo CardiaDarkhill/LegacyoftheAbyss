@@ -1,4 +1,4 @@
-﻿#nullable disable
+#nullable disable
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -162,6 +162,16 @@ public partial class LegacyHelper
             shadeSoul = Mathf.Max(0, shadeSoul - projectileSoulCost);
             PushSoulToHud();
             CheckHazardOverlap();
+
+            // Recorded because "a Shade Soul fires by itself on room entry" has no other witness:
+            // by the time it is noticed the input that caused it is a frame old. The fire value is
+            // what decides this, so it is the first thing the event says.
+            LegacyoftheAbyss.Diagnostics.BugReportSystem.RecordEvent(
+                "shade-spell",
+                "shade soul cast",
+                FormattableString.Invariant(
+                    $"fire={ShadeInput.GetActionValue(ShadeAction.Fire):F2} ai={LegacyoftheAbyss.Shade.Ai.ShadeAiInput.Active} at=({transform.position.x:F2}, {transform.position.y:F2}) facing={facing} sceneProtected={sceneProtectionActive} controlsLocked={hornetControlsLocked}"));
+
             TrackSpellCast(StartCoroutine(FireballCastRoutine()));
         }
 

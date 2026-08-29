@@ -1,4 +1,4 @@
-﻿#nullable disable
+#nullable disable
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -144,6 +144,7 @@ public partial class LegacyHelper : BaseUnityPlugin
         ShadeCharacterManager.ApplyConfigToRegistry();
         LoggingManager.Initialize(Logger);
         LegacyoftheAbyss.Diagnostics.BugReportSystem.Install(Logger);
+        LegacyoftheAbyss.Diagnostics.SceneEntryAudioTrace.Install();
         var harmony = new Harmony("com.legacyoftheabyss.helper");
         PatchAllTolerantly(harmony);
 
@@ -440,6 +441,11 @@ public partial class LegacyHelper : BaseUnityPlugin
     {
         var gm = GameManager.instance;
         if (gm == null || gm.hero_ctrl == null) return;
+
+        // Placing a companion is the other moment a stray sound gets reported, and it is not the
+        // same instant as the scene load - the Knight's bundle alone can put most of a second
+        // between them.
+        LegacyoftheAbyss.Diagnostics.SceneEntryAudioTrace.Open();
 
         if (!ModConfig.Instance.shadeEnabled)
         {

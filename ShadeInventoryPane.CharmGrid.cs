@@ -156,7 +156,33 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         return columns;
     }
 
+    /// <summary>
+    /// Lays the charm grid out.
+    /// <para>
+    /// Wrapped because every caller is inside the game's own inventory flow: a throw here does not
+    /// cost the Shade its charm grid, it costs the player the whole inventory screen. One failed
+    /// layout should be a bad-looking pane and a logged reason, not an inventory that will not open.
+    /// </para>
+    /// </summary>
     private void LayoutCharmEntries()
+    {
+        try
+        {
+            LayoutCharmEntriesCore();
+        }
+        catch (Exception e)
+        {
+            // Recorded on the snapshot as well as logged: the log ring will not still be holding
+            // this by the time anyone files a report about the inventory.
+            LastLayoutFailure = e.ToString();
+            LogMenuEvent($"Charm grid layout failed; the pane will be misdrawn but the inventory still opens: {e}");
+        }
+    }
+
+    /// <summary>The last charm-grid layout exception, or null. Read by the bug reporter.</summary>
+    internal static string? LastLayoutFailure { get; private set; }
+
+    private void LayoutCharmEntriesCore()
     {
         if (gridRoot == null || leftContentRoot == null)
         {

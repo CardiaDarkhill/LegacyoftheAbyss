@@ -1,4 +1,4 @@
-﻿#nullable disable
+#nullable disable
 using System;
 using System.Collections.Generic;
 using System.Reflection;
@@ -83,6 +83,57 @@ public partial class LegacyHelper
         /// binds belong to the player, not to whichever entity a pad happens to be assigned to.
         /// </summary>
         internal static IReadOnlyCollection<string> AllowedHeroActionNames => AllowedHeroActions;
+
+        /// <summary>
+        /// What the game's own inventory and map actions are currently bound to, for
+        /// <c>BugReportState</c>. "The inventory will not open" has two very different causes -
+        /// the key doing nothing because the action lost its binding, or the press being taken
+        /// away from the player - and from outside they look identical.
+        /// </summary>
+        internal static string DescribeHeroMenuBindings()
+        {
+            try
+            {
+                var actions = InputHandler.UnsafeInstance?.inputActions;
+                if (actions == null)
+                {
+                    return "no InputHandler";
+                }
+
+                var parts = new List<string>();
+                foreach (var action in actions.Actions)
+                {
+                    if (action == null || !AllowedHeroActions.Contains(action.Name))
+                    {
+                        continue;
+                    }
+
+                    var bindings = action.UnfilteredBindings;
+                    int count = bindings?.Count ?? 0;
+                    var sources = new List<string>();
+                    for (int i = 0; i < count && i < 8; i++)
+                    {
+                        var binding = bindings[i];
+                        if (binding != null)
+                        {
+                            sources.Add(binding.Name ?? binding.BindingSourceType.ToString());
+                        }
+                    }
+
+                    // The count matters as much as the names: several callers re-add these bindings
+                    // on every hero-actions rebuild, so a list that keeps growing is its own bug and
+                    // is invisible from a truncated sample.
+                    string suffix = count > sources.Count ? $"/+{count - sources.Count}" : string.Empty;
+                    parts.Add($"{action.Name}({count})=[{string.Join("/", sources)}{suffix}]");
+                }
+
+                return parts.Count == 0 ? "no menu actions found" : string.Join(", ", parts);
+            }
+            catch (System.Exception e)
+            {
+                return "unreadable: " + e.Message;
+            }
+        }
 
         private static readonly Dictionary<InputDevice, bool> IgnoreDeviceCache = new();
         private static int ignoreDeviceCacheFrame = -1;

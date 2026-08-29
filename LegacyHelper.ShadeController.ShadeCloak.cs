@@ -68,8 +68,10 @@ public partial class LegacyHelper
                 shadeCloakAbsorbTimer = ShadeCloakAbsorbSeconds;
                 PlayShadeCloakReadyFlourish();
 
-                // The bundle ships a "Shadow Recharge" clip for exactly this moment.
-                knightView?.Play(KnightView.ClipShadeCloakReady, restart: true);
+                // On its own effect object, not the body: the rig shares one clip library across
+                // every animator in it, so playing an effect clip on the body would draw the burst
+                // as the Knight rather than beside it.
+                knightView?.FlashShadeCloakReady();
             }
         }
 

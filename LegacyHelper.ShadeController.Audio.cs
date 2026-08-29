@@ -1,4 +1,4 @@
-﻿#nullable disable
+#nullable disable
 using System;
 using System.IO;
 using LegacyoftheAbyss.Shade;
@@ -249,7 +249,15 @@ public partial class LegacyHelper
             float volume = Mathf.Clamp01(GetEffectiveSfxVolume());
             if (focusSfx != null) focusSfx.volume = volume;
             if (spellSfx != null) spellSfx.volume = volume;
+            if (knightSfx != null) knightSfx.volume = volume;
         }
+
+        // ========== Knight movement SFX (dash, wings, Shade Cloak) ==========
+        // Its own source, parented to this companion, so the Knight's sounds come from where the
+        // Knight is rather than from Hornet - the two are routinely a screen apart.
+        private AudioSource knightSfx;
+
+        private AudioSource EnsureKnightSfx() => knightSfx ??= CreateSfxSource("KnightSFX");
 
         // ========== Spell SFX (Projectile, Shriek, Quake) ==========
         private AudioSource spellSfx;

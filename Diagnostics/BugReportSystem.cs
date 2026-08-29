@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
@@ -267,6 +267,7 @@ namespace LegacyoftheAbyss.Diagnostics
             if (_state == OverlayState.Idle)
             {
                 SampleFlightRecorder(realtime);
+                InventoryOpenProbe.Tick(realtime);
 
                 if (Input.GetKeyDown(ResolveHotkey()))
                 {

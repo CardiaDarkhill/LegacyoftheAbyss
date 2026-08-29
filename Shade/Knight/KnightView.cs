@@ -25,6 +25,9 @@ namespace LegacyoftheAbyss.Shade.Knight
         internal const string ClipShadeCloakReady = "Shadow Recharge";
         internal const string ClipMap = "Map Open";
 
+        // The wings are their own object under Effects, sharing the rig's single 214-clip library.
+        internal const string ClipMonarchWings = "Double Jump Wings 2";
+
         private static readonly System.Collections.Generic.HashSet<string> s_missingClips = new();
 
         private tk2dSpriteAnimator? animator;
@@ -189,73 +192,121 @@ namespace LegacyoftheAbyss.Shade.Knight
         /// <summary>Whether the rig is currently drawing. The Shade answers this with its renderer.</summary>
         internal bool IsVisible => rig != null && rig.gameObject.activeSelf;
 
-        // Monarch Wings ride on their own child of the rig, which DisableStrayRenderers switched off
-        // along with the glow. Found by name because the rig gives no other handle on it; a miss
-        // costs the flourish and is reported once rather than throwing.
-        private static readonly string[] WingNames = { "Wings", "Double Jump", "Monarch Wings", "dj_wings" };
-        private Transform? wings;
-        private bool wingsResolved;
-        private float wingsHideAt;
+        // The rig's one-shot effects live as their own children under "Effects", each with its own
+        // animator sharing the body's clip library. Names are the prefab's, verified against the
+        // bundle: guessing at them ("Wings", "Monarch Wings") found nothing and cost the flourish
+        // silently twice.
+        internal const string WingsObjectName = "Double J Wings";
+        internal const string ShadeCloakReadyObjectName = "Shadow Recharge";
+
+        private readonly System.Collections.Generic.Dictionary<string, EffectObject> effects = new();
+
+        private sealed class EffectObject
+        {
+            internal Transform? Root;
+            internal tk2dSpriteAnimator? Animator;
+            internal float HideAt;
+        }
+
+        /// <summary>Shows the Monarch Wings for the length of the double jump.</summary>
+        internal void FlashMonarchWings(float seconds = 0.45f)
+            => FlashEffect(WingsObjectName, ClipMonarchWings, seconds);
+
+        /// <summary>Shows the burst Hollow Knight plays the moment Shade Cloak comes back.</summary>
+        internal void FlashShadeCloakReady(float seconds = 0.6f)
+            => FlashEffect(ShadeCloakReadyObjectName, ClipShadeCloakReady, seconds);
 
         /// <summary>
-        /// Shows the Monarch Wings for the length of the double jump. They are part of the rig
-        /// rather than a separate effect, so this re-enables what the strip pass turned off instead
-        /// of building anything.
+        /// Plays one of the rig's own effect objects. These are switched off twice over on the way
+        /// in - <see cref="DisableStrayRenderers"/> takes their renderers and the prefab ships their
+        /// animators disabled - so all three have to be put back, and the parent chain with them:
+        /// activating a child of an inactive parent draws nothing.
         /// </summary>
-        internal void FlashMonarchWings(float seconds = 0.45f)
+        private void FlashEffect(string objectName, string clipName, float seconds)
         {
-            var found = ResolveWings();
-            if (found == null)
+            var effect = ResolveEffect(objectName);
+            if (effect?.Root == null)
             {
                 return;
             }
 
-            foreach (var renderer in found.GetComponentsInChildren<Renderer>(true))
+            foreach (var renderer in effect.Root.GetComponentsInChildren<Renderer>(true))
             {
                 renderer.enabled = true;
             }
 
-            found.gameObject.SetActive(true);
-            wingsHideAt = Time.time + seconds;
-        }
-
-        private Transform? ResolveWings()
-        {
-            if (wingsResolved)
+            for (var node = effect.Root; node != null && node != rig; node = node.parent)
             {
-                return wings;
+                node.gameObject.SetActive(true);
             }
 
-            wingsResolved = true;
+            if (effect.Animator != null)
+            {
+                effect.Animator.enabled = true;
+                var clip = effect.Animator.Library != null ? effect.Animator.Library.GetClipByName(clipName) : null;
+                if (clip != null)
+                {
+                    effect.Animator.Play(clip);
+                }
+                else if (s_missingClips.Add(clipName))
+                {
+                    LegacyHelper.LogWarning($"Knight effect clip '{clipName}' is not in the bundled clip library.");
+                }
+            }
+
+            effect.HideAt = Time.time + seconds;
+        }
+
+        private EffectObject? ResolveEffect(string objectName)
+        {
+            if (effects.TryGetValue(objectName, out var cached))
+            {
+                return cached;
+            }
+
+            var resolved = new EffectObject();
+            effects[objectName] = resolved;
+
             if (rig == null)
             {
-                return null;
+                return resolved;
             }
 
             foreach (var child in rig.GetComponentsInChildren<Transform>(true))
             {
-                foreach (var name in WingNames)
+                if (string.Equals(child.name, objectName, System.StringComparison.Ordinal))
                 {
-                    if (string.Equals(child.name, name, System.StringComparison.OrdinalIgnoreCase))
-                    {
-                        wings = child;
-                        return wings;
-                    }
+                    resolved.Root = child;
+                    resolved.Animator = child.GetComponent<tk2dSpriteAnimator>()
+                        ?? child.GetComponentInChildren<tk2dSpriteAnimator>(true);
+                    return resolved;
                 }
             }
 
+            // Naming the children in the warning rather than pointing at the bug report: the last two
+            // attempts at this both failed on the name alone, with nothing on hand to correct it from.
+            var names = new System.Collections.Generic.List<string>();
+            foreach (var child in rig.GetComponentsInChildren<Transform>(true))
+            {
+                names.Add(child.name);
+            }
+
             LegacyHelper.LogWarning(
-                $"Knight Monarch Wings found none of: {string.Join(", ", WingNames)}. "
-                + "Check the Knight bundle row on a bug report for the child names the rig carries.");
-            return null;
+                $"Knight effect object '{objectName}' is not in the rig. It carries: {string.Join(", ", names)}");
+            return resolved;
         }
 
         private void Update()
         {
-            if (wings != null && wingsHideAt > 0f && Time.time >= wingsHideAt)
+            foreach (var effect in effects.Values)
             {
-                wingsHideAt = 0f;
-                foreach (var renderer in wings.GetComponentsInChildren<Renderer>(true))
+                if (effect.Root == null || effect.HideAt <= 0f || Time.time < effect.HideAt)
+                {
+                    continue;
+                }
+
+                effect.HideAt = 0f;
+                foreach (var renderer in effect.Root.GetComponentsInChildren<Renderer>(true))
                 {
                     renderer.enabled = false;
                 }

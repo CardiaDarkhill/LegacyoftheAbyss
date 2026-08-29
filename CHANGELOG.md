@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 One line per change, two at most. Say what changed for the player and name the setting that
 controls it; the reasoning belongs in the commit and the code.
@@ -29,6 +29,8 @@ controls it; the reasoning belongs in the commit and the code.
 - Shade Cloak now has a cooldown, and the shadow wisps are its readout: they gather while it
   recharges and are drawn back into the body the moment it is ready. The Shade adopts the same tell
   once it reaches Shade Cloak.
+- The Knight uses Hollow Knight's own sounds where the asset bundle carries them: its dash, and its
+  Shade Cloak. They play from the Knight rather than from Hornet, so distance is audible.
 - Shade AI is unavailable while the Knight is equipped and reads as such in the menu — it steers by
   synthesising input, which cannot drive a character that has to jump and climb. Your setting is
   kept and returns with the Shade.

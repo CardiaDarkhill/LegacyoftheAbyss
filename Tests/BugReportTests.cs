@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using LegacyoftheAbyss.Diagnostics;
@@ -54,6 +54,50 @@ public class BugReportTests
         // The report has to say so: a log that silently starts partway through reads as "nothing
         // happened before this", which is a different and wrong conclusion.
         Assert.Contains("3 earlier line(s) dropped", ring.Render(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LogRingFoldsARepeatedLineInsteadOfSpendingTheRing()
+    {
+        var ring = new BugReportLogRing(BugReportLogRing.MinimumCapacity);
+        ring.Add(Entry("before"));
+        for (int i = 0; i < 500; i++)
+        {
+            ring.Add(new BugReportLogEntry(
+                new DateTime(2026, 8, 22, 17, 32, 45, DateTimeKind.Utc),
+                12.5f + (i * 0.01f),
+                "Error",
+                "Unity Log",
+                "NullReferenceException"));
+        }
+
+        ring.Add(Entry("after"));
+
+        var snapshot = ring.Snapshot();
+
+        // The whole point: a plugin throwing once a frame used to evict every other line in the ring
+        // within a minute, and several reports in a row arrived with nothing else left to read.
+        Assert.Equal(3, snapshot.Length);
+        Assert.Equal(0, ring.DroppedCount);
+        Assert.Equal("before", snapshot[0].Message);
+        Assert.Equal("after", snapshot[2].Message);
+        Assert.Equal(500, snapshot[1].RepeatCount);
+        Assert.Contains("(x500 over", snapshot[1].Format(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LogRingOnlyFoldsConsecutiveMatches()
+    {
+        var ring = new BugReportLogRing(BugReportLogRing.MinimumCapacity);
+        ring.Add(Entry("same"));
+        ring.Add(Entry("different"));
+        ring.Add(Entry("same"));
+
+        var snapshot = ring.Snapshot();
+
+        // Folding across a gap would claim an ordering that never happened.
+        Assert.Equal(3, snapshot.Length);
+        Assert.All(snapshot, entry => Assert.Equal(1, entry.RepeatCount));
     }
 
     [Fact]

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -221,6 +221,32 @@ public class GameApiContractTests
         GameApiContract.RequireMethod(
             typeof(HeroController), "TakeDamage",
             "Patched to spare Hornet a hit she is not standing in.", "go", "damageAmount");
+    }
+
+    /// <summary>
+    /// The inventory-open trace. Both of these are patch targets resolved by name, so both can go
+    /// dead in silence - and a diagnostic that has gone dead is worse than none, because "the
+    /// listener never ran" then reads as a finding rather than as a broken instrument.
+    /// </summary>
+    [Fact]
+    public void TheInventoryOpenPathCanBeWatchedFromInside()
+    {
+        GameApiContract.RequireMethod(
+            typeof(HutongGames.PlayMaker.Actions.ListenForInventoryShortcut), "OnUpdate",
+            "Prefixed to record whether the Inventory Control FSM's Closed state is polling at all.");
+
+        GameApiContract.RequireField(
+            typeof(HutongGames.PlayMaker.Actions.ListenForInventoryShortcut), "inputHandler", typeof(InputHandler),
+            "Read so the trace sees the same actions the listener does, rather than a second instance.");
+
+        GameApiContract.RequireMethod(
+            typeof(HeroController), "CanOpenInventory",
+            "Postfixed to record the gate's answer at the moment the FSM asks, which is inside a "
+            + "frame and therefore invisible to anything sampling once per frame.");
+
+        GameApiContract.RequireMethod(
+            typeof(InventoryPaneInput), "GetInventoryInputPressed",
+            "Called by the trace to report which inventory action the listener saw.", "ia");
     }
 
     /// <summary>

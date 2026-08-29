@@ -16,7 +16,12 @@ public partial class LegacyHelper
         private const float KnightJumpHoldSeconds = 0.28f;
         private const float KnightDashSpeed = 20f;
         private const float KnightDashSeconds = 0.25f;
-        private const float KnightDashCooldownSeconds = 0.6f;
+        /// <summary>
+        /// Zero on purpose. The Knight's Mothwing dash is ready the instant the previous one
+        /// finishes, as it is in Hollow Knight; only Shade Cloak carries a recharge. The Shade's
+        /// own sprint dash keeps its cooldown, which is a separate ability.
+        /// </summary>
+        private const float KnightDashCooldownSeconds = 0f;
 
         /// <summary>
         /// Shade Cloak's own cooldown, separate from and longer than the plain dash's, as it is in
@@ -60,6 +65,11 @@ public partial class LegacyHelper
         private bool knightDashSpentInAir;
         private float knightWallJumpLockTimer;
         private float knightLandTimer;
+
+        // Latched in Update by CaptureMovementInput; see there for why.
+        private bool knightJumpPressLatched;
+        private bool knightDashPressLatched;
+        private bool knightJumpHeld;
 
         /// <summary>Holds a scripted pose - the map, currently - against the movement animation.</summary>
         private bool knightMapOpen;
@@ -324,8 +334,9 @@ public partial class LegacyHelper
             knightDashCooldownTimer = Mathf.Max(0f, knightDashCooldownTimer - dt);
             knightLandTimer = Mathf.Max(0f, knightLandTimer - dt);
 
-            if (ShadeInput.WasActionPressed(KnightJumpAction))
+            if (knightJumpPressLatched)
             {
+                knightJumpPressLatched = false;
                 knightJumpBufferTimer = KnightJumpBufferSeconds;
             }
             else
@@ -358,7 +369,7 @@ public partial class LegacyHelper
             }
 
             // Holding jump keeps thrust for a moment - Hollow Knight's variable jump height.
-            if (allowInput && knightJumpHoldTimer > 0f && ShadeInput.IsActionHeld(KnightJumpAction))
+            if (allowInput && knightJumpHoldTimer > 0f && knightJumpHeld)
             {
                 knightJumpHoldTimer -= dt;
                 knightVerticalVelocity = KnightJumpSpeed;
@@ -407,7 +418,7 @@ public partial class LegacyHelper
                 knightJumpHoldTimer = KnightJumpHoldSeconds;
                 knightView?.Play(KnightView.ClipDoubleJump, restart: true);
                 knightView?.FlashMonarchWings();
-                KnightAudio.PlayWings();
+                KnightAudio.PlayWings(EnsureKnightSfx(), GetEffectiveSfxVolume());
                 return true;
             }
 
@@ -427,9 +438,14 @@ public partial class LegacyHelper
                 return;
             }
 
-            if (!knightAbilities.CanDash
-                || knightDashCooldownTimer > 0f
-                || !ShadeInput.WasActionPressed(ShadeAction.Sprint))
+            if (!knightDashPressLatched)
+            {
+                return;
+            }
+
+            knightDashPressLatched = false;
+
+            if (!knightAbilities.CanDash || knightDashCooldownTimer > 0f)
             {
                 return;
             }
@@ -461,12 +477,12 @@ public partial class LegacyHelper
                 SetKnightIntangible(true);
                 BeginShadeCloakCooldown();
                 knightView?.Play(KnightView.ClipShadeCloak, restart: true);
-                KnightAudio.PlayShadeCloak();
+                KnightAudio.PlayShadeCloak(EnsureKnightSfx(), GetEffectiveSfxVolume());
             }
             else
             {
                 knightView?.Play(KnightView.ClipDash, restart: true);
-                KnightAudio.PlayDash();
+                KnightAudio.PlayDash(EnsureKnightSfx(), GetEffectiveSfxVolume());
             }
         }
 
@@ -747,7 +763,10 @@ public partial class LegacyHelper
 
             if (knightDashTimer > 0f)
             {
-                knightView.Play(KnightView.ClipDash);
+                // Which dash matters: the per-frame animation step ran straight after the dash
+                // started and stamped the plain Dash clip over the Shade Cloak one, so the cloak
+                // never showed its own animation for a single frame.
+                knightView.Play(knightDashIsShadeCloak ? KnightView.ClipShadeCloak : KnightView.ClipDash);
                 return;
             }
 

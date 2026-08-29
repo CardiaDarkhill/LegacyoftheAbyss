@@ -27,6 +27,8 @@ namespace LegacyoftheAbyss.Shade.Knight
         private static bool s_shaderScanRegistered;
         private static bool s_shadersApplied;
         private static bool s_loadFailed;
+        private static Dictionary<string, AudioClip>? s_audio;
+        private static bool s_audioScannedGlobally;
 
         /// <summary>The Knight body prefab, or null when the bundle is missing or failed to load.</summary>
         internal static GameObject? KnightPrefab
@@ -93,6 +95,63 @@ namespace LegacyoftheAbyss.Shade.Knight
         internal static string Inventory { get; private set; } = "bundle not loaded";
 
         /// <summary>
+        /// One of Hollow Knight's own sounds by name, or null.
+        /// <para>
+        /// <c>LoadAllAssets&lt;AudioClip&gt;()</c> returns none of these, which is what led to the
+        /// wrong conclusion that the bundle ships no audio: it holds 162 clips, but every one of them
+        /// is a dependency of a prefab rather than an asset of the bundle in its own right, and
+        /// <c>LoadAllAssets</c> only returns the latter. They are reachable through the components
+        /// that reference them instead. The <c>AudioSource</c> pass is authoritative - those are
+        /// native components, so Unity always deserialises them. The global pass is the fallback for
+        /// clips a script or FSM holds, which only load if their owning script bound to a real type.
+        /// </para>
+        /// </summary>
+        internal static AudioClip? FindAudioClip(string name)
+        {
+            if (string.IsNullOrEmpty(name) || !TryLoad())
+            {
+                return null;
+            }
+
+            if (s_audio == null)
+            {
+                s_audio = new Dictionary<string, AudioClip>();
+                foreach (var prefab in s_prefabs.Values)
+                {
+                    foreach (var source in prefab.GetComponentsInChildren<AudioSource>(true))
+                    {
+                        var clip = source != null ? source.clip : null;
+                        if (clip != null && !string.IsNullOrEmpty(clip.name))
+                        {
+                            s_audio[clip.name] = clip;
+                        }
+                    }
+                }
+            }
+
+            if (s_audio.TryGetValue(name, out var found))
+            {
+                return found;
+            }
+
+            if (!s_audioScannedGlobally)
+            {
+                s_audioScannedGlobally = true;
+                foreach (var clip in Resources.FindObjectsOfTypeAll<AudioClip>())
+                {
+                    if (clip != null && !string.IsNullOrEmpty(clip.name) && !s_audio.ContainsKey(clip.name))
+                    {
+                        s_audio[clip.name] = clip;
+                    }
+                }
+
+                return s_audio.TryGetValue(name, out var late) ? late : null;
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// Records the animation, audio and prefab names the bundle carries. Kept on the state
         /// snapshot rather than only logged: this happens once at first load, and the log ring is a
         /// few hundred lines, so by the time anyone files a report it has long scrolled away -
@@ -128,12 +187,18 @@ namespace LegacyoftheAbyss.Shade.Knight
 
             clips.Sort();
 
+            // From the prefabs' AudioSources, not LoadAllAssets: see FindAudioClip for why the
+            // latter reports none.
             var audio = new List<string>();
-            foreach (var clip in s_bundle.LoadAllAssets<AudioClip>())
+            foreach (var prefab in s_prefabs.Values)
             {
-                if (clip != null && !string.IsNullOrEmpty(clip.name))
+                foreach (var source in prefab.GetComponentsInChildren<AudioSource>(true))
                 {
-                    audio.Add(clip.name);
+                    var clip = source != null ? source.clip : null;
+                    if (clip != null && !string.IsNullOrEmpty(clip.name) && !audio.Contains(clip.name))
+                    {
+                        audio.Add(clip.name);
+                    }
                 }
             }
 
@@ -223,6 +288,8 @@ namespace LegacyoftheAbyss.Shade.Knight
         internal static void Unload()
         {
             s_prefabs.Clear();
+            s_audio = null;
+            s_audioScannedGlobally = false;
             s_shaders.Clear();
             s_shadersApplied = false;
 

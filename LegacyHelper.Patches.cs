@@ -1,4 +1,4 @@
-﻿#nullable disable
+#nullable disable
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -948,6 +948,8 @@ public partial class LegacyHelper
             {
                 return;
             }
+
+            LegacyoftheAbyss.Diagnostics.InventoryOpenProbe.Attach(__instance);
 
             try
             {

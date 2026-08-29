@@ -18,12 +18,19 @@ namespace LegacyoftheAbyss.Diagnostics
     internal readonly struct BugReportLogEntry
     {
         internal BugReportLogEntry(DateTime timestampUtc, float realtime, string level, string source, string message)
+            : this(timestampUtc, realtime, level, source, message, 1, realtime)
+        {
+        }
+
+        private BugReportLogEntry(DateTime timestampUtc, float realtime, string level, string source, string message, int repeatCount, float lastRealtime)
         {
             TimestampUtc = timestampUtc;
             Realtime = realtime;
             Level = string.IsNullOrEmpty(level) ? "Info" : level;
             Source = string.IsNullOrEmpty(source) ? "?" : source;
             Message = message ?? string.Empty;
+            RepeatCount = repeatCount;
+            LastRealtime = lastRealtime;
         }
 
         internal DateTime TimestampUtc { get; }
@@ -37,9 +44,27 @@ namespace LegacyoftheAbyss.Diagnostics
 
         internal string Message { get; }
 
+        /// <summary>How many identical lines this entry stands for, counting itself.</summary>
+        internal int RepeatCount { get; }
+
+        /// <summary>Realtime of the most recent of those lines. Equals <see cref="Realtime"/> when there is only one.</summary>
+        internal float LastRealtime { get; }
+
+        internal bool SameLineAs(in BugReportLogEntry other)
+        {
+            return string.Equals(Message, other.Message, StringComparison.Ordinal)
+                && string.Equals(Level, other.Level, StringComparison.Ordinal)
+                && string.Equals(Source, other.Source, StringComparison.Ordinal);
+        }
+
+        internal BugReportLogEntry Repeated(in BugReportLogEntry latest)
+        {
+            return new BugReportLogEntry(TimestampUtc, Realtime, Level, Source, Message, RepeatCount + 1, latest.Realtime);
+        }
+
         internal string Format()
         {
-            return string.Format(
+            string line = string.Format(
                 CultureInfo.InvariantCulture,
                 "[{0:HH:mm:ss.fff}] [t={1,8:F2}] [{2,-7}] [{3}] {4}",
                 TimestampUtc,
@@ -47,6 +72,17 @@ namespace LegacyoftheAbyss.Diagnostics
                 Level,
                 Source,
                 Message);
+
+            if (RepeatCount > 1)
+            {
+                line += string.Format(
+                    CultureInfo.InvariantCulture,
+                    " (x{0} over {1:F3}s)",
+                    RepeatCount,
+                    LastRealtime - Realtime);
+            }
+
+            return line;
         }
     }
 
@@ -110,10 +146,30 @@ namespace LegacyoftheAbyss.Diagnostics
             }
         }
 
+        /// <summary>
+        /// Appends a line, or folds it into the previous one when the two are identical.
+        /// <para>
+        /// The collapse is what keeps the ring usable. A single misbehaving plugin throwing from an
+        /// <c>Update</c> emits one line per frame, and at that rate it evicts the entire ring in
+        /// under a minute: several reports in a row arrived with all 800 entries spent on the same
+        /// stack trace and 3,700 dropped, so nothing this mod logged was left to read. Only runs of
+        /// consecutive matches are folded, so ordering still means what it says.
+        /// </para>
+        /// </summary>
         internal void Add(in BugReportLogEntry entry)
         {
             lock (_sync)
             {
+                if (_count > 0)
+                {
+                    int last = (_next - 1 + _entries.Length) % _entries.Length;
+                    if (_entries[last].SameLineAs(entry))
+                    {
+                        _entries[last] = _entries[last].Repeated(entry);
+                        return;
+                    }
+                }
+
                 if (_count == _entries.Length)
                 {
                     _dropped++;

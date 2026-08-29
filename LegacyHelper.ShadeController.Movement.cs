@@ -1,4 +1,4 @@
-﻿#nullable disable
+#nullable disable
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -255,13 +255,25 @@ public partial class LegacyHelper
             if (!hornetControlsLocked && !inHardLeash && !isChannelingTeleport && !isInactive && damageStaggerTimer <= 0f)
             {
                 HandleFocus();
-                if (!isCastingSpell)
+
+                // No spell may *start* inside the spawn-protection window. The Shade is set down at
+                // a new position with the previous frame's input still standing, and a cast begun
+                // there releases from wherever it landed - which is the Shade Soul that appeared
+                // across the room on every transition and on every character swap. Casts already
+                // running are dropped separately, by CancelSpellCasts. The nail is left alone: it
+                // fires from the body and cannot land somewhere the Shade is not.
+                bool spellsHeldForSpawn = sceneProtectionActive;
+
+                if (!isCastingSpell && !spellsHeldForSpawn)
                     HandleFire();
                 if (!isCastingSpell)
                 {
                     HandleNailAttack();
-                    HandleShriek();
-                    HandleDescendingDark();
+                    if (!spellsHeldForSpawn)
+                    {
+                        HandleShriek();
+                        HandleDescendingDark();
+                    }
                 }
             }
 
@@ -394,6 +406,22 @@ public partial class LegacyHelper
             capturedMoveInput = input;
             capturedHorizontalInput = Mathf.Clamp(input.x, -1f, 1f);
             capturedSprintHeld = damageStaggerTimer <= 0f && sprintUnlocked && ShadeInput.IsActionHeld(ShadeAction.Sprint) && input.sqrMagnitude > 0f;
+
+            // Edge-triggered inputs are latched here, in Update, and consumed by the Knight's step
+            // in FixedUpdate. Reading WasActionPressed from FixedUpdate drops the press outright on
+            // every rendered frame that happens not to carry a physics tick, which at a high frame
+            // rate is most of them - that is the jump that sometimes does nothing.
+            if (ShadeInput.WasActionPressed(KnightJumpAction))
+            {
+                knightJumpPressLatched = true;
+            }
+
+            if (ShadeInput.WasActionPressed(ShadeAction.Sprint))
+            {
+                knightDashPressLatched = true;
+            }
+
+            knightJumpHeld = ShadeInput.IsActionHeld(KnightJumpAction);
         }
 
         private static bool GameIsPaused()

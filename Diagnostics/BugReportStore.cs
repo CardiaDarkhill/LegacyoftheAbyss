@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -375,6 +375,21 @@ namespace LegacyoftheAbyss.Diagnostics
             if (!string.IsNullOrEmpty(state.KnightAudio))
             {
                 Row(builder, "Knight audio", state.KnightAudio);
+            }
+
+            if (!string.IsNullOrEmpty(state.ShadePaneLayoutFailure))
+            {
+                Row(builder, "Shade pane layout failure", state.ShadePaneLayoutFailure);
+            }
+
+            if (!string.IsNullOrEmpty(state.HeroMenuBindings))
+            {
+                Row(builder, "Hero menu bindings", state.HeroMenuBindings);
+            }
+
+            if (!string.IsNullOrEmpty(state.InventoryProbe))
+            {
+                Row(builder, "Inventory probe", state.InventoryProbe);
             }
 
             builder.AppendLine();
