@@ -330,6 +330,31 @@ public class GameApiContractTests
     }
 
     /// <summary>
+    /// The co-op camera lean is a Harmony postfix on
+    /// <c>CameraController.UpdateTargetDestinationDelta</c> that writes the two delta fields the
+    /// camera's destination is built from, injected by name as <c>___targetDeltaX</c> and
+    /// <c>___targetDeltaY</c>. Harmony resolves those by reflection: if either is renamed the patch
+    /// silently stops applying the lean instead of failing, which is precisely how this feature
+    /// shipped inert once already.
+    /// </summary>
+    [Fact]
+    public void TheCameraDeltaFieldsTheCoopLeanWritesStillExist()
+    {
+        var controller = GameApiContract.RequireType("CameraController");
+
+        GameApiContract.RequireField(
+            controller, "targetDeltaX", typeof(float),
+            "Written by the co-op camera postfix; CameraController.LateUpdate builds its destination from it.");
+        GameApiContract.RequireField(
+            controller, "targetDeltaY", typeof(float),
+            "Written by the co-op camera postfix; CameraController.LateUpdate builds its destination from it.");
+
+        GameApiContract.RequireMethod(
+            controller, "UpdateTargetDestinationDelta",
+            "The co-op camera lean postfixes it, resolved by shape in CompanionCameraBias's patch class.");
+    }
+
+    /// <summary>
     /// The Shade lights dark rooms by cloning Hornet's hero light, because scene darkness is a
     /// shader cutout fed by a camera that renders that one object. If either accessor stops
     /// resolving there is nothing to clone and the Shade goes invisible in the dark again.

@@ -165,6 +165,15 @@ public static partial class ShadeSettingsMenu
         previewNameLayout.minHeight = 48f;
         previewNameLayout.preferredHeight = 48f;
 
+        var previewMovesetObj = new GameObject("PreviewMoveset");
+        previewMovesetObj.transform.SetParent(previewColumn.transform, false);
+        var previewMoveset = previewMovesetObj.AddComponent<Text>();
+        ApplyTextStyle(previewMoveset, sliderValueStyle ?? sliderLabelStyle, TextAnchor.MiddleCenter, Color.white);
+        ScaleTextElements(previewMovesetObj, 0.85f);
+        var previewMovesetLayout = previewMovesetObj.AddComponent<LayoutElement>();
+        previewMovesetLayout.minHeight = 36f;
+        previewMovesetLayout.preferredHeight = 36f;
+
         var previewStatusObj = new GameObject("PreviewStatus");
         previewStatusObj.transform.SetParent(previewColumn.transform, false);
         var previewStatus = previewStatusObj.AddComponent<Text>();
@@ -190,11 +199,19 @@ public static partial class ShadeSettingsMenu
 
         var selectables = new List<MenuSelectable>();
 
-        // Characters first, then that character's skins. The menu configures the primary companion;
-        // when more than one can spawn this grows a companion picker above the character rows.
+        // The menu configures the primary companion; when more than one can spawn this grows a
+        // companion picker above these rows.
         int companionId = ShadeCompanionRegistry.PrimaryId;
+
+        // A character that brings its own skins is represented by those skin rows rather than a row
+        // of its own - a "Shade" row sitting above a "Shade" skin listed the same choice twice.
         foreach (var character in ShadeCharacterRegistry.Characters)
         {
+            if (character.SupportsSkins)
+            {
+                continue;
+            }
+
             var characterSelectable = CreateMenuButton(
                 listRoot.transform,
                 buttonTemplate,
@@ -219,13 +236,9 @@ public static partial class ShadeSettingsMenu
             selectables.Add(characterButton);
         }
 
-        // Only the character actually wearing skins lists them, so the Knight's rows are not
-        // followed by a set of Shade sheets that would do nothing.
-        bool showSkins = ShadeCharacterManager.GetSelected(companionId).SupportsSkins
-            && skins != null
-            && skins.Count > 0;
-
-        foreach (var skin in showSkins ? skins : Array.Empty<ShadeSkinDefinition>())
+        // Always listed, whichever character is equipped: picking a skin is also how you come back
+        // to the Shade from the Knight.
+        foreach (var skin in skins ?? (IReadOnlyList<ShadeSkinDefinition>)Array.Empty<ShadeSkinDefinition>())
         {
             if (skin == null)
                 continue;
@@ -254,7 +267,7 @@ public static partial class ShadeSettingsMenu
             selectables.Add(button);
         }
 
-        skinsController.Initialize(previewImage, previewName, previewStatus);
+        skinsController.Initialize(previewImage, previewName, previewMoveset, previewStatus);
 
         SetupButtonList(ms, selectables);
         var preferred = skinsController.GetSelectedSkinSelectable() ?? (selectables.Count > 0 ? selectables[0] : null);
@@ -279,6 +292,7 @@ public static partial class ShadeSettingsMenu
         private readonly List<CharacterButtonDriver> characterButtons = new();
         private Image previewImage;
         private Text previewName;
+        private Text previewMoveset;
         private Text previewStatus;
         private ShadeSkinDefinition focusedSkin;
 
@@ -301,11 +315,11 @@ public static partial class ShadeSettingsMenu
 
             if (previewImage != null)
             {
-                // The Knight renders from an asset bundle rather than the sheets the preview reads,
-                // so it has no still to show here until that bundle is loaded.
+                // A character with skins previews through the selected one; the Knight renders from
+                // an asset bundle and carries a still of its own instead.
                 var sprite = character.SupportsSkins
                     ? ShadeSkinManager.GetPreviewSprite(ShadeSkinManager.SelectedSkin)
-                    : null;
+                    : ShadeCharacterManager.GetPreviewSprite(character);
                 previewImage.sprite = sprite;
                 previewImage.enabled = sprite != null;
                 previewImage.color = Color.white;
@@ -313,6 +327,8 @@ public static partial class ShadeSettingsMenu
 
             if (previewName != null)
                 previewName.text = character.DisplayName;
+
+            SetMovesetLabel(character.MovesetName);
 
             if (previewStatus != null)
             {
@@ -358,10 +374,11 @@ public static partial class ShadeSettingsMenu
             }
         }
 
-        public void Initialize(Image image, Text nameLabel, Text statusLabel)
+        public void Initialize(Image image, Text nameLabel, Text movesetLabel, Text statusLabel)
         {
             previewImage = image;
             previewName = nameLabel;
+            previewMoveset = movesetLabel;
             previewStatus = statusLabel;
             RefreshButtons();
             ShowPreview(ShadeSkinManager.SelectedSkin);
@@ -419,15 +436,37 @@ public static partial class ShadeSettingsMenu
             if (skin == null)
                 return;
 
+            // Skins belong to the Shade, so choosing one is also how you leave the Knight.
+            int companionId = ShadeCompanionRegistry.PrimaryId;
+            bool leavingKnight = ShadeCharacterManager.GetSelected(companionId).Id != ShadeCharacterId.Shade;
+            if (leavingKnight)
+            {
+                LegacyHelper.SetShadeCharacter(companionId, ShadeCharacterId.Shade);
+            }
+
             LegacyHelper.SetShadeSkin(skin.Id);
             focusedSkin = skin;
             RefreshButtons();
+            RefreshCharacterButtons(companionId);
             ShowPreview(skin);
+        }
+
+        private void SetMovesetLabel(string moveset)
+        {
+            if (previewMoveset != null)
+            {
+                previewMoveset.text = moveset;
+                previewMoveset.color = Color.white;
+            }
         }
 
         private void RefreshButtons()
         {
-            string selectedId = ShadeSkinManager.SelectedSkinId;
+            // No skin is equipped while another character is: marking one would show two rows as
+            // equipped at once.
+            bool shadeEquipped = ShadeCharacterManager
+                .GetSelected(ShadeCompanionRegistry.PrimaryId).Id == ShadeCharacterId.Shade;
+            string selectedId = shadeEquipped ? ShadeSkinManager.SelectedSkinId : null;
             for (int i = buttons.Count - 1; i >= 0; i--)
             {
                 var driver = buttons[i];
@@ -466,6 +505,8 @@ public static partial class ShadeSettingsMenu
 
             if (previewName != null)
                 previewName.text = skin.DisplayName;
+
+            SetMovesetLabel(ShadeCharacterRegistry.Get(ShadeCharacterId.Shade).MovesetName);
 
             if (previewStatus != null)
             {

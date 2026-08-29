@@ -177,6 +177,22 @@ public class ShadeCompanionRegistryTests
         }
     }
 
+    /// <summary>
+    /// The moveset decides which movement step a companion runs, so it has to stay attached to the
+    /// character rather than being inferred from how that character happens to be rendered.
+    /// </summary>
+    [Fact]
+    public void EachCharacterCarriesItsOwnMoveset()
+    {
+        var shade = ShadeCharacterRegistry.Get(ShadeCharacterId.Shade);
+        var knight = ShadeCharacterRegistry.Get(ShadeCharacterId.Knight);
+
+        Assert.Equal(ShadeMoveset.Shade, shade.Moveset);
+        Assert.Equal(ShadeMoveset.Knight, knight.Moveset);
+        Assert.Equal("Shade Moveset", shade.MovesetName);
+        Assert.Equal("Knight Moveset", knight.MovesetName);
+    }
+
     [Fact]
     public void UnknownPersistedCharacterIdFallsBackToTheShade()
     {

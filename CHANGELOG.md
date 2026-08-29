@@ -3,6 +3,29 @@
 One line per change, two at most. Say what changed for the player and name the setting that
 controls it; the reasoning belongs in the commit and the code.
 
+## Unreleased
+
+### Added
+
+- The Shade's "Skins" menu is now "Characters", and the Knight of Hallownest joins the Shade as a
+  playable companion. It walks instead of floating, and pogos off Hornet with a down slash.
+- The Knight's abilities follow Hornet's: Mothwing Cloak with her sprint, Mantis Claw with her wall
+  climb, Double Jump alongside it, and Shade Cloak with Harpoon Dash. Jump is a new binding in
+  Controls, unbound to anything the Shade uses.
+- Ten charms join the roster: Weaversong, Defender's Crest, Flukenest, Spore Shroom, Thorns of
+  Agony, Glowing Womb, Gathering Swarm, Grimmchild, Dream Wielder and Dreamshield. All work for
+  both the Shade and the Knight, sold by the Bonebottom shopkeeper and Grindle.
+- The charm inventory now scales its grid to fit the larger roster instead of running off the pane.
+- The camera now leans toward the midpoint between Hornet and her companion, and widens by up to a
+  quarter once they no longer both fit, so the pair stay on screen. The Knight is held inside the
+  view as a backstop. "Co-op Camera" in the Shade settings turns both off for anyone who prefers
+  the camera to stay on Hornet; `companionCameraMaxZoom` sets how far it may widen.
+- The Knight carries a brighter light than the Shade. `knightLightRadiusMultiplier` and
+  `knightLightIntensityMultiplier` control it.
+- Shade AI is unavailable while the Knight is equipped and reads as such in the menu — it steers by
+  synthesising input, which cannot drive a character that has to jump and climb. Your setting is
+  kept and returns with the Shade.
+
 ## 1.2.0
 
 ### Fixed

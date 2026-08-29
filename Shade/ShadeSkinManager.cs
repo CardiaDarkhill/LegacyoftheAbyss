@@ -306,7 +306,7 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
-        private static ShadeSkinDefinition CreateDefaultSkin() => new(DefaultSkinId, "Default Shade", null);
+        private static ShadeSkinDefinition CreateDefaultSkin() => new(DefaultSkinId, "Shade", null);
 
         private static IEnumerable<ManifestEntry> ReadManifest(string skinsRoot)
         {

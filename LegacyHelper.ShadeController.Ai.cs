@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using System;
 using System.Collections.Generic;
 using LegacyoftheAbyss.Shade.Ai;
@@ -37,7 +37,13 @@ public partial class LegacyHelper
         /// </summary>
         private const int AiStuckStreakLimit = 3;
 
-        internal bool ShadeAiEnabled => aiEnabled;
+        /// <summary>
+        /// Whether an AI is actually driving this companion. The Knight is excluded outright: the
+        /// AI steers by synthesising input, which works for a Shade because it flies anywhere in a
+        /// straight line, and a walking body needs jump planning the brain does not have. The
+        /// player's setting is kept rather than cleared, so it returns when the Shade does.
+        /// </summary>
+        internal bool ShadeAiEnabled => aiEnabled && !UsesGroundedMovement;
 
         /// <summary>
         /// Whether an AI is driving the Shade in this scene. Falls back to config when no Shade is
@@ -50,7 +56,7 @@ public partial class LegacyHelper
                 try
                 {
                     var shade = PrimaryInstance;
-                    return shade != null ? shade.aiEnabled : ModConfig.Instance.shadeAiEnabled;
+                    return shade != null ? shade.ShadeAiEnabled : ModConfig.Instance.shadeAiEnabled;
                 }
                 catch
                 {
@@ -151,7 +157,7 @@ public partial class LegacyHelper
         /// </summary>
         private void UpdateShadeAi()
         {
-            if (!aiEnabled)
+            if (!ShadeAiEnabled)
             {
                 if (aiEngaged)
                 {
@@ -743,7 +749,7 @@ public partial class LegacyHelper
         /// <summary>The AI's current state, as a flight-recorder/diagnostics fragment.</summary>
         private string DescribeAiState()
         {
-            if (!aiEnabled)
+            if (!ShadeAiEnabled)
             {
                 return null;
             }

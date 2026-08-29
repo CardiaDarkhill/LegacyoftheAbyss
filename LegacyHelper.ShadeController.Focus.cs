@@ -84,6 +84,9 @@ public partial class LegacyHelper
                     TryPlayFocusCompleteSfx();
                 }
 
+                // Spore Shroom bursts on the channel completing, whether or not it healed.
+                OnFocusCompletedCharmEffects();
+
                 // End channel regardless of success
                 isFocusing = false;
                 isCastingSpell = false;

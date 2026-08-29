@@ -327,7 +327,8 @@ public static partial class ShadeSettingsMenu
             (ShadeAction.Fire, "Spellcast"),
             (ShadeAction.Teleport, "Teleport"),
             (ShadeAction.Focus, "Focus"),
-            (ShadeAction.Sprint, "Sprint"),
+            (ShadeAction.Sprint, "Sprint / Dash"),
+            (ShadeAction.Jump, "Jump (Knight)"),
             (ShadeAction.CommandShade, "Command Shade")
         };
 

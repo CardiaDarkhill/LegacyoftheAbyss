@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using System.Collections.Generic;
 using System.Text;
 using LegacyoftheAbyss.Diagnostics;
@@ -98,7 +98,7 @@ public partial class LegacyHelper
             state.NailTimer = nailTimer;
             state.FocusTimer = focusTimer;
             state.MoveSpeed = moveSpeed;
-            state.AiEnabled = aiEnabled;
+            state.AiEnabled = ShadeAiEnabled;
             state.AiReason = aiPlan.Reason.ToString();
             state.AiAction = DescribeAiAction(aiPlan.Action);
             state.AiTargetId = aiPlan.TargetId;

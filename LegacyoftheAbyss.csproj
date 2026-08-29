@@ -99,11 +99,14 @@
           <Binaries Include="$(TargetPath)"/>
           <Binaries Include="$(TargetDir)/$(TargetName).pdb"/>
           <ModAssets Include="Assets\charm_placements.json" />
+          <!-- Recursive copy keeps the Knight bundle folder intact; it is not a flat asset. -->
+          <ModAssetTrees Include="Assets\Knight\**\*.*" />
       </ItemGroup>
 
       <Copy SourceFiles="@(Binaries)" DestinationFolder="$(SilksongFolder)/BepInEx/plugins/$(TargetName)" />
       <MakeDir Directories="$(SilksongFolder)/BepInEx/plugins/$(TargetName)/Assets" />
       <Copy SourceFiles="@(ModAssets)" DestinationFolder="$(SilksongFolder)/BepInEx/plugins/$(TargetName)/Assets" SkipUnchangedFiles="true" />
+      <Copy SourceFiles="@(ModAssetTrees)" DestinationFiles="@(ModAssetTrees->'$(SilksongFolder)/BepInEx/plugins/$(TargetName)/Assets/Knight/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
 
       <PropertyGroup>
           <ExportFolder>bin/Publish</ExportFolder>

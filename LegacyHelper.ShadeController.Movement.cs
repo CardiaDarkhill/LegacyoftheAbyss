@@ -264,6 +264,7 @@ public partial class LegacyHelper
                 }
             }
 
+            UpdateGatheringSwarm(Time.deltaTime);
             CheckHazardOverlap();
             PersistIfChanged();
             CheckFocusReadySfx();
@@ -953,10 +954,12 @@ public partial class LegacyHelper
 
             hiddenForScriptedHold = hidden;
 
-            if (sr)
+            if (sr && !UsesGroundedMovement)
             {
                 sr.enabled = !hidden;
             }
+
+            knightView?.SetVisible(!hidden);
 
             if (shadowParticleRenderer)
             {
@@ -1137,6 +1140,14 @@ public partial class LegacyHelper
 
         private void HandleMovementAndFacing(float deltaTime)
         {
+            // The Knight walks; everything below this flies. Its own step handles the locked and
+            // stunned cases, because a grounded body still has to fall through them.
+            if (UsesGroundedMovement)
+            {
+                HandleKnightMovement(deltaTime);
+                return;
+            }
+
             // Hit-stun and knockback still win, so a hit landed just as a cutscene starts still reads
             // as a hit rather than the Shade sliding calmly into place.
             if (hornetControlsLocked && damageStaggerTimer <= 0f && knockbackTimer <= 0f)
@@ -1365,7 +1376,7 @@ public partial class LegacyHelper
                 // because it does not actually let the Shade off screen - GetDynamicLeashLimits
                 // overwrites the per-axis limits with the real room to the screen edge either way, so
                 // this only stops the radii being the tighter of the two constraints.
-                if (aiEnabled)
+                if (ShadeAiEnabled)
                 {
                     multiplier = Mathf.Max(multiplier, ShadeAiLeashMultiplier);
                 }
@@ -1393,7 +1404,7 @@ public partial class LegacyHelper
 
         private float GetLeashRoomMultiplier()
         {
-            if (!aiEnabled || !HasShadeAiCommand)
+            if (!ShadeAiEnabled || !HasShadeAiCommand)
             {
                 return 1f;
             }
@@ -1412,7 +1423,7 @@ public partial class LegacyHelper
         /// </summary>
         private float GetLeashRoomFloor()
         {
-            return aiEnabled && HasShadeAiCommand ? aiCommandLeashFloor : 0f;
+            return ShadeAiEnabled && HasShadeAiCommand ? aiCommandLeashFloor : 0f;
         }
 
         private void SpawnSprintBurst(Vector2 dir)

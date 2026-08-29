@@ -173,7 +173,22 @@ public partial class LegacyHelper
             }
 
             Vector2 dir = new Vector2(facing, 0f);
-            SpawnProjectile(dir);
+            if (FlukenestActive)
+            {
+                // Flukenest trades the single bolt for a spread: more total damage, but only if
+                // enough of the cluster connects.
+                const int flukeCount = 5;
+                for (int i = 0; i < flukeCount; i++)
+                {
+                    float spread = Mathf.Lerp(-22f, 22f, flukeCount > 1 ? i / (float)(flukeCount - 1) : 0.5f);
+                    SpawnProjectile(Quaternion.Euler(0f, 0f, spread) * dir, damageScale: 0.45f);
+                }
+            }
+            else
+            {
+                SpawnProjectile(dir);
+            }
+
             currentAnimFrames = null;
             isCastingSpell = false;
         }
@@ -230,7 +245,10 @@ public partial class LegacyHelper
             StartCoroutine(DescendingDarkRoutine(dmg, upgraded));
         }
 
-        // Spell progression helpers
+        // Spell progression helpers.
+        // The Shade counts Hornet's six spell flags into one 0-6 track. The Knight instead follows
+        // Knight in Silksong's per-spell mapping, so each of its three spells has its own two gates
+        // - see KnightAbilityMap.
         private int ShadeSpellProgress
         {
             get
@@ -263,6 +281,8 @@ public partial class LegacyHelper
         {
             if (abilityOverrides.EnableProjectile.HasValue)
                 return abilityOverrides.EnableProjectile.Value;
+            if (UsesGroundedMovement)
+                return knightAbilities.FireballLevel >= 1;
             return ShadeSpellProgress >= 1;
         }
 
@@ -270,6 +290,8 @@ public partial class LegacyHelper
         {
             if (abilityOverrides.EnableDescendingDark.HasValue)
                 return abilityOverrides.EnableDescendingDark.Value;
+            if (UsesGroundedMovement)
+                return knightAbilities.QuakeLevel >= 1;
             return ShadeSpellProgress >= 2;
         }
 
@@ -277,6 +299,8 @@ public partial class LegacyHelper
         {
             if (abilityOverrides.EnableShriek.HasValue)
                 return abilityOverrides.EnableShriek.Value;
+            if (UsesGroundedMovement)
+                return knightAbilities.ScreamLevel >= 1;
             return ShadeSpellProgress >= 3;
         }
 
@@ -284,6 +308,8 @@ public partial class LegacyHelper
         {
             if (abilityOverrides.UpgradeProjectile.HasValue)
                 return abilityOverrides.UpgradeProjectile.Value;
+            if (UsesGroundedMovement)
+                return knightAbilities.FireballLevel >= 2;
             return ShadeSpellProgress >= 4;
         }
 
@@ -291,6 +317,8 @@ public partial class LegacyHelper
         {
             if (abilityOverrides.UpgradeDescendingDark.HasValue)
                 return abilityOverrides.UpgradeDescendingDark.Value;
+            if (UsesGroundedMovement)
+                return knightAbilities.QuakeLevel >= 2;
             return ShadeSpellProgress >= 5;
         }
 
@@ -298,6 +326,8 @@ public partial class LegacyHelper
         {
             if (abilityOverrides.UpgradeShriek.HasValue)
                 return abilityOverrides.UpgradeShriek.Value;
+            if (UsesGroundedMovement)
+                return knightAbilities.ScreamLevel >= 2;
             return ShadeSpellProgress >= 6;
         }
         private int ComputeSpellDamageMultiplier(float baseMult, bool upgraded)

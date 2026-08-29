@@ -40,6 +40,14 @@ public partial class LegacyHelper
             transform.localScale = Vector3.one * SpriteScale;
             ApplyRenderingSettings();
             LoadShadeSprites();
+
+            // After the sheets, so the Knight inherits the sorting they resolved - and so a missing
+            // bundle leaves a working Shade rather than an invisible companion.
+            if (UsesGroundedMovement && !TryInitializeKnight() && Companion != null)
+            {
+                LogWarning($"Companion {Companion.Id} falls back to the Shade: the Knight bundle could not be loaded.");
+                Companion.Character = ShadeCharacterId.Shade;
+            }
             if (sr != null)
             {
                 if (idleAnimFrames != null && idleAnimFrames.Length > 0)
@@ -135,6 +143,9 @@ public partial class LegacyHelper
             {
                 Companion.Controller = null;
             }
+
+            // Summoned minions follow their owner out; without this their bookkeeping outlives it.
+            ShadeCharmSummons.DismissAll(this);
 
             // The synthesised input is static and outlives this component. Leaving a direction held
             // on the way out would hand it straight to the pause-menu panes, which navigate on the
@@ -778,6 +789,10 @@ public partial class LegacyHelper
 
         private void HandleAnimation()
         {
+            // The Knight animates from its own clip library, driven inside its movement step.
+            if (UsesGroundedMovement)
+                return;
+
             if (sr == null) return;
             sr.flipX = (facing == 1);
 

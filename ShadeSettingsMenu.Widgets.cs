@@ -1326,7 +1326,7 @@ public static partial class ShadeSettingsMenu
     /// MenuButton clone does, so those rows are the ones that look permanently unselected.
     /// </para>
     /// </summary>
-    private static MenuSelectable CreateToggle(Transform parent, MenuButton buttonTemplate, string label, bool value, System.Action<bool> onChange, CancelTarget cancelTarget)
+    private static MenuSelectable CreateToggle(Transform parent, MenuButton buttonTemplate, string label, bool value, System.Action<bool> onChange, CancelTarget cancelTarget, System.Func<bool> unavailable = null)
     {
         var selectable = CreateMenuButton(parent, buttonTemplate, label, null, cancelTarget);
         if (selectable is not MenuButton button)
@@ -1337,7 +1337,7 @@ public static partial class ShadeSettingsMenu
         }
 
         var driver = button.gameObject.AddComponent<LabeledToggleDriver>();
-        driver.Initialize(button, label, value, onChange);
+        driver.Initialize(button, label, value, onChange, unavailable);
         return button;
     }
 

@@ -362,6 +362,11 @@ namespace LegacyoftheAbyss.Diagnostics
                 Row(builder, "Menu slider template", state.MenuSliderTemplate);
             }
 
+            if (!string.IsNullOrEmpty(state.CoopCamera))
+            {
+                Row(builder, "Co-op camera", state.CoopCamera);
+            }
+
             builder.AppendLine();
 
             var hero = state.Hero;

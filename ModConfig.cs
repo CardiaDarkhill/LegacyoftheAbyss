@@ -320,6 +320,11 @@ public class ModConfig
     // character instead of an unlit overlay. Toggleable because it is the one visual change
     // here that depends on a game-side shader we do not control.
     public bool shadeUseHornetMaterial = true;
+    // The Knight's rig comes out of Hollow Knight at its own scale, which stands it nearly as tall
+    // as Hornet; it should be a little over half her height. Multiplies the rig's own scale, and
+    // the companion body's collider with it so the hurtbox does not stay a head taller than the
+    // art. Cosmetic tuning - raise it if the Knight reads as too small beside her.
+    public float knightScale = 0.57f;
     // Give the Shade a clone of Hornet's hero light. Scene darkness is a shader cutout fed by a
     // camera that renders that object, so this is what lets the Shade be seen - and light its own
     // surroundings - in a dark room away from Hornet.
@@ -335,6 +340,28 @@ public class ModConfig
     // own light instead, which reads larger than the light looks because these sprites carry a
     // wide soft falloff.
     public float shadeLightFalloffRadius = 10f;
+    // The Knight is a second player rather than a companion drifting near Hornet, so it carries a
+    // stronger light of its own. These multiply the two peaks above when a companion is wearing the
+    // Knight; the distance fade still applies on top, so its light still yields where hers reaches.
+    public float knightLightRadiusMultiplier = 2f;
+    public float knightLightIntensityMultiplier = 1.5f;
+    // Keeps the Knight inside the camera's view, so the second player can always see themselves.
+    // Silksong's camera cannot be split - tk2dCamera writes the projection matrix directly and has
+    // no viewport support - so confining the Knight to the visible area is what stands in for it.
+    public bool knightCameraLeashEnabled = true;
+    // World units held back from the screen edge, so the Knight stops just inside it rather than
+    // half off it.
+    public float knightCameraLeashMargin = 1.5f;
+    // Pull the camera toward the midpoint between Hornet and whichever companion is out, so both
+    // stay on screen for longer before the leash above bites. Biases the camera's follow target, so
+    // scene bounds, lock areas and the game's own damping all still apply. Applies to the Shade as
+    // well as the Knight - the Shade is leashed closer, so it simply asks for a smaller lean.
+    // Toggled in-game by "Co-op Camera" on the Shade settings screen.
+    public bool companionCameraBiasEnabled = true;
+    // How far the view may widen once the pair no longer fit the frame, as a share of the normal
+    // shot. 0.25 is a quarter wider; 0 disables the zoom and leaves only the lean. Applied by
+    // raising the camera's field of view, which the darkness pass follows on its own.
+    public float companionCameraMaxZoom = 0.25f;
     // Trailing black-wisp emitter that follows the Shade, scaled by its current SOUL.
     public bool shadeShadowParticlesEnabled = true;
     // Global multiplier on that emitter, 0 (off) to 2 (twice the tuned density).

@@ -35,6 +35,18 @@ public static partial class ShadeSettingsMenu
             var s = CreateMenuButton(content, buttonTemplate, "Characters", () => ShowScreen(skinsScreen), CancelTarget.PauseMenu);
             if (s != null) selectables.Add(s);
         }
+        // A toggle among the navigation rows rather than a screen of its own: it is one switch, and
+        // it belongs next to Characters because it only does anything with a second player out.
+        {
+            var s = CreateToggle(content, buttonTemplate, "Co-op Camera", ModConfig.Instance.companionCameraBiasEnabled,
+                v =>
+                {
+                    ModConfig.Instance.companionCameraBiasEnabled = v;
+                    if (!v)
+                        LegacyHelper.CompanionCameraBias.Reset();
+                }, CancelTarget.PauseMenu);
+            if (s != null) selectables.Add(s);
+        }
         if (shadeAiScreen != null)
         {
             var s = CreateMenuButton(content, buttonTemplate, "Shade AI", () => ShowScreen(shadeAiScreen), CancelTarget.PauseMenu);
@@ -488,6 +500,11 @@ public static partial class ShadeSettingsMenu
             descriptions.Add(new KeyValuePair<MenuSelectable, string>(selectable, description));
         }
 
+        // Re-asked on every show rather than captured here: the character can change on another
+        // screen, and this row is built once for the session.
+        static bool AiUnavailableForCharacter() => ShadeCharacterManager
+            .GetSelected(ShadeCompanionRegistry.PrimaryId).Id == ShadeCharacterId.Knight;
+
         Add(CreateToggle(content, buttonTemplate, "Shade AI", ModConfig.Instance.shadeAiEnabled, v =>
             {
                 ModConfig.Instance.shadeAiEnabled = v;
@@ -498,8 +515,8 @@ public static partial class ShadeSettingsMenu
                     if (shade != null)
                         shade.SetShadeAiEnabled(v, persist: false);
                 }
-            }, CancelTarget.ShadeMain),
-            "Let the Shade fight by itself. It picks targets, attacks, steps out of danger and heals you both. It can be killed, so you will need to revive it.");
+            }, CancelTarget.ShadeMain, AiUnavailableForCharacter),
+            "Let the Shade fight by itself. It picks targets, attacks, steps out of danger and heals you both. It can be killed, so you will need to revive it. Unavailable while the Knight is equipped — the AI cannot drive a character that has to jump and climb.");
 
         Add(CreateSlider(content, sliderTemplate, buttonTemplate, "Attack Speed", 0.1f, 1f, ModConfig.Instance.shadeAiAttackSpeedFraction,
                 v => ModConfig.Instance.shadeAiAttackSpeedFraction = v, CancelTarget.ShadeMain),

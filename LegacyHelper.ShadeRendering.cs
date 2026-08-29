@@ -460,6 +460,14 @@ public partial class LegacyHelper
             float maxIntensity = Mathf.Max(0f, config.shadeLightIntensity);
             float maxRadius = Mathf.Max(0f, config.shadeLightRadiusScale);
 
+            // The Knight lights more of the room than the Shade does - it is played, not followed.
+            // Applied to the peaks so the distance fade below still governs it.
+            if (UsesGroundedMovement)
+            {
+                maxIntensity *= Mathf.Max(0f, config.knightLightIntensityMultiplier);
+                maxRadius *= Mathf.Max(0f, config.knightLightRadiusMultiplier);
+            }
+
             // Both fade in with distance from Hornet, because the Shade's light is only wanted
             // where hers is not reaching: overlapping the two washes the pair out. Radius reaches
             // its maximum at the edge of her light; intensity ramps over the further distance at
@@ -481,9 +489,11 @@ public partial class LegacyHelper
             float intensity = maxIntensity * intensityT;
             float radius = maxRadius * radiusT;
 
-            // Follows the body sprite, which is what ApplyScriptedHoldVisibility turns off, so a
-            // scripted hold takes the light with it.
-            bool visible = sr && sr.enabled;
+            // Follows whatever actually draws this companion, which is what
+            // ApplyScriptedHoldVisibility turns off, so a scripted hold takes the light with it.
+            // The Knight draws through its rig rather than the sheet renderer, and keying this on
+            // the renderer alone left it carrying no light at all.
+            bool visible = CompanionVisible;
 
             for (int i = 0; i < shadeLightRenderers.Length; i++)
             {

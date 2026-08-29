@@ -713,16 +713,26 @@ public static partial class ShadeSettingsMenu
         private bool value;
         private System.Action<bool> onChange;
 
-        public void Initialize(MenuButton menuButton, string labelText, bool initial, System.Action<bool> changed)
+        /// <summary>
+        /// Re-asked every time the row is shown, so a setting that another screen can make
+        /// meaningless reads as unavailable rather than as a stale On/Off. Null means always
+        /// available.
+        /// </summary>
+        private System.Func<bool> isUnavailable;
+
+        public void Initialize(MenuButton menuButton, string labelText, bool initial, System.Action<bool> changed, System.Func<bool> unavailable = null)
         {
             button = menuButton;
             label = labelText;
             value = initial;
             onChange = changed;
+            isUnavailable = unavailable;
             button.OnSubmitPressed.RemoveAllListeners();
             button.OnSubmitPressed.AddListener(Toggle);
             UpdateLabel();
         }
+
+        private bool Unavailable => isUnavailable != null && isUnavailable();
 
         private void OnEnable()
         {
@@ -731,6 +741,12 @@ public static partial class ShadeSettingsMenu
 
         private void Toggle()
         {
+            if (Unavailable)
+            {
+                UpdateLabel();
+                return;
+            }
+
             value = !value;
             try
             {
@@ -751,7 +767,7 @@ public static partial class ShadeSettingsMenu
                 return;
             }
 
-            SetSelectableLabelText(button.gameObject, label + ": " + (value ? "On" : "Off"));
+            SetSelectableLabelText(button.gameObject, label + ": " + (Unavailable ? "Unavailable" : (value ? "On" : "Off")));
         }
     }
 

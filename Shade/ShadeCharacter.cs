@@ -14,6 +14,19 @@ namespace LegacyoftheAbyss.Shade
     }
 
     /// <summary>
+    /// Which set of movement rules a character plays by. Separate from the character itself so two
+    /// characters could share one, and separate from the render backend, which is about art.
+    /// </summary>
+    internal enum ShadeMoveset
+    {
+        /// <summary>Floats on a leash near Hornet, with gravity off.</summary>
+        Shade,
+
+        /// <summary>Walks, jumps, clings to walls and pogos.</summary>
+        Knight
+    }
+
+    /// <summary>
     /// How a character's frames reach the screen. The Shade animates flat sheets loaded by
     /// <c>LoadShadeSprites</c>; the Knight drives the animator inside KIS's asset bundle. The two
     /// paths share no code, so anything rendering a companion has to branch on this.
@@ -35,13 +48,17 @@ namespace LegacyoftheAbyss.Shade
             string displayName,
             string description,
             ShadeRenderBackend renderBackend,
-            bool supportsSkins)
+            ShadeMoveset moveset,
+            bool supportsSkins,
+            string? previewImagePath = null)
         {
             Id = id;
             DisplayName = displayName;
             Description = description;
             RenderBackend = renderBackend;
+            Moveset = moveset;
             SupportsSkins = supportsSkins;
+            PreviewImagePath = previewImagePath;
         }
 
         internal ShadeCharacterId Id { get; }
@@ -52,8 +69,19 @@ namespace LegacyoftheAbyss.Shade
 
         internal ShadeRenderBackend RenderBackend { get; }
 
+        internal ShadeMoveset Moveset { get; }
+
         /// <summary>Whether the Characters menu offers a skin list beneath this character.</summary>
         internal bool SupportsSkins { get; }
+
+        /// <summary>
+        /// Menu preview art, relative to the assets root. Null for a character whose preview comes
+        /// from its skin sheets instead.
+        /// </summary>
+        internal string? PreviewImagePath { get; }
+
+        /// <summary>How the Characters menu names this character's movement rules.</summary>
+        internal string MovesetName => Moveset == ShadeMoveset.Knight ? "Knight Moveset" : "Shade Moveset";
 
         /// <summary>Stable identifier persisted in config.</summary>
         internal string ConfigId => Id.ToString();
@@ -71,13 +99,18 @@ namespace LegacyoftheAbyss.Shade
                 "Shade",
                 "The vessel's shade. Fights with nail and soul, and wears any installed skin.",
                 ShadeRenderBackend.SpriteSheets,
+                ShadeMoveset.Shade,
                 supportsSkins: true),
             new ShadeCharacterDefinition(
                 ShadeCharacterId.Knight,
                 "Knight",
                 "The Knight of Hallownest. Trades soul spells for Hollow Knight movement, and can pogo off Hornet.",
                 ShadeRenderBackend.AssetBundle,
-                supportsSkins: false),
+                ShadeMoveset.Knight,
+                supportsSkins: false,
+                // A still rather than a frame out of the bundle: the menu is built at launch, and
+                // the bundle is ~54 MB that only a spawned Knight should pay for.
+                previewImagePath: "Knight/knight_preview.png"),
         };
 
         internal static IReadOnlyList<ShadeCharacterDefinition> Characters => s_characters;

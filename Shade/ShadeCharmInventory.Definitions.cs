@@ -654,6 +654,189 @@ namespace LegacyoftheAbyss.Shade
                 fallbackTint: new Color(0.32f, 0.32f, 0.42f),
                 enumId: ShadeCharmId.VoidHeart,
                 iconName: "shade_charm_void_heart"));
+
+            definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.Weaversong),
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx => ShadeCharmSummons.Spawn(
+                        ctx.Controller, ShadeCharmId.Weaversong,
+                        count: 3, damage: 5, orbitRadius: 1.9f, seekRange: 9f),
+                    OnRemoved = ctx => ShadeCharmSummons.Dismiss(ctx.Controller, ShadeCharmId.Weaversong)
+                },
+                displayName: "Weaversong",
+                description: "Contains the lingering souls of a departed tribe of weavers. Summons weaverlings to the bearer's side, who will attack nearby foes.",
+                notchCost: 2,
+                fallbackTint: new Color(0.45f, 0.36f, 0.62f),
+                enumId: ShadeCharmId.Weaversong,
+                iconName: "shade_charm_weaversongcharmgrimmsilkweaver"));
+
+            definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.DefendersCrest),
+                hooks: new ShadeCharmHooks
+                {
+                    OnUpdate = (ctx, delta) =>
+                    {
+                        var controller = ctx.Controller;
+                        if (controller == null)
+                            return;
+
+                        if (ShadeCharmSummons.TickSpawnTimer(controller, ShadeCharmId.DefendersCrest, delta, 0.6f))
+                            controller.SpawnCharmDamageBurst(radius: 2.6f, damage: 3, lifeSeconds: 0.3f);
+                    }
+                },
+                displayName: "Defender's Crest",
+                description: "Crest of a proud knight. The bearer is wreathed in a cloud of noxious spores that damages foes that draw near. The smell is quite terrible.",
+                notchCost: 1,
+                fallbackTint: new Color(0.52f, 0.58f, 0.28f),
+                enumId: ShadeCharmId.DefendersCrest,
+                iconName: "shade_charm_defenderscrestcharmdungdef"));
+
+            definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.Flukenest),
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx => ctx.Controller?.SetFlukenestEnabled(true),
+                    OnRemoved = ctx => ctx.Controller?.SetFlukenestEnabled(false)
+                },
+                displayName: "Flukenest",
+                description: "Contains the young of a parasitic creature. Changes the Vengeful Spirit spell, causing the bearer to launch a cluster of volatile flukes instead.",
+                notchCost: 3,
+                fallbackTint: new Color(0.72f, 0.38f, 0.44f),
+                enumId: ShadeCharmId.Flukenest,
+                iconName: "shade_charm_flukenestcharmfluke"));
+
+            definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.SporeShroom),
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx => ctx.Controller?.SetSporeShroomEnabled(true),
+                    OnRemoved = ctx => ctx.Controller?.SetSporeShroomEnabled(false)
+                },
+                displayName: "Spore Shroom",
+                description: "Formed from the flesh of a fungal creature. When the bearer focuses SOUL, a cloud of corrosive spores bursts forth to harm any foe that lingers.",
+                notchCost: 1,
+                fallbackTint: new Color(0.63f, 0.66f, 0.42f),
+                enumId: ShadeCharmId.SporeShroom,
+                iconName: "shade_charm_sporeshroomcharmfungus"));
+
+            definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.ThornsOfAgony),
+                hooks: new ShadeCharmHooks
+                {
+                    OnShadeDamaged = (ctx, evt) =>
+                    {
+                        // Only a hit that actually landed retaliates - a shielded or evaded hit
+                        // never hurt the bearer, so there is nothing to answer for.
+                        if (evt.WasPrevented || evt.ActualDamage <= 0)
+                            return;
+
+                        ctx.Controller?.SpawnCharmDamageBurst(radius: 3.2f, damage: 12, lifeSeconds: 0.25f);
+                    }
+                },
+                displayName: "Thorns of Agony",
+                description: "Bramble-shaped charm containing the memory of pain. When the bearer suffers damage, thorny vines burst out and lash the foes surrounding them.",
+                notchCost: 1,
+                fallbackTint: new Color(0.44f, 0.60f, 0.34f),
+                enumId: ShadeCharmId.ThornsOfAgony,
+                iconName: "shade_charm_thornsofagony0000charmthorncounter"));
+
+            definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.GlowingWomb),
+                hooks: new ShadeCharmHooks
+                {
+                    OnUpdate = (ctx, delta) =>
+                    {
+                        var controller = ctx.Controller;
+                        if (controller == null)
+                            return;
+
+                        // Costs SOUL to birth one, as it costs the Knight in Hallownest.
+                        if (!ShadeCharmSummons.TickSpawnTimer(controller, ShadeCharmId.GlowingWomb, delta, 3.5f))
+                            return;
+
+                        if (controller.GetShadeSoul() < 8)
+                            return;
+
+                        controller.GainShadeSoul(-8);
+                        ShadeCharmSummons.AddOne(
+                            controller, ShadeCharmId.GlowingWomb,
+                            maxAlive: 4, damage: 9, seekRange: 12f,
+                            lifeSeconds: 12f, expiresOnHit: true);
+                    },
+                    OnRemoved = ctx => ShadeCharmSummons.Dismiss(ctx.Controller, ShadeCharmId.GlowingWomb)
+                },
+                displayName: "Glowing Womb",
+                description: "Forms a bond between the SOUL of the bearer and the void within. Consumes SOUL to birth fragile hatchlings that seek out foes and burst upon them.",
+                notchCost: 2,
+                fallbackTint: new Color(0.78f, 0.80f, 0.55f),
+                enumId: ShadeCharmId.GlowingWomb,
+                iconName: "shade_charm_glowingwomb0009charmhatchling"));
+
+            definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.GatheringSwarm),
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx => ctx.Controller?.SetGatheringSwarmEnabled(true),
+                    OnRemoved = ctx => ctx.Controller?.SetGatheringSwarmEnabled(false)
+                },
+                displayName: "Gathering Swarm",
+                description: "A swarm of tiny creatures that follow the bearer, gathering up loose rosaries that would otherwise be left behind.",
+                notchCost: 1,
+                fallbackTint: new Color(0.86f, 0.78f, 0.44f),
+                enumId: ShadeCharmId.GatheringSwarm,
+                iconName: "shade_charm_gatheringswarmcharmsprite02"));
+
+            definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.Grimmchild),
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx => ShadeCharmSummons.Spawn(
+                        ctx.Controller, ShadeCharmId.Grimmchild,
+                        count: 1, damage: 14, orbitRadius: 2.2f, seekRange: 11f),
+                    OnRemoved = ctx => ShadeCharmSummons.Dismiss(ctx.Controller, ShadeCharmId.Grimmchild)
+                },
+                displayName: "Grimmchild",
+                description: "A child of the Nightmare's Heart, held close. It drifts beside the bearer and darts at foes who come near, hungry for the flames within them.",
+                notchCost: 2,
+                fallbackTint: new Color(0.76f, 0.26f, 0.30f),
+                enumId: ShadeCharmId.Grimmchild,
+                iconName: "shade_charm_grimmchildcharmgrimmkin04"));
+
+            definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.DreamWielder),
+                statModifiers: new ShadeCharmStatModifiers
+                {
+                    ShadeSoulCapacityFlatBonus = 11
+                },
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx => ctx.Controller?.AddSoulGainBonus(4),
+                    OnRemoved = ctx => ctx.Controller?.AddSoulGainBonus(-4)
+                },
+                displayName: "Dream Wielder",
+                description: "Charm of an ancient dream-seer. The bearer draws SOUL more readily from every strike, and holds a little more of it than they otherwise could.",
+                notchCost: 1,
+                fallbackTint: new Color(0.60f, 0.72f, 0.88f),
+                enumId: ShadeCharmId.DreamWielder,
+                iconName: "shade_charm_dreamwielder"));
+
+            definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.Dreamshield),
+                hooks: new ShadeCharmHooks
+                {
+                    OnApplied = ctx => ShadeCharmSummons.Spawn(
+                        ctx.Controller, ShadeCharmId.Dreamshield,
+                        count: 1, damage: 10, orbitRadius: 2.4f, seekRange: 0f),
+                    OnRemoved = ctx => ShadeCharmSummons.Dismiss(ctx.Controller, ShadeCharmId.Dreamshield)
+                },
+                displayName: "Dreamshield",
+                description: "A shield of dream-stuff that circles the bearer, striking foes it passes through. It keeps its slow orbit rather than seeking anything out.",
+                notchCost: 3,
+                fallbackTint: new Color(0.70f, 0.84f, 0.90f),
+                enumId: ShadeCharmId.Dreamshield,
+                iconName: "shade_charm_dreamshieldcharmgrimmmarkothshield"));
+
             return definitions;
         }
     }

@@ -18,6 +18,7 @@ namespace LegacyoftheAbyss.Shade.Knight
         private const string BundleFile = "knight.bundle";
         private const string ShaderMapFile = "MaterialShaderMap.json";
         private const string KnightPrefabName = "Knight_0";
+        private const string IdleClipName = "Idle";
 
         private static AssetBundle? s_bundle;
         private static readonly Dictionary<string, GameObject> s_prefabs = new();
@@ -26,9 +27,6 @@ namespace LegacyoftheAbyss.Shade.Knight
         private static bool s_shaderScanRegistered;
         private static bool s_shadersApplied;
         private static bool s_loadFailed;
-
-        /// <summary>Set once the bundle is loaded and its prefabs indexed.</summary>
-        internal static bool IsLoaded => s_bundle != null;
 
         /// <summary>The Knight body prefab, or null when the bundle is missing or failed to load.</summary>
         internal static GameObject? KnightPrefab
@@ -88,6 +86,73 @@ namespace LegacyoftheAbyss.Shade.Knight
             PreparePrefabs();
             BeginShaderScan();
             return true;
+        }
+
+        /// <summary>
+        /// A still from the Knight's idle animation, for the Characters menu, or null when the
+        /// bundle or the clip is unavailable. Loading the bundle here is deliberate: it happens the
+        /// first time the Knight row is focused, in a paused menu, rather than at launch for
+        /// everyone.
+        /// </summary>
+        internal static Sprite? TryBuildIdlePreview()
+        {
+            if (!TryLoad())
+            {
+                return null;
+            }
+
+            ApplyShaders();
+
+            var prefab = KnightPrefab;
+            var animator = prefab != null ? prefab.GetComponentInChildren<tk2dSpriteAnimator>(true) : null;
+            var clip = animator?.Library != null ? animator.Library.GetClipByName(IdleClipName) : null;
+            if (clip?.frames == null || clip.frames.Length == 0)
+            {
+                LegacyHelper.LogWarning($"Knight preview falls back to the shipped still: no '{IdleClipName}' clip in the bundle.");
+                return null;
+            }
+
+            var frame = clip.frames[0];
+            var collection = frame?.spriteCollection;
+            if (collection?.spriteDefinitions == null
+                || frame == null
+                || frame.spriteId < 0
+                || frame.spriteId >= collection.spriteDefinitions.Length)
+            {
+                return null;
+            }
+
+            var definition = collection.spriteDefinitions[frame.spriteId];
+            var texture = definition?.material != null ? definition.material.mainTexture as Texture2D : null;
+            if (definition?.uvs == null || definition.uvs.Length == 0 || texture == null)
+            {
+                return null;
+            }
+
+            // The frame is a region of the atlas, described by its UV corners.
+            Vector2 min = definition.uvs[0];
+            Vector2 max = definition.uvs[0];
+            for (int i = 1; i < definition.uvs.Length; i++)
+            {
+                min = Vector2.Min(min, definition.uvs[i]);
+                max = Vector2.Max(max, definition.uvs[i]);
+            }
+
+            var rect = new Rect(
+                min.x * texture.width,
+                min.y * texture.height,
+                (max.x - min.x) * texture.width,
+                (max.y - min.y) * texture.height);
+
+            if (rect.width < 1f || rect.height < 1f)
+            {
+                return null;
+            }
+
+            var sprite = Sprite.Create(texture, rect, new Vector2(0.5f, 0.5f));
+            sprite.name = "KnightIdlePreview";
+            sprite.hideFlags = HideFlags.HideAndDontSave;
+            return sprite;
         }
 
         internal static void Unload()

@@ -41,7 +41,18 @@ namespace LegacyoftheAbyss.Shade
         JonisBlessing,
         Hiveblood,
         Kingsoul,
-        VoidHeart
+        VoidHeart,
+        // Appended, never reordered: these are persisted by ordinal in existing save slots.
+        Weaversong,
+        DefendersCrest,
+        Flukenest,
+        SporeShroom,
+        ThornsOfAgony,
+        GlowingWomb,
+        GatheringSwarm,
+        Grimmchild,
+        DreamWielder,
+        Dreamshield
     }
 
     internal sealed class ShadeCharmDefinition

@@ -127,6 +127,13 @@ namespace LegacyoftheAbyss.Diagnostics
         /// </para>
         /// </summary>
         public string? MenuSliderTemplate;
+
+        /// <summary>
+        /// Why the co-op camera lean is or is not moving the shot. Every stage of it can decline
+        /// for a legitimate reason, and from outside those are indistinguishable from it being
+        /// broken - so the reason travels with the report rather than being guessed at.
+        /// </summary>
+        public string? CoopCamera;
     }
 
     /// <summary>
@@ -166,6 +173,7 @@ namespace LegacyoftheAbyss.Diagnostics
 
             TryRun(() => state.Scene = SceneManager.GetActiveScene().name);
             TryRun(() => state.MenuSliderTemplate = ShadeSettingsMenu.LastSliderTemplateDescription);
+            TryRun(() => state.CoopCamera = LegacyHelper.CompanionCameraBias.DescribeState());
 
             var gameManager = MenuStateUtility.TryGetGameManager();
             if (gameManager != null)

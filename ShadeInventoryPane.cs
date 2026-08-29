@@ -14,7 +14,9 @@ using LegacyoftheAbyss.Shade;
 internal sealed partial class ShadeInventoryPane : InventoryPane
 {
     private const int CharmRows = 4;
-    private const int DefaultCharmColumns = 6;
+    // Only the estimate used before the roster is known; the real column count is derived
+    // from the charm count. Sized for the current 42-charm roster over four rows.
+    private const int DefaultCharmColumns = 11;
     private static readonly Vector2 DefaultCharmCellSize = new Vector2(104f, 112f);
     private static readonly Vector2 DefaultCharmSpacing = new Vector2(16f, 16f);
     private const float RowOffsetFactor = 0.5f;
@@ -27,9 +29,16 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
     private const float CharmSpacingScale = 0.4f;
     private const float CharmSpacingMin = 4f;
     private const float BackgroundAlpha = 0.82f;
-    private const float CharmGridHorizontalScreenFraction = 0.15f;
+    /// <summary>Left inset of the "Equipped"/"Notches" labels, which the grid lines up with.</summary>
+    private const float SectionLabelInset = 16f;
+
+    /// <summary>Bottom of the notch icon row, measured from the top of the left column.</summary>
+    private const float NotchSectionBottom = 340f;
+
+    /// <summary>Breathing room between the notch icons and the first row of charms.</summary>
+    private const float CharmGridTopGap = 24f;
+
     private const float CharmGridVerticalScreenFraction = 0.12f;
-    private const float CharmGridHorizontalParentFraction = 0.12f;
     private const float CharmGridVerticalParentFraction = 0.04f;
     private const float SectionOffsetFraction = 0.05f;
     private const float DetailPreviewScale = 1.6f;

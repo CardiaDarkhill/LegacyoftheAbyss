@@ -259,6 +259,15 @@ public partial class LegacyHelper
         /// is the primary's. Falls back to the primary for a controller spawned outside the registry.
         /// </summary>
         private ShadeCharmInventory OwnCharms => Companion?.Charms ?? ShadeRuntime.Charms;
+
+        /// <summary>
+        /// Whether this companion is currently drawn, whichever renderer draws it. The Shade uses
+        /// its sheet renderer; the Knight's is disabled in favour of its own rig, so anything
+        /// following the body's visibility has to ask here rather than read <c>sr.enabled</c>.
+        /// </summary>
+        private bool CompanionVisible => UsesGroundedMovement
+            ? knightView != null && knightView.IsVisible
+            : sr && sr.enabled;
         private bool isDying;
         private Coroutine deathRoutine;
 

@@ -89,6 +89,49 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         UpdateCharmIconSizeCache();
     }
 
+    /// <summary>
+    /// Scales the cells down until the whole grid fits the box left for it. The cloned grid template
+    /// hands back a fixed cell size, which was big enough while the roster was 32 charms over eight
+    /// columns; the layout positions rows but never shrinks them, so at 42 the grid ran off the
+    /// column into the detail panel and up through the notch icons.
+    /// <para>
+    /// Both axes matter: width decides whether the description is overlapped, height whether the
+    /// notch row is.
+    /// </para>
+    /// </summary>
+    private void FitCharmCellsToBox(int columns, float availableWidth, float availableHeight)
+    {
+        if (columns <= 0 || availableWidth <= 0f || availableHeight <= 0f)
+        {
+            return;
+        }
+
+        float strideX = charmCellSize.x + charmSpacing.x;
+        // Odd rows are offset by half a stride, so they are the widest.
+        float requiredWidth = charmCellSize.x + Mathf.Max(0, columns - 1) * strideX + strideX * RowOffsetFactor;
+        float requiredHeight = CharmRows * charmCellSize.y + Mathf.Max(0, CharmRows - 1) * charmSpacing.y;
+
+        if (requiredWidth <= 0f || requiredHeight <= 0f)
+        {
+            return;
+        }
+
+        float scale = Mathf.Min(availableWidth / requiredWidth, availableHeight / requiredHeight);
+        if (scale >= 1f)
+        {
+            return;
+        }
+
+        charmCellSize = new Vector2(
+            Mathf.Max(charmCellSize.x * scale, MinRootSizeThreshold),
+            Mathf.Max(charmCellSize.y * scale, MinRootSizeThreshold));
+        charmSpacing = new Vector2(
+            Mathf.Max(charmSpacing.x * scale, 0f),
+            Mathf.Max(charmSpacing.y * scale, 0f));
+
+        UpdateCharmIconSizeCache();
+    }
+
     private int DetermineCharmColumnCount(int entryCount)
     {
         if (gridLayoutTemplate.HasValue &&
@@ -148,6 +191,35 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             columns = requiredColumns;
         }
 
+        Vector2 parentSize = leftContentRoot.rect.size;
+        if (parentSize.x < MinRootSizeThreshold || parentSize.y < MinRootSizeThreshold)
+        {
+            Vector2 fallbackParent = normalizedFallbackRootSize.sqrMagnitude > 0f ? normalizedFallbackRootSize : DefaultStandaloneRootSize;
+            parentSize = new Vector2(fallbackParent.x * 0.58f, fallbackParent.y * 0.55f);
+        }
+
+        Vector2 screenSize = normalizedFallbackRootSize.sqrMagnitude > 0f
+            ? normalizedFallbackRootSize
+            : DefaultStandaloneRootSize;
+
+        // Left edge lines up with the "Equipped" and "Notches" labels rather than sitting inside a
+        // margin of its own, which left a column of dead space between them and the grid.
+        float sectionOffsetX = ComputeNormalizedMargin(screenSize.x, SectionOffsetFraction * 0.5f);
+        float sectionOffsetY = ComputeNormalizedMargin(screenSize.y, SectionOffsetFraction);
+        float leftMargin = Mathf.Clamp(SectionLabelInset + sectionOffsetX, 0f, Mathf.Max(0f, parentSize.x - 1f));
+
+        float desiredBottomMargin = ComputeNormalizedMargin(screenSize.y, CharmGridVerticalScreenFraction);
+        float parentBottomMargin = ComputeNormalizedMargin(parentSize.y, CharmGridVerticalParentFraction);
+        float bottomMargin = Mathf.Min(desiredBottomMargin, parentBottomMargin);
+
+        // The equipped and notch rows own the top of this column, so the grid gets what is left
+        // below them. Without this the first row of charms drew over the notch icons.
+        float reservedTop = NotchSectionBottom + sectionOffsetY + CharmGridTopGap;
+        float availableWidth = Mathf.Max(1f, parentSize.x - leftMargin);
+        float availableHeight = Mathf.Max(1f, parentSize.y - reservedTop - bottomMargin);
+
+        FitCharmCellsToBox(columns, availableWidth, availableHeight);
+
         float strideX = charmCellSize.x + charmSpacing.x;
         float strideY = charmCellSize.y + charmSpacing.y;
         float halfStrideX = strideX * RowOffsetFactor;
@@ -189,32 +261,6 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         }
 
         float totalHeight = usedRows * charmCellSize.y + Mathf.Max(0, usedRows - 1) * charmSpacing.y;
-
-        Vector2 parentSize = leftContentRoot.rect.size;
-        if (parentSize.x < MinRootSizeThreshold || parentSize.y < MinRootSizeThreshold)
-        {
-            Vector2 fallback = normalizedFallbackRootSize.sqrMagnitude > 0f ? normalizedFallbackRootSize : DefaultStandaloneRootSize;
-            parentSize = new Vector2(Mathf.Max(fallback.x * 0.58f, maxWidth), Mathf.Max(fallback.y * 0.55f, totalHeight));
-        }
-
-        Vector2 screenSize = normalizedFallbackRootSize.sqrMagnitude > 0f
-            ? normalizedFallbackRootSize
-            : DefaultStandaloneRootSize;
-
-        float desiredLeftMargin = ComputeNormalizedMargin(screenSize.x, CharmGridHorizontalScreenFraction);
-        float desiredBottomMargin = ComputeNormalizedMargin(screenSize.y, CharmGridVerticalScreenFraction);
-
-        float parentLeftMargin = ComputeNormalizedMargin(parentSize.x, CharmGridHorizontalParentFraction);
-        float parentBottomMargin = ComputeNormalizedMargin(parentSize.y, CharmGridVerticalParentFraction);
-
-        float targetLeftMargin = Mathf.Min(desiredLeftMargin, parentLeftMargin);
-        float targetBottomMargin = Mathf.Min(desiredBottomMargin, parentBottomMargin);
-
-        float maxLeftMargin = Mathf.Max(0f, parentSize.x - maxWidth);
-        float leftMargin = Mathf.Clamp(targetLeftMargin, 0f, maxLeftMargin);
-
-        float maxBottomMargin = Mathf.Max(0f, parentSize.y - totalHeight);
-        float bottomMargin = Mathf.Clamp(targetBottomMargin, 0f, maxBottomMargin);
 
         gridRoot.anchorMin = new Vector2(0f, 0f);
         gridRoot.anchorMax = new Vector2(0f, 0f);

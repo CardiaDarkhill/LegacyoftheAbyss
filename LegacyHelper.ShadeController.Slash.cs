@@ -175,6 +175,11 @@ public partial class LegacyHelper
                     PerformShamanSlash(forcedV);
                 else
                     PerformNailSlash(forcedV);
+
+                // A down slash that finds something below bounces the Knight off it - Hornet
+                // included, which is what keeps the game's verticality open to it.
+                if (forcedV < -0.35f)
+                    TryKnightPogo();
             }
         }
 
@@ -691,7 +696,11 @@ public partial class LegacyHelper
         }
 
 
-        private void SpawnProjectile(Vector2 dir)
+        /// <summary>
+        /// <paramref name="damageScale"/> is Flukenest's: it fires several weaker projectiles in
+        /// place of one, so each carries a fraction of the bolt's damage.
+        /// </summary>
+        private void SpawnProjectile(Vector2 dir, float damageScale = 1f)
         {
             var proj = new GameObject("ShadeProjectile");
             proj.transform.position = transform.position + (Vector3)new Vector2(muzzleOffset.x * facing, muzzleOffset.y);
@@ -763,7 +772,7 @@ public partial class LegacyHelper
             sp.animFrames = frames;
             // Use spell progression for damage (2.5x upgraded, 30% less when unupgraded)
             int dmg = ComputeSpellDamageMultiplier(2.5f, IsProjectileUpgraded());
-            sp.damage = Mathf.Max(1, dmg);
+            sp.damage = Mathf.Max(1, Mathf.RoundToInt(dmg * damageScale));
             sp.hornetRoot = hornetTransform;
             sp.destroyOnTerrain = !IsProjectileUpgraded();
             sp.maxRange = IsProjectileUpgraded() ? 22f : 0f;

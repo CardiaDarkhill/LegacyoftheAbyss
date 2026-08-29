@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using System;
 using LegacyoftheAbyss.Shade.Ai;
 using UnityEngine;
@@ -80,7 +80,7 @@ public partial class LegacyHelper
             // Only meaningful while an AI is driving, and only when the player has left it enabled.
             // Anything else - a cutscene, the pause menu, a bug report being typed - is handled by
             // the same gate the driver uses, so the reticle cannot be opened behind a menu.
-            if (!aiEnabled || !config.shadeAiCommandEnabled || hornetControlsLocked || isInactive || isDying || ShadeAiUiIsOpen())
+            if (!ShadeAiEnabled || !config.shadeAiCommandEnabled || hornetControlsLocked || isInactive || isDying || ShadeAiUiIsOpen())
             {
                 ClearShadeAiCommand(null);
                 return;
