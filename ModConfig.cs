@@ -248,6 +248,14 @@ public class ModConfig
 
     public float hudMaskScale = 1f;
     public float hudMaskSpacing = 6f;
+    /// <summary>
+    /// Scales the Shade's charm grid after it has been fitted to its column. The fit is what stops
+    /// the grid running into the notch row and the description, so 1 is as large as it can be
+    /// without overlapping something; above that is deliberately allowed, and deliberately the
+    /// player's decision. Ctrl+F5 rereads it.
+    /// </summary>
+    public float shadeCharmGridScale = 1f;
+
     // The companion's buff bar, under the mask row. Sized and placed here rather than derived,
     // because a row of status icons is exactly the kind of placement that cannot be reasoned out
     // from the art; Ctrl+F5 rereads these against the running screen.

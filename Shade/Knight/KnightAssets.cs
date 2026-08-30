@@ -299,21 +299,6 @@ namespace LegacyoftheAbyss.Shade.Knight
         /// </summary>
         internal static Sprite? TryBuildIdlePreview() => TryBuildSprite(IdleClipName, 0);
 
-        /// <summary>
-        /// How many frames a bundled clip has, or zero when it is not there. Needed because
-        /// <see cref="TryBuildSprite"/> clamps its index, so walking a clip by asking for frames
-        /// until one comes back null would never end.
-        /// </summary>
-        internal static int GetClipFrameCount(string clipName)
-        {
-            if (!TryLoad())
-            {
-                return 0;
-            }
-
-            var clip = FindClip(clipName);
-            return clip?.frames?.Length ?? 0;
-        }
 
         /// <summary>
         /// Frames the atlas stores turned 90 degrees, by the key <see cref="TryBuildSprite"/> caches

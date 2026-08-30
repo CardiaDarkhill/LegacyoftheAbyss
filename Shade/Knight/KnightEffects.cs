@@ -39,20 +39,28 @@ namespace LegacyoftheAbyss.Shade.Knight
         internal const string SpellFluke = "Spell Fluke";
 
         /// <summary>
-        /// Grubberfly's Elegy beams, one prefab per direction: the art is drawn facing its way
-        /// rather than rotated, so the direction picks the prefab instead of an angle.
+        /// Grubberfly's Elegy's beam, as one prefab that the caller turns.
         /// <para>
-        /// Each has an "R" twin in the bundle - Hollow Knight's pooled copy of the same object.
-        /// Either draws, so <see cref="TrySpawnFirst"/> takes whichever is present.
+        /// The bundle has four of these and their baked transforms do not mean what the names
+        /// suggest: BeamD is byte-for-byte BeamL, and BeamU is BeamL turned +90 degrees, which
+        /// points it down. Hollow Knight sets the real orientation from the FSM at spawn, and that
+        /// is stripped out of anything borrowed here - so picking by name gave a beam facing down
+        /// when fired up and left when fired down. BeamL is the clean base: no mirroring, no
+        /// rotation, art pointing left. See <see cref="GrubberflyBeamArtAngle"/>.
         /// </para>
         /// </summary>
-        internal static readonly string[] GrubberflyBeamRight = { "Grubberfly BeamR", "Grubberfly BeamR R" };
+        internal static readonly string[] GrubberflyBeam = { "Grubberfly BeamL", "Grubberfly BeamL R" };
 
-        internal static readonly string[] GrubberflyBeamLeft = { "Grubberfly BeamL", "Grubberfly BeamL R" };
+        /// <summary>Which way <see cref="GrubberflyBeam"/> is drawn, so a caller can turn it.</summary>
+        internal const float GrubberflyBeamArtAngle = 180f;
 
-        internal static readonly string[] GrubberflyBeamUp = { "Grubberfly BeamU", "Grubberfly BeamU R" };
-
-        internal static readonly string[] GrubberflyBeamDown = { "Grubberfly BeamD", "Grubberfly BeamD R" };
+        /// <summary>
+        /// A small effect prefab off the Knight's shared clip library, used as a body to play a
+        /// clip on. The whole rig shares one library, so any of its effect objects can play any of
+        /// its clips - and borrowing one means the animation draws through the bundle's own
+        /// tk2dSprite and material, which is the path every effect that works here already takes.
+        /// </summary>
+        internal const string ClipHost = "Shadow Burst";
 
         /// <summary>
         /// Instantiates <paramref name="prefabName"/> under <paramref name="parent"/>, stripped of
@@ -97,6 +105,8 @@ namespace LegacyoftheAbyss.Shade.Knight
                 Object.Destroy(stage);
                 return null;
             }
+
+            WakeArt(instance);
 
             instance.transform.SetParent(parent, worldPositionStays: false);
             instance.transform.localPosition = Vector3.zero;
@@ -154,65 +164,6 @@ namespace LegacyoftheAbyss.Shade.Knight
 
             ApplyParticleTuning(instance, scale, alpha);
             return instance;
-        }
-
-        /// <summary>
-        /// A bundled animation clip played once on a plain renderer, for art that lives only as an
-        /// animation rather than as a prefab of its own - Thorns of Agony's vines are six frames of
-        /// "Thorn Attack" on the Knight's own body, with no object in the bundle to borrow.
-        /// </summary>
-        internal static GameObject? TrySpawnClip(string clipName, float fps, Transform parent, Renderer? sortLike, float scale = 1f)
-        {
-            if (string.IsNullOrEmpty(clipName) || parent == null || !KnightAssets.TryLoad())
-            {
-                return null;
-            }
-
-            int frameCount = KnightAssets.GetClipFrameCount(clipName);
-            if (frameCount <= 0)
-            {
-                LegacyHelper.LogWarning($"Knight clip '{clipName}' is not in the bundle; whatever asked for it draws nothing.");
-                return null;
-            }
-
-            var frames = new Sprite?[frameCount];
-            bool any = false;
-            for (int i = 0; i < frameCount; i++)
-            {
-                frames[i] = KnightAssets.TryBuildSprite(clipName, i);
-                any |= frames[i] != null;
-            }
-
-            if (!any)
-            {
-                LegacyHelper.LogWarning($"Knight clip '{clipName}' has {frameCount} frames but none could be cut from the atlas.");
-                return null;
-            }
-
-            var go = new GameObject("KnightClip_" + clipName);
-            go.transform.SetParent(parent, worldPositionStays: false);
-            go.transform.localPosition = Vector3.zero;
-            go.transform.localRotation = Quaternion.identity;
-            go.transform.localScale = Vector3.one * scale;
-
-            var renderer = go.AddComponent<SpriteRenderer>();
-            renderer.sprite = frames[0];
-            if (sortLike != null)
-            {
-                renderer.sortingLayerID = sortLike.sortingLayerID;
-                renderer.sortingOrder = sortLike.sortingOrder + 1;
-            }
-
-            // tk2d packs frames rotated to save atlas space and records it on the definition; a
-            // Unity Sprite has nowhere to carry that, so it has to be turned back here.
-            if (KnightAssets.IsSpriteRotated(clipName, 0))
-            {
-                go.transform.localRotation = Quaternion.Euler(0f, 0f, -90f);
-            }
-
-            var player = go.AddComponent<KnightClipPlayer>();
-            player.Play(renderer, frames, fps);
-            return go;
         }
 
         /// <summary>
@@ -304,6 +255,86 @@ namespace LegacyoftheAbyss.Shade.Knight
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Switches the art back on.
+        /// <para>
+        /// The bundle's effect objects ship inactive twice over - their renderers disabled and
+        /// their animators disabled - because Hollow Knight turns them on from the FSM that fires
+        /// them, and that FSM is the first thing stripped here. A borrowed effect that is never
+        /// woken is instantiated, parented and positioned correctly, and draws nothing at all.
+        /// The parent chain matters too: activating a child of an inactive object shows nothing.
+        /// </para>
+        /// </summary>
+        private static void WakeArt(GameObject instance)
+        {
+            foreach (var child in instance.GetComponentsInChildren<Transform>(true))
+            {
+                if (child != null && !child.gameObject.activeSelf)
+                {
+                    child.gameObject.SetActive(true);
+                }
+            }
+
+            foreach (var renderer in instance.GetComponentsInChildren<Renderer>(true))
+            {
+                if (renderer != null)
+                {
+                    renderer.enabled = true;
+                }
+            }
+
+            foreach (var animator in instance.GetComponentsInChildren<tk2dSpriteAnimator>(true))
+            {
+                if (animator != null)
+                {
+                    animator.enabled = true;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Borrows <see cref="ClipHost"/> and plays <paramref name="clipName"/> on it, for art that
+        /// exists only as an animation on the Knight's rig and has no object of its own - Thorns of
+        /// Agony's vines being the case this was written for. Preferred over cutting the clip to
+        /// sprites by hand, because it draws through the bundle's own material rather than through
+        /// a renderer built here with whatever material happens to be the default.
+        /// </summary>
+        internal static GameObject? TrySpawnAnimatedClip(string clipName, Transform parent, Renderer? sortLike, float scale = 1f, float alpha = 1f)
+        {
+            if (string.IsNullOrEmpty(clipName) || parent == null)
+            {
+                return null;
+            }
+
+            var host = TrySpawnSorted(ClipHost, parent, sortLike, scale, sortingOffset: 1, alpha: alpha);
+            if (host == null)
+            {
+                LegacyHelper.LogWarning($"Knight clip '{clipName}' has no host to play on ('{ClipHost}' is not in the bundle).");
+                return null;
+            }
+
+            var animator = host.GetComponent<tk2dSpriteAnimator>()
+                ?? host.GetComponentInChildren<tk2dSpriteAnimator>(true);
+            if (animator == null)
+            {
+                LegacyHelper.LogWarning($"Knight clip host '{ClipHost}' carries no animator, so '{clipName}' cannot play.");
+                Object.Destroy(host);
+                return null;
+            }
+
+            var clip = animator.Library != null ? animator.Library.GetClipByName(clipName) : null;
+            if (clip == null)
+            {
+                LegacyHelper.LogWarning($"Knight clip '{clipName}' is not in the host's library.");
+                Object.Destroy(host);
+                return null;
+            }
+
+            animator.enabled = true;
+            animator.Play(clip);
+            return host;
         }
 
         /// <summary>

@@ -77,7 +77,12 @@ controls it; the reasoning belongs in the commit and the code.
 - Flukes carry a hitbox their own size, so they no longer burst the instant they are thrown.
 - The Dreamshield is smaller, closer and slower.
 - The Shade's charm grid is drawn at the right size on high-resolution displays instead of at twice
-  its intended size, where it overlapped the notch row and the charm description.
+  its intended size, where it overlapped the notch row and the charm description. It also no longer
+  changes size between the first and later times it is opened in a scene.
+- Grubberfly's Elegy beams point the way they are fired.
+- Thorns of Agony bursts its vines again. Borrowed Hollow Knight effects are switched on when they
+  are spawned, which several charms needed and none of them were getting.
+- The Shade's charm grid size can be set with `shadeCharmGridScale`, reread with Ctrl+F5.
 - The Knight is pushed back by its own nail hits and by damage, and Steady Body stops it again. The
   push no longer spins it round to face away from whatever it just hit.
 - Sprintmaster, and every other movement-speed charm, now works for the Knight, with its own walk

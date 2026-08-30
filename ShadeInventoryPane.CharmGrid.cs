@@ -274,6 +274,19 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
 
         try
         {
+            // Ahead of the rebuild below, and the reason the pane came out a different size the
+            // second time it was opened in a scene: the canvas scaler applies on its own update, so
+            // the very first layout after the pane is built measures rects that have not been
+            // resolved against it yet. Flushing the canvas makes every layout measure the same
+            // thing, rather than the first one measuring a canvas that no longer exists.
+            Canvas.ForceUpdateCanvases();
+        }
+        catch
+        {
+        }
+
+        try
+        {
             LayoutRebuilder.ForceRebuildLayoutImmediate(leftContentRoot);
         }
         catch
@@ -364,10 +377,20 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
 
         FitCharmCellsToBox(columns, availableWidth, availableHeight);
 
+        // After the fit, not folded into it: the fit decides the largest the grid can be without
+        // running into anything, and this is the player saying they want it a different size.
+        float gridScaleKnob = Mathf.Clamp(ModConfig.Instance?.shadeCharmGridScale ?? 1f, 0.25f, 2f);
+        if (!Mathf.Approximately(gridScaleKnob, 1f))
+        {
+            charmCellSize *= gridScaleKnob;
+            charmSpacing *= gridScaleKnob;
+            UpdateCharmIconSizeCache();
+        }
+
         // Recorded rather than logged: this is intermittent and the report is filed long after the
         // log ring has rolled, so the numbers behind a bad layout have to survive on the snapshot.
         LastCharmGridLayout = FormattableString.Invariant(
-            $"columns={columns} entries={entries.Count} metrics={lastCharmMetricsSource} parent={measuredParent.x:0.#}x{measuredParent.y:0.#} used={parentSize.x:0.#}x{parentSize.y:0.#} screen={screenSize.x:0.#}x{screenSize.y:0.#} available={availableWidth:0.#}x{availableHeight:0.#} notchBottom={notchBottom:0.#} reservedTop={reservedTop:0.#} cell={charmCellSize.x:0.#}x{charmCellSize.y:0.#} spacing={charmSpacing.x:0.#}x{charmSpacing.y:0.#} icon={currentCharmIconSize:0.#} correction={lastGridCorrection:0.###} {DescribeDrawnScale()}");
+            $"columns={columns} entries={entries.Count} metrics={lastCharmMetricsSource} parent={measuredParent.x:0.#}x{measuredParent.y:0.#} used={parentSize.x:0.#}x{parentSize.y:0.#} screen={screenSize.x:0.#}x{screenSize.y:0.#} available={availableWidth:0.#}x{availableHeight:0.#} notchBottom={notchBottom:0.#} reservedTop={reservedTop:0.#} cell={charmCellSize.x:0.#}x{charmCellSize.y:0.#} spacing={charmSpacing.x:0.#}x{charmSpacing.y:0.#} icon={currentCharmIconSize:0.#} knob={gridScaleKnob:0.###} correction={lastGridCorrection:0.###} {DescribeDrawnScale()}");
 
         float strideX = charmCellSize.x + charmSpacing.x;
         float strideY = charmCellSize.y + charmSpacing.y;
@@ -467,7 +490,9 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         // the result have disagreed, and the measurement is the one to believe. Three separate
         // theories about *why* they can disagree have been wrong, so this corrects the outcome
         // rather than the cause - and costs one extra placement pass in the case where it fires.
-        float correction = allowCorrection ? MeasureGridOverrun() : 1f;
+        // A knob above 1 is an explicit request for a grid larger than fits, so the corrective
+        // pass stands down rather than immediately undoing it.
+        float correction = allowCorrection && gridScaleKnob <= 1f ? MeasureGridOverrun() : 1f;
         if (correction < 0.995f)
         {
             charmMeasuredCorrection = Mathf.Clamp(correction, 0.15f, 1f);

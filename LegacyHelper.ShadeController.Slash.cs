@@ -764,21 +764,20 @@ public partial class LegacyHelper
             int atkLayer = LayerMask.NameToLayer("Hero Attack");
             if (spellLayer >= 0) proj.layer = spellLayer; else if (atkLayer >= 0) proj.layer = atkLayer;
 
-            // Hollow Knight's own beam, one prefab per direction. The art is drawn facing its
-            // way, so the direction chooses the prefab rather than rotating a sprite - and it is
-            // the crescent the charm is supposed to throw rather than a stand-in dot.
-            string[] beamPrefabs;
-            if (dir == Vector2.up)
-                beamPrefabs = LegacyoftheAbyss.Shade.Knight.KnightEffects.GrubberflyBeamUp;
-            else if (dir == Vector2.down)
-                beamPrefabs = LegacyoftheAbyss.Shade.Knight.KnightEffects.GrubberflyBeamDown;
-            else if (dir == Vector2.left)
-                beamPrefabs = LegacyoftheAbyss.Shade.Knight.KnightEffects.GrubberflyBeamLeft;
-            else
-                beamPrefabs = LegacyoftheAbyss.Shade.Knight.KnightEffects.GrubberflyBeamRight;
+            // Hollow Knight's own crescent, turned here rather than chosen by name: the four
+            // directional prefabs' baked transforms do not match their names, because the game sets
+            // the orientation from an FSM that is stripped out of anything borrowed.
+            float beamAngle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg
+                - LegacyoftheAbyss.Shade.Knight.KnightEffects.GrubberflyBeamArtAngle;
+            proj.transform.rotation = Quaternion.Euler(0f, 0f, beamAngle);
 
-            bool borrowedArt =
-                LegacyoftheAbyss.Shade.Knight.KnightEffects.TrySpawnFirst(beamPrefabs, proj.transform, sr) != null;
+            bool borrowedArt = LegacyoftheAbyss.Shade.Knight.KnightEffects.TrySpawnFirst(
+                LegacyoftheAbyss.Shade.Knight.KnightEffects.GrubberflyBeam, proj.transform, sr) != null;
+            if (!borrowedArt)
+            {
+                // The fallback dot is drawn axis-aligned, so it must not inherit that turn.
+                proj.transform.rotation = Quaternion.identity;
+            }
 
             var psr = proj.AddComponent<SpriteRenderer>();
             if (borrowedArt)

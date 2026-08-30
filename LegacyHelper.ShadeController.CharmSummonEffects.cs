@@ -67,8 +67,12 @@ public partial class LegacyHelper
             }
             else if (!string.IsNullOrEmpty(effectClip))
             {
-                LegacyoftheAbyss.Shade.Knight.KnightEffects.TrySpawnClip(
-                    effectClip, effectClipFps, go.transform, sr, effectScale);
+                var drawn = LegacyoftheAbyss.Shade.Knight.KnightEffects.TrySpawnAnimatedClip(
+                    effectClip, go.transform, sr, effectScale, effectAlpha);
+                if (drawn == null)
+                {
+                    LegacyHelper.LogWarning($"Charm burst wanted the '{effectClip}' animation and got nothing; the effect will be invisible.");
+                }
             }
 
             var circle = go.AddComponent<CircleCollider2D>();

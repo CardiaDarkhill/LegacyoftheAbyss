@@ -682,7 +682,7 @@ namespace LegacyoftheAbyss.Shade
                             controller.SpawnCharmDamageBurst(
                                 radius: 2.1f, damage: 3, lifeSeconds: 1.1f, hitIntervalSeconds: 0.3f,
                                 effectPrefab: LegacyoftheAbyss.Shade.Knight.KnightEffects.DungCloud,
-                                effectScale: 0.25f,
+                                effectScale: 0.65f,
                                 effectAlpha: 0.2f);
                     }
                 },
