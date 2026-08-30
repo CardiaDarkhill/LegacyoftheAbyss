@@ -1,5 +1,6 @@
 #nullable disable
 using System;
+using LegacyoftheAbyss.Shade.Knight;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -29,13 +30,27 @@ public partial class SimpleHUD
             var slashPath = ModPaths.GetAssetPath("The Knight spells and items - atlas0 #00000309.png");
             var soulOrbPath = ModPaths.GetAssetPath("soul_orb_glow0000.png");
             var overcharmBackdropPath = ModPaths.GetAssetPath("overcharm_backboard.png");
-            maskSprite = LoadSprite(maskPath);
+            // Hollow Knight's own HUD art first, out of the Knight bundle. It is the companion's
+            // HUD, so it should look like the companion's game - and the mask in particular is more
+            // than twice the resolution of the still we were shipping (70x57 against 33x41).
+            maskSprite = KnightAssets.TryBuildSprite(KnightHud.MaskClip, 0);
+            maskSpriteRotated = maskSprite != null && KnightAssets.IsSpriteRotated(KnightHud.MaskClip, 0);
+            frameSpriteRotated = KnightAssets.IsSpriteRotated(KnightHud.FrameClip, 0);
+            maskBackboardSprite = KnightAssets.TryBuildSprite(KnightHud.MaskBackboardClip, 0);
+            frameSprite = KnightAssets.TryBuildSprite(KnightHud.FrameClip, 0);
+            soulOrbSprite = KnightAssets.TryBuildSprite(KnightHud.SoulOrbClip, 0);
+            soulOrbFillSprite = KnightAssets.TryBuildSpriteFromTexture(KnightHud.SoulOrbFillTexture);
+
+            // The shipped stills stay as the fallback: the bundle is optional, and a player without
+            // it should still get a HUD rather than a row of white boxes.
+            if (maskSprite == null) maskSprite = LoadSprite(maskPath);
             if (maskSprite == null) maskSprite = FindSpriteInGame("select_game_HUD_0001_health");
             hivebloodMaskSprite = CreateTintedSprite(maskSprite, hivebloodMaskColor);
-            frameSprite = LoadSprite(framePath);
+            if (frameSprite == null) frameSprite = LoadSprite(framePath);
             if (frameSprite == null) frameSprite = FindSpriteInGame("select_game_HUD_0002_health_frame");
             slashFrames = LoadSpriteSheet(slashPath, 8, 8);
-            soulOrbSprite = LoadSprite(soulOrbPath);
+            if (soulOrbSprite == null) soulOrbSprite = LoadSprite(soulOrbPath);
+            if (soulOrbFillSprite == null) soulOrbFillSprite = soulOrbSprite;
             overcharmBackdropSprite = LoadSprite(overcharmBackdropPath);
             if (overcharmBackdropSprite == null)
             {

@@ -25,6 +25,29 @@ public partial class SimpleHUD : MonoBehaviour
 
     // Soul orb state
     private Sprite soulOrbSprite;
+
+    /// <summary>The orb's filled interior, drawn under the mask. Hollow Knight draws these separately.</summary>
+    private Sprite soulOrbFillSprite;
+
+    /// <summary>The dark plate a mask sits on when it is empty.</summary>
+    private Sprite maskBackboardSprite;
+
+    /// <summary>Set when the mask art came out of the atlas on its side. See KnightAssets.IsSpriteRotated.</summary>
+    private bool maskSpriteRotated;
+
+    private bool frameSpriteRotated;
+
+    /// <summary>The HUD plate behind the orb, or null when there is no frame art to draw.</summary>
+    private Image hudFrameImage;
+
+    /// <summary>
+    /// Where the plate's socket sits within it, as a fraction of its drawn size, y measured down.
+    /// Taken off the art rather than guessed: the dark disc's centroid in the turned 239x144 frame
+    /// is (168, 82). Tools/HudPreview.py re-derives it if the art ever changes.
+    /// </summary>
+    private const float FrameSocketX = 0.704f;
+
+    private const float FrameSocketY = 0.568f;
     private RectTransform soulOrbRoot;
     private RectTransform soulRevealMask;
     private Image soulImage;
@@ -80,6 +103,36 @@ public partial class SimpleHUD : MonoBehaviour
     private float shadeSoulMax;
 
     private const float MaskScale = 0.88f; // slightly shrink masks
+
+    /// <summary>
+    /// The height a mask is drawn at, in the pixels of the still this HUD was laid out against.
+    /// <para>
+    /// The layout used to be taken from whatever the mask sprite happened to measure, which was fine
+    /// while that was always the same 33x41 still. It is not any more: the art now comes from the
+    /// Knight bundle at 70x57, and sizing straight off the source would have made every mask half as
+    /// big again and a different shape. Held to this height and the sprite's own aspect instead, so
+    /// swapping the art changes how sharp the HUD is and not how big.
+    /// </para>
+    /// </summary>
+    private const float MaskReferenceHeightPixels = 41f;
+
+    /// <summary>The drawn size of one mask, at <see cref="MaskReferenceHeightPixels"/> and the source's aspect.</summary>
+    private Vector2 MeasureMask(float uiScale)
+    {
+        Vector2 pixels = maskSprite != null
+            ? new Vector2(maskSprite.rect.width, maskSprite.rect.height)
+            : new Vector2(33f, 41f);
+
+        // Displayed, not stored: a rotated frame occupies its atlas region turned on its side.
+        if (maskSpriteRotated)
+        {
+            pixels = new Vector2(pixels.y, pixels.x);
+        }
+
+        float height = MaskReferenceHeightPixels * uiScale * MaskScale;
+        float aspect = pixels.y > 0.001f ? pixels.x / pixels.y : 1f;
+        return new Vector2(height * aspect, height);
+    }
     private const float OvercharmBackdropScale = 3.4f;
     private const float OvercharmBackdropRotation = 180f;
     private const float OvercharmBackdropHorizontalOffsetFraction = 3.2f;
@@ -110,6 +163,8 @@ public partial class SimpleHUD : MonoBehaviour
 
     private void Update()
     {
+        ApplyHudTuning();
+
         UpdatePauseFade();
         SubscribeToCharmInventory();
 

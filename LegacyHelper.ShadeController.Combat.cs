@@ -1,4 +1,4 @@
-﻿#nullable disable
+#nullable disable
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -548,7 +548,9 @@ public partial class LegacyHelper
             }
 
             var aoe = hitbox.AddComponent<ShadeAoE>();
-            aoe.ConfigureDamage(GetShadeNailDamage(), applyDamageMultiplier: false);
+            int sharpShadowDamage = GetShadeNailDamage();
+            LoggingManager.LogShadeAttackDamage(CharacterLogName, "Sharp Shadow dash", sharpShadowDamage);
+            aoe.ConfigureDamage(sharpShadowDamage, applyDamageMultiplier: false);
             aoe.hornetRoot = hornetTransform;
             aoe.lifeSeconds = 0f;
             aoe.attackType = AttackTypes.Nail;

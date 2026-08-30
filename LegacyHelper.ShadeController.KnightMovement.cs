@@ -14,6 +14,26 @@ public partial class LegacyHelper
         private const float KnightMaxFallSpeed = 26f;
         private const float KnightJumpSpeed = 16.6f;
         private const float KnightJumpHoldSeconds = 0.28f;
+
+        /// <summary>
+        /// The air jump's share of a ground jump's height.
+        /// <para>
+        /// Applied as its square root, because height goes as the square of the launch speed: 0.6
+        /// here is a jump 40% lower, where taking 40% off the speed outright would have cost nearly
+        /// two thirds of the height. The ground jump is untouched.
+        /// </para>
+        /// </summary>
+        private const float KnightDoubleJumpHeightScale = 0.6f;
+
+        private static readonly float KnightDoubleJumpSpeed =
+            KnightJumpSpeed * Mathf.Sqrt(KnightDoubleJumpHeightScale);
+
+        /// <summary>
+        /// What the held-jump thrust re-asserts, which is not always <see cref="KnightJumpSpeed"/>.
+        /// Without this the hold would hand the air jump the ground jump's speed back a frame after
+        /// launch and undo the whole difference.
+        /// </summary>
+        private float knightJumpThrustSpeed = KnightJumpSpeed;
         private const float KnightDashSpeed = 20f;
         private const float KnightDashSeconds = 0.25f;
         /// <summary>
@@ -194,7 +214,26 @@ public partial class LegacyHelper
             PushKnightOutOfTerrain();
             ProbeKnightSurroundings();
 
-            if (hornetControlsLocked || isInactive || damageStaggerTimer > 0f)
+            if (knightCastFrozen && Time.time >= knightCastFreezeUntil)
+            {
+                EndKnightCastFreeze();
+            }
+
+            if (knightCastFrozen)
+            {
+                // Held rather than damped: at this scale a single frame of gravity is a visible
+                // drop, and the point of the stall is that the Knight does not move at all.
+                knightVerticalVelocity = 0f;
+                knightJumpHoldTimer = 0f;
+                UpdateKnightAnimation(0f);
+                return;
+            }
+
+            // Walking to a bench is the exception: the hold belongs to Hornet, and for that one the
+            // Knight has somewhere to be. UpdateKnightBench owns the input for the whole approach.
+            bool benchWalking = knightBenchActive && !knightBenchSeated;
+
+            if (!benchWalking && (hornetControlsLocked || isInactive || damageStaggerTimer > 0f))
             {
                 // Still fall, so a locked Knight does not hang in the air, but take no input.
                 IntegrateKnightVertical(dt, allowInput: false);
@@ -372,7 +411,7 @@ public partial class LegacyHelper
             if (allowInput && knightJumpHoldTimer > 0f && knightJumpHeld)
             {
                 knightJumpHoldTimer -= dt;
-                knightVerticalVelocity = KnightJumpSpeed;
+                knightVerticalVelocity = knightJumpThrustSpeed;
                 return;
             }
 
@@ -393,6 +432,7 @@ public partial class LegacyHelper
             {
                 knightJumpBufferTimer = 0f;
                 knightVerticalVelocity = KnightWallJumpSpeed;
+                knightJumpThrustSpeed = KnightJumpSpeed;
                 knightJumpHoldTimer = KnightJumpHoldSeconds;
                 knightWallJumpLockTimer = KnightWallJumpLockSeconds;
                 facing = -knightWallDirection;
@@ -406,6 +446,7 @@ public partial class LegacyHelper
                 knightJumpBufferTimer = 0f;
                 knightCoyoteTimer = 0f;
                 knightVerticalVelocity = KnightJumpSpeed;
+                knightJumpThrustSpeed = KnightJumpSpeed;
                 knightJumpHoldTimer = KnightJumpHoldSeconds;
                 return true;
             }
@@ -414,7 +455,8 @@ public partial class LegacyHelper
             {
                 knightJumpBufferTimer = 0f;
                 knightAirJumpSpent = true;
-                knightVerticalVelocity = KnightJumpSpeed;
+                knightVerticalVelocity = KnightDoubleJumpSpeed;
+                knightJumpThrustSpeed = KnightDoubleJumpSpeed;
                 knightJumpHoldTimer = KnightJumpHoldSeconds;
                 knightView?.Play(KnightView.ClipDoubleJump, restart: true);
                 knightView?.FlashMonarchWings();
@@ -732,6 +774,65 @@ public partial class LegacyHelper
             return collider.GetComponentInParent<HealthManager>() != null;
         }
 
+        /// <summary>The scripted spell pose currently overriding the movement clips, and its expiry.</summary>
+        private string knightSpellClip;
+        private float knightSpellClipUntil;
+
+        /// <summary>
+        /// The air-stall. Casting stops the Knight dead in the air, which in Hollow Knight is not a
+        /// side effect of the animation but a movement tool in its own right - a spell is how you
+        /// hang in place over a hazard or reset a fall.
+        /// </summary>
+        private bool knightCastFrozen;
+
+        /// <summary>
+        /// A backstop on that freeze. Every cast releases it explicitly, but a cast can also be
+        /// dropped from outside - a room change, a cutscene, Hornet going down - and a freeze left
+        /// standing would strand the Knight in mid-air for the rest of the session.
+        /// </summary>
+        private float knightCastFreezeUntil;
+
+        private const float KnightCastFreezeMaxSeconds = 1.5f;
+
+        /// <summary>
+        /// Holds the Knight still for a cast. A no-op for the Shade, which floats and has no
+        /// momentum worth cancelling, so the spell routines can call it unguarded.
+        /// </summary>
+        private void BeginKnightCastFreeze()
+        {
+            if (!UsesGroundedMovement)
+            {
+                return;
+            }
+
+            knightCastFrozen = true;
+            knightCastFreezeUntil = Time.time + KnightCastFreezeMaxSeconds;
+            knightVerticalVelocity = 0f;
+            knightJumpHoldTimer = 0f;
+        }
+
+        private void EndKnightCastFreeze()
+        {
+            knightCastFrozen = false;
+            knightCastFreezeUntil = 0f;
+        }
+
+        /// <summary>
+        /// Holds one of the rig's spell poses for <paramref name="seconds"/>. A no-op for the Shade,
+        /// which animates from its own sprite sheets, so the spell routines can call it unguarded.
+        /// </summary>
+        private void PlayKnightSpellAnimation(string clipName, float seconds)
+        {
+            if (knightView == null || string.IsNullOrEmpty(clipName))
+            {
+                return;
+            }
+
+            knightSpellClip = clipName;
+            knightSpellClipUntil = Time.time + seconds;
+            knightView.Play(clipName, restart: true);
+        }
+
         private void UpdateKnightAnimation(float horizontalSpeed)
         {
             if (knightView == null)
@@ -749,10 +850,29 @@ public partial class LegacyHelper
                 return;
             }
 
+            // Ahead of everything, including the dormant pose: sitting is what the Knight is doing
+            // while Hornet rests, and the hold that would otherwise dock it is the same one.
+            string benchClip = KnightBenchClip();
+            if (benchClip != null)
+            {
+                knightView.Play(benchClip);
+                return;
+            }
+
             // Once the animator has a frame, sit the rig's feet on the collider's base.
             if (bodyCol != null)
             {
                 knightView.AlignFeetTo(bodyCol.bounds.min.y);
+            }
+
+            // A spell pose outranks the movement state while the cast runs, for the same reason the
+            // map pose does: this method runs every physics step and would otherwise stamp the
+            // airborne or idle clip over it on the very next one. That is why Descending Dark went
+            // off with all of its effects and none of the Knight's own animation.
+            if (knightSpellClip != null && Time.time < knightSpellClipUntil)
+            {
+                knightView.Play(knightSpellClip);
+                return;
             }
 
             if (isInactive)

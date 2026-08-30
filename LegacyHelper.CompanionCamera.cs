@@ -122,6 +122,26 @@ public partial class LegacyHelper
         private static bool s_patchUnavailable;
         private static string s_lastDecision = "not evaluated yet";
 
+        /// <summary>
+        /// How much of the requested lean a camera lock area refused, per axis, last frame.
+        /// <para>
+        /// Lock areas cover ordinary rooms, and inside one the camera cannot leave the locked
+        /// region however far the companion goes. Neither the zoom nor the leash knew that: the
+        /// zoom widened only by what the <i>requested</i> lean failed to cover, and the leash
+        /// measured reach from a lean the camera was never going to be allowed. Between them the
+        /// Knight was let all the way off screen with the numbers reading healthy.
+        /// </para>
+        /// </summary>
+        private static Vector2 s_leanRefused;
+
+        /// <summary>Told by the patch how much lean actually survived the lock area's clamp.</summary>
+        internal static void ReportAppliedLean(Vector2 wanted, Vector2 applied)
+        {
+            s_leanRefused = new Vector2(
+                Mathf.Max(0f, Mathf.Abs(wanted.x) - Mathf.Abs(applied.x)),
+                Mathf.Max(0f, Mathf.Abs(wanted.y) - Mathf.Abs(applied.y)));
+        }
+
         internal static void MarkPatchApplied() => s_patchApplied = true;
 
         internal static void MarkPatchUnavailable() => s_patchUnavailable = true;
@@ -140,7 +160,7 @@ public partial class LegacyHelper
             }
 
             return FormattableString.Invariant(
-                $"enabled={ModConfig.Instance.companionCameraBiasEnabled}, offset={s_offset}, zoom wanted={s_zoom:0.###} applied={(s_projectionScaled ? s_appliedZoom : 1f):0.###}, {s_lastDecision}");
+                $"enabled={ModConfig.Instance.companionCameraBiasEnabled}, offset={s_offset}, zoom wanted={s_zoom:0.###} applied={(s_projectionScaled ? s_appliedZoom : 1f):0.###}, lock refused {s_leanRefused}, {s_lastDecision}");
         }
 
         internal static void Reset()
@@ -149,6 +169,7 @@ public partial class LegacyHelper
             s_offsetVelocity = Vector2.zero;
             s_zoom = 1f;
             s_zoomVelocity = 0f;
+            s_leanRefused = Vector2.zero;
             RestoreFieldOfView();
         }
 
@@ -208,9 +229,13 @@ public partial class LegacyHelper
                 Mathf.Clamp(wantedX, -maxLeanX, maxLeanX),
                 Mathf.Clamp(wantedY, -maxLeanY, maxLeanY));
 
-            // Whatever the capped lean could not cover, widen the view to cover instead.
-            float companionFromCentreX = Mathf.Abs(separation.x - offset.x);
-            float companionFromCentreY = Mathf.Abs(separation.y - offset.y);
+            // Whatever the capped lean could not cover, widen the view to cover instead - measured
+            // against the lean that survives the lock area rather than the one requested, or a
+            // clamped lean silently costs the shot the width that was meant to make up for it.
+            float effectiveX = Mathf.Sign(offset.x) * Mathf.Max(0f, Mathf.Abs(offset.x) - s_leanRefused.x);
+            float effectiveY = Mathf.Sign(offset.y) * Mathf.Max(0f, Mathf.Abs(offset.y) - s_leanRefused.y);
+            float companionFromCentreX = Mathf.Abs(separation.x - effectiveX);
+            float companionFromCentreY = Mathf.Abs(separation.y - effectiveY);
             float zoom = Mathf.Max(companionFromCentreX / comfortX, companionFromCentreY / comfortY);
 
             float maxZoom = 1f + Mathf.Max(0f, ModConfig.Instance.companionCameraMaxZoom);
@@ -260,8 +285,10 @@ public partial class LegacyHelper
             float zoomedHalfWidth = baseHalfWidth * maxZoom;
             float zoomedHalfHeight = baseHalfHeight * maxZoom;
 
-            float reachX = zoomedHalfWidth * lean + (zoomedHalfWidth - margin - extents.x);
-            float reachY = zoomedHalfHeight * lean + (zoomedHalfHeight - margin - extents.y);
+            // Minus what the lock area is currently refusing: reach the camera will not be allowed
+            // to take is not reach, and promising it is what let the companion walk off screen.
+            float reachX = zoomedHalfWidth * lean - s_leanRefused.x + (zoomedHalfWidth - margin - extents.x);
+            float reachY = zoomedHalfHeight * lean - s_leanRefused.y + (zoomedHalfHeight - margin - extents.y);
 
             reachX = Mathf.Max(0f, reachX);
             reachY = Mathf.Max(0f, reachY);
@@ -502,11 +529,16 @@ public partial class LegacyHelper
             var framing = CompanionCameraBias.Step(Time.deltaTime);
             if (framing.Offset == Vector2.zero)
             {
+                // Nothing was asked for, so nothing was refused. Leaving the previous frame's
+                // shortfall standing would keep shrinking the leash after the camera was free again.
+                CompanionCameraBias.ReportAppliedLean(Vector2.zero, Vector2.zero);
                 return;
             }
 
-            float x = ___targetDeltaX + framing.Offset.x;
-            float y = ___targetDeltaY + framing.Offset.y;
+            float baseX = ___targetDeltaX;
+            float baseY = ___targetDeltaY;
+            float x = baseX + framing.Offset.x;
+            float y = baseY + framing.Offset.y;
 
             // Inside a lock area the camera target clamps its own destination to the locked region,
             // and writing the delta here goes around that. Re-applying the same bounds keeps the
@@ -520,6 +552,8 @@ public partial class LegacyHelper
 
             ___targetDeltaX = x;
             ___targetDeltaY = y;
+
+            CompanionCameraBias.ReportAppliedLean(framing.Offset, new Vector2(x - baseX, y - baseY));
         }
     }
 }

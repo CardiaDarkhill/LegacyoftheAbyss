@@ -145,6 +145,10 @@ public partial class LegacyHelper : BaseUnityPlugin
         LoggingManager.Initialize(Logger);
         LegacyoftheAbyss.Diagnostics.BugReportSystem.Install(Logger);
         LegacyoftheAbyss.Diagnostics.SceneEntryAudioTrace.Install();
+
+        // Started here rather than at the first Knight spawn: the bundle is 54 MB and loading it on
+        // demand froze the game for about a second in the Characters menu.
+        LegacyoftheAbyss.Shade.Knight.KnightAssets.BeginPreload();
         var harmony = new Harmony("com.legacyoftheabyss.helper");
         PatchAllTolerantly(harmony);
 
@@ -212,6 +216,17 @@ public partial class LegacyHelper : BaseUnityPlugin
     {
         try
         {
+            // Rereads config.json, for the HUD layout knobs. Its own key rather than a modifier on
+            // the backquote below, because it is the one debug action wanted while looking at the
+            // screen rather than at the Shade.
+            if (Input.GetKeyDown(KeyCode.F5)
+                && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)))
+            {
+                ModConfig.Reload();
+                Logger?.LogInfo("Config reloaded from disk.");
+                return;
+            }
+
             if (!Input.GetKeyDown(KeyCode.BackQuote))
             {
                 return;

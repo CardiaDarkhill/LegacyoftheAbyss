@@ -1,4 +1,4 @@
-﻿# AGENTS.md file
+# AGENTS.md file
 
 ## Where the documentation lives
 
@@ -67,6 +67,8 @@ Always validate with `dotnet build -c Release` and `dotnet test -c Release` befo
 - Shade sprite sheets live in `Assets/Knight_Shade_Sprites/`. Alternate skins go in `Assets/Knight_Shade_Sprites/Skins/<Skin Name>/` and need only the sheets they override; `ShadeSkinManager.ResolveSpritePath` falls back to the built-in set. `Skins/skins.json` optionally controls menu order and display names. **All sheet loading must stay routed through `LoadShadeSprites` in `LegacyHelper.ShadeController.Core.cs`** or skin switching silently stops working for the new sheet.
 - Logs are written under `Assets/logs/` by `LoggingManager`. Clean that folder before committing if you have run the mod locally.
 - Save data and bug reports live in `ModPaths.UserData` (`BepInEx/config/LegacyoftheAbyss/`), outside this repository, so a mod update cannot destroy them and they cannot be committed by accident.
+- **The running game is the mod-manager profile, not the game folder.** `-p:DeployLocalDevBuild=true` copies to both, but `ModPaths.UserData` resolves next to the *loaded* DLL, so live saves, `config.json` and reports are under `Thunderstore Mod Manager/.../profiles/<profile>/BepInEx/config/LegacyoftheAbyss/`. The `shade_slot_*.json` still sitting in `plugins/Assets/` is the pre-migration location and editing it does nothing.
+- **Read the Knight bundle rather than inferring what is in it.** `Tools/HudPreview.py` (UnityPy + Pillow) opens it offline. `LoadAllAssets<T>()` returns only a bundle's *main* assets, so audio and textures referenced by components come back empty from it and must be reached through the components instead — that mistake produced a documented "the bundle ships no audio" that was wrong by 162 clips.
 
 ## Bug reports
 
@@ -92,6 +94,8 @@ Most of this repo is Harmony patches and reflection against an assembly we do no
 - **Removing a bug can remove the behaviour it was accidentally providing.** Lace's cross slash carries no damage component; it damages the hero by calling `HeroController` from an FSM, so the Shade had only ever been hit by it through a bug. When a fix removes a code path, check what depended on it and expect "it stopped working entirely" as the next report.
 - **Patch classes are applied one at a time** (`PatchAllTolerantly` in `LegacyHelper.Core.cs`) rather than through `Harmony.PatchAll`, which rethrows the first failure out of `Awake` and takes the HUD, the Shade and the bug reporter down with it. Do not switch back.
 
+- **The companion is on the hero's layer and tag on purpose**, so the world cannot tell it from Hornet. Anything that acts on the hero has to be taught the difference: `InteractableBase.AddInside`/`LocalAddInside` for benches, levers and doors, `TransitionPoint.TryDoTransition` for room changes, `TrackTriggerObjects.IsCounted` for ranges. A new "the companion did something only Hornet should" bug is almost always another `layer == 9` test somewhere.
+
 ## Borrowing the game's UI
 
 The pause-menu screens clone the game's own prefabs, and **a clone brings everything, and what it brings is invisible until it draws on top of your own work.**
@@ -107,6 +111,16 @@ The pause-menu screens clone the game's own prefabs, and **a clone brings everyt
 - **Scene darkness has three parts, and a light needs two of them.** `Hero_Hornet(Clone)/Vignette` (sorting layer `Vignette`, shader `Sprites/Darkness Sprite`) is the hero-centred overlay that darkens the room. Hornet stays lit because `white_light_donut` sits on the `Over` sorting layer, above it, with a `Sprites/Screen` blend; and because `Vignette Cutout` on the **TransparentFX** layer - the only layer `DarknessCameraEffect`'s camera renders - feeds the `_DarknessCutout` texture that shader samples. Cloning the glow alone lights nothing. `EnsureShadeLight` copies both, and re-centres by rendered bounds because Hornet's rig hangs its glow ~5.7 units above her transform origin.
 - **A `Canvas` rewrites its own `RectTransform` every frame** to match the screen, so anything written to that rect - position, size, anchors - is silently discarded. Content that needs to move lives under a child container, which is what `overlayRoot` is.
 
+## Changing anything visual
+
+Placement, rotation and scale cannot be reasoned out from sprite dimensions. Every attempt cost a round trip for something an eye catches instantly.
+
+- **Look at the art before writing code against it.** `Tools/HudPreview.py` extracts each sprite, renders both rotations of anything the atlas stored turned, and composes a mock layout. It caught a 90-degree rotation, a mirror, and a plate that already contained the disc being drawn behind it.
+- **tk2d packs sprites rotated.** `tk2dSpriteDefinition.flipped` says so, and a Unity `Sprite` has nowhere to carry it, so the drawing code has to turn it back. Derive the displayed size from that too, or the layout uses the atlas orientation.
+- **Rotation and a mirroring `localScale` compound.** Pick one. Mirror by where pieces are placed, not by a negative scale, wherever a rotation is also involved.
+- **Measure the anchor off the art.** Borrowed pieces are rarely centred on what matters; `HudPreview.py`'s `socket_centre` derives `hudFrameSocketX/Y` rather than leaving it to be nudged.
+- **Ship the knob, not the guess.** HUD layout values live in `config.json` and are re-applied every frame by `HUD.Tuning.cs`; **Ctrl+F5** rereads the file. Anything positional that cannot be verified here belongs there so the developer can dial it in against the screen in seconds.
+
 ## Diagnosing from a bug report
 
 Reports are the only instrument for anything needing a live game, so treat gaps in them as bugs in the tooling rather than as a reason to ask for another repro.
@@ -116,6 +130,7 @@ Reports are the only instrument for anything needing a live game, so treat gaps 
 - **Record the discriminator, not the verdict.** "Shade inside" is not enough; "Shade inside [shade:hero damager]" names the collider consulted and lets a wrong reading be recognised. "Has a DamageHero" via `GetComponentInParent` is true of every collider on a boss, making an attack hitbox indistinguishable from a detection range.
 - **Add the emitter before the next repro, not after.** If a report cannot answer the question, the fix is a new event category in the same turn.
 - **A decision made far from where the bug shows up belongs in the snapshot, not the log.** The settings menu is built seconds after launch and the log ring keeps a few hundred lines, so the line naming the slider template is gone by the time anyone reports the sliders look wrong. `BugReportState`'s `Menu slider template` row carries it instead, and `state.Config` covers settings the same way. Extend that pattern rather than adding a log line nobody will still have.
+- **A per-frame thrower starves the log ring.** It folds consecutive identical lines now, but check for one before concluding that code did not run — DebugMod's `GUIController` NRE spent the whole 800-line ring for a day and hid three separate diagnoses.
 - **Confirm an interception fired before believing it works.** "The bug persists" and "the fix never ran" look identical from outside. Every interception writes an event when it engages; check for that first.
 
 ## Writing the changelog

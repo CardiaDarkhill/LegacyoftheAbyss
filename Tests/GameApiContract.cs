@@ -224,6 +224,45 @@ public class GameApiContractTests
     }
 
     /// <summary>
+    /// The companion interaction blocker. Harmony binds prefix parameters by name, so the parameter
+    /// name is as much a part of this contract as the method is - a rename turns the patch into a
+    /// load error and hands benches back to the companion.
+    /// </summary>
+    [Theory]
+    [InlineData("AddInside")]
+    [InlineData("LocalAddInside")]
+    public void CompanionsCanBeKeptOutOfInteractionRanges(string method)
+    {
+        GameApiContract.RequireMethod(
+            typeof(InteractableBase), method,
+            "Prefixed so the companion's hero-shaped proxy cannot register as the hero being in "
+            + "range of a bench, lever or door.",
+            "col");
+    }
+
+    [Fact]
+    public void CompanionsCannotDriveASceneTransition()
+    {
+        // TransitionPoint is an InteractableBase but bypasses its range bookkeeping, testing
+        // layer == 9 in its own trigger callbacks - which the companion's proxy satisfies. Both
+        // callbacks meet here, and Harmony binds the prefix by this parameter name.
+        GameApiContract.RequireMethod(
+            typeof(TransitionPoint), "TryDoTransition",
+            "Prefixed so the companion standing in a doorway cannot send Hornet through it.",
+            "heroCollider");
+    }
+
+    [Fact]
+    public void TheOneShotAudioActionCanBeIdentified()
+    {
+        // Prefixed to name the FSM behind a stray sound. PlayMaker's own stack frames carry no FSM
+        // identity, so without this the trace can say a state played a clip but never whose.
+        GameApiContract.RequireMethod(
+            typeof(HutongGames.PlayMaker.Actions.AudioPlayerOneShotSingle), "OnEnter",
+            "Prefixed by the scene-entry audio trace to record which FSM is playing a one-shot.");
+    }
+
+    /// <summary>
     /// The inventory-open trace. Both of these are patch targets resolved by name, so both can go
     /// dead in silence - and a diagnostic that has gone dead is worse than none, because "the
     /// listener never ran" then reads as a finding rather than as a broken instrument.

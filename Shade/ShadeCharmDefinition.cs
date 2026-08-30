@@ -133,6 +133,8 @@ namespace LegacyoftheAbyss.Shade
             FireCooldownFlatDelta = 0f;
             NailCooldownMultiplier = 1f;
             NailCooldownFlatDelta = 0f;
+            NailDurationMultiplier = 1f;
+            NailDurationFlatDelta = 0f;
             ShriekCooldownMultiplier = 1f;
             ShriekCooldownFlatDelta = 0f;
             QuakeCooldownMultiplier = 1f;
@@ -176,6 +178,14 @@ namespace LegacyoftheAbyss.Shade
         public float FireCooldownFlatDelta { get; init; }
 
         public float NailCooldownMultiplier { get; init; }
+
+        /// <summary>
+        /// Scales the swing itself, which Hollow Knight times separately from the cooldown - Quick
+        /// Slash shortens the two by different amounts (0.35s to 0.28s against 0.41s to 0.25s).
+        /// </summary>
+        public float NailDurationMultiplier { get; init; }
+
+        public float NailDurationFlatDelta { get; init; }
 
         public float NailCooldownFlatDelta { get; init; }
 
@@ -229,6 +239,8 @@ namespace LegacyoftheAbyss.Shade
                 FireCooldownFlatDelta = FireCooldownFlatDelta + other.FireCooldownFlatDelta,
                 NailCooldownMultiplier = NailCooldownMultiplier * other.NailCooldownMultiplier,
                 NailCooldownFlatDelta = NailCooldownFlatDelta + other.NailCooldownFlatDelta,
+                NailDurationMultiplier = NailDurationMultiplier * other.NailDurationMultiplier,
+                NailDurationFlatDelta = NailDurationFlatDelta + other.NailDurationFlatDelta,
                 ShriekCooldownMultiplier = ShriekCooldownMultiplier * other.ShriekCooldownMultiplier,
                 ShriekCooldownFlatDelta = ShriekCooldownFlatDelta + other.ShriekCooldownFlatDelta,
                 QuakeCooldownMultiplier = QuakeCooldownMultiplier * other.QuakeCooldownMultiplier,
@@ -343,6 +355,9 @@ namespace LegacyoftheAbyss.Shade
 
         public float NailCooldown { get; init; }
 
+        /// <summary>How long the swing itself lasts. Hollow Knight's figure, unmodified.</summary>
+        public float NailDuration { get; init; }
+
         public float ShriekCooldown { get; init; }
 
         public float QuakeCooldown { get; init; }
@@ -369,7 +384,11 @@ namespace LegacyoftheAbyss.Shade
                 SprintDashDuration = 0.075f,
                 SprintDashCooldown = 1f,
                 FireCooldown = 0.25f,
-                NailCooldown = 0.3f,
+                // Hollow Knight's own numbers. A single 0.3s gate used to stand in for both, which
+                // made the nail faster than the first game's and left Quick Slash with nothing much
+                // to shorten.
+                NailCooldown = 0.41f,
+                NailDuration = 0.35f,
                 ShriekCooldown = 0.5f,
                 QuakeCooldown = 1.1f,
                 TeleportCooldown = 1.5f,
@@ -392,6 +411,7 @@ namespace LegacyoftheAbyss.Shade
             float sprintDashCooldown,
             float fireCooldown,
             float nailCooldown,
+            float nailDuration,
             float shriekCooldown,
             float quakeCooldown,
             float teleportCooldown,
@@ -410,6 +430,7 @@ namespace LegacyoftheAbyss.Shade
             SprintDashCooldown = sprintDashCooldown;
             FireCooldown = fireCooldown;
             NailCooldown = nailCooldown;
+            NailDuration = nailDuration;
             ShriekCooldown = shriekCooldown;
             QuakeCooldown = quakeCooldown;
             TeleportCooldown = teleportCooldown;
@@ -435,6 +456,8 @@ namespace LegacyoftheAbyss.Shade
         public float FireCooldown { get; }
 
         public float NailCooldown { get; }
+
+        public float NailDuration { get; }
 
         public float ShriekCooldown { get; }
 
@@ -466,6 +489,7 @@ namespace LegacyoftheAbyss.Shade
                 baseline.SprintDashCooldown,
                 baseline.FireCooldown,
                 baseline.NailCooldown,
+                baseline.NailDuration,
                 baseline.ShriekCooldown,
                 baseline.QuakeCooldown,
                 baseline.TeleportCooldown,
@@ -511,6 +535,7 @@ namespace LegacyoftheAbyss.Shade
             float sprintDashCooldown = ClampNonNegative(baseline.SprintDashCooldown * mods.SprintDashCooldownMultiplier + mods.SprintDashCooldownFlatDelta);
             float fireCooldown = ClampNonNegative(baseline.FireCooldown * mods.FireCooldownMultiplier + mods.FireCooldownFlatDelta);
             float nailCooldown = ClampNonNegative(baseline.NailCooldown * mods.NailCooldownMultiplier + mods.NailCooldownFlatDelta);
+            float nailDuration = ClampNonNegative(baseline.NailDuration * mods.NailDurationMultiplier + mods.NailDurationFlatDelta);
             float shriekCooldown = ClampNonNegative(baseline.ShriekCooldown * mods.ShriekCooldownMultiplier + mods.ShriekCooldownFlatDelta);
             float quakeCooldown = ClampNonNegative(baseline.QuakeCooldown * mods.QuakeCooldownMultiplier + mods.QuakeCooldownFlatDelta);
             float teleportCooldown = ClampNonNegative(baseline.TeleportCooldown * mods.TeleportCooldownMultiplier + mods.TeleportCooldownFlatDelta);
@@ -528,6 +553,7 @@ namespace LegacyoftheAbyss.Shade
                 sprintDashCooldown,
                 fireCooldown,
                 nailCooldown,
+                nailDuration,
                 shriekCooldown,
                 quakeCooldown,
                 teleportCooldown,

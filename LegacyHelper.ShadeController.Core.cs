@@ -1,4 +1,4 @@
-﻿#nullable disable
+#nullable disable
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -384,6 +384,7 @@ public partial class LegacyHelper
             sprintDashCooldown = charmSnapshot.SprintDashCooldown;
             fireCooldown = charmSnapshot.FireCooldown;
             nailCooldown = charmSnapshot.NailCooldown;
+            nailDuration = charmSnapshot.NailDuration;
             shriekCooldown = charmSnapshot.ShriekCooldown;
             quakeCooldown = charmSnapshot.QuakeCooldown;
             teleportCooldown = charmSnapshot.TeleportCooldown;

@@ -87,9 +87,17 @@ public partial class SimpleHUD
             ? new Vector2(soulOrbSprite.rect.width, soulOrbSprite.rect.height)
             : new Vector2(96, 96);
         float uiScale = GetUIScale();
-        soulOrbRoot.sizeDelta = orbPixels * uiScale * 0.85f;
-        soulOrbRoot.anchoredPosition = new Vector2(-200f * uiScale, -20f * uiScale);
-        soulOrbRoot.localScale = new Vector3(-1f, 1f, 1f); // mirror like previous frame
+        // Full size: the orb art and the plate's socket are the same 130x125 piece of Hollow
+        // Knight's HUD, so anything less leaves a ring of socket showing round a full orb.
+        tuningOrbPixels = orbPixels;
+        tuningOrbBasePosition = new Vector2(-200f * uiScale, -20f * uiScale);
+        soulOrbRoot.sizeDelta = orbPixels * uiScale;
+        soulOrbRoot.anchoredPosition = tuningOrbBasePosition;
+
+        // Not mirrored by scale any more. The HUD is mirrored by where its pieces are put, and a
+        // negative scale here compounds with the plate's rotation into an orientation neither of
+        // them asked for.
+        soulOrbRoot.localScale = Vector3.one;
         orbGameplayScale = soulOrbRoot.localScale;
         orbMenuScale = orbGameplayScale;
 
@@ -122,7 +130,9 @@ public partial class SimpleHUD
         var soulImgGO = new GameObject("SoulImage");
         soulImgGO.transform.SetParent(soulOrbRoot, false);
         soulImage = soulImgGO.AddComponent<Image>();
-        soulImage.sprite = soulOrbSprite != null ? soulOrbSprite : BuildCircleSprite();
+        // The filled interior, not the glow. Hollow Knight draws the two separately, which is what
+        // makes the orb read as filling rather than merely brightening.
+        soulImage.sprite = soulOrbFillSprite ?? soulOrbSprite ?? BuildCircleSprite();
         soulImage.preserveAspect = true;
         soulImage.maskable = true;
         soulImage.raycastTarget = false;
@@ -138,16 +148,15 @@ public partial class SimpleHUD
         soulImgRect.anchoredPosition = Vector2.zero;
         soulImgRect.sizeDelta = soulOrbRoot.sizeDelta;
 
+        BuildHudFrame(canvas, uiScale);
+
         // Health masks container
         healthContainer = new GameObject("HealthContainer");
         healthContainer.transform.SetParent(canvas.transform, false);
         var hRect = healthContainer.AddComponent<RectTransform>();
         hRect.anchorMin = hRect.anchorMax = new Vector2(1, 1);
         hRect.pivot = new Vector2(1, 1);
-        Vector2 maskPixelsRef = maskSprite != null
-            ? new Vector2(maskSprite.rect.width, maskSprite.rect.height)
-            : new Vector2(33, 41);
-        float maskHeight = maskPixelsRef.y * uiScale * MaskScale;
+        float maskHeight = MeasureMask(uiScale).y;
         float orbCenterY = soulOrbRoot.anchoredPosition.y - (soulOrbRoot.sizeDelta.y * 0.5f);
         hRect.anchoredPosition = new Vector2(
             soulOrbRoot.anchoredPosition.x,
@@ -355,7 +364,8 @@ public partial class SimpleHUD
         previewRect.pivot = new Vector2(0.5f, 0.5f);
         previewRect.anchoredPosition = Vector2.zero;
         previewRect.localScale = Vector3.one;
-        previewRect.localRotation = Quaternion.identity;
+        // Matched to the mask rather than reset: the art is turned when the atlas stored it turned.
+        previewRect.localRotation = targetRect.localRotation;
         previewRect.SetAsLastSibling();
 
         float scale = elapsed >= HivebloodPreviewSecondStageSeconds ? (2f / 3f) : (1f / 3f);
@@ -544,12 +554,10 @@ public partial class SimpleHUD
     {
         int totalMasks = Mathf.Max(0, shadeMax) + Mathf.Max(0, shadeLifebloodMax);
         maskImages = new Image[totalMasks];
-        Vector2 maskPixels = maskSprite != null
-            ? new Vector2(maskSprite.rect.width, maskSprite.rect.height)
-            : new Vector2(33, 41);
-        Vector2 maskSize = maskPixels * uiScale * MaskScale;
+        Vector2 maskSize = MeasureMask(uiScale);
+        tuningMaskSize = maskSize;
 
-        float spacing = 6f * uiScale;
+        float spacing = ModConfig.Instance.hudMaskSpacing * uiScale;
         overcharmMaskSize = maskSize;
         overcharmMaskSpacing = spacing;
         EnsureOvercharmBackdrop(container);
@@ -565,7 +573,18 @@ public partial class SimpleHUD
             r.anchoredPosition = new Vector2(-x, 0f);
             x += maskSize.x + spacing;
 
-            var img = m.AddComponent<Image>();
+            // The art is a centred child rather than the box itself. The box is laid out from its
+            // top-right corner, and rotating about that corner would swing the mask out of its own
+            // slot; a centred child turns on the spot.
+            var art = new GameObject("Art");
+            art.transform.SetParent(m.transform, false);
+            var ar = art.AddComponent<RectTransform>();
+            ar.anchorMin = ar.anchorMax = new Vector2(0.5f, 0.5f);
+            ar.pivot = new Vector2(0.5f, 0.5f);
+            ar.sizeDelta = maskSpriteRotated ? new Vector2(maskSize.y, maskSize.x) : maskSize;
+            ar.localEulerAngles = maskSpriteRotated ? new Vector3(0f, 0f, 90f) : Vector3.zero;
+
+            var img = art.AddComponent<Image>();
             img.preserveAspect = true;
             img.sprite = maskSprite != null ? maskSprite : BuildMaskSprite();
             img.color = Color.white;
@@ -573,6 +592,74 @@ public partial class SimpleHUD
         }
 
         RefreshOvercharmBackdrop();
+    }
+
+    /// <summary>
+    /// Hollow Knight's HUD plate, behind the orb and the start of the mask row.
+    /// <para>
+    /// Built as the first child of the canvas so it draws under everything else, and mirrored on the
+    /// x axis for the same reason the orb is: this HUD lives in the top right where the first game's
+    /// lives in the top left.
+    /// </para>
+    /// </summary>
+    private void BuildHudFrame(Canvas canvas, float uiScale)
+    {
+        if (frameSprite == null || soulOrbRoot == null)
+        {
+            return;
+        }
+
+        var go = new GameObject("HudFrame");
+        go.transform.SetParent(canvas.transform, false);
+        go.transform.SetAsFirstSibling();
+
+        var image = go.AddComponent<Image>();
+        image.sprite = frameSprite;
+        image.preserveAspect = true;
+        image.raycastTarget = false;
+        image.color = Color.white;
+
+        // Displayed size, which is the atlas region turned on its side when tk2d packed it that way.
+        Vector2 pixels = new Vector2(frameSprite.rect.width, frameSprite.rect.height);
+        if (frameSpriteRotated)
+        {
+            pixels = new Vector2(pixels.y, pixels.x);
+        }
+
+        tuningFramePixels = pixels;
+
+        var rect = image.rectTransform;
+        rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.sizeDelta = frameSpriteRotated
+            ? new Vector2(pixels.y, pixels.x)
+            : pixels;
+
+        // Turned, and deliberately not mirrored. The plate is asymmetric - a socket with a horn
+        // sweeping off one side - and turning it this way already points the horn the way this HUD
+        // needs, which is the opposite of Hollow Knight's. Mirroring as well would put it back.
+        rect.localEulerAngles = frameSpriteRotated ? new Vector3(0f, 0f, 90f) : Vector3.zero;
+        rect.localScale = new Vector3(uiScale, uiScale, 1f);
+
+        Vector2 orbCentre = soulOrbRoot.anchoredPosition + new Vector2(
+            -soulOrbRoot.sizeDelta.x * 0.5f,
+            -soulOrbRoot.sizeDelta.y * 0.5f);
+
+        // Placed by its socket rather than by its middle. The socket is off-centre in the plate, so
+        // aligning the two centres would leave the orb sitting on the horn.
+        var socketFromCentre = new Vector2(
+            (FrameSocketX - 0.5f) * pixels.x,
+            -(FrameSocketY - 0.5f) * pixels.y);
+        rect.anchoredPosition = orbCentre - (socketFromCentre * uiScale);
+
+        hudFrameImage = image;
+
+        // The plate carries its own dark socket, which is the orb's background. Leaving the flat
+        // grey disc underneath as well is what put two circles on screen.
+        if (soulBgImage != null)
+        {
+            soulBgImage.enabled = false;
+        }
     }
 
     private void EnsureOvercharmBackdrop(RectTransform container)

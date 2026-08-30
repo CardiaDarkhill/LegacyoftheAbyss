@@ -568,6 +568,9 @@ public partial class LegacyHelper
             }
         }
 
+        /// <summary>Which character this companion is, for a log line. Nothing else reads it.</summary>
+        private string CharacterLogName => UsesGroundedMovement ? "Knight" : "Shade";
+
         private int GetShadeNailDamage()
         {
             int nailDmg = Mathf.Max(1, GetHornetNailDamage());

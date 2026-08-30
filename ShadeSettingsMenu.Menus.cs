@@ -516,7 +516,7 @@ public static partial class ShadeSettingsMenu
                         shade.SetShadeAiEnabled(v, persist: false);
                 }
             }, CancelTarget.ShadeMain, AiUnavailableForCharacter),
-            "Let the Shade fight by itself. It picks targets, attacks, steps out of danger and heals you both. It can be killed, so you will need to revive it. Unavailable while the Knight is equipped — the AI cannot drive a character that has to jump and climb.");
+            "Let the Shade fight by itself. It picks targets, attacks, steps out of danger and heals you both. It can be killed, so you will need to revive it. Unavailable while the Knight is equipped.");
 
         Add(CreateSlider(content, sliderTemplate, buttonTemplate, "Attack Speed", 0.1f, 1f, ModConfig.Instance.shadeAiAttackSpeedFraction,
                 v => ModConfig.Instance.shadeAiAttackSpeedFraction = v, CancelTarget.ShadeMain),

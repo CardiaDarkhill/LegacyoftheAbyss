@@ -1,4 +1,4 @@
-﻿#nullable disable
+#nullable disable
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -141,6 +141,18 @@ public partial class LegacyHelper
         private static Material s_sprintBurstMat;
         private int facing = 1;
         private float nailTimer;
+
+        /// <summary>
+        /// The swing, timed separately from the cooldown. Hollow Knight refuses the next strike
+        /// until both have run out, and lets a turn or a dash end this one early once the cooldown
+        /// already has - which is where the first game's faster attack rates come from.
+        /// </summary>
+        private float nailDurationTimer;
+
+        private float nailDuration = s_defaultCharmStats.NailDuration;
+
+        /// <summary>Last frame's facing, so a turn can be noticed without every mover reporting one.</summary>
+        private int nailLastFacing = 1;
         internal static bool suppressActivateOnSlash;
         internal static Transform expectedSlashParent;
         private SpriteRenderer baldurShellRenderer;

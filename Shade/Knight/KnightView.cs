@@ -24,6 +24,19 @@ namespace LegacyoftheAbyss.Shade.Knight
         internal const string ClipShadeCloak = "Shadow Dash";
         internal const string ClipShadeCloakReady = "Shadow Recharge";
         internal const string ClipMap = "Map Open";
+        internal const string ClipSit = "Sit";
+        internal const string ClipSitIdle = "Sit Idle";
+
+        // The spells. Each has a plain and an upgraded pose, as Hollow Knight's own do.
+        internal const string ClipFireball = "Fireball1 Cast";
+        internal const string ClipFireballUpgraded = "Fireball2 Cast";
+        internal const string ClipScream = "Scream";
+        internal const string ClipScreamUpgraded = "Scream 2";
+        internal const string ClipQuakeAntic = "Quake Antic";
+        internal const string ClipQuakeFall = "Quake Fall";
+        internal const string ClipQuakeFallUpgraded = "Quake Fall 2";
+        internal const string ClipQuakeLand = "Quake Land";
+        internal const string ClipQuakeLandUpgraded = "Quake Land 2";
 
         // The wings are their own object under Effects, sharing the rig's single 214-clip library.
         internal const string ClipMonarchWings = "Double Jump Wings 2";
@@ -68,9 +81,19 @@ namespace LegacyoftheAbyss.Shade.Knight
 
         private bool Build(GameObject prefab)
         {
-            var instance = Instantiate(prefab, transform, worldPositionStays: false);
+            // Staged under an inactive holder so that nothing on the prefab ever gets to run.
+            // Instantiate wakes everything it copies, and this prefab is Hollow Knight's entire hero
+            // - FSMs included. One frame is all they need: the two hero_fireball clips and the
+            // explosion that played on every room entry and every character swap were the Knight's
+            // own spell FSMs casting in the frame before StripHeroBehaviour could reach them.
+            var stage = new GameObject("KnightRigStage");
+            stage.SetActive(false);
+
+            var instance = Instantiate(prefab, stage.transform, worldPositionStays: false);
             instance.name = "KnightRig";
             instance.transform.localRotation = Quaternion.identity;
+
+            // Active within an inactive parent, so still nothing awakens.
             instance.SetActive(true);
             rig = instance.transform;
 
@@ -82,7 +105,7 @@ namespace LegacyoftheAbyss.Shade.Knight
             if (animator == null)
             {
                 LegacyHelper.LogWarning("Knight rig has no tk2dSpriteAnimator; the Knight cannot animate.");
-                Destroy(instance);
+                Destroy(stage);
                 rig = null;
                 return false;
             }
@@ -97,6 +120,12 @@ namespace LegacyoftheAbyss.Shade.Knight
                 animator.gameObject.SetActive(true);
             }
 
+            DisableStrayRenderers();
+
+            // Only now does anything on the rig wake, and by this point it is art and nothing else.
+            instance.transform.SetParent(transform, worldPositionStays: false);
+            Destroy(stage);
+
             // The body transform is already scaled and the rig is its child, so the prefab's own
             // scale is the baseline - scaling by the body's own factor again multiplied the two and
             // produced a Knight several times the intended size. What the prefab ships at still
@@ -105,8 +134,6 @@ namespace LegacyoftheAbyss.Shade.Knight
             baseScaleX = Mathf.Abs(instance.transform.localScale.x);
 
             instance.transform.localPosition = Vector3.zero;
-
-            DisableStrayRenderers();
             return true;
         }
 
@@ -131,46 +158,83 @@ namespace LegacyoftheAbyss.Shade.Knight
                 }
             }
 
+            // The whole object, immediately, and not the component: ParticleSystemRenderer depends on
+            // ParticleSystem so removing one alone is refused, and a deferred Destroy would leave it
+            // emitting until the end of the frame - which is after the rig goes live.
             foreach (var particles in rig.GetComponentsInChildren<ParticleSystem>(true))
             {
-                Destroy(particles);
+                if (particles != null)
+                {
+                    DestroyImmediate(particles.gameObject);
+                }
             }
         }
 
         /// <summary>
+        /// Behaviours the rig keeps. Everything else on it is Hollow Knight's hero, and this is an
+        /// allow-list rather than a list of things to remove because the ways that rig can act on
+        /// its own kept turning out to be one wider than whatever had just been removed: first its
+        /// FSMs casting spells, then a <c>PersonalObjectPool</c> warming Hollow Knight's effect
+        /// prefabs into Silksong's global pool and setting one off every time a room loaded.
+        /// </summary>
+        private static bool IsArtBehaviour(MonoBehaviour behaviour)
+        {
+            return behaviour is tk2dSpriteAnimator
+                || behaviour is tk2dBaseSprite
+                || behaviour is DeactivateAfter2dtkAnimation;
+        }
+
+        /// <summary>
         /// Removes everything on the rig that would act on its own. The prefab carries Hollow
-        /// Knight's FSMs, physics and hitboxes, and left in place they fight the companion body
-        /// this rig is parented to — its collider is the one that matters.
+        /// Knight's whole hero - FSMs, physics, hitboxes, pooling - and left in place they fight
+        /// the companion body this rig is parented to, or worse act on the world around it.
+        /// <para>
+        /// <see cref="DestroyImmediate"/> throughout, and that is load-bearing rather than a style
+        /// choice. <c>Destroy</c> defers to the end of the frame, so with the staged build the FSMs
+        /// were still attached at the moment the rig was reparented and woke up - and they cast.
+        /// The first version of the staging fix therefore turned two stray sounds into a Shade Soul
+        /// and a Vengeful Spirit flying across the room, because by then the effects were live under
+        /// the companion rather than orphaned. Nothing here has awoken yet, so immediate removal is
+        /// safe: Unity does not call <c>OnDestroy</c> on a component whose <c>Awake</c> never ran.
+        /// </para>
         /// </summary>
         private static void StripHeroBehaviour(GameObject instance)
         {
-            foreach (var fsm in instance.GetComponentsInChildren<PlayMakerFSM>(true))
+            // MonoBehaviours first, and SetParticleScale is the reason the order matters: it holds
+            // the Rigidbody2D and calls IsAwake every frame, so removing the body from under it
+            // threw a NullReferenceException per frame for the rest of the session.
+            foreach (var behaviour in instance.GetComponentsInChildren<MonoBehaviour>(true))
             {
-                Destroy(fsm);
-            }
-
-            // Before the Rigidbody2D goes: this one holds a reference to it and calls IsAwake every
-            // frame, so removing the body underneath it threw a NullReferenceException per frame
-            // for the rest of the session.
-            foreach (var particleScale in instance.GetComponentsInChildren<SetParticleScale>(true))
-            {
-                Destroy(particleScale);
-            }
-
-            foreach (var body in instance.GetComponentsInChildren<Rigidbody2D>(true))
-            {
-                Destroy(body);
+                if (behaviour != null && !IsArtBehaviour(behaviour))
+                {
+                    DestroyImmediate(behaviour);
+                }
             }
 
             foreach (var collider in instance.GetComponentsInChildren<Collider2D>(true))
             {
-                Destroy(collider);
+                if (collider != null)
+                {
+                    DestroyImmediate(collider);
+                }
+            }
+
+            // After the colliders: a Rigidbody2D with colliders still attached to it is refused.
+            foreach (var body in instance.GetComponentsInChildren<Rigidbody2D>(true))
+            {
+                if (body != null)
+                {
+                    DestroyImmediate(body);
+                }
             }
 
             // Audio comes from the companion's own audio path; the rig's sources would double it.
             foreach (var source in instance.GetComponentsInChildren<AudioSource>(true))
             {
-                Destroy(source);
+                if (source != null)
+                {
+                    DestroyImmediate(source);
+                }
             }
         }
 
@@ -348,6 +412,49 @@ namespace LegacyoftheAbyss.Shade.Knight
 
             rig.position += new Vector3(0f, targetBottomWorldY - bounds.min.y, 0f);
             footAligned = true;
+        }
+
+        private float appliedLift;
+
+        /// <summary>
+        /// What the Knight actually occupies on screen, or false when the animator has no frame yet.
+        /// Used for placing it against another character's silhouette, which is the only way to say
+        /// "just touching" - transform origins sit wherever each rig's author put them.
+        /// </summary>
+        internal bool TryGetRenderedBounds(out Bounds bounds)
+        {
+            bounds = default;
+            var renderer = animator != null ? animator.GetComponent<Renderer>() : null;
+            if (renderer == null)
+            {
+                return false;
+            }
+
+            bounds = renderer.bounds;
+            return bounds.size.x > 0.0001f;
+        }
+
+        /// <summary>
+        /// Raises the drawn rig off its feet without moving the body.
+        /// <para>
+        /// For sitting. The seat is a few inches above where the Knight would stand, and the honest
+        /// way to say that is with the sprite rather than with the collider: pinning the body above
+        /// the floor meant abandoning gravity and the ground probes, and because Hornet's transform
+        /// origin sits near her middle rather than at her feet, an offset measured from her put the
+        /// Knight most of a body-height into the air.
+        /// </para>
+        /// </summary>
+        internal void SetLift(float lift)
+        {
+            if (rig == null || Mathf.Approximately(lift, appliedLift))
+            {
+                return;
+            }
+
+            // World space, matching AlignFeetTo: the body this rides may be scaled, and a local
+            // offset would then mean a different distance than it says.
+            rig.position += new Vector3(0f, lift - appliedLift, 0f);
+            appliedLift = lift;
         }
 
         /// <summary>

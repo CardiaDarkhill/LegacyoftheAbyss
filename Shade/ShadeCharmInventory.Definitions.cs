@@ -88,7 +88,9 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.QuickSlash),
                 statModifiers: new ShadeCharmStatModifiers
                 {
-                    NailCooldownMultiplier = 0.68f
+                    // 0.41s -> 0.25s and 0.35s -> 0.28s, which are Hollow Knight's numbers.
+                    NailCooldownMultiplier = 0.25f / 0.41f,
+                    NailDurationMultiplier = 0.28f / 0.35f
                 },
                 displayName: "Quick Slash",
                 description: "Born from imperfect, discarded Nails that have fused together. The Nails still long to feel proper use and will grant the bearer faster attacks.",

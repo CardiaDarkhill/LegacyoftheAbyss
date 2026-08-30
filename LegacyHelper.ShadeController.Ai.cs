@@ -1,4 +1,4 @@
-﻿#nullable disable
+#nullable disable
 using System;
 using System.Collections.Generic;
 using LegacyoftheAbyss.Shade.Ai;
@@ -466,7 +466,7 @@ public partial class LegacyHelper
 
         private bool IsAiNailReady(float nailInterval, float now)
         {
-            if (nailTimer > 0f)
+            if (nailTimer > 0f || nailDurationTimer > 0f)
             {
                 return false;
             }

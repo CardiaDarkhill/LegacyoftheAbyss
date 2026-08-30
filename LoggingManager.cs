@@ -102,6 +102,41 @@ internal static class LoggingManager
         }
     }
 
+    private static bool wroteDealtHeader;
+
+    /// <summary>
+    /// What a companion attack is worth, at the moment it lands.
+    /// <para>
+    /// The damage log only ever recorded what hit the Shade, which left no way to answer the
+    /// question a charm test actually asks - what does this loadout hit *for*. Every figure here is
+    /// the final one, after charms, so swapping a charm and throwing one attack is enough to read
+    /// its effect.
+    /// </para>
+    /// </summary>
+    internal static void LogShadeAttackDamage(string character, string attack, int damage, float cooldownSeconds = -1f)
+    {
+        if (!ModConfig.Instance.logDamage) return;
+
+        Initialize();
+
+        // The cooldown rides along because attack *rate* charms cannot be read off a damage figure,
+        // and counting swings by hand measures how fast you can press the button rather than what
+        // the charm did - which is how Quick Slash came to look inert.
+        string rate = cooldownSeconds >= 0f
+            ? $", {cooldownSeconds:0.###}s cooldown ({(cooldownSeconds > 0.0001f ? 1f / cooldownSeconds : 0f):0.#}/s)"
+            : string.Empty;
+        string line = $"{character} {attack}: {damage} damage{rate}";
+        consoleLogger?.LogInfo(line);
+
+        if (!wroteDealtHeader)
+        {
+            AppendLine("== Damage dealt ==");
+            wroteDealtHeader = true;
+        }
+
+        AppendLine("- " + line);
+    }
+
     private static void AppendHeader(bool succeeded)
     {
         if (succeeded && !wroteHitHeader)

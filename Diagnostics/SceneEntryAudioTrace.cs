@@ -35,9 +35,44 @@ namespace LegacyoftheAbyss.Diagnostics
         private const float WindowSeconds = 8f;
         private const int MaxEntriesPerScene = 60;
 
+        private const int MaxBundleStacks = 6;
+
         private static float windowClosesAt = -1f;
         private static int recorded;
+        private static int bundleStacksTaken;
         private static bool installed;
+
+        /// <summary>The first few frames of a stack, without the noise either side of them.</summary>
+        private static string Trim(string stackTrace)
+        {
+            if (string.IsNullOrEmpty(stackTrace))
+            {
+                return "<no stack>";
+            }
+
+            var lines = stackTrace.Split('\n');
+            var kept = new List<string>();
+            foreach (var line in lines)
+            {
+                string trimmed = line.Trim();
+                if (trimmed.Length == 0 || trimmed.Contains("SceneEntryAudioTrace") || trimmed.Contains("System.Environment"))
+                {
+                    continue;
+                }
+
+                kept.Add(trimmed);
+
+                // Deep enough to get past PlayMaker. Six frames stopped at FsmState.OnEnter, which
+                // named the action but not what had woken the object it was on - and for a pooled
+                // object sitting parked, that caller is the whole question.
+                if (kept.Count >= 18)
+                {
+                    break;
+                }
+            }
+
+            return string.Join(" <- ", kept);
+        }
 
         internal static void Install()
         {
@@ -55,6 +90,22 @@ namespace LegacyoftheAbyss.Diagnostics
         {
             windowClosesAt = Time.realtimeSinceStartup + WindowSeconds;
             recorded = 0;
+            bundleStacksTaken = 0;
+        }
+
+        /// <summary>The FSM whose one-shot action is running right now, for the next Record call.</summary>
+        private static string pendingFsm = string.Empty;
+
+        internal static void NoteFsmOneShot(HutongGames.PlayMaker.Fsm? fsm)
+        {
+            if (fsm == null)
+            {
+                pendingFsm = string.Empty;
+                return;
+            }
+
+            var owner = fsm.GameObject;
+            pendingFsm = " by FSM '" + (fsm.Name ?? "?") + "' on " + (owner != null ? Path(owner.transform) : "<no owner>");
         }
 
         internal static void Record(AudioSource? source, AudioClip? clip, string how)
@@ -66,16 +117,42 @@ namespace LegacyoftheAbyss.Diagnostics
 
             recorded++;
 
+            // A clip name proves nothing on its own - Silksong reuses much of Hollow Knight's audio
+            // library - but the bundle's own instance of one could only have been played by
+            // something we brought in. The check only reaches clips the bundle's prefabs hold on an
+            // AudioSource, which is 39 of its 162, so a "no" here is not an acquittal.
+            bool fromBundle = clip != null && LegacyoftheAbyss.Shade.Knight.KnightAssets.IsBundleAudio(clip);
+
+            // The game's own one-shot spawner. Whoever is playing the stray sound on room entry is
+            // going through it, and naming the caller is the only thing left that will settle it.
+            bool oneShotSpawner = how == "PlayOneShot"
+                && source != null
+                && source.gameObject.name.StartsWith("Audio Player", StringComparison.Ordinal);
+
+            string origin = fromBundle ? " [KNIGHT BUNDLE]" : string.Empty;
+
+            // Capped, and only for those two: a stack trace is expensive and the point is to name a
+            // caller, not to narrate the room.
+            string stack = string.Empty;
+            if ((fromBundle || oneShotSpawner) && bundleStacksTaken < MaxBundleStacks)
+            {
+                bundleStacksTaken++;
+                stack = " via " + Trim(Environment.StackTrace);
+            }
+
             string clipName = clip != null ? clip.name : "<no clip>";
             string owner = source != null ? Path(source.transform) : "<no source>";
             string position = source != null
                 ? FormattableString.Invariant($"({source.transform.position.x:F1}, {source.transform.position.y:F1})")
                 : "?";
 
+            string culprit = pendingFsm;
+            pendingFsm = string.Empty;
+
             BugReportSystem.RecordEvent(
                 "scene-audio",
                 clipName,
-                string.Format(CultureInfo.InvariantCulture, "{0} from {1} at {2}", how, owner, position));
+                string.Format(CultureInfo.InvariantCulture, "{0} from {1} at {2}{3}{4}{5}", how, owner, position, culprit, origin, stack));
         }
 
         private static string Path(Transform node)
@@ -88,6 +165,34 @@ namespace LegacyoftheAbyss.Diagnostics
 
             return builder.ToString();
         }
+    }
+
+    /// <summary>
+    /// The action the stray room-entry sound comes through.
+    /// <para>
+    /// The captured stack ended at <c>FsmState.OnEnter</c>, which says a PlayMaker state was entered
+    /// and played a clip but not <i>whose</i> - PlayMaker's own frames carry no FSM identity. This
+    /// reads it off the action itself, which is the last thing needed to name the culprit.
+    /// </para>
+    /// </summary>
+    [HarmonyPatch]
+    internal static class AudioPlayerOneShotSingle_OnEnter_SceneEntryTrace
+    {
+        private static IEnumerable<MethodBase> TargetMethods()
+        {
+            var method = AccessTools.DeclaredMethod(
+                typeof(HutongGames.PlayMaker.Actions.AudioPlayerOneShotSingle), "OnEnter");
+            if (method == null)
+            {
+                LegacyHelper.LogWarning("Scene-entry audio trace: AudioPlayerOneShotSingle.OnEnter not found.");
+                yield break;
+            }
+
+            yield return method;
+        }
+
+        private static void Prefix(HutongGames.PlayMaker.Actions.AudioPlayerOneShotSingle __instance)
+            => SceneEntryAudioTrace.NoteFsmOneShot(__instance?.Fsm);
     }
 
     /// <summary>

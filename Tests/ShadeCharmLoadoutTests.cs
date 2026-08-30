@@ -21,6 +21,40 @@ public class ShadeCharmLoadoutTests
         Assert.Null(snapshot.AbilityOverrides.EnableShriek);
     }
 
+    /// <summary>
+    /// Hollow Knight's own nail figures, which are the point of the two-timer gate: without a
+    /// separate duration, Quick Slash could only shorten one of them and the charm read as inert
+    /// against a stopwatch.
+    /// </summary>
+    [Fact]
+    public void TheNailKeepsHollowKnightsTwoTimings()
+    {
+        var baseline = ShadeCharmStatBaseline.CreateDefault();
+
+        Assert.Equal(0.41f, baseline.NailCooldown, 3);
+        Assert.Equal(0.35f, baseline.NailDuration, 3);
+
+        var quickSlash = new ShadeCharmDefinition(
+            "quickSlash",
+            statModifiers: new ShadeCharmStatModifiers
+            {
+                NailCooldownMultiplier = 0.25f / 0.41f,
+                NailDurationMultiplier = 0.28f / 0.35f
+            });
+
+        var snapshot = ShadeCharmCalculator.BuildSnapshot(baseline, new[] { quickSlash });
+
+        Assert.Equal(0.25f, snapshot.NailCooldown, 3);
+        Assert.Equal(0.28f, snapshot.NailDuration, 3);
+
+        // The strike is refused until both have run out, so the rate is set by the longer one:
+        // 0.41s unaided, 0.28s with the charm - a bit over a third faster.
+        float unaided = MathF.Max(baseline.NailCooldown, baseline.NailDuration);
+        float aided = MathF.Max(snapshot.NailCooldown, snapshot.NailDuration);
+        Assert.Equal(0.41f, unaided, 3);
+        Assert.Equal(0.28f, aided, 3);
+    }
+
     [Fact]
     public void StatModifiersStackMultiplicativelyAndAdditively()
     {

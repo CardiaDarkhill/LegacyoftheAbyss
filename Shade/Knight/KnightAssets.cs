@@ -27,6 +27,7 @@ namespace LegacyoftheAbyss.Shade.Knight
         private static bool s_shaderScanRegistered;
         private static bool s_shadersApplied;
         private static bool s_loadFailed;
+        private static AssetBundleCreateRequest? s_preload;
         private static Dictionary<string, AudioClip>? s_audio;
         private static bool s_audioScannedGlobally;
 
@@ -35,6 +36,35 @@ namespace LegacyoftheAbyss.Shade.Knight
             => s_prefabs.TryGetValue(KnightPrefabName, out var prefab) ? prefab : null;
 
         internal static string BundlePath => Path.Combine(ModPaths.Assets, BundleFolder, BundleFile);
+
+        /// <summary>
+        /// Starts reading the bundle in the background, at launch, so that nothing later has to wait
+        /// for it.
+        /// <para>
+        /// It is 54 MB, and loading it on demand meant the game locked up for about a second the
+        /// first time anyone picked the Knight in the Characters menu. Asynchronous rather than
+        /// simply moved into startup, so it costs a background read instead of a second on the
+        /// splash screen; <see cref="TryLoad"/> finishes the request early if something does ask
+        /// before it lands.
+        /// </para>
+        /// </summary>
+        internal static void BeginPreload()
+        {
+            if (s_bundle != null || s_preload != null || s_loadFailed)
+            {
+                return;
+            }
+
+            string path = BundlePath;
+            if (!File.Exists(path))
+            {
+                s_loadFailed = true;
+                LegacyHelper.LogWarning($"Knight character disabled: asset bundle not found at {path}.");
+                return;
+            }
+
+            s_preload = AssetBundle.LoadFromFileAsync(path);
+        }
 
         /// <summary>
         /// Loads the bundle if it is not already loaded. Returns false and logs once when the bundle
@@ -60,7 +90,12 @@ namespace LegacyoftheAbyss.Shade.Knight
                 return false;
             }
 
-            s_bundle = AssetBundle.LoadFromFile(path);
+            // Reading .assetBundle on a request that has not finished blocks until it has, which is
+            // exactly the wanted behaviour: whoever asked first pays whatever is left of the read
+            // rather than starting a second one.
+            s_bundle = s_preload != null ? s_preload.assetBundle : AssetBundle.LoadFromFile(path);
+            s_preload = null;
+
             if (s_bundle == null)
             {
                 s_loadFailed = true;
@@ -95,6 +130,53 @@ namespace LegacyoftheAbyss.Shade.Knight
         internal static string Inventory { get; private set; } = "bundle not loaded";
 
         /// <summary>
+        /// Whether this exact clip came out of the Knight bundle.
+        /// <para>
+        /// Identity, not name. Silksong reuses a great deal of Hollow Knight's audio library, so a
+        /// clip called <c>hero_fireball</c> or <c>explosion_4_wet</c> playing in a room proves
+        /// nothing on its own - the question is always whether it is <i>our</i> copy, which is the
+        /// difference between a bug this mod caused and a sound the room was always going to make.
+        /// </para>
+        /// </summary>
+        internal static bool IsBundleAudio(AudioClip clip)
+        {
+            if (clip == null || s_bundle == null)
+            {
+                return false;
+            }
+
+            return EnsurePrefabAudioMap().TryGetValue(clip.name, out var known) && ReferenceEquals(known, clip);
+        }
+
+        /// <summary>
+        /// The clips reachable through the loaded prefabs' AudioSources. Deliberately without the
+        /// global fallback scan, which would pull in Silksong's own clips and make
+        /// <see cref="IsBundleAudio"/> answer yes for sounds that are nothing to do with us.
+        /// </summary>
+        private static Dictionary<string, AudioClip> EnsurePrefabAudioMap()
+        {
+            if (s_audio != null)
+            {
+                return s_audio;
+            }
+
+            s_audio = new Dictionary<string, AudioClip>();
+            foreach (var prefab in s_prefabs.Values)
+            {
+                foreach (var source in prefab.GetComponentsInChildren<AudioSource>(true))
+                {
+                    var clip = source != null ? source.clip : null;
+                    if (clip != null && !string.IsNullOrEmpty(clip.name))
+                    {
+                        s_audio[clip.name] = clip;
+                    }
+                }
+            }
+
+            return s_audio;
+        }
+
+        /// <summary>
         /// One of Hollow Knight's own sounds by name, or null.
         /// <para>
         /// <c>LoadAllAssets&lt;AudioClip&gt;()</c> returns none of these, which is what led to the
@@ -113,23 +195,9 @@ namespace LegacyoftheAbyss.Shade.Knight
                 return null;
             }
 
-            if (s_audio == null)
-            {
-                s_audio = new Dictionary<string, AudioClip>();
-                foreach (var prefab in s_prefabs.Values)
-                {
-                    foreach (var source in prefab.GetComponentsInChildren<AudioSource>(true))
-                    {
-                        var clip = source != null ? source.clip : null;
-                        if (clip != null && !string.IsNullOrEmpty(clip.name))
-                        {
-                            s_audio[clip.name] = clip;
-                        }
-                    }
-                }
-            }
+            var audio = EnsurePrefabAudioMap();
 
-            if (s_audio.TryGetValue(name, out var found))
+            if (audio.TryGetValue(name, out var found))
             {
                 return found;
             }
@@ -139,13 +207,13 @@ namespace LegacyoftheAbyss.Shade.Knight
                 s_audioScannedGlobally = true;
                 foreach (var clip in Resources.FindObjectsOfTypeAll<AudioClip>())
                 {
-                    if (clip != null && !string.IsNullOrEmpty(clip.name) && !s_audio.ContainsKey(clip.name))
+                    if (clip != null && !string.IsNullOrEmpty(clip.name) && !audio.ContainsKey(clip.name))
                     {
-                        s_audio[clip.name] = clip;
+                        audio[clip.name] = clip;
                     }
                 }
 
-                return s_audio.TryGetValue(name, out var late) ? late : null;
+                return audio.TryGetValue(name, out var late) ? late : null;
             }
 
             return null;
@@ -219,12 +287,96 @@ namespace LegacyoftheAbyss.Shade.Knight
         }
 
         /// <summary>
-        /// A still from the Knight's idle animation, for the Characters menu, or null when the
-        /// bundle or the clip is unavailable. Loading the bundle here is deliberate: it happens the
-        /// first time the Knight row is focused, in a paused menu, rather than at launch for
-        /// everyone.
+        /// A still from the Knight's idle animation, for the Characters menu.
         /// </summary>
-        internal static Sprite? TryBuildIdlePreview()
+        internal static Sprite? TryBuildIdlePreview() => TryBuildSprite(IdleClipName, 0);
+
+        /// <summary>
+        /// Frames the atlas stores turned 90 degrees, by the key <see cref="TryBuildSprite"/> caches
+        /// them under. tk2d packs sprites rotated when it saves space, and records that in the
+        /// definition's <c>flipped</c> flag; a Unity Sprite has nowhere to carry it, so whoever draws
+        /// the frame has to turn it back. The HUD masks arrived on their side because of this.
+        /// </summary>
+        private static readonly HashSet<string> s_rotatedSprites = new();
+
+        internal static bool IsSpriteRotated(string clipName, int frameIndex)
+            => s_rotatedSprites.Contains(SpriteKey(clipName, frameIndex));
+
+        private static string SpriteKey(string clipName, int frameIndex)
+            => clipName + "#" + frameIndex.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        private static readonly Dictionary<string, Sprite?> s_builtSprites = new();
+
+        /// <summary>
+        /// One frame of a bundled animation, as a Unity <see cref="Sprite"/>.
+        /// <para>
+        /// tk2d does not store sprites: a frame is a rectangle of an atlas described by its UV
+        /// corners, so this reads those back out and cuts a Sprite from the same texture. Results
+        /// are cached because callers are UI code that asks per rebuild, and every call would
+        /// otherwise leak another Sprite object over the same pixels.
+        /// </para>
+        /// </summary>
+        internal static Sprite? TryBuildSprite(string clipName, int frameIndex)
+        {
+            string key = SpriteKey(clipName, frameIndex);
+            if (s_builtSprites.TryGetValue(key, out var cached))
+            {
+                return cached;
+            }
+
+            var built = BuildSprite(clipName, frameIndex);
+            s_builtSprites[key] = built;
+            return built;
+        }
+
+        /// <summary>
+        /// A sprite cut from a whole bundled texture, for art that belongs to no animation.
+        /// <para>
+        /// The soul orb's filled interior is one of these: it is a standalone 130x125 texture rather
+        /// than a frame of anything, so <see cref="TryBuildSprite"/> cannot reach it.
+        /// </para>
+        /// </summary>
+        internal static Sprite? TryBuildSpriteFromTexture(string textureName)
+        {
+            string key = "tex:" + textureName;
+            if (s_builtSprites.TryGetValue(key, out var cached))
+            {
+                return cached;
+            }
+
+            Sprite? built = null;
+            if (TryLoad())
+            {
+                // A loaded-object scan rather than LoadAllAssets: bundle textures hang off materials
+                // and sprites rather than being assets of the bundle in their own right, for the
+                // same reason its audio does. Once per name, then cached.
+                foreach (var texture in Resources.FindObjectsOfTypeAll<Texture2D>())
+                {
+                    if (texture == null || !string.Equals(texture.name, textureName, System.StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    built = Sprite.Create(
+                        texture,
+                        new Rect(0f, 0f, texture.width, texture.height),
+                        new Vector2(0.5f, 0.5f));
+                    built.name = "Knight_" + textureName;
+                    built.hideFlags = HideFlags.HideAndDontSave;
+                    break;
+                }
+
+                if (built == null)
+                {
+                    LegacyHelper.LogWarning($"Knight bundle has no texture '{textureName}'; whatever asked for it falls back to the shipped art.");
+                }
+            }
+
+            s_builtSprites[key] = built;
+            return built;
+        }
+
+        private static Sprite? BuildSprite(string clipName, int frameIndex)
         {
             if (!TryLoad())
             {
@@ -233,16 +385,14 @@ namespace LegacyoftheAbyss.Shade.Knight
 
             ApplyShaders();
 
-            var prefab = KnightPrefab;
-            var animator = prefab != null ? prefab.GetComponentInChildren<tk2dSpriteAnimator>(true) : null;
-            var clip = animator?.Library != null ? animator.Library.GetClipByName(IdleClipName) : null;
+            var clip = FindClip(clipName);
             if (clip?.frames == null || clip.frames.Length == 0)
             {
-                LegacyHelper.LogWarning($"Knight preview falls back to the shipped still: no '{IdleClipName}' clip in the bundle.");
+                LegacyHelper.LogWarning($"Knight bundle has no '{clipName}' clip; whatever asked for it falls back to the shipped art.");
                 return null;
             }
 
-            var frame = clip.frames[0];
+            var frame = clip.frames[Mathf.Clamp(frameIndex, 0, clip.frames.Length - 1)];
             var collection = frame?.spriteCollection;
             if (collection?.spriteDefinitions == null
                 || frame == null
@@ -257,6 +407,11 @@ namespace LegacyoftheAbyss.Shade.Knight
             if (definition?.uvs == null || definition.uvs.Length == 0 || texture == null)
             {
                 return null;
+            }
+
+            if (definition.flipped != tk2dSpriteDefinition.FlipMode.None)
+            {
+                s_rotatedSprites.Add(SpriteKey(clipName, frameIndex));
             }
 
             // The frame is a region of the atlas, described by its UV corners.
@@ -280,14 +435,38 @@ namespace LegacyoftheAbyss.Shade.Knight
             }
 
             var sprite = Sprite.Create(texture, rect, new Vector2(0.5f, 0.5f));
-            sprite.name = "KnightIdlePreview";
+            sprite.name = "Knight_" + clipName;
             sprite.hideFlags = HideFlags.HideAndDontSave;
             return sprite;
+        }
+
+        /// <summary>
+        /// A clip by name from anywhere in the bundle. Every animator in the rig shares one library,
+        /// but the HUD's clips live on their own prefabs, so this looks past the Knight itself.
+        /// </summary>
+        private static tk2dSpriteAnimationClip? FindClip(string clipName)
+        {
+            foreach (var prefab in s_prefabs.Values)
+            {
+                foreach (var animator in prefab.GetComponentsInChildren<tk2dSpriteAnimator>(true))
+                {
+                    var clip = animator.Library != null ? animator.Library.GetClipByName(clipName) : null;
+                    if (clip?.frames != null && clip.frames.Length > 0)
+                    {
+                        return clip;
+                    }
+                }
+            }
+
+            return null;
         }
 
         internal static void Unload()
         {
             s_prefabs.Clear();
+            s_builtSprites.Clear();
+            s_rotatedSprites.Clear();
+            s_preload = null;
             s_audio = null;
             s_audioScannedGlobally = false;
             s_shaders.Clear();

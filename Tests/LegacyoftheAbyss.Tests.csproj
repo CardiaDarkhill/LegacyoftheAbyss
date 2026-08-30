@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <Import Project="..\SilksongPath.props" Condition="Exists('..\SilksongPath.props')" />
 
   <PropertyGroup>
@@ -28,6 +28,11 @@
     <UnityRuntimeLib Include="$(SilksongManagedDir)\UnityEngine.AudioModule.dll" />
     <UnityRuntimeLib Include="$(SilksongManagedDir)\UnityEngine.ParticleSystemModule.dll" />
     <UnityRuntimeLib Include="$(SilksongManagedDir)\UnityEngine.Physics2DModule.dll" />
+    <!-- 3D physics, which nothing in the mod uses. PlayMaker's Fsm declares the 3D trigger
+         callbacks alongside the 2D ones, so reflecting over its methods at all needs Collider to
+         resolve - without this the companion-interaction contract test dies on a
+         FileNotFoundException rather than on anything it was asserting. -->
+    <UnityRuntimeLib Include="$(SilksongManagedDir)\UnityEngine.PhysicsModule.dll" />
     <UnityRuntimeLib Include="$(SilksongManagedDir)\UnityEngine.TextRenderingModule.dll" />
     <UnityRuntimeLib Include="$(SilksongManagedDir)\UnityEngine.UI.dll" />
     <UnityRuntimeLib Include="$(SilksongManagedDir)\UnityEngine.UIModule.dll" />

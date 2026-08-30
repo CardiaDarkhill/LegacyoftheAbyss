@@ -101,6 +101,7 @@ public partial class LegacyHelper
                 CancelFocus();
                 DestroyOtherSlashes(null);
                 isCastingSpell = false;
+                EndKnightCastFreeze();
                 isChannelingTeleport = false;
                 teleportChannelTimer = 0f;
                 capturedMoveInput = Vector2.zero;
@@ -226,6 +227,15 @@ public partial class LegacyHelper
             // Recomputed once a frame and read by FixedUpdate, the combat gate below, and SimpleHUD.
             bool wasControlsLocked = hornetControlsLocked;
             hornetControlsLocked = HornetControlsLocked(out bool shadeHidden);
+
+            // A bench is the one scripted hold the Knight has something of its own to do, so it
+            // stays in shot for it. The Shade still steps out of frame - it has no sitting pose.
+            bool hornetAtBench = HornetIsAtBench();
+            if (hornetAtBench && UsesGroundedMovement && knightView != null)
+            {
+                shadeHidden = false;
+            }
+
             ApplyScriptedHoldVisibility(shadeHidden);
             if (hornetControlsLocked && !wasControlsLocked)
             {
@@ -233,6 +243,7 @@ public partial class LegacyHelper
                 // leaving a focus or a channel running through a cutscene.
                 CancelFocus();
                 isCastingSpell = false;
+                EndKnightCastFreeze();
                 isChannelingTeleport = false;
                 teleportChannelTimer = 0f;
             }
@@ -250,6 +261,9 @@ public partial class LegacyHelper
                 capturedHorizontalInput = 0f;
                 capturedSprintHeld = false;
             }
+
+            // After the lock has cleared the input, because this writes its own over the top.
+            UpdateKnightBench(hornetAtBench);
 
             // Allow starting focus even when not casting other spells; focusing itself sets isCastingSpell
             if (!hornetControlsLocked && !inHardLeash && !isChannelingTeleport && !isInactive && damageStaggerTimer <= 0f)
@@ -536,6 +550,13 @@ public partial class LegacyHelper
         /// </para>
         /// </summary>
         internal static bool HornetControlsLocked() => HornetControlsLocked(out _);
+
+        /// <summary>Hornet resting, which is the cue for the Knight to come and sit with her.</summary>
+        private static bool HornetIsAtBench()
+        {
+            var playerData = MenuStateUtility.TryGetPlayerData();
+            return !ReferenceEquals(playerData, null) && playerData.atBench;
+        }
 
         /// <summary>
         /// As <see cref="HornetControlsLocked()"/>, additionally reporting whether the Shade should

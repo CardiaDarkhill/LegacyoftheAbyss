@@ -1,4 +1,4 @@
-﻿#nullable disable
+#nullable disable
 using System;
 using System.Collections;
 using System.Globalization;
@@ -153,8 +153,22 @@ public partial class LegacyHelper
 
         private void HandleNailAttack()
         {
-            nailTimer -= Time.deltaTime;
-            if (nailTimer > 0f) return;
+            float nailDelta = Time.deltaTime;
+            nailTimer -= nailDelta;
+            nailDurationTimer -= nailDelta;
+
+            // Hollow Knight's cancel: once the cooldown is done, turning around or dashing ends the
+            // swing early. It is what makes Quick Slash worth more than its cooldown alone, because
+            // that is the case where the swing is the longer of the two.
+            bool turned = facing != nailLastFacing;
+            nailLastFacing = facing;
+            bool dashing = knightDashTimer > 0f || sprintDashTimer > 0f;
+            if (nailDurationTimer > 0f && nailTimer <= 0f && (turned || dashing))
+            {
+                nailDurationTimer = 0f;
+            }
+
+            if (nailTimer > 0f || nailDurationTimer > 0f) return;
 
             float forcedV;
             bool pressed;
@@ -187,6 +201,7 @@ public partial class LegacyHelper
             if (pressed)
             {
                 nailTimer = nailCooldown;
+                nailDurationTimer = nailDuration;
                 if (shamanMovesetActive)
                     PerformShamanSlash(forcedV);
                 else
@@ -498,6 +513,7 @@ public partial class LegacyHelper
         private void RetargetDamagers(GameObject slash, float slashDir, Vector2 slashForward, bool applyKnockbackCharm)
         {
             int nailDmg = GetShadeNailDamage();
+            LoggingManager.LogShadeAttackDamage(CharacterLogName, "nail", nailDmg, Mathf.Max(nailCooldown, nailDuration));
             bool firstKept = false;
 
             foreach (var d in slash.GetComponentsInChildren<DamageEnemies>(true))
@@ -789,6 +805,10 @@ public partial class LegacyHelper
             // Use spell progression for damage (2.5x upgraded, 30% less when unupgraded)
             int dmg = ComputeSpellDamageMultiplier(2.5f, IsProjectileUpgraded());
             sp.damage = Mathf.Max(1, Mathf.RoundToInt(dmg * damageScale));
+            LoggingManager.LogShadeAttackDamage(
+                CharacterLogName,
+                IsProjectileUpgraded() ? "Shade Soul" : "Vengeful Spirit",
+                sp.damage);
             sp.hornetRoot = hornetTransform;
             sp.destroyOnTerrain = !IsProjectileUpgraded();
             sp.maxRange = IsProjectileUpgraded() ? 22f : 0f;

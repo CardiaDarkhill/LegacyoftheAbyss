@@ -35,11 +35,23 @@ namespace LegacyoftheAbyss.Diagnostics
         private static float lastListenerRun = -1f;
         private static readonly List<string> sightings = new(HistoryLength);
         private static readonly List<string> verdicts = new(HistoryLength);
+        private static readonly List<string> outcomes = new(HistoryLength);
+
+        /// <summary>
+        /// Every FSM running the listener, by owner. More than one means the press is being fired
+        /// into a duplicate inventory while the live one never hears it - which the counters alone
+        /// cannot show, because a duplicate polls just as busily as the real thing.
+        /// </summary>
+        private static readonly HashSet<string> listenerOwners = new(StringComparer.Ordinal);
+
+        /// <summary>True between prefix and postfix when the listener saw a press this call.</summary>
+        private static bool sawPressThisCall;
 
         internal static void NoteListenerRan(HeroActions? actions)
         {
             listenerRuns++;
             lastListenerRun = Time.realtimeSinceStartup;
+            sawPressThisCall = false;
 
             if (actions == null)
             {
@@ -52,11 +64,35 @@ namespace LegacyoftheAbyss.Diagnostics
                 return;
             }
 
+            sawPressThisCall = true;
             Push(sightings, string.Format(
                 CultureInfo.InvariantCulture,
                 "t={0:F1} {1}",
                 lastListenerRun,
                 pressed));
+        }
+
+        /// <summary>
+        /// Where the FSM ended up on the same call that saw the press. PlayMaker switches state
+        /// inside <c>Fsm.Event</c>, so a state still reading <c>Closed</c> here means the event went
+        /// nowhere - the transition is absent, or the event itself is null.
+        /// </summary>
+        internal static void NoteListenerFinished(string ownerPath, string fsmName, string stateAfter, string? eventName)
+        {
+            listenerOwners.Add(fsmName + " on " + ownerPath);
+
+            if (!sawPressThisCall)
+            {
+                return;
+            }
+
+            sawPressThisCall = false;
+            Push(outcomes, string.Format(
+                CultureInfo.InvariantCulture,
+                "t={0:F1} fired '{1}' -> {2}",
+                Time.realtimeSinceStartup,
+                eventName ?? "<null event>",
+                string.IsNullOrEmpty(stateAfter) ? "?" : stateAfter));
         }
 
         /// <summary>
@@ -93,10 +129,12 @@ namespace LegacyoftheAbyss.Diagnostics
         {
             return string.Format(
                 CultureInfo.InvariantCulture,
-                "listener ran {0}x (last t={1}) | saw: {2} | CanOpenInventory asked: {3}",
+                "listener ran {0}x (last t={1}) on [{2}] | saw: {3} | after firing: {4} | CanOpenInventory asked: {5}",
                 listenerRuns,
                 lastListenerRun < 0f ? "never" : lastListenerRun.ToString("F1", CultureInfo.InvariantCulture),
+                listenerOwners.Count == 0 ? "nothing" : string.Join(" + ", listenerOwners),
                 sightings.Count == 0 ? "nothing" : string.Join(" ; ", sightings),
+                outcomes.Count == 0 ? "n/a" : string.Join(" ; ", outcomes),
                 verdicts.Count == 0 ? "never" : string.Join(" ; ", verdicts));
         }
     }
@@ -130,6 +168,28 @@ namespace LegacyoftheAbyss.Diagnostics
             // sees, and substituting a different instance here would hide exactly that.
             var handler = HandlerField?.GetValue(__instance) as InputHandler;
             InventoryOpenTrace.NoteListenerRan(handler != null ? handler.inputActions : null);
+        }
+
+        private static void Postfix(ListenForInventoryShortcut __instance)
+        {
+            var fsm = __instance.Fsm;
+            var owner = fsm?.GameObject;
+            InventoryOpenTrace.NoteListenerFinished(
+                owner != null ? DescribePath(owner.transform) : "<no owner>",
+                fsm?.Name ?? "?",
+                fsm?.ActiveStateName ?? "?",
+                __instance.WasPressed?.Name);
+        }
+
+        private static string DescribePath(Transform node)
+        {
+            var builder = new System.Text.StringBuilder(node.name);
+            for (var parent = node.parent; parent != null; parent = parent.parent)
+            {
+                builder.Insert(0, '/').Insert(0, parent.name);
+            }
+
+            return builder.ToString();
         }
     }
 

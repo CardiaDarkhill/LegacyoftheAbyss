@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using LegacyoftheAbyss.Diagnostics;
@@ -226,6 +226,30 @@ public class ModConfig
     // Enables the developer HP/soul cheat keys polled by SimpleHUD.Update. Off by default
     // so shipped builds do not poll six keys every frame or expose the cheats.
     public bool debugKeysEnabled = false;
+
+    // HUD layout, applied live and rereadable with Ctrl+F5. These exist because placing borrowed
+    // art by reasoning about its dimensions kept being wrong in ways only an eye catches. The
+    // defaults were dialled in against the running game, not derived.
+    public bool hudFrameEnabled = true;
+    public bool hudFrameMirror = false;
+    public float hudFrameRotation = 90f;
+    public float hudFrameScale = 1f;
+    public float hudFrameOffsetX = -26f;
+    public float hudFrameOffsetY = 0f;
+
+    /// <summary>Where the plate's socket sits within it, as a fraction of its drawn size, y down.</summary>
+    public float hudFrameSocketX = 0.704f;
+
+    public float hudFrameSocketY = 0.568f;
+
+    public float hudOrbScale = 1f;
+    public float hudOrbOffsetX = 120f;
+    public float hudOrbOffsetY = 0f;
+
+    public float hudMaskScale = 1f;
+    public float hudMaskSpacing = 6f;
+    public float hudMaskRowOffsetX = -120f;
+    public float hudMaskRowOffsetY = 12f;
     public bool shadeUnlockPopupsMuted = false;
     public float shadeUnlockPopupDelaySeconds = 0.75f;
     public float shadeUnlockPopupDurationSeconds = 3.5f;
@@ -495,6 +519,16 @@ public class ModConfig
     };
 
     public static ModConfig Instance => instance ??= Load();
+
+    /// <summary>
+    /// Rereads config.json from disk, discarding whatever is in memory. Bound to Ctrl+F5 so the HUD
+    /// tuning values can be dialled in against the running game rather than one build at a time.
+    /// </summary>
+    public static void Reload()
+    {
+        instance = null;
+        _ = Instance;
+    }
 
     public static ModConfig Load()
     {

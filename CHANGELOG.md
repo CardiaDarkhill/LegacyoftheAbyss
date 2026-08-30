@@ -31,6 +31,18 @@ controls it; the reasoning belongs in the commit and the code.
   once it reaches Shade Cloak.
 - The Knight uses Hollow Knight's own sounds where the asset bundle carries them: its dash, and its
   Shade Cloak. They play from the Knight rather than from Hornet, so distance is audible.
+- HUD layout can be tuned live: the frame, orb and mask row read their placement from `config.json`,
+  and Ctrl+F5 rereads it without a restart.
+- The HUD's masks and frame now use Hollow Knight's own art from the Knight bundle, at better than
+  twice the resolution of the stills that shipped before.
+- "Damage Summary File" now also records what the Shade and the Knight *deal* - the final damage of
+  every nail hit and spell, and the nail's cooldown, so a charm's effect can be read off one swing.
+- Casting a spell stops the Knight dead in the air for the cast, as in Hollow Knight, so a spell can
+  be used to hang in place. Descending Dark holds only until its own dive starts.
+- The Knight's asset bundle is read in the background at launch instead of the first time the
+  Characters menu needs it, which is where the one-second freeze came from.
+- The Knight sits down beside Hornet when she rests at a bench, walking over for it and being placed
+  there if the way is blocked.
 - Shade AI is unavailable while the Knight is equipped and reads as such in the menu — it steers by
   synthesising input, which cannot drive a character that has to jump and climb. Your setting is
   kept and returns with the Shade.

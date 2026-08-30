@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using LegacyoftheAbyss.Shade;
+using LegacyoftheAbyss.Shade.Knight;
 using UnityEngine;
 using GlobalEnums;
 
@@ -148,6 +149,8 @@ public partial class LegacyHelper
                 isCastingSpell = false;
                 currentAnimFrames = null;
             }
+
+            EndKnightCastFreeze();
         }
 
         private void HandleFire()
@@ -193,6 +196,10 @@ public partial class LegacyHelper
         private IEnumerator FireballCastRoutine()
         {
             isCastingSpell = true;
+            BeginKnightCastFreeze();
+            PlayKnightSpellAnimation(
+                IsProjectileUpgraded() ? KnightView.ClipFireballUpgraded : KnightView.ClipFireball,
+                0.35f);
             if (fireballCastAnimFrames != null && fireballCastAnimFrames.Length > 0)
             {
                 currentAnimFrames = fireballCastAnimFrames;
@@ -229,13 +236,19 @@ public partial class LegacyHelper
 
             currentAnimFrames = null;
             isCastingSpell = false;
+            EndKnightCastFreeze();
         }
 
         private IEnumerator ShriekCastRoutine()
         {
             isCastingSpell = true;
+            BeginKnightCastFreeze();
             bool upgraded = IsShriekUpgraded();
+            PlayKnightSpellAnimation(
+                upgraded ? KnightView.ClipScreamUpgraded : KnightView.ClipScream,
+                0.5f);
             int dmg = ComputeSpellDamageMultiplier(4f, upgraded);
+            LoggingManager.LogShadeAttackDamage(CharacterLogName, upgraded ? "Abyss Shriek" : "Howling Wraiths", dmg);
             TryPlayShriekSfx(upgraded);
             float life = 0.18f;
             Vector2 localOffset = new Vector2(0f, 0.8f);
@@ -280,6 +293,7 @@ public partial class LegacyHelper
             bool upgraded = IsDescendingDarkUpgraded();
             TryPlayQuakePrepareSfx();
             int dmg = ComputeSpellDamageMultiplier(3f, upgraded); // Descending Dark base 3x
+            LoggingManager.LogShadeAttackDamage(CharacterLogName, upgraded ? "Descending Dark" : "Desolate Dive", dmg);
             TrackSpellCast(StartCoroutine(DescendingDarkRoutine(dmg, upgraded)));
         }
 
@@ -465,6 +479,12 @@ public partial class LegacyHelper
         private IEnumerator DescendingDarkRoutine(int totalDamage, bool upgraded)
         {
             isCastingSpell = true;
+
+            // Released again the moment the dive itself starts, below. This spell carries its own
+            // movement, so freezing it for the whole cast would fight the descent rather than set
+            // it up.
+            BeginKnightCastFreeze();
+            PlayKnightSpellAnimation(KnightView.ClipQuakeAntic, 0.35f);
             float prevVelY = rb ? rb.linearVelocity.y : 0f;
             if (rb) rb.linearVelocity = Vector2.zero;
             if (quakeCastAnimFrames != null && quakeCastAnimFrames.Length > 0)
@@ -494,6 +514,11 @@ public partial class LegacyHelper
                 animTimer = 0f;
                 sr.sprite = descendAnimFrames[0];
             }
+
+            PlayKnightSpellAnimation(
+                upgraded ? KnightView.ClipQuakeFallUpgraded : KnightView.ClipQuakeFall,
+                1f);
+            EndKnightCastFreeze();
             var aura = SpawnDescendAura();
 
             // Find ground below: ignore Hornet/enemy/hazard hitboxes so we only stop on terrain
@@ -578,6 +603,10 @@ public partial class LegacyHelper
                 isCastingSpell = false;
                 yield break;
             }
+
+            PlayKnightSpellAnimation(
+                upgraded ? KnightView.ClipQuakeLandUpgraded : KnightView.ClipQuakeLand,
+                0.45f);
 
             // Spawn two hitboxes: ground strip (10 units wide), and teardrop (6x8) above
             TryPlayQuakeImpactSfx(upgraded);
