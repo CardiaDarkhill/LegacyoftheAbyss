@@ -39,13 +39,17 @@ public partial class LegacyHelper
                     focusSoulAccumulator -= drainThisFrame;
                     int beforeSoul = shadeSoul;
                     shadeSoul = Mathf.Max(0, shadeSoul - drainThisFrame);
+                    focusSoulDrainedThisChannel += beforeSoul - shadeSoul;
                     if (shadeSoul != beforeSoul)
                     {
                         PushSoulToHud();
                     }
-                    if (shadeSoul <= 0)
+
+                    // Only a channel that has *not* yet paid its own cost can run out: the meter
+                    // holds an exact multiple of it, so the last heal a full meter affords always
+                    // ends on zero and cancelling there is what cost the third heal.
+                    if (shadeSoul <= 0 && focusSoulDrainedThisChannel < focusSoulCost)
                     {
-                        // Ran out of soul mid-channel; cancel with no benefit
                         CancelFocus();
                         return;
                     }
@@ -95,6 +99,7 @@ public partial class LegacyHelper
                 if (focusAuraRenderer) focusAuraRenderer.enabled = false;
                 StopFocusChargeSfx();
                 focusSoulAccumulator = 0f;
+                focusSoulDrainedThisChannel = 0;
                 PersistIfChanged();
                 RefreshBaldurShellFocusState();
                 return;
@@ -117,6 +122,7 @@ public partial class LegacyHelper
             focusTimer = Mathf.Max(0.05f, focusChannelTime);
             SetSpriteAlpha(focusAlphaWhileChannel);
             focusSoulAccumulator = 0f;
+            focusSoulDrainedThisChannel = 0;
             EnsureFocusAura();
             if (focusAuraRenderer) focusAuraRenderer.enabled = true;
             StartFocusChargeSfx();
@@ -132,6 +138,7 @@ public partial class LegacyHelper
             if (focusAuraRenderer) focusAuraRenderer.enabled = false;
             StopFocusChargeSfx();
             focusSoulAccumulator = 0f;
+            focusSoulDrainedThisChannel = 0;
             focusDamageShieldAbsorbedThisChannel = false;
             RefreshBaldurShellFocusState();
         }
@@ -198,7 +205,11 @@ public partial class LegacyHelper
         private void RefreshBaldurShellFocusState(bool immediate = false)
         {
             bool hasFrames = baldurShellFocusAnimFrames != null && baldurShellFocusAnimFrames.Length > 0;
-            bool shouldShow = focusDamageShieldEnabled && isFocusing && hasFrames;
+
+            // A spent shell draws nothing: the charm is still equipped and still worth its notches
+            // once a bench mends it, but there is no shell there to curl up right now.
+            bool hasShell = (OwnCharms?.BaldurShellCharges ?? 0) > 0;
+            bool shouldShow = focusDamageShieldEnabled && isFocusing && hasFrames && hasShell;
 
             if (shouldShow)
             {

@@ -42,7 +42,8 @@ public partial class LegacyHelper
                 ResetCharmDerivedStats();
 
                 var inventory = OwnCharms;
-                var loadout = inventory?.GetEquippedDefinitions();
+                // Active, not equipped: a broken fragile charm keeps its slot but not its effect.
+                var loadout = inventory?.GetActiveDefinitions();
                 ApplyCharmLoadout(loadout);
 
                 maxDistance = Mathf.Max(6f, maxDistance);
@@ -127,12 +128,6 @@ public partial class LegacyHelper
             focusDamageShieldEnabled = false;
             focusDamageShieldAbsorbedThisChannel = false;
             focusHealingDisabled = false;
-            shamanMovesetActive = false;
-            shamanHorizontalSlashTemplate = null;
-            shamanHorizontalAltSlashTemplate = null;
-            shamanUpSlashTemplate = null;
-            shamanDownSlashTemplate = null;
-            shamanSlashConfigSource = null;
             carefreeMelodyEquipped = false;
 
             carefreeMelodyChance = 0f;
@@ -140,6 +135,10 @@ public partial class LegacyHelper
             DisableCarefreeMelodyEffect();
             LegacyHelper.SetFragileGreedActive(false);
             sharpShadowEquipped = false;
+            sprintmasterEquipped = false;
+            grubberflyElegyEquipped = false;
+            shamanStoneEquipped = false;
+            furyModeActive = false;
             sharpShadowDashActive = false;
             DestroySharpShadowDashHitbox();
             conditionalNailDamageMultipliers.Clear();
@@ -237,6 +236,66 @@ public partial class LegacyHelper
             hitKnockbackForce = Mathf.Clamp(hitKnockbackForce * factor, 0.1f, Mathf.Max(0.1f, baseHitKnockbackForce * 5f));
         }
 
+        /// <summary>Scratch for <see cref="PushBuffsToHud"/>, so a per-frame push allocates nothing.</summary>
+        private readonly System.Collections.Generic.List<SimpleHUD.BuffIcon> buffIconScratch = new System.Collections.Generic.List<SimpleHUD.BuffIcon>();
+
+        /// <summary>
+        /// Gathers this companion's status icons and hands them to the HUD.
+        /// <para>
+        /// Adding a buff is one more Append call here; the bar sizes itself to whatever the list
+        /// holds and does not know what any of it means.
+        /// </para>
+        /// </summary>
+        private void PushBuffsToHud()
+        {
+            // The HUD is shared, and a second companion pushing its own set would simply
+            // overwrite the first's every frame. The primary owns the bar, as it owns the mask row.
+            if (!cachedHud || Companion == null || !Companion.IsPrimary)
+            {
+                return;
+            }
+
+            buffIconScratch.Clear();
+            AppendBaldurShellBuff(buffIconScratch);
+
+            cachedHud.SetBuffIcons(buffIconScratch);
+        }
+
+        /// <summary>
+        /// Baldur Shell's shell, shown only while the charm is worn - including when it is spent,
+        /// which is the whole point of the readout: it breaks quietly and this is the only sign.
+        /// </summary>
+        private void AppendBaldurShellBuff(System.Collections.Generic.List<SimpleHUD.BuffIcon> icons)
+        {
+            if (!focusDamageShieldEnabled)
+            {
+                return;
+            }
+
+            var charms = OwnCharms;
+            if (charms == null)
+            {
+                return;
+            }
+
+            icons.Add(SimpleHUD.BuildBaldurShellIcon(charms.BaldurShellCharges, ShadeCharmInventory.BaldurShellMaxCharges));
+        }
+
+        internal void SetShamanStoneEquipped(bool equipped)
+        {
+            shamanStoneEquipped = equipped;
+        }
+
+        internal void SetGrubberflyElegyEquipped(bool equipped)
+        {
+            grubberflyElegyEquipped = equipped;
+        }
+
+        internal void SetSprintmasterEquipped(bool equipped)
+        {
+            sprintmasterEquipped = equipped;
+        }
+
         internal void SetFocusMovementAllowed(bool allowed)
         {
             allowFocusMovement = allowed;
@@ -261,10 +320,15 @@ public partial class LegacyHelper
             }
 
             sharpShadowEquipped = enabled;
-            if (!enabled)
+            if (enabled)
+            {
+                EnsureSharpShadowShadeView();
+            }
+            else
             {
                 sharpShadowDashActive = false;
                 DestroySharpShadowDashHitbox();
+                DiscardSharpShadowShadeView();
             }
         }
 
@@ -364,16 +428,6 @@ public partial class LegacyHelper
         internal void SetFragileGreedActive(bool active)
         {
             LegacyHelper.SetFragileGreedActive(active);
-        }
-
-        internal void SetShamanMovesetOverride(bool active)
-        {
-            if (shamanMovesetActive == active)
-            {
-                return;
-            }
-
-            shamanMovesetActive = active;
         }
 
         /// <summary>

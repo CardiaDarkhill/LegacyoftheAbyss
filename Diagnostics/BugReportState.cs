@@ -151,6 +151,13 @@ namespace LegacyoftheAbyss.Diagnostics
         /// </summary>
         public string? ShadePaneLayoutFailure;
 
+        /// <summary>
+        /// The measurements behind the last charm-grid layout. "The grid is sometimes too spread
+        /// out" is a report about a number nobody can see, and the column it measures against is a
+        /// stretched rect that can read wrong without anything throwing.
+        /// </summary>
+        public string? ShadeCharmGridLayout;
+
         /// <summary>What Hornet's inventory/map actions are bound to right now.</summary>
         public string? HeroMenuBindings;
 
@@ -199,6 +206,7 @@ namespace LegacyoftheAbyss.Diagnostics
             TryRun(() => state.KnightBundle = LegacyoftheAbyss.Shade.Knight.KnightAssets.Inventory);
             TryRun(() => state.KnightAudio = LegacyoftheAbyss.Shade.Knight.KnightAudio.Report);
             TryRun(() => state.ShadePaneLayoutFailure = ShadeInventoryPane.LastLayoutFailure);
+            TryRun(() => state.ShadeCharmGridLayout = ShadeInventoryPane.LastCharmGridLayout);
             TryRun(() => state.HeroMenuBindings = LegacyHelper.InputDeviceBlocker.DescribeHeroMenuBindings());
             TryRun(() => state.InventoryProbe = InventoryOpenProbe.Describe());
 

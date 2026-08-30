@@ -190,10 +190,16 @@ public partial class SimpleHUD : MonoBehaviour
     {
         if (!ModConfig.Instance.debugKeysEnabled) return;
 
-            // Debug: Shade HP adjust
+            // Debug: Shade HP adjust. Applied to the companions, exactly as the soul keys below
+            // are - writing the HUD field here made the damage cosmetic, so it came back on the
+            // next scene and focus could not heal it. The masks follow from the push.
             if (ShadeInput.WasActionPressed(ShadeAction.DebugDamageShade))
             {
-                shadeHealth = Mathf.Max(0, shadeHealth - 1);
+                foreach (var sc in LegacyHelper.ShadeController.ActiveInstances)
+                {
+                    if (sc != null) sc.DebugAdjustHealth(-1);
+                }
+
                 if (ModConfig.Instance.logHud)
                 {
                     Debug.Log("[SimpleHUD] Debug: Shade HP -1");
@@ -201,7 +207,11 @@ public partial class SimpleHUD : MonoBehaviour
             }
             if (ShadeInput.WasActionPressed(ShadeAction.DebugHealShade))
             {
-                shadeHealth = Mathf.Min(shadeMax, shadeHealth + 1);
+                foreach (var sc in LegacyHelper.ShadeController.ActiveInstances)
+                {
+                    if (sc != null) sc.DebugAdjustHealth(1);
+                }
+
                 if (ModConfig.Instance.logHud)
                 {
                     Debug.Log("[SimpleHUD] Debug: Shade HP +1");

@@ -507,7 +507,9 @@ namespace LegacyoftheAbyss.Shade
                 return false;
             }
 
-            bool repaired = false;
+            // Baldur Shell mends here too, and silently: it never announced breaking, so it has
+            // nothing to announce mending either.
+            bool repaired = s_charmInventory.RefillBaldurShellCharges();
             repaired |= TryRepairFragileCharm(ShadeCharmId.FragileStrength, string.Empty);
             repaired |= TryRepairFragileCharm(ShadeCharmId.FragileHeart, string.Empty);
             repaired |= TryRepairFragileCharm(ShadeCharmId.FragileGreed, string.Empty);

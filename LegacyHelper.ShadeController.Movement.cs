@@ -291,7 +291,8 @@ public partial class LegacyHelper
                 }
             }
 
-            UpdateGatheringSwarm(Time.deltaTime);
+            UpdateSporeShroomCooldown(Time.deltaTime);
+            PushBuffsToHud();
             CheckHazardOverlap();
             PersistIfChanged();
             CheckFocusReadySfx();
@@ -1324,22 +1325,18 @@ public partial class LegacyHelper
                 sprintDashTimer = 0f;
             }
 
-            bool dashNowActive = !inHardLeash && sprintDashTimer > 0f;
-            bool sharpShadowShouldBeActive = dashNowActive && sharpShadowEquipped && IsVoidHeartEvading();
-            if (sharpShadowShouldBeActive)
+            if (inHardLeash && sharpShadowDashActive)
             {
-                if (!sharpShadowDashActive)
-                {
-                    sharpShadowDashActive = true;
-                    EnsureSharpShadowDashHitbox();
-                }
-                UpdateSharpShadowDashHitbox();
-            }
-            else if (sharpShadowDashActive)
-            {
+                // Being reeled in is not a dash, whatever the timer says.
                 sharpShadowDashActive = false;
                 DestroySharpShadowDashHitbox();
             }
+            else if (!inHardLeash)
+            {
+                UpdateSharpShadowDashState();
+            }
+
+            UpdateSharpShadowShadeForm();
 
             if (knockbackTimer > 0f)
             {
@@ -1527,6 +1524,8 @@ public partial class LegacyHelper
 
         internal void SetFuryModeActive(bool active)
         {
+            furyModeActive = active;
+
             try
             {
                 if (active)

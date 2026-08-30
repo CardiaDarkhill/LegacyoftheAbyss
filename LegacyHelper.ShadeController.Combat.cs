@@ -503,14 +503,53 @@ public partial class LegacyHelper
             return voidHeartEvadeActive && sprintDashTimer > 0f;
         }
 
-        private void EnsureSharpShadowDashHitbox()
+        /// <summary>
+        /// Whether the companion is inside the dash Sharp Shadow sharpens.
+        /// <para>
+        /// The two characters reach it differently and only the Shade's route was ever asked
+        /// about, which is why the charm did nothing at all for the Knight: the Shade's shadow dash
+        /// is a sprint dash with Void Heart worn, while the Knight has its own Shade Cloak dash off
+        /// <c>KnightAbilityMap</c> and never touches <c>sprintDashTimer</c>.
+        /// </para>
+        /// </summary>
+        private bool IsSharpShadowDashing()
         {
             if (!sharpShadowEquipped)
             {
-                return;
+                return false;
             }
 
-            if (!IsVoidHeartEvading())
+            return UsesGroundedMovement
+                ? knightDashTimer > 0f && knightDashIsShadeCloak
+                : IsVoidHeartEvading();
+        }
+
+        /// <summary>
+        /// Brings the Sharp Shadow hitbox in and out with the dash. Called from each character's
+        /// own movement step, because neither one's dash state is visible from the other's.
+        /// </summary>
+        private void UpdateSharpShadowDashState()
+        {
+            if (IsSharpShadowDashing())
+            {
+                if (!sharpShadowDashActive)
+                {
+                    sharpShadowDashActive = true;
+                    EnsureSharpShadowDashHitbox();
+                }
+
+                UpdateSharpShadowDashHitbox();
+            }
+            else if (sharpShadowDashActive)
+            {
+                sharpShadowDashActive = false;
+                DestroySharpShadowDashHitbox();
+            }
+        }
+
+        private void EnsureSharpShadowDashHitbox()
+        {
+            if (!IsSharpShadowDashing())
             {
                 return;
             }
@@ -1112,6 +1151,13 @@ public partial class LegacyHelper
 
         private void DispatchCharmDamageEvent(int attemptedDamage, int actualDamage, bool wasHazard, bool prevented, bool lethal)
         {
+            // Spore Shroom's cloud is available again either after its wait or after a hit lands.
+            // Ahead of the callback list, which a loadout with no damage hooks leaves empty.
+            if (!prevented && actualDamage > 0)
+            {
+                ClearSporeShroomCooldown();
+            }
+
             if (charmDamageCallbacks.Count == 0)
             {
                 return;
@@ -1126,6 +1172,16 @@ public partial class LegacyHelper
             }
         }
 
+        /// <summary>
+        /// Baldur Shell taking a blow for the companion.
+        /// <para>
+        /// The blow still lands and the channel still breaks - only the damage is absorbed. Letting
+        /// the focus run on made this read as invulnerability for as long as the button was held,
+        /// which is what the shell is emphatically not. The shell has four blows in it and then
+        /// stops working until a bench; it breaks quietly, with no notification, unlike a fragile
+        /// charm.
+        /// </para>
+        /// </summary>
         private bool TryPreventFocusDamage(int attemptedDamage, bool wasHazard)
         {
             if (!focusDamageShieldEnabled || !isFocusing || focusDamageShieldAbsorbedThisChannel)
@@ -1133,7 +1189,14 @@ public partial class LegacyHelper
                 return false;
             }
 
+            var charms = OwnCharms;
+            if (charms == null || !charms.TryConsumeBaldurShellCharge())
+            {
+                return false;
+            }
+
             focusDamageShieldAbsorbedThisChannel = true;
+            CancelFocus();
             DispatchCharmDamageEvent(attemptedDamage, 0, wasHazard, true, false);
             return true;
         }
@@ -1210,6 +1273,61 @@ public partial class LegacyHelper
             isDying = false;
             isCastingSpell = false;
             currentAnimFrames = null;
+        }
+
+        /// <summary>
+        /// The developer HP keys, applied to the companion rather than to the HUD.
+        /// <para>
+        /// They used to write <c>SimpleHUD.shadeHealth</c> directly, which is only what the masks
+        /// are drawn from: the companion never lost the health, so focus had nothing to heal and
+        /// the next scene redrew the masks from the state that had never changed. The soul keys
+        /// beside them always did it this way - through every active companion - and this brings
+        /// the health keys into line.
+        /// </para>
+        /// <para>
+        /// Lifeblood is spent first when losing health and never restored when gaining, matching
+        /// how the pools behave everywhere else.
+        /// </para>
+        /// </summary>
+        internal void DebugAdjustHealth(int delta)
+        {
+            if (delta == 0)
+            {
+                return;
+            }
+
+            int before = GetTotalCurrentHealth();
+
+            if (delta < 0)
+            {
+                int remaining = -delta;
+                int fromLifeblood = Mathf.Min(remaining, Mathf.Max(0, shadeLifeblood));
+                shadeLifeblood -= fromLifeblood;
+                remaining -= fromLifeblood;
+                shadeHP = Mathf.Max(0, shadeHP - remaining);
+            }
+            else
+            {
+                shadeHP = Mathf.Min(shadeMaxHP, shadeHP + delta);
+            }
+
+            if (GetTotalCurrentHealth() == before)
+            {
+                return;
+            }
+
+            if (GetTotalCurrentHealth() <= 0)
+            {
+                StartDeathAnimation();
+            }
+            else
+            {
+                isInactive = false;
+                CancelDeathAnimation();
+            }
+
+            PushShadeStatsToHud(suppressDamageAudio: true);
+            PersistIfChanged();
         }
 
         private IEnumerator DeathAnimationRoutine()

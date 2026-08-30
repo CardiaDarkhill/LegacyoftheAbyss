@@ -240,6 +240,20 @@ public class GameApiContractTests
             "col");
     }
 
+    /// <summary>
+    /// Gathering Swarm is the game's own rosary magnet turned on for a charm rather than a second
+    /// pull written beside it. If this stops resolving the charm silently does nothing at all -
+    /// which is the state it was reported in.
+    /// </summary>
+    [Fact]
+    public void TheRosaryMagnetGateCanBeAnswered()
+    {
+        GameApiContract.RequireMethod(
+            typeof(CurrencyObjectBase), "MagnetToolIsEquipped",
+            "Postfixed so Gathering Swarm starts each pickup's own Getter routine, which is what "
+            + "draws rosaries to Hornet.");
+    }
+
     [Fact]
     public void CompanionsCannotDriveASceneTransition()
     {
@@ -515,21 +529,6 @@ public class GameApiContractTests
         GameApiContract.RequireMethod(
             typeof(GameCameras), "get_IsHudVisible",
             "IsGameHudHidden reads it as the tiebreaker for whether the game took the moment away.");
-    }
-
-    /// <summary>
-    /// The Wanderer crest's slash prefabs are reachable only through these arrays - nothing public
-    /// maps a Config back to the ConfigGroup holding its prefabs. If they stop resolving the shaman
-    /// moveset silently falls back to the plain nail slash.
-    /// </summary>
-    [Theory]
-    [InlineData("configs")]
-    [InlineData("specialConfigs")]
-    public void TheCrestSlashPrefabsCanBeFound(string field)
-    {
-        GameApiContract.RequireField(
-            typeof(HeroController), field, typeof(HeroController.ConfigGroup[]),
-            "FindShamanConfigGroup searches it for the ConfigGroup matching the spell crest's config.");
     }
 
     /// <summary>

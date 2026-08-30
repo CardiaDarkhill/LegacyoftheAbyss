@@ -35,6 +35,14 @@ namespace LegacyoftheAbyss.Shade.Knight
         internal static GameObject? KnightPrefab
             => s_prefabs.TryGetValue(KnightPrefabName, out var prefab) ? prefab : null;
 
+        /// <summary>
+        /// Any bundled prefab by name, or null. <see cref="Inventory"/> lists what is in there, and
+        /// is written into every bug report, so a name can be checked against a real bundle rather
+        /// than guessed at.
+        /// </summary>
+        internal static GameObject? FindPrefab(string name)
+            => !string.IsNullOrEmpty(name) && s_prefabs.TryGetValue(name, out var prefab) ? prefab : null;
+
         internal static string BundlePath => Path.Combine(ModPaths.Assets, BundleFolder, BundleFile);
 
         /// <summary>
@@ -290,6 +298,22 @@ namespace LegacyoftheAbyss.Shade.Knight
         /// A still from the Knight's idle animation, for the Characters menu.
         /// </summary>
         internal static Sprite? TryBuildIdlePreview() => TryBuildSprite(IdleClipName, 0);
+
+        /// <summary>
+        /// How many frames a bundled clip has, or zero when it is not there. Needed because
+        /// <see cref="TryBuildSprite"/> clamps its index, so walking a clip by asking for frames
+        /// until one comes back null would never end.
+        /// </summary>
+        internal static int GetClipFrameCount(string clipName)
+        {
+            if (!TryLoad())
+            {
+                return 0;
+            }
+
+            var clip = FindClip(clipName);
+            return clip?.frames?.Length ?? 0;
+        }
 
         /// <summary>
         /// Frames the atlas stores turned 90 degrees, by the key <see cref="TryBuildSprite"/> caches

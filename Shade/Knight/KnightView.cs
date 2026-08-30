@@ -15,6 +15,25 @@ namespace LegacyoftheAbyss.Shade.Knight
         // Clip names as they exist in the bundled tk2d library.
         internal const string ClipIdle = "Idle";
         internal const string ClipRun = "Run";
+
+        /// <summary>The Sprintmaster walk cycle, played in place of <see cref="ClipRun"/>.</summary>
+        internal const string ClipSprint = "Sprint";
+
+        /// <summary>The ordinary focus pose, held for the length of the channel.</summary>
+        internal const string ClipFocus = "Focus";
+
+        /// <summary>
+        /// Shape of Unn's focus set: the Knight takes a slug's form and can crawl while channelling.
+        /// <para>
+        /// The bundle also carries "B", "S" and "BS" suffixed variants of both of these, which are
+        /// the Baldur Shell and Spore Shroom combinations. They are not wired up - which suffix is
+        /// which has not been confirmed against the art, and a wrong guess draws the wrong charm.
+        /// </para>
+        /// </summary>
+        internal const string ClipSlugIdle = "Slug Idle";
+
+        /// <summary>The crawl half of Shape of Unn's focus set. See <see cref="ClipSlugIdle"/>.</summary>
+        internal const string ClipSlugWalk = "Slug Walk";
         internal const string ClipAirborne = "Airborne";
         internal const string ClipLand = "Land";
         internal const string ClipDash = "Dash";
@@ -22,6 +41,9 @@ namespace LegacyoftheAbyss.Shade.Knight
         internal const string ClipDoubleJump = "Double Jump";
         internal const string ClipCollect = "Collect Normal 1";
         internal const string ClipShadeCloak = "Shadow Dash";
+
+        /// <summary>Shade Cloak with Sharp Shadow worn - the body sharpens into the dash.</summary>
+        internal const string ClipShadeCloakSharp = "Shadow Dash Sharp";
         internal const string ClipShadeCloakReady = "Shadow Recharge";
         internal const string ClipMap = "Map Open";
         internal const string ClipSit = "Sit";
@@ -481,6 +503,21 @@ namespace LegacyoftheAbyss.Shade.Knight
         /// the companion, but is reported once - the clip names are a contract with an asset bundle
         /// we do not build, and a silent miss here looks exactly like a movement bug.
         /// </summary>
+        /// <summary>
+        /// Whether the bundle actually carries a clip. <see cref="Play"/> leaves the current
+        /// animation running when asked for one it cannot find, so a caller with a fallback has to
+        /// ask first or an optional clip freezes the Knight on whatever it was doing.
+        /// </summary>
+        internal bool HasClip(string clipName)
+        {
+            if (animator == null || animator.Library == null || string.IsNullOrEmpty(clipName))
+            {
+                return false;
+            }
+
+            return animator.Library.GetClipByName(clipName) != null;
+        }
+
         internal void Play(string clipName, bool restart = false)
         {
             if (animator == null || string.IsNullOrEmpty(clipName))

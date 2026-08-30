@@ -220,14 +220,7 @@ public partial class LegacyHelper
             Vector2 dir = new Vector2(facing, 0f);
             if (FlukenestActive)
             {
-                // Flukenest trades the single bolt for a spread: more total damage, but only if
-                // enough of the cluster connects.
-                const int flukeCount = 5;
-                for (int i = 0; i < flukeCount; i++)
-                {
-                    float spread = Mathf.Lerp(-22f, 22f, flukeCount > 1 ? i / (float)(flukeCount - 1) : 0.5f);
-                    SpawnProjectile(Quaternion.Euler(0f, 0f, spread) * dir, damageScale: 0.45f);
-                }
+                SpawnFlukeCluster(dir);
             }
             else
             {
@@ -237,6 +230,79 @@ public partial class LegacyHelper
             currentAnimFrames = null;
             isCastingSpell = false;
             EndKnightCastFreeze();
+        }
+
+        /// <summary>How many flukes the spell throws, by whether it has been upgraded.</summary>
+        private const int FlukeCountVengefulSpirit = 9;
+
+        private const int FlukeCountShadeSoul = 16;
+
+        /// <summary>
+        /// The middle of the range a fluke covers, in world units - about half the distance from a
+        /// centred caster to the edge of the screen.
+        /// </summary>
+        private const float FlukeAverageRange = 7f;
+
+        /// <summary>
+        /// Gravity a fluke falls under, as a multiple of the scene's. They are lobbed rather than
+        /// fired, which is what makes the cluster spread out over the ground in front of the caster
+        /// instead of arriving as one line.
+        /// </summary>
+        private const float FlukeGravityScale = 2.5f;
+
+        /// <summary>The arc the cluster is thrown through, measured from horizontal.</summary>
+        private const float FlukeMinAngle = 8f;
+
+        private const float FlukeMaxAngle = 52f;
+
+        /// <summary>
+        /// How far above the muzzle a fluke starts. The caster is usually standing on the floor and
+        /// the muzzle sits near its feet, so a fluke launched from there met the ground on its first
+        /// step and burst before it had travelled at all.
+        /// </summary>
+        private const float FlukeMuzzleLift = 0.55f;
+
+        /// <summary>A hitbox the size of a fluke rather than of the bolt it replaces.</summary>
+        private const float FlukeColliderRadius = 0.16f;
+
+        /// <summary>
+        /// Flukenest's cluster: a handful of flukes lobbed in an arc ahead of the caster.
+        /// <para>
+        /// Each carries a flat 4, or 5 under Shaman Stone - the charm's own numbers, which is why
+        /// they follow neither the nail nor the spell progression. The count does follow the
+        /// upgrade, and the launch speed is randomised so the cluster lands spread across roughly
+        /// half to one and a half times its average range rather than all in one place.
+        /// </para>
+        /// </summary>
+        private void SpawnFlukeCluster(Vector2 dir)
+        {
+            int flukeCount = IsProjectileUpgraded() ? FlukeCountShadeSoul : FlukeCountVengefulSpirit;
+            int flukeDamage = shamanStoneEquipped ? 5 : 4;
+            float facingSign = dir.x < 0f ? -1f : 1f;
+
+            // Range goes as the square of the launch speed, so a +/-22% spread in speed is the
+            // +/-50% spread in distance the cluster is meant to cover.
+            float baseSpeed = Mathf.Sqrt(FlukeAverageRange * Mathf.Abs(Physics2D.gravity.y) * FlukeGravityScale);
+
+            for (int i = 0; i < flukeCount; i++)
+            {
+                float t = flukeCount > 1 ? i / (float)(flukeCount - 1) : 0.5f;
+                float angle = Mathf.Lerp(FlukeMinAngle, FlukeMaxAngle, t);
+                float radians = angle * Mathf.Deg2Rad;
+                Vector2 launch = new Vector2(Mathf.Cos(radians) * facingSign, Mathf.Sin(radians));
+
+                SpawnProjectile(
+                    launch,
+                    fixedDamage: flukeDamage,
+                    effectPrefab: LegacyoftheAbyss.Shade.Knight.KnightEffects.SpellFluke,
+                    effectScale: 0.45f,
+                    speedOverride: baseSpeed * UnityEngine.Random.Range(0.78f, 1.22f),
+                    gravityScale: FlukeGravityScale,
+                    destroyOnTerrain: true,
+                    faceVelocity: true,
+                    colliderRadius: FlukeColliderRadius,
+                    muzzleLift: FlukeMuzzleLift);
+            }
         }
 
         private IEnumerator ShriekCastRoutine()

@@ -14,6 +14,13 @@ public partial class LegacyHelper
         public float lifeSeconds;
         public Sprite[] animFrames;
         public float animFrameTime = 0.1f;
+
+        /// <summary>
+        /// Whether the projectile turns to point along its velocity. Off for the bolts, which are
+        /// drawn flat and only ever thrown along the ground; on for anything following an arc,
+        /// where a sprite held flat reads as the wrong art rather than as aim.
+        /// </summary>
+        public bool faceVelocity;
         private SpriteRenderer sr;
         private int animFrameIndex;
         private float animTimer;
@@ -50,6 +57,18 @@ public partial class LegacyHelper
                     animTimer -= animFrameTime;
                     animFrameIndex = (animFrameIndex + 1) % animFrames.Length;
                     sr.sprite = animFrames[animFrameIndex];
+                }
+            }
+
+            if (faceVelocity)
+            {
+                var body = GetComponent<Rigidbody2D>();
+                Vector2 velocity = body != null ? body.linearVelocity : Vector2.zero;
+                if (velocity.sqrMagnitude > 0.01f)
+                {
+                    // Re-read every frame, not set once: under gravity the direction of travel
+                    // keeps changing, which is the whole point of showing it.
+                    transform.rotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(velocity.y, velocity.x) * Mathf.Rad2Deg);
                 }
             }
 
@@ -103,11 +122,19 @@ public partial class LegacyHelper
         public float multiplier = 1f;
         public bool isHeroDamage = true;
         public bool isFirstHit = true;
-        private HashSet<Collider2D> hitSet;
+
+        /// <summary>
+        /// Seconds before the same target can be hit again. Zero is the original behaviour, one hit
+        /// per target for the volume's whole life, which is what a burst wants; a lingering cloud
+        /// wants its damage spread over the time it stands, so it sets an interval instead.
+        /// </summary>
+        public float hitIntervalSeconds;
+
+        private Dictionary<Collider2D, float> nextHitTimes;
 
         void Awake()
         {
-            hitSet = new HashSet<Collider2D>();
+            nextHitTimes = new Dictionary<Collider2D, float>();
         }
 
         public void ConfigureDamage(int amount, bool applyDamageMultiplier)
@@ -128,13 +155,21 @@ public partial class LegacyHelper
                 Destroy(gameObject, lifeSeconds);
         }
 
-        void OnTriggerEnter2D(Collider2D other)
+        void OnTriggerEnter2D(Collider2D other) => TryHit(other);
+
+        // Only does anything for a volume with an interval set; a plain burst records a next-hit
+        // time it can never reach, so repeats cost one dictionary lookup and stop there.
+        void OnTriggerStay2D(Collider2D other) => TryHit(other);
+
+        private void TryHit(Collider2D other)
         {
             if (other == null) return;
             if (hornetRoot != null && other.transform.IsChildOf(hornetRoot)) return;
             if (other.transform == transform || other.transform.IsChildOf(transform)) return;
-            if (hitSet.Contains(other)) return;
-            hitSet.Add(other);
+            if (nextHitTimes.TryGetValue(other, out float nextAllowed) && Time.time < nextAllowed) return;
+            nextHitTimes[other] = hitIntervalSeconds > 0f
+                ? Time.time + hitIntervalSeconds
+                : float.PositiveInfinity;
 
             var hit = new HitInstance
             {

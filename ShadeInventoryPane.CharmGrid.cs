@@ -13,13 +13,21 @@ using LegacyoftheAbyss.Shade;
 
 internal sealed partial class ShadeInventoryPane : InventoryPane
 {
+    /// <summary>
+    /// Which of the three sources supplied the last cell size. Recorded because they disagree by
+    /// a long way, and a report about the grid being the wrong size cannot be read without it.
+    /// </summary>
+    private string lastCharmMetricsSource = "defaults";
+
     private void ResolveCharmLayoutMetrics(int entryCount)
     {
         Vector2 cell = DefaultCharmCellSize;
         Vector2 spacing = DefaultCharmSpacing;
+        lastCharmMetricsSource = "defaults";
 
         if (gridLayoutTemplate.HasValue)
         {
+            lastCharmMetricsSource = "template";
             var template = gridLayoutTemplate.Value;
             if (template.CellSize.x >= MinRootSizeThreshold && template.CellSize.y >= MinRootSizeThreshold)
             {
@@ -33,6 +41,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         }
         else if (useNormalizedFallbackLayout)
         {
+            lastCharmMetricsSource = "normalized";
             Vector2 rootSize = normalizedFallbackRootSize;
             float effectiveWidth = Mathf.Max(rootSize.x * 0.58f, MinRootSizeThreshold);
             float effectiveHeight = Mathf.Max(rootSize.y * 0.76f, MinRootSizeThreshold);
@@ -132,6 +141,71 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         UpdateCharmIconSizeCache();
     }
 
+    /// <summary>
+    /// The scales between the grid and the screen, and the column's drawn width.
+    /// <para>
+    /// The layout fits the grid in the column's own units, so a scale anywhere up the parent chain
+    /// makes the drawn result disagree with the arithmetic without anything looking wrong in the
+    /// numbers themselves. Nothing else in the snapshot can tell those two cases apart.
+    /// </para>
+    /// </summary>
+    private string DescribeDrawnScale()
+    {
+        try
+        {
+            Vector3 gridScale = gridRoot != null ? gridRoot.lossyScale : Vector3.one;
+            Vector3 columnScale = leftContentRoot != null ? leftContentRoot.lossyScale : Vector3.one;
+            float canvasScale = overlayCanvas != null ? overlayCanvas.scaleFactor : 1f;
+            float derivedScale = overlayCanvas != null
+                ? ResolveOverlayCanvasScaleFactor(overlayCanvas.pixelRect)
+                : 1f;
+
+            float drawnWidth = 0f;
+            if (leftContentRoot != null)
+            {
+                var corners = new Vector3[4];
+                leftContentRoot.GetWorldCorners(corners);
+                drawnWidth = Mathf.Abs(corners[2].x - corners[0].x);
+            }
+
+            return FormattableString.Invariant(
+                $"gridScale={gridScale.x:0.###} columnScale={columnScale.x:0.###} canvasScale={canvasScale:0.###} derivedScale={derivedScale:0.###} columnDrawnWidth={drawnWidth:0.#}");
+        }
+        catch
+        {
+            return "scale=unavailable";
+        }
+    }
+
+    /// <summary>
+    /// How far below the top of the left column the notch row actually ends, in that column's own
+    /// units. Falls back to <see cref="NotchSectionBottom"/> when the row cannot be measured, and
+    /// never reports less than it - the constant is the floor, not the answer.
+    /// </summary>
+    private float MeasureNotchSectionBottom(float sectionOffsetY)
+    {
+        float assumed = NotchSectionBottom + sectionOffsetY;
+        if (leftContentRoot == null || notchIconContainer == null)
+        {
+            return assumed;
+        }
+
+        try
+        {
+            var corners = new Vector3[4];
+            notchIconContainer.GetWorldCorners(corners);
+
+            // corners[0] is the bottom-left. leftContentRoot's pivot is its top-left, so a point
+            // below the top has a negative local y and its depth is the negation.
+            float measured = -leftContentRoot.InverseTransformPoint(corners[0]).y;
+            return measured > assumed ? measured : assumed;
+        }
+        catch
+        {
+            return assumed;
+        }
+    }
+
     private int DetermineCharmColumnCount(int entryCount)
     {
         if (gridLayoutTemplate.HasValue &&
@@ -182,7 +256,16 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
     /// <summary>The last charm-grid layout exception, or null. Read by the bug reporter.</summary>
     internal static string? LastLayoutFailure { get; private set; }
 
-    private void LayoutCharmEntriesCore()
+    /// <summary>
+    /// The measurements behind the last charm-grid layout. Read by the bug reporter, because "the
+    /// grid is sometimes too spread out" cannot be told apart from "the column measured wrong"
+    /// without them, and the two want different fixes.
+    /// </summary>
+    internal static string? LastCharmGridLayout { get; private set; }
+
+    private void LayoutCharmEntriesCore() => LayoutCharmEntriesCore(allowCorrection: true);
+
+    private void LayoutCharmEntriesCore(bool allowCorrection)
     {
         if (gridRoot == null || leftContentRoot == null)
         {
@@ -197,7 +280,25 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         {
         }
 
+        if (allowCorrection)
+        {
+            // Measured afresh on every top-level layout, so a correction cannot outlive the
+            // situation that needed it.
+            charmMeasuredCorrection = 1f;
+            lastGridCorrection = 1f;
+        }
+
         ResolveCharmLayoutMetrics(entries.Count);
+
+        // Applied after the metrics, not folded into them: ResolveCharmLayoutMetrics goes back to
+        // its source every time, so a correction written into charmCellSize would be discarded by
+        // the very pass that is meant to apply it.
+        if (charmMeasuredCorrection < 0.999f)
+        {
+            charmCellSize *= charmMeasuredCorrection;
+            charmSpacing *= charmMeasuredCorrection;
+            UpdateCharmIconSizeCache();
+        }
 
         entryGridPositions.Clear();
         entryCenterXs.Clear();
@@ -217,16 +318,27 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             columns = requiredColumns;
         }
 
-        Vector2 parentSize = leftContentRoot.rect.size;
+        // Re-derived per layout rather than trusted from build time. The canvas scaler settles a
+        // frame after the pane is built, so a value cached during the build describes a canvas that
+        // no longer exists - and every margin below is measured against it.
+        var refreshedRoot = overlayRoot != null ? DetermineOverlayCanvasSize(overlayRoot) : Vector2.zero;
+        if (refreshedRoot.x > MinRootSizeThreshold && refreshedRoot.y > MinRootSizeThreshold)
+        {
+            normalizedFallbackRootSize = refreshedRoot;
+        }
+
+        Vector2 screenSize = normalizedFallbackRootSize.sqrMagnitude > 0f
+            ? normalizedFallbackRootSize
+            : DefaultStandaloneRootSize;
+
+        Vector2 measuredParent = leftContentRoot.rect.size;
+        Vector2 parentSize = measuredParent;
         if (parentSize.x < MinRootSizeThreshold || parentSize.y < MinRootSizeThreshold)
         {
             Vector2 fallbackParent = normalizedFallbackRootSize.sqrMagnitude > 0f ? normalizedFallbackRootSize : DefaultStandaloneRootSize;
             parentSize = new Vector2(fallbackParent.x * 0.58f, fallbackParent.y * 0.55f);
         }
 
-        Vector2 screenSize = normalizedFallbackRootSize.sqrMagnitude > 0f
-            ? normalizedFallbackRootSize
-            : DefaultStandaloneRootSize;
 
         // Left edge lines up with the "Equipped" and "Notches" labels rather than sitting inside a
         // margin of its own, which left a column of dead space between them and the grid.
@@ -239,12 +351,23 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         float bottomMargin = Mathf.Min(desiredBottomMargin, parentBottomMargin);
 
         // The equipped and notch rows own the top of this column, so the grid gets what is left
-        // below them. Without this the first row of charms drew over the notch icons.
-        float reservedTop = NotchSectionBottom + sectionOffsetY + CharmGridTopGap;
+        // below them. Measured off the notch row itself rather than taken from the constant: that
+        // constant is the container's declared height, and the icons inside it are sized from the
+        // charm cell, so the row is routinely taller than the number that reserves space for it.
+        float notchBottom = MeasureNotchSectionBottom(sectionOffsetY);
+        float reservedTop = notchBottom + CharmGridTopGap;
         float availableWidth = Mathf.Max(1f, parentSize.x - leftMargin);
         float availableHeight = Mathf.Max(1f, parentSize.y - reservedTop - bottomMargin);
+        reservedTopFraction = parentSize.y > MinRootSizeThreshold
+            ? Mathf.Clamp01((reservedTop + bottomMargin) / parentSize.y)
+            : 0f;
 
         FitCharmCellsToBox(columns, availableWidth, availableHeight);
+
+        // Recorded rather than logged: this is intermittent and the report is filed long after the
+        // log ring has rolled, so the numbers behind a bad layout have to survive on the snapshot.
+        LastCharmGridLayout = FormattableString.Invariant(
+            $"columns={columns} entries={entries.Count} metrics={lastCharmMetricsSource} parent={measuredParent.x:0.#}x{measuredParent.y:0.#} used={parentSize.x:0.#}x{parentSize.y:0.#} screen={screenSize.x:0.#}x{screenSize.y:0.#} available={availableWidth:0.#}x{availableHeight:0.#} notchBottom={notchBottom:0.#} reservedTop={reservedTop:0.#} cell={charmCellSize.x:0.#}x{charmCellSize.y:0.#} spacing={charmSpacing.x:0.#}x{charmSpacing.y:0.#} icon={currentCharmIconSize:0.#} correction={lastGridCorrection:0.###} {DescribeDrawnScale()}");
 
         float strideX = charmCellSize.x + charmSpacing.x;
         float strideY = charmCellSize.y + charmSpacing.y;
@@ -323,13 +446,125 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
                     rect.anchoredPosition = new Vector2(centerX, centerY);
                 }
 
+                // The icon is re-sized here too. It used to be set once, when the cell was built,
+                // from whatever the icon-size cache held at that moment - so the cells moved onto
+                // the layout's stride while the art inside them kept an size from a different
+                // pass. Drawn and computed have to come from the same numbers or the grid reads as
+                // the wrong size however carefully it was fitted.
+                var iconRect = entry.Icon != null ? entry.Icon.rectTransform : null;
+                if (iconRect != null)
+                {
+                    iconRect.sizeDelta = new Vector2(currentCharmIconSize, currentCharmIconSize);
+                }
+
                 entryGridPositions.Add(new Vector2Int(row, column));
                 entryCenterXs.Add(centerX);
             }
         }
 
+        // Everything above is arithmetic against a rect. This asks the screen instead: if the row
+        // that was just placed is drawn wider than the column it was fitted into, the numbers and
+        // the result have disagreed, and the measurement is the one to believe. Three separate
+        // theories about *why* they can disagree have been wrong, so this corrects the outcome
+        // rather than the cause - and costs one extra placement pass in the case where it fires.
+        float correction = allowCorrection ? MeasureGridOverrun() : 1f;
+        if (correction < 0.995f)
+        {
+            charmMeasuredCorrection = Mathf.Clamp(correction, 0.15f, 1f);
+            lastGridCorrection = charmMeasuredCorrection;
+            LayoutCharmEntriesCore(allowCorrection: false);
+            return;
+        }
+
         UpdateDetailPreviewSize();
     }
+
+    /// <summary>How much the last layout had to be shrunk by after measuring it. 1 means it fitted.</summary>
+    private float lastGridCorrection = 1f;
+
+    /// <summary>
+    /// The shrink the measured pass asked for, held across the second placement. Reset at the start
+    /// of every top-level layout so it is re-derived rather than accumulated.
+    /// </summary>
+    private float charmMeasuredCorrection = 1f;
+
+    /// <summary>
+    /// The factor the grid would have to be scaled by to sit inside its column, measured from what
+    /// is actually drawn. Returns 1 when it already fits, or when nothing can be measured.
+    /// </summary>
+    private float MeasureGridOverrun()
+    {
+        if (gridRoot == null || leftContentRoot == null || entries.Count == 0)
+        {
+            return 1f;
+        }
+
+        try
+        {
+            var columnCorners = new Vector3[4];
+            leftContentRoot.GetWorldCorners(columnCorners);
+            float columnWidth = Mathf.Abs(columnCorners[2].x - columnCorners[0].x);
+            float columnHeight = Mathf.Abs(columnCorners[1].y - columnCorners[0].y);
+            if (columnWidth <= MinRootSizeThreshold || columnHeight <= MinRootSizeThreshold)
+            {
+                return 1f;
+            }
+
+            // The cells, not gridRoot. gridRoot's size is set from the same arithmetic being
+            // checked, so measuring it only ever confirms itself - which is why the first version
+            // of this reported that everything fitted while the grid was visibly overflowing.
+            float minX = float.MaxValue;
+            float maxX = float.MinValue;
+            float minY = float.MaxValue;
+            float maxY = float.MinValue;
+            var cellCorners = new Vector3[4];
+
+            for (int i = 0; i < entries.Count; i++)
+            {
+                var rect = entries[i].Root;
+                if (rect == null)
+                {
+                    continue;
+                }
+
+                rect.GetWorldCorners(cellCorners);
+                for (int c = 0; c < 4; c++)
+                {
+                    minX = Mathf.Min(minX, cellCorners[c].x);
+                    maxX = Mathf.Max(maxX, cellCorners[c].x);
+                    minY = Mathf.Min(minY, cellCorners[c].y);
+                    maxY = Mathf.Max(maxY, cellCorners[c].y);
+                }
+            }
+
+            if (minX > maxX || minY > maxY)
+            {
+                return 1f;
+            }
+
+            float gridWidth = maxX - minX;
+            float gridHeight = maxY - minY;
+            if (gridWidth <= MinRootSizeThreshold || gridHeight <= MinRootSizeThreshold)
+            {
+                return 1f;
+            }
+
+            // The column has to hold the grid and the sections above it, so the grid gets what is
+            // left below the notch row rather than the whole height.
+            float usableHeight = columnHeight * Mathf.Clamp01(1f - (reservedTopFraction));
+            float widthRatio = columnWidth / gridWidth;
+            float heightRatio = usableHeight > MinRootSizeThreshold ? usableHeight / gridHeight : 1f;
+
+            return Mathf.Clamp(Mathf.Min(widthRatio, heightRatio), 0.2f, 1f);
+        }
+        catch
+        {
+            return 1f;
+        }
+    }
+
+    /// <summary>What proportion of the column the equipped and notch rows take, from the last fit.</summary>
+    private float reservedTopFraction;
 
     private RectTransform? EnsureHighlightRect()
     {

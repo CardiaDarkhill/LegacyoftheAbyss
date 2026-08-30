@@ -128,7 +128,16 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             rect.anchoredPosition3D = new Vector3(AnchoredPosition.x, AnchoredPosition.y, AnchoredPositionZ);
             rect.sizeDelta = SizeDelta;
             rect.localRotation = LocalRotation;
-            rect.localScale = LocalScale;
+
+            // Deliberately not LocalScale. A snapshot is taken from a rect in the game's own
+            // inventory hierarchy and applied to one of ours, on our own overlay canvas; the
+            // anchors and offsets carry over because they are relative, and the scale does not,
+            // because it only meant something against the parent chain it was read from.
+            // Copying it scales one of our containers and not its siblings, which puts the charm
+            // grid's drawn size out of step with the rect the layout fitted it to - the fit is
+            // right in local units and wrong on screen. The overlay root and canvas are already
+            // pinned to one for the same reason.
+            rect.localScale = Vector3.one;
         }
     }
 

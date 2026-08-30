@@ -128,7 +128,11 @@ public partial class LegacyHelper
                     {
                         if (definition != null)
                         {
-                            equipped.Add(definition.Id);
+                            // Marked rather than omitted: a broken charm stays equipped and its
+                            // effect does not, so a report listing it plainly would read as the
+                            // charm having failed when it is only waiting for a bench.
+                            bool broken = definition.EnumId.HasValue && charms.IsBroken(definition.EnumId.Value);
+                            equipped.Add(broken ? definition.Id + " (broken)" : definition.Id);
                         }
                     }
 

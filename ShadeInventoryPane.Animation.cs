@@ -1027,7 +1027,10 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
                     orderedPairs.Add((def.EnumId.Value, def));
                 }
 
-                Sprite sprite = def?.Icon ?? GetFallbackSprite();
+                // A broken fragile charm keeps its slot in the loadout now, so the row has to say
+                // which of the charms in it is not working.
+                bool defBroken = def?.EnumId.HasValue == true && inv.IsBroken(def.EnumId.Value);
+                Sprite sprite = (defBroken ? def?.BrokenIcon ?? def?.Icon : def?.Icon) ?? GetFallbackSprite();
                 if (sprite != null)
                 {
                     bool animating = animatingEquippedIcons.Contains(image);
@@ -1499,8 +1502,9 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
                     continue;
                 }
 
-                Sprite sprite = def.Icon ?? GetFallbackSprite();
                 ShadeCharmId? charmId = def.EnumId;
+                bool defBroken = charmId.HasValue && inv.IsBroken(charmId.Value);
+                Sprite sprite = (defBroken ? def.BrokenIcon ?? def.Icon : def.Icon) ?? GetFallbackSprite();
                 for (int i = 0; i < cost && assignments.Count < capacity; i++)
                 {
                     assignments.Add(new NotchAssignment

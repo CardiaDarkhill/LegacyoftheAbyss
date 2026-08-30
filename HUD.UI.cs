@@ -166,6 +166,7 @@ public partial class SimpleHUD
         healthMenuScale = healthGameplayScale;
 
         BuildMasks(hRect, uiScale);
+        BuildBuffBar(canvas, uiScale);
 
         unlockPopup = gameObject.GetComponent<ShadeUnlockPopup>();
         if (unlockPopup == null)
@@ -451,17 +452,29 @@ public partial class SimpleHUD
             emptyColor = missingMaskColor;
         }
 
+        // Re-checked after every wait, not just on entry. This flicker outlives a HUD rebuild,
+        // and writing .color to a destroyed Image throws out of the setter rather than being a
+        // no-op - Graphic.SetVerticesDirty reaches isActiveAndEnabled on a freed native object.
+        // Unity's == null overload is what recognises that state, so the check has to be here.
         for (int i = 0; i < 2; i++)
         {
-            img.color = filledColor; yield return new WaitForSeconds(0.05f);
-            img.color = flickerColor; yield return new WaitForSeconds(0.05f);
+            if (img == null) break;
+            img.color = filledColor;
+            yield return new WaitForSeconds(0.05f);
+
+            if (img == null) break;
+            img.color = flickerColor;
+            yield return new WaitForSeconds(0.05f);
         }
 
-        img.color = emptyColor;
-
-        if (wasLifeblood)
+        if (img != null)
         {
-            HideLifebloodMaskIfDepleted(img);
+            img.color = emptyColor;
+
+            if (wasLifeblood)
+            {
+                HideLifebloodMaskIfDepleted(img);
+            }
         }
 
         animatingMaskImages.Remove(img);

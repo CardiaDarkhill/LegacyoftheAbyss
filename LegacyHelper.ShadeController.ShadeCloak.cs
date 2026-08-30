@@ -130,5 +130,121 @@ public partial class LegacyHelper
         }
 
         private const float ShadeCloakAbsorbPull = 6f;
+
+        /// <summary>The borrowed Knight rig the Shade wears for a Sharp Shadow dash, or null.</summary>
+        private KnightView sharpShadowShadeView;
+
+        /// <summary>Set once the bundle has been asked for and refused, so it is not asked again.</summary>
+        private bool sharpShadowShadeViewUnavailable;
+
+        private bool sharpShadowFormActive;
+
+        /// <summary>
+        /// Draws the Shade as the sharpened cloak form for the length of a Sharp Shadow dash.
+        /// <para>
+        /// The clip is the Knight's own body animation, so wearing it means swapping the Shade's
+        /// sprite sheets for the bundled rig and swapping back afterwards. That reads correctly
+        /// because the animation is itself a transformation - the body sharpens into the dash and
+        /// returns - rather than a pose the two characters would have to share.
+        /// </para>
+        /// <para>
+        /// Shade only. The Knight already draws this clip through the rig it is.
+        /// </para>
+        /// </summary>
+        private void UpdateSharpShadowShadeForm()
+        {
+            if (UsesGroundedMovement)
+            {
+                return;
+            }
+
+            bool wanted = IsSharpShadowDashing() && sharpShadowShadeView != null;
+
+            if (wanted)
+            {
+                if (!sharpShadowFormActive)
+                {
+                    sharpShadowFormActive = true;
+                    if (sr != null)
+                    {
+                        sr.enabled = false;
+                    }
+
+                    sharpShadowShadeView.SetVisible(true);
+                    sharpShadowShadeView.Play(KnightView.ClipShadeCloakSharp, restart: true);
+                }
+
+                sharpShadowShadeView.SetFacing(facing);
+                if (bodyCol != null)
+                {
+                    sharpShadowShadeView.AlignFeetTo(bodyCol.bounds.min.y);
+                }
+
+                return;
+            }
+
+            if (sharpShadowFormActive)
+            {
+                sharpShadowFormActive = false;
+                sharpShadowShadeView?.SetVisible(false);
+                if (sr != null)
+                {
+                    sr.enabled = true;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Builds the borrowed rig, hidden, when a Shade equips Sharp Shadow.
+        /// <para>
+        /// Done on equip rather than on the first dash because the Knight bundle is about 54 MB and
+        /// loading it is not something to do in the frame a dash starts. Equipping happens at a
+        /// bench, which is the right place to pay for it.
+        /// </para>
+        /// </summary>
+        private void EnsureSharpShadowShadeView()
+        {
+            if (UsesGroundedMovement || sharpShadowShadeView != null || sharpShadowShadeViewUnavailable)
+            {
+                return;
+            }
+
+            var view = KnightView.Attach(gameObject);
+            if (view == null)
+            {
+                sharpShadowShadeViewUnavailable = true;
+                LegacyHelper.LogWarning("Sharp Shadow: the Knight bundle did not load, so the Shade keeps its ordinary cloak animation.");
+                return;
+            }
+
+            if (sr != null)
+            {
+                view.ApplySorting(sr.sortingLayerID, sr.sortingOrder);
+            }
+
+            view.SetVisible(false);
+            sharpShadowShadeView = view;
+        }
+
+        /// <summary>Puts the Shade back in its own sheets and drops the borrowed rig.</summary>
+        private void DiscardSharpShadowShadeView()
+        {
+            if (sharpShadowFormActive)
+            {
+                sharpShadowFormActive = false;
+                if (sr != null)
+                {
+                    sr.enabled = true;
+                }
+            }
+
+            if (sharpShadowShadeView != null)
+            {
+                Destroy(sharpShadowShadeView);
+                sharpShadowShadeView = null;
+            }
+
+            sharpShadowShadeViewUnavailable = false;
+        }
     }
 }

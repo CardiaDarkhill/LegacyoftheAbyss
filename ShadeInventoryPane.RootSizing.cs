@@ -1093,6 +1093,18 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         return overlayRoot;
     }
 
+    /// <summary>
+    /// The overlay canvas's size <em>in the units its children are laid out in</em>.
+    /// <para>
+    /// Emphatically not <c>pixelRect</c>, which is the screen. The canvas is scaled to a 1920x1080
+    /// reference, so on a 4K screen it lays out in 1920 units and draws each of them at two pixels.
+    /// Every absolute number the charm grid derives from this - cell sizes, spacing, margins - was
+    /// therefore twice the size it should have been, while the anchored rects around it resolved
+    /// correctly and hid the discrepancy. Nothing in the rects themselves shows it: they are
+    /// self-consistent in canvas units, and only the ratio between an absolute size and a stretched
+    /// one is wrong.
+    /// </para>
+    /// </summary>
     private Vector2 DetermineOverlayCanvasSize(RectTransform root)
     {
         if (root == null)
@@ -1105,7 +1117,8 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             Rect pixelRect = overlayCanvas.pixelRect;
             if (pixelRect.width > MinRootSizeThreshold && pixelRect.height > MinRootSizeThreshold)
             {
-                return new Vector2(pixelRect.width, pixelRect.height);
+                float scale = ResolveOverlayCanvasScaleFactor(pixelRect);
+                return new Vector2(pixelRect.width / scale, pixelRect.height / scale);
             }
         }
 
@@ -1117,6 +1130,38 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         }
 
         return DefaultStandaloneRootSize;
+    }
+
+    /// <summary>
+    /// The factor the canvas draws its units at.
+    /// <para>
+    /// Derived rather than read off the Canvas: the scaler applies on its own update, so for the
+    /// whole of the frame the pane is built in, <c>Canvas.scaleFactor</c> is still 1 and the rects
+    /// have not been re-resolved yet. Reading it there was what made a diagnostic row report a
+    /// scale of 1 for a layout that was in fact being drawn at two. This mirrors Unity's own
+    /// formula for the mode <see cref="UpdateOverlayCanvasScaler"/> forces.
+    /// </para>
+    /// </summary>
+    private float ResolveOverlayCanvasScaleFactor(Rect pixelRect)
+    {
+        if (overlayCanvasScaler == null
+            || overlayCanvasScaler.uiScaleMode != CanvasScaler.ScaleMode.ScaleWithScreenSize)
+        {
+            float reported = overlayCanvas != null ? overlayCanvas.scaleFactor : 1f;
+            return reported > 0.01f ? reported : 1f;
+        }
+
+        Vector2 reference = overlayCanvasScaler.referenceResolution;
+        if (reference.x <= MinRootSizeThreshold || reference.y <= MinRootSizeThreshold)
+        {
+            reference = DefaultStandaloneRootSize;
+        }
+
+        float match = Mathf.Clamp01(overlayCanvasScaler.matchWidthOrHeight);
+        float logWidth = Mathf.Log(pixelRect.width / reference.x, 2f);
+        float logHeight = Mathf.Log(pixelRect.height / reference.y, 2f);
+        float scale = Mathf.Pow(2f, Mathf.Lerp(logWidth, logHeight, match));
+        return scale > 0.01f ? scale : 1f;
     }
 
     private void UpdateOverlayCanvasScaler()

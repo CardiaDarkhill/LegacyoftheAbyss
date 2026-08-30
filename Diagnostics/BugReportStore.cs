@@ -382,6 +382,11 @@ namespace LegacyoftheAbyss.Diagnostics
                 Row(builder, "Shade pane layout failure", state.ShadePaneLayoutFailure);
             }
 
+            if (!string.IsNullOrEmpty(state.ShadeCharmGridLayout))
+            {
+                Row(builder, "Shade charm grid layout", state.ShadeCharmGridLayout);
+            }
+
             if (!string.IsNullOrEmpty(state.HeroMenuBindings))
             {
                 Row(builder, "Hero menu bindings", state.HeroMenuBindings);

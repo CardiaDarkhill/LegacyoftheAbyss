@@ -36,6 +36,23 @@ public partial class LegacyHelper
         private const float KnightBenchArriveTolerance = 0.2f;
 
         /// <summary>
+        /// How far along the bench the seated Knight may be before it walks back. Generous: it only
+        /// has to catch a Knight that is no longer at the bench at all, not one settling into it.
+        /// </summary>
+        private const float KnightBenchDriftTolerance = 3f;
+
+        /// <summary>
+        /// How far above or below Hornet the seated Knight may be before it walks back.
+        /// <para>
+        /// Measured against Hornet rather than against the seat, and loosely, because the two
+        /// origins mean different things - hers sits near her middle, the Knight's at its feet -
+        /// so a unit or two of difference is what sitting together looks like. Only a Knight that
+        /// has genuinely left the bench clears this.
+        /// </para>
+        /// </summary>
+        private const float KnightBenchVerticalDriftTolerance = 5f;
+
+        /// <summary>
         /// How long the Knight is given to walk there before being put there instead. The approach
         /// is a straight walk and nothing more, so a gap, a step or a closed door would otherwise
         /// leave it jogging into scenery for as long as Hornet rests.
@@ -108,7 +125,20 @@ public partial class LegacyHelper
 
             if (knightBenchSeated)
             {
-                return;
+                // The seat is held for as long as Hornet rests, and things happen in that time:
+                // the player can teleport the Knight away, and a seat placed over a gap used to
+                // drop it. Neither un-seated it, so the hold below kept it wherever it had ended
+                // up for the rest of the rest. Re-checked every frame instead, and walked back.
+                if (HasDriftedFromBenchSeat())
+                {
+                    knightBenchSeated = false;
+                    knightBenchWalkTimer = KnightBenchWalkSeconds;
+                    knightView.SetLift(0f);
+                }
+                else
+                {
+                    return;
+                }
             }
 
             // Recomputed every frame of the approach: both silhouettes change as the Knight walks,
@@ -130,6 +160,26 @@ public partial class LegacyHelper
             }
 
             capturedHorizontalInput = Mathf.Sign(delta);
+        }
+
+        /// <summary>
+        /// Whether the seated Knight has left its seat - teleported away, or dropped out of the
+        /// room. Checked every frame while it is seated, because the seat is held for as long as
+        /// Hornet rests and nothing else would ever put the Knight back.
+        /// </summary>
+        private bool HasDriftedFromBenchSeat()
+        {
+            if (hornetTransform == null)
+            {
+                return false;
+            }
+
+            if (Mathf.Abs(transform.position.x - BenchSeatPosition().x) > KnightBenchDriftTolerance)
+            {
+                return true;
+            }
+
+            return Mathf.Abs(transform.position.y - hornetTransform.position.y) > KnightBenchVerticalDriftTolerance;
         }
 
         /// <summary>
@@ -207,7 +257,9 @@ public partial class LegacyHelper
             if (snap)
             {
                 // Horizontal only. The walk stops within a tolerance of the seat and the remainder
-                // is small enough to place rather than to keep walking off.
+                // is small enough to place rather than to keep walking off. Emphatically not
+                // Hornet's y: her origin sits near her middle and the Knight's at its feet, so
+                // matching them stands the Knight in the air at her shoulder.
                 TeleportToPosition(new Vector3(knightBenchTargetX, transform.position.y, transform.position.z));
             }
 

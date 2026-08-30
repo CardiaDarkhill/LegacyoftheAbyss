@@ -82,18 +82,7 @@ public partial class LegacyHelper
                 if (controller != null)
                 {
                     sb.Append(" shadeFacing=").Append(controller.facing)
-                      .Append(" shadeLocalScale=").Append(controller.transform.localScale)
-                      .Append(" shamanActive=").Append(controller.shamanMovesetActive);
-
-                    var marker = slash.GetComponent<ShadeSlashMarker>();
-                    if (marker != null)
-                    {
-                        sb.Append(" markerVertical=").Append(marker.verticalInput.ToString("0.###", CultureInfo.InvariantCulture))
-                          .Append(" markerInvertDown=").Append(marker.invertDown)
-                          .Append(" markerHasStoredScale=").Append(marker.hasStoredScale);
-                        if (marker.hasStoredScale)
-                            sb.Append(" markerStoredScale=").Append(marker.storedLocalScale);
-                    }
+                      .Append(" shadeLocalScale=").Append(controller.transform.localScale);
                 }
 
                 var nailSlash = slash.GetComponent<NailSlash>();
@@ -202,74 +191,16 @@ public partial class LegacyHelper
             {
                 nailTimer = nailCooldown;
                 nailDurationTimer = nailDuration;
-                if (shamanMovesetActive)
-                    PerformShamanSlash(forcedV);
-                else
-                    PerformNailSlash(forcedV);
+                PerformNailSlash(forcedV);
+
+                // After the slash, not instead of it: the beam rides along with the swing.
+                TryFireGrubberflyBeam(forcedV);
 
                 // A down slash that finds something below bounces the Knight off it - Hornet
                 // included, which is what keeps the game's verticality open to it.
                 if (forcedV < -0.35f)
                     TryKnightPogo();
             }
-        }
-
-        private void PerformShamanSlash(float forcedV = 0f)
-        {
-            var hc = HeroController.instance;
-            if (hc == null || !EnsureShamanSlashTemplates(hc))
-            {
-                PerformNailSlash(forcedV);
-                return;
-            }
-
-            float v = forcedV;
-            GameObject source;
-            bool invertDown = false;
-            if (v > 0.35f)
-            {
-                source = shamanUpSlashTemplate ?? shamanHorizontalSlashTemplate ?? shamanHorizontalAltSlashTemplate;
-            }
-            else if (v < -0.35f)
-            {
-                invertDown = true;
-                source = shamanUpSlashTemplate ?? shamanDownSlashTemplate ?? shamanHorizontalSlashTemplate ?? shamanHorizontalAltSlashTemplate;
-            }
-            else
-            {
-                source = facing >= 0 && shamanHorizontalAltSlashTemplate != null
-                    ? shamanHorizontalAltSlashTemplate
-                    : shamanHorizontalSlashTemplate ?? shamanHorizontalAltSlashTemplate ?? shamanUpSlashTemplate ?? shamanDownSlashTemplate;
-            }
-
-            if (source == null)
-            {
-                PerformNailSlash(forcedV);
-                return;
-            }
-
-            DestroyOtherSlashes(null);
-
-            GameObject slash = SpawnSlash(hc, source);
-
-            float orientationFacing = facing >= 0 ? 1f : -1f;
-            if (invertDown && orientationFacing > 0f)
-                orientationFacing = -orientationFacing;
-
-            var marker = slash.AddComponent<ShadeSlashMarker>();
-            marker.verticalInput = v;
-            marker.invertDown = invertDown;
-            marker.orientationFacing = orientationFacing;
-
-            LogSlashState("Shaman slash spawn (pre-orient)", slash, this);
-
-            ConfigureSpawnedSlash(hc, slash, source, v, invertDown, orientationFacing, "Shaman slash oriented", marker);
-
-            // The clone stays parented to Hornet for a frame so it measures against the hierarchy it
-            // came from; AdoptSlashAfterFrame moves it onto the Shade once it has.
-            StartCoroutine(AdoptSlashAfterFrame(slash));
-
-            DestroyOtherSlashes(slash);
         }
 
         private void PerformNailSlash(float forcedV = 0f)
@@ -285,12 +216,11 @@ public partial class LegacyHelper
 
             GameObject slash = SpawnSlash(hc, source);
             slash.transform.SetParent(transform, false);
-            slash.AddComponent<ShadeSlashMarker>();
             slash.transform.position = transform.position;
 
             LogSlashState("Shade slash spawn (pre-orient)", slash, this);
 
-            ConfigureSpawnedSlash(hc, slash, source, v, invertDown: false, orientationFacing: facing, "Shade slash oriented", marker: null);
+            ConfigureSpawnedSlash(hc, slash, source, v, invertDown: false, orientationFacing: facing, "Shade slash oriented");
 
             DestroyOtherSlashes(slash);
         }
@@ -348,14 +278,8 @@ public partial class LegacyHelper
 
         /// <summary>
         /// Turns a cloned hero slash into a Shade slash: strips what makes it Hornet's, points its
-        /// damage at enemies only, and starts it. Shared by both slash paths, which differ only in
-        /// where the clone is parented and which of Hornet's extras still apply.
+        /// damage at enemies only, and starts it.
         /// </summary>
-        /// <param name="marker">
-        /// The shaman path's marker, carrying orientation across the frame the clone spends parented
-        /// to Hornet. Null on the nail path, which parents to the Shade immediately - and so also
-        /// serves as "this is the nail path" for the two behaviours that only apply there.
-        /// </param>
         private void ConfigureSpawnedSlash(
             HeroController hc,
             GameObject slash,
@@ -363,10 +287,8 @@ public partial class LegacyHelper
             float v,
             bool invertDown,
             float orientationFacing,
-            string logContext,
-            ShadeSlashMarker marker)
+            string logContext)
         {
-            bool nailPath = marker == null;
             var nailSlash = slash.GetComponent<NailSlash>();
             var slashCols = slash.GetComponentsInChildren<Collider2D>(true);
 
@@ -387,12 +309,6 @@ public partial class LegacyHelper
             }
 
             ApplyBaseSlashOrientation(slash, nailSlash, v, invertDown, orientationFacing);
-
-            if (marker != null)
-            {
-                marker.storedLocalScale = slash.transform.localScale;
-                marker.hasStoredScale = true;
-            }
 
             DetachHeroFlipHandler(hc, slash);
             LogSlashState(logContext, slash, this);
@@ -432,12 +348,12 @@ public partial class LegacyHelper
                 slashForward = facing >= 0 ? Vector2.right : Vector2.left;
             }
 
-            RetargetDamagers(slash, slashDir, slashForward, applyKnockbackCharm: nailPath);
+            RetargetDamagers(slash, slashDir, slashForward, applyKnockbackCharm: true);
 
             nailSlash.StartSlash();
 
 
-            HookSlashDamage(slash, nailSlash, slashForward, applyRecoil: nailPath);
+            HookSlashDamage(slash, nailSlash, slashForward, applyRecoil: true);
 
             // Failsafe against colliders outliving the animation.
             StartCoroutine(DisableSlashAfterWindow(slash, 0.3f));
@@ -657,85 +573,34 @@ public partial class LegacyHelper
         }
 
 
-        private class ShadeSlashMarker : MonoBehaviour
-        {
-            public float verticalInput;
-            public bool invertDown;
-            public float orientationFacing;
-            public Vector3 storedLocalScale;
-            public bool hasStoredScale;
-        }
-
         private IEnumerator DisableSlashAfterWindow(GameObject slash, float seconds)
         {
             yield return new WaitForSeconds(seconds);
             if (slash) DisableSlashHitboxes(slash);
         }
 
-        /// <summary>
-        /// Moves a shaman slash off Hornet and onto the Shade, one frame after it was cloned so it
-        /// measured its rects against the hierarchy it came from. The travel component's cached
-        /// start pose is rewritten too: it was captured while the slash was still Hornet's.
-        /// </summary>
-        private IEnumerator AdoptSlashAfterFrame(GameObject slash)
-        {
-            yield return null;
-            if (!slash) yield break;
-
-            var tr = slash.transform;
-            var marker = slash.GetComponent<ShadeSlashMarker>();
-
-            float verticalInput = marker != null ? marker.verticalInput : 0f;
-            bool invertDown = marker != null && marker.invertDown;
-            float markerFacing = marker != null && marker.orientationFacing != 0f
-                ? marker.orientationFacing
-                : (facing >= 0 ? 1f : -1f);
-
-            tr.SetParent(transform, false);
-            tr.position = transform.position;
-            tr.localPosition = Vector3.zero;
-
-            var nailSlash = slash.GetComponent<NailSlash>();
-            if (marker != null && marker.hasStoredScale)
-            {
-                tr.localScale = marker.storedLocalScale;
-                if (nailSlash != null)
-                {
-                    s_nailSlashScaleField?.SetValue(nailSlash, marker.storedLocalScale);
-                    s_nailSlashLongScaleField?.SetValue(nailSlash, marker.storedLocalScale);
-                }
-            }
-            else
-            {
-                ApplyBaseSlashOrientation(slash, nailSlash, verticalInput, invertDown, markerFacing);
-            }
-
-            var travel = slash.GetComponent<NailSlashTravel>();
-            if (travel != null)
-            {
-                s_nailTravelInitialPosField?.SetValue(travel, tr.localPosition);
-                s_nailTravelInitialScaleField?.SetValue(travel, tr.localScale);
-
-                if (invertDown && s_nailTravelDistanceField != null)
-                {
-                    var distance = (Vector2)s_nailTravelDistanceField.GetValue(travel);
-                    distance.y = -distance.y;
-                    s_nailTravelDistanceField.SetValue(travel, distance);
-                }
-            }
-
-            LogSlashState("Shaman slash adopted", slash, this);
-        }
-
 
         /// <summary>
-        /// <paramref name="damageScale"/> is Flukenest's: it fires several weaker projectiles in
-        /// place of one, so each carries a fraction of the bolt's damage.
+        /// <paramref name="damageScale"/> scales the bolt's own damage for a caller firing several
+        /// in place of one. <paramref name="fixedDamage"/> replaces it outright, for a projectile
+        /// whose damage is specified as a number rather than as a share of the spell - a fluke.
         /// </summary>
-        private void SpawnProjectile(Vector2 dir, float damageScale = 1f)
+        private void SpawnProjectile(
+            Vector2 dir,
+            float damageScale = 1f,
+            int fixedDamage = 0,
+            string effectPrefab = null,
+            float effectScale = 1f,
+            float speedOverride = 0f,
+            float gravityScale = 0f,
+            bool destroyOnTerrain = false,
+            bool faceVelocity = false,
+            float colliderRadius = 0f,
+            float muzzleLift = 0f)
         {
             var proj = new GameObject("ShadeProjectile");
-            proj.transform.position = transform.position + (Vector3)new Vector2(muzzleOffset.x * facing, muzzleOffset.y);
+            proj.transform.position = transform.position
+                + (Vector3)new Vector2(muzzleOffset.x * facing, muzzleOffset.y + muzzleLift);
             proj.tag = "Hero Spell";
             int spellLayer = LayerMask.NameToLayer("Hero Spell");
             int atkLayer = LayerMask.NameToLayer("Hero Attack");
@@ -748,6 +613,17 @@ public partial class LegacyHelper
             else
                 psr.sprite = MakeDotSprite();
 
+            // A charm that changes what the bolt *is* brings its own art - Flukenest's flukes are
+            // not small Shade Souls, and drawing them as one is what the charm was reported for.
+            // The colliders below are still measured from the Shade Soul frames, so the fluke keeps
+            // a hitbox the same shape as the bolt it replaces.
+            bool borrowedArt = !string.IsNullOrEmpty(effectPrefab)
+                && LegacyoftheAbyss.Shade.Knight.KnightEffects.TrySpawnSorted(effectPrefab, proj.transform, sr, effectScale) != null;
+            if (borrowedArt)
+            {
+                psr.enabled = false;
+            }
+
             bool flip = dir.x < 0f;
             psr.flipX = flip;
 
@@ -756,9 +632,22 @@ public partial class LegacyHelper
             proj.transform.localScale = Vector3.one * scale;
 
             Collider2D[] projCols;
-            if (frames.Length > 0)
+            if (colliderRadius > 0f)
             {
-                var size = frames[0].bounds.size;
+                // An explicit hitbox, for a projectile whose art is not the bolt's. Deriving one
+                // from the Shade Soul frames gave a fluke the reach of a full spell, which is what
+                // burst them against the floor the instant they were thrown.
+                var small = proj.AddComponent<CircleCollider2D>();
+                small.isTrigger = true;
+                small.radius = colliderRadius;
+                projCols = new Collider2D[] { small };
+            }
+            else if (frames.Length > 0)
+            {
+                // Sized to what is drawn. The frames describe the Shade Soul, so a projectile that
+                // borrowed smaller art was keeping the bolt's hitbox - which is a fluke the size of
+                // a Shade Soul, hitting terrain the moment it left the caster.
+                var size = frames[0].bounds.size * (borrowedArt ? effectScale : 1f);
                 float radius = size.y / 2f;
                 float facingSign = flip ? -1f : 1f;
 
@@ -788,9 +677,9 @@ public partial class LegacyHelper
                         if (oc && pc) Physics2D.IgnoreCollision(pc, oc, true);
 
             var rb = proj.AddComponent<Rigidbody2D>();
-            rb.gravityScale = 0;
+            rb.gravityScale = gravityScale;
             rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
-            rb.linearVelocity = dir.normalized * projectileSpeed;
+            rb.linearVelocity = dir.normalized * (speedOverride > 0f ? speedOverride : projectileSpeed);
 
             if (hornetTransform != null)
             {
@@ -801,86 +690,158 @@ public partial class LegacyHelper
             }
 
             var sp = proj.AddComponent<ShadeProjectile>();
-            sp.animFrames = frames;
-            // Use spell progression for damage (2.5x upgraded, 30% less when unupgraded)
-            int dmg = ComputeSpellDamageMultiplier(2.5f, IsProjectileUpgraded());
-            sp.damage = Mathf.Max(1, Mathf.RoundToInt(dmg * damageScale));
+            // No frame animation when a prefab is drawing: it animates itself, and stepping the
+            // hidden renderer's frames on top of it would be work nobody sees.
+            sp.animFrames = borrowedArt ? null : frames;
+            if (fixedDamage > 0)
+            {
+                sp.damage = fixedDamage;
+            }
+            else
+            {
+                // Use spell progression for damage (2.5x upgraded, 30% less when unupgraded)
+                int dmg = ComputeSpellDamageMultiplier(2.5f, IsProjectileUpgraded());
+                sp.damage = Mathf.Max(1, Mathf.RoundToInt(dmg * damageScale));
+            }
+
             LoggingManager.LogShadeAttackDamage(
                 CharacterLogName,
-                IsProjectileUpgraded() ? "Shade Soul" : "Vengeful Spirit",
+                fixedDamage > 0 ? "Fluke" : IsProjectileUpgraded() ? "Shade Soul" : "Vengeful Spirit",
                 sp.damage);
             sp.hornetRoot = hornetTransform;
-            sp.destroyOnTerrain = !IsProjectileUpgraded();
+            sp.faceVelocity = faceVelocity;
+            sp.destroyOnTerrain = destroyOnTerrain || !IsProjectileUpgraded();
             sp.maxRange = IsProjectileUpgraded() ? 22f : 0f;
 
             // SFX
             TryPlayFireballSfx();
         }
 
-        private bool EnsureShamanSlashTemplates(HeroController hc)
+        /// <summary>
+        /// How long a Grubberfly beam lives. Short: it is a flourish on the swing rather than a
+        /// projectile to be aimed, and it should be gone before the next one is thrown.
+        /// </summary>
+        private const float GrubberflyBeamSeconds = 0.34f;
+
+        private const float GrubberflyBeamSpeed = 52f;
+
+        /// <summary>Far enough that the lifetime is what ends it, not the range.</summary>
+        private const float GrubberflyBeamRange = GrubberflyBeamSpeed * GrubberflyBeamSeconds;
+
+        /// <summary>
+        /// Grubberfly's Elegy: a wave of energy thrown alongside an ordinary slash while the bearer
+        /// is unhurt, for half the nail's damage.
+        /// <para>
+        /// It used to swap the whole nail moveset for Hornet's Spell Crest slash instead. That is
+        /// what produced both halves of the report - the companion stopped swinging its own nail at
+        /// all, and the borrowed prefab threw its waves from Hornet, because it is hers and fires
+        /// from wherever the crest's own slash object is anchored. Nothing about this charm should
+        /// touch the moveset: it adds a projectile and changes nothing else.
+        /// </para>
+        /// </summary>
+        private void TryFireGrubberflyBeam(float forcedV)
         {
-            var crest = Gameplay.SpellCrest;
-            var config = crest ? crest.HeroConfig : null;
-            if (hc == null || config == null)
+            if (!grubberflyElegyEquipped || !IsGrubberflyBeamCharged())
             {
-                shamanHorizontalSlashTemplate = null;
-                shamanHorizontalAltSlashTemplate = null;
-                shamanUpSlashTemplate = null;
-                shamanDownSlashTemplate = null;
-                shamanSlashConfigSource = null;
-                return false;
+                return;
             }
 
-            if (shamanSlashConfigSource == config && (shamanHorizontalSlashTemplate != null || shamanHorizontalAltSlashTemplate != null || shamanUpSlashTemplate != null))
+            Vector2 dir;
+            if (forcedV > 0.35f)
+                dir = Vector2.up;
+            else if (forcedV < -0.35f)
+                dir = Vector2.down;
+            else
+                dir = facing >= 0 ? Vector2.right : Vector2.left;
+
+            // Half a nail slash, rounded up so the weakest nail still does something.
+            int damage = Mathf.Max(1, Mathf.CeilToInt(GetShadeNailDamage() * 0.5f));
+
+            var proj = new GameObject("ShadeGrubberflyBeam");
+            proj.transform.position = transform.position + (Vector3)new Vector2(muzzleOffset.x * facing, muzzleOffset.y);
+            proj.tag = "Hero Spell";
+            int spellLayer = LayerMask.NameToLayer("Hero Spell");
+            int atkLayer = LayerMask.NameToLayer("Hero Attack");
+            if (spellLayer >= 0) proj.layer = spellLayer; else if (atkLayer >= 0) proj.layer = atkLayer;
+
+            // Hollow Knight's own beam, one prefab per direction. The art is drawn facing its
+            // way, so the direction chooses the prefab rather than rotating a sprite - and it is
+            // the crescent the charm is supposed to throw rather than a stand-in dot.
+            string[] beamPrefabs;
+            if (dir == Vector2.up)
+                beamPrefabs = LegacyoftheAbyss.Shade.Knight.KnightEffects.GrubberflyBeamUp;
+            else if (dir == Vector2.down)
+                beamPrefabs = LegacyoftheAbyss.Shade.Knight.KnightEffects.GrubberflyBeamDown;
+            else if (dir == Vector2.left)
+                beamPrefabs = LegacyoftheAbyss.Shade.Knight.KnightEffects.GrubberflyBeamLeft;
+            else
+                beamPrefabs = LegacyoftheAbyss.Shade.Knight.KnightEffects.GrubberflyBeamRight;
+
+            bool borrowedArt =
+                LegacyoftheAbyss.Shade.Knight.KnightEffects.TrySpawnFirst(beamPrefabs, proj.transform, sr) != null;
+
+            var psr = proj.AddComponent<SpriteRenderer>();
+            if (borrowedArt)
             {
-                return true;
+                // The prefab draws; this renderer stays only so the projectile has one to sort by.
+                psr.enabled = false;
+            }
+            else
+            {
+                psr.sprite = MakeDotSprite();
+                psr.color = new Color(0.72f, 0.88f, 1f, 0.9f);
+                if (sr != null)
+                {
+                    psr.sortingLayerID = sr.sortingLayerID;
+                    psr.sortingOrder = sr.sortingOrder + 1;
+                }
+
+                bool vertical = Mathf.Abs(dir.y) > 0.5f;
+                proj.transform.localScale = vertical
+                    ? new Vector3(0.5f, 1.6f, 1f)
+                    : new Vector3(1.6f, 0.5f, 1f);
             }
 
-            shamanHorizontalSlashTemplate = null;
-            shamanHorizontalAltSlashTemplate = null;
-            shamanUpSlashTemplate = null;
-            shamanDownSlashTemplate = null;
-            shamanSlashConfigSource = null;
+            var col = proj.AddComponent<CircleCollider2D>();
+            col.isTrigger = true;
 
-            var group = FindShamanConfigGroup(hc, config);
-            if (group == null)
+            var body = proj.AddComponent<Rigidbody2D>();
+            body.gravityScale = 0f;
+            body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+            body.linearVelocity = dir * GrubberflyBeamSpeed;
+
+            if (hornetTransform != null)
             {
-                return false;
+                foreach (var hornetCol in hornetTransform.GetComponentsInChildren<Collider2D>(true))
+                {
+                    if (hornetCol) Physics2D.IgnoreCollision(col, hornetCol, true);
+                }
             }
 
-            shamanHorizontalSlashTemplate = group.NormalSlashObject ?? group.AlternateSlashObject;
-            shamanHorizontalAltSlashTemplate = group.AlternateSlashObject;
-            shamanUpSlashTemplate = group.UpSlashObject ?? group.AltUpSlashObject ?? shamanHorizontalSlashTemplate ?? shamanHorizontalAltSlashTemplate;
-            shamanDownSlashTemplate = group.DownSlashObject ?? group.AltDownSlashObject;
+            var beam = proj.AddComponent<ShadeProjectile>();
+            beam.damage = damage;
+            beam.hornetRoot = hornetTransform;
+            beam.maxRange = GrubberflyBeamRange;
+            beam.lifeSeconds = GrubberflyBeamSeconds;
 
-            shamanSlashConfigSource = config;
-            return shamanHorizontalSlashTemplate != null || shamanHorizontalAltSlashTemplate != null || shamanUpSlashTemplate != null || shamanDownSlashTemplate != null;
+            LoggingManager.LogShadeAttackDamage(CharacterLogName, "Grubberfly's Elegy beam", damage);
         }
 
-        private static HeroController.ConfigGroup FindShamanConfigGroup(HeroController hc, HeroControllerConfig config)
+        /// <summary>
+        /// Whether the charm is presently paying out: at full health, or on the last mask when Fury
+        /// of the Fallen is also worn, exactly as the pair behaves in Hallownest.
+        /// </summary>
+        private bool IsGrubberflyBeamCharged()
         {
-            if (hc == null || config == null)
+            if (GetTotalCurrentHealth() <= 0)
             {
-                return null;
+                return false;
             }
 
-            foreach (var field in s_heroConfigGroupFields)
-            {
-                if (field?.GetValue(hc) is not HeroController.ConfigGroup[] groups)
-                {
-                    continue;
-                }
-
-                foreach (var group in groups)
-                {
-                    if (group != null && group.Config == config)
-                    {
-                        return group;
-                    }
-                }
-            }
-
-            return null;
+            // Full masks, lifeblood not counted - the same rule as in Hallownest. Fury of the
+            // Fallen's own "last mask" signal is reused rather than re-derived, so the two charms
+            // cannot disagree about when the bearer is on their final mask.
+            return shadeHP >= shadeMaxHP || furyModeActive;
         }
 
         private Sprite MakeDotSprite()

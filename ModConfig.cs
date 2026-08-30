@@ -248,6 +248,16 @@ public class ModConfig
 
     public float hudMaskScale = 1f;
     public float hudMaskSpacing = 6f;
+    // The companion's buff bar, under the mask row. Sized and placed here rather than derived,
+    // because a row of status icons is exactly the kind of placement that cannot be reasoned out
+    // from the art; Ctrl+F5 rereads these against the running screen.
+    public bool hudBuffBarEnabled = true;
+    public float hudBuffIconSize = 34f;
+    public float hudBuffIconScale = 1f;
+    public float hudBuffIconSpacing = 6f;
+    public float hudBuffBarOffsetX = -150f;
+    public float hudBuffBarOffsetY = -14f;
+
     public float hudMaskRowOffsetX = -120f;
     public float hudMaskRowOffsetY = 12f;
     public bool shadeUnlockPopupsMuted = false;

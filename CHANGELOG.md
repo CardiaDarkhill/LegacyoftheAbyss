@@ -7,6 +7,10 @@ controls it; the reasoning belongs in the commit and the code.
 
 ### Added
 
+- A buff bar under the companion's mask row, showing Baldur Shell's remaining blows. "Buff Bar" is
+  on by default; `hudBuffBarOffsetX`, `hudBuffBarOffsetY`, `hudBuffIconSize`, `hudBuffIconScale` and
+  `hudBuffIconSpacing` place it, and Ctrl+F5 rereads them.
+
 - The Shade's "Skins" menu is now "Characters", and the Knight of Hallownest joins the Shade as a
   playable companion. It walks instead of floating, and pogos off Hornet with a down slash.
 - The Knight's abilities follow Hornet's: Mothwing Cloak with her sprint, Mantis Claw with her wall
@@ -50,6 +54,52 @@ controls it; the reasoning belongs in the commit and the code.
 ## 1.2.0
 
 ### Fixed
+
+- The Knight now comes back to Hornet while her controls are locked, so it appears at the entrance
+  after a transition instead of being left behind, and it stays put on a bench instead of falling.
+- Grimmchild flies at its bearer's shoulder and spits fireballs at any angle, animated from the
+  Grimmchild III art, instead of drifting into foes. It and its fireballs stop at terrain.
+- Weaversong, Glowing Womb, Dreamshield, Defender's Crest, Spore Shroom, Thorns of Agony and
+  Flukenest now use Hollow Knight's own art for what they summon or throw, instead of the charm
+  icon. Weaverlings run along the ground rather than drifting over it.
+- Sharp Shadow gives the Shade the sharpened cloak animation the Knight already had.
+- Grubberfly's Elegy throws Hollow Knight's own crescent beam, one per direction, instead of a
+  placeholder bolt.
+- Flukenest throws 9 flukes, or 16 with Shade Soul, lobbed on an arc that lands them spread across
+  the ground ahead of the caster. They are smaller, and they burst on terrain.
+- Defender's Crest's cloud is smaller and much fainter.
+- The Dreamshield circles the bearer evenly with its point turned outward.
+- Idle weaverlings wander instead of piling up, and one that cannot reach its target goes back to
+  the bearer and tries again.
+- Thorns of Agony bursts Hollow Knight's own vines instead of stray lines, and Defender's Crest no
+  longer throws orange streaks across the room.
+- Grubberfly's Elegy beams face the way they are travelling.
+- Flukes carry a hitbox their own size, so they no longer burst the instant they are thrown.
+- The Dreamshield is smaller, closer and slower.
+- The Shade's charm grid is drawn at the right size on high-resolution displays instead of at twice
+  its intended size, where it overlapped the notch row and the charm description.
+- The Knight is pushed back by its own nail hits and by damage, and Steady Body stops it again. The
+  push no longer spins it round to face away from whatever it just hit.
+- Sprintmaster, and every other movement-speed charm, now works for the Knight, with its own walk
+  cycle. Shape of Unn slows a focusing Knight to half speed rather than the Knight being able to
+  walk freely, and draws Hollow Knight's slug form while it channels.
+- Sharp Shadow works for the Knight's Shade Cloak, and plays the charm's own cloak animation.
+- Grubberfly's Elegy adds a half-damage beam to the companion's own swing instead of replacing its
+  nail with Hornet's and firing from her.
+- Weaversong's weaverlings deal exactly 3 and only on contact. Flukenest's flukes deal 4, or 5 with
+  Shaman Stone, in a tighter fan. Thorns of Agony deals exactly one nail slash.
+- Defender's Crest and Spore Shroom now leave clouds that damage over time instead of landing as a
+  single hit.
+- Baldur Shell no longer makes focusing invulnerable: the hit still lands and still breaks the
+  channel, the shell absorbs four of them, and a bench mends it.
+- Gathering Swarm draws loose rosaries to Hornet, using the game's own magnet.
+- A full SOUL meter is worth three focus heals again, instead of two.
+- Fragile charms stay equipped when they break, so a bench repairs the loadout you had.
+- The debug HP keys damage the companion for real, so focus can heal it and it survives a room
+  change. Requires "Debug Keys (HP/Soul)".
+- Dream Wielder and Nailmaster's Glory describe what they actually do, and say that the mechanics
+  behind them are still to come.
+- Losing a mask no longer throws an error when the HUD is rebuilt mid-animation.
 
 - Cycling the Shade's mask setting in the Difficulty menu no longer leaves it on 1 health. The
   Shade now unpauses with the health it had when you paused, or its new maximum, whichever is

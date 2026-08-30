@@ -33,6 +33,76 @@ public partial class LegacyHelper
         /// <summary>Whether hitting something ends this minion, as a hatchling's charge does.</summary>
         public bool expiresOnHit;
 
+        /// <summary>
+        /// How close this minion has to be to actually land a hit, in world units. Matched to the
+        /// trigger it carries rather than relied on through the physics callback: the collision
+        /// matrix decides whether a trigger on this object ever meets an enemy's collider, and the
+        /// chase already knows exactly where its quarry is.
+        /// </summary>
+        public float contactRadius = 0.45f;
+
+        /// <summary>
+        /// Whether the difficulty multiplier applies. Off for the charms specified as an exact
+        /// number of damage - Weaversong's 3, a hatchling's 9 - which are the charm's figure and
+        /// not a share of the nail's.
+        /// </summary>
+        public bool scaleWithDamageMultiplier = true;
+
+        /// <summary>
+        /// Whether this minion walks instead of flying. A weaverling is a spiderling: it runs along
+        /// the floor and cannot cross a gap, which is most of what makes it read as a creature
+        /// rather than as an icon drifting over the terrain.
+        /// </summary>
+        public bool groundBound;
+
+        /// <summary>
+        /// How much of the orbit's radius is spent vertically. The flock charms sit on a flattened
+        /// ellipse so they read as circling in front of the bearer; Dreamshield is a real circle,
+        /// because the shield is meant to cover every side equally.
+        /// </summary>
+        public float orbitVerticalScale = 0.6f;
+
+        /// <summary>
+        /// Whether the minion turns so its own right-hand side points away from the bearer. The
+        /// Dreamshield's point does; a weaverling has no orientation worth keeping.
+        /// </summary>
+        public bool faceOutward;
+
+        /// <summary>
+        /// Whether an idle minion drifts around near the bearer instead of sitting on them. Without
+        /// it a flock with nothing to chase piles up in one spot.
+        /// </summary>
+        public bool wanders;
+
+        /// <summary>How long a minion may fail to close on its target before it is sent home.</summary>
+        private const float StuckSeconds = 3f;
+
+        /// <summary>How much closer it has to get in that time to count as making progress.</summary>
+        private const float StuckProgressEpsilon = 0.75f;
+
+        private const float WanderRepickSeconds = 1.6f;
+        private const float WanderRadius = 3.2f;
+
+        private float stuckTimer;
+        private float bestTargetDistance = float.MaxValue;
+        private float wanderTimer;
+        private Vector2 wanderPoint;
+        private bool hasWanderPoint;
+
+        /// <summary>Gravity for a grounded minion, matched to the Knight so they fall alike.</summary>
+        private const float Gravity = 60f;
+
+        private const float MaxFallSpeed = 26f;
+
+        /// <summary>How hard a grounded minion hops when its quarry is above it.</summary>
+        private const float HopSpeed = 13f;
+
+        private const float BodyRadius = 0.3f;
+        private const float GroundProbe = 0.14f;
+
+        private float verticalVelocity;
+        private bool grounded;
+
         private float angle;
         private float life;
         private Transform target;
@@ -74,24 +144,212 @@ public partial class LegacyHelper
                 if (retargetTimer <= 0f)
                 {
                     retargetTimer = RetargetSeconds;
+                    var previous = target;
                     target = FindNearestEnemy(owner.position, seekRange);
+                    if (target != previous)
+                    {
+                        ResetStuckTracking();
+                    }
                 }
+
+                UpdateStuckTracking(dt);
             }
 
-            if (target != null)
+            if (groundBound)
+            {
+                MoveAlongGround(dt);
+            }
+            else if (target != null)
             {
                 transform.position = Vector3.MoveTowards(transform.position, target.position, seekSpeed * dt);
-                TryDamage(target.gameObject);
             }
             else
             {
                 angle += orbitSpeed * dt;
                 float radians = angle * Mathf.Deg2Rad;
-                Vector3 offset = new Vector3(Mathf.Cos(radians), Mathf.Sin(radians) * 0.6f, 0f) * orbitRadius;
+                Vector3 offset = new Vector3(Mathf.Cos(radians), Mathf.Sin(radians) * orbitVerticalScale, 0f) * orbitRadius;
                 transform.position = Vector3.Lerp(transform.position, owner.position + offset, 1f - Mathf.Exp(-12f * dt));
+
+                if (faceOutward)
+                {
+                    // Turned by where it is rather than by where it is going: the point should aim
+                    // away from the bearer at every position on the circle, which is the offset's
+                    // own direction. Reading it from the offset also keeps it exact at the top and
+                    // bottom of the orbit, where the direction of travel is horizontal.
+                    transform.rotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(offset.y, offset.x) * Mathf.Rad2Deg);
+                }
+            }
+
+            // Only on contact. Damaging the chase target unconditionally meant a minion hit
+            // whatever it had picked out from anywhere inside its whole seek range - which is
+            // what "it just randomly hits things nearby" was: a hit with no strike behind it.
+            if (target != null && WithinContact(target))
+            {
+                TryDamage(target.gameObject);
             }
 
             ExpireHitCooldowns(dt);
+        }
+
+        /// <summary>
+        /// One step of a spiderling: run at whatever it is chasing, or trail its owner when it has
+        /// nothing, and fall the rest of the time. It hops when its quarry is above it and it has
+        /// something to push off, which is as much climbing as a minion this small needs.
+        /// </summary>
+        private void MoveAlongGround(float dt)
+        {
+            Vector2 position = transform.position;
+            Vector2 goal = target != null ? (Vector2)target.position : ResolveIdleGoal(dt, position);
+
+            float toGoalX = goal.x - position.x;
+            float horizontal = Mathf.Abs(toGoalX) > 0.15f ? Mathf.Sign(toGoalX) * seekSpeed : 0f;
+
+            ProbeGround(position);
+
+            if (grounded)
+            {
+                verticalVelocity = 0f;
+                if (goal.y - position.y > 1.2f)
+                {
+                    verticalVelocity = HopSpeed;
+                    grounded = false;
+                }
+            }
+            else
+            {
+                verticalVelocity = Mathf.Max(verticalVelocity - Gravity * dt, -MaxFallSpeed);
+            }
+
+            Vector2 step = position + new Vector2(horizontal, verticalVelocity) * dt;
+            transform.position = ResolveTerrain(position, step);
+        }
+
+        /// <summary>
+        /// Where a minion with nothing to chase is heading: a point it picks near its bearer and
+        /// re-picks every so often, rather than the bearer itself. Walking at the bearer directly is
+        /// what made the whole flock stack into one spot.
+        /// </summary>
+        private Vector2 ResolveIdleGoal(float dt, Vector2 position)
+        {
+            Vector2 ownerPos = owner.position;
+            if (!wanders)
+            {
+                return ownerPos;
+            }
+
+            wanderTimer -= dt;
+            bool arrived = hasWanderPoint && Mathf.Abs(wanderPoint.x - position.x) < 0.4f;
+            if (!hasWanderPoint || arrived || wanderTimer <= 0f)
+            {
+                hasWanderPoint = true;
+                wanderTimer = WanderRepickSeconds;
+                wanderPoint = ownerPos + new Vector2(Random.Range(-WanderRadius, WanderRadius), 0f);
+            }
+
+            // Never further from the bearer than the wander radius, whatever it wandered into.
+            if (Mathf.Abs(wanderPoint.x - ownerPos.x) > WanderRadius)
+            {
+                wanderPoint.x = ownerPos.x + Mathf.Sign(wanderPoint.x - ownerPos.x) * WanderRadius;
+            }
+
+            return new Vector2(wanderPoint.x, ownerPos.y);
+        }
+
+        /// <summary>
+        /// Sends a minion back to its bearer when it has spent <see cref="StuckSeconds"/> unable to
+        /// get any closer to what it is chasing - a ledge, a wall, a pit. Re-homed rather than
+        /// destroyed and re-summoned: the flock is a fixed set, and putting this one back at the
+        /// bearer is the same thing to look at without churning the set it belongs to.
+        /// </summary>
+        private void UpdateStuckTracking(float dt)
+        {
+            if (target == null)
+            {
+                ResetStuckTracking();
+                return;
+            }
+
+            float distance = Vector2.Distance(transform.position, target.position);
+            if (distance < bestTargetDistance - StuckProgressEpsilon)
+            {
+                bestTargetDistance = distance;
+                stuckTimer = 0f;
+                return;
+            }
+
+            stuckTimer += dt;
+            if (stuckTimer < StuckSeconds)
+            {
+                return;
+            }
+
+            transform.position = owner.position;
+            verticalVelocity = 0f;
+            hasWanderPoint = false;
+            ResetStuckTracking();
+        }
+
+        private void ResetStuckTracking()
+        {
+            stuckTimer = 0f;
+            bestTargetDistance = float.MaxValue;
+        }
+
+        private void ProbeGround(Vector2 position)
+        {
+            int mask = ShadeController.TerrainMask();
+            grounded = verticalVelocity <= 0.01f
+                && Physics2D.OverlapCircle(position + Vector2.down * (BodyRadius + GroundProbe * 0.5f), GroundProbe, mask) != null;
+        }
+
+        /// <summary>
+        /// Stops the body at terrain rather than sliding through it, swept per axis so a spiderling
+        /// runs along a wall instead of sticking to it.
+        /// </summary>
+        private static Vector2 ResolveTerrain(Vector2 current, Vector2 target)
+        {
+            int mask = ShadeController.TerrainMask();
+            Vector2 resolved = current;
+
+            float dx = target.x - current.x;
+            if (Mathf.Abs(dx) > 0.0001f)
+            {
+                var hit = Physics2D.CircleCast(resolved, BodyRadius, new Vector2(Mathf.Sign(dx), 0f), Mathf.Abs(dx), mask);
+                resolved.x = hit.collider != null
+                    ? resolved.x + Mathf.Sign(dx) * Mathf.Max(0f, hit.distance - 0.01f)
+                    : target.x;
+            }
+
+            float dy = target.y - current.y;
+            if (Mathf.Abs(dy) > 0.0001f)
+            {
+                var hit = Physics2D.CircleCast(resolved, BodyRadius, new Vector2(0f, Mathf.Sign(dy)), Mathf.Abs(dy), mask);
+                resolved.y = hit.collider != null
+                    ? resolved.y + Mathf.Sign(dy) * Mathf.Max(0f, hit.distance - 0.01f)
+                    : target.y;
+            }
+
+            return resolved;
+        }
+
+        /// <summary>
+        /// Whether the minion is close enough to the target to be touching it. Measured against
+        /// the target's own collider where it has one, because a HealthManager's transform origin
+        /// is routinely nowhere near the body it belongs to.
+        /// </summary>
+        private bool WithinContact(Transform other)
+        {
+            if (other == null)
+            {
+                return false;
+            }
+
+            var collider = other.GetComponent<Collider2D>();
+            Vector3 closest = collider != null
+                ? (Vector3)collider.ClosestPoint(transform.position)
+                : other.position;
+
+            return (closest - transform.position).sqrMagnitude <= contactRadius * contactRadius;
         }
 
         private void OnTriggerStay2D(Collider2D other)
@@ -134,7 +392,9 @@ public partial class LegacyHelper
             {
                 Source = gameObject,
                 AttackType = AttackTypes.Spell,
-                DamageDealt = Mathf.Max(1, Mathf.RoundToInt(contactDamage * ModConfig.Instance.shadeDamageMultiplier)),
+                DamageDealt = scaleWithDamageMultiplier
+                    ? Mathf.Max(1, Mathf.RoundToInt(contactDamage * ModConfig.Instance.shadeDamageMultiplier))
+                    : Mathf.Max(1, contactDamage),
                 Direction = direction,
                 MagnitudeMultiplier = 1f,
                 Multiplier = 1f,

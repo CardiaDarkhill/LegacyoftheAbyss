@@ -66,6 +66,9 @@ public partial class LegacyHelper
         /// <summary>Distance past the hard leash at which the Knight is put back beside Hornet.</summary>
         private const float KnightLeashSnapPadding = 6f;
 
+        /// <summary>How much of its walk the Knight keeps while focusing under Shape of Unn.</summary>
+        private const float KnightFocusMoveScale = 0.5f;
+
         private KnightView knightView;
         private KnightAbilities knightAbilities = KnightAbilities.None;
         private float knightAbilityRefreshTimer;
@@ -229,15 +232,49 @@ public partial class LegacyHelper
                 return;
             }
 
+            // Consumed unconditionally, so a push landing on the same frame as a stagger or a
+            // cutscene is spent rather than banked and released when the hold lifts.
+            float knockbackSpeed = ConsumeKnightKnockback(dt);
+
             // Walking to a bench is the exception: the hold belongs to Hornet, and for that one the
             // Knight has somewhere to be. UpdateKnightBench owns the input for the whole approach.
             bool benchWalking = knightBenchActive && !knightBenchSeated;
 
             if (!benchWalking && (hornetControlsLocked || isInactive || damageStaggerTimer > 0f))
             {
-                // Still fall, so a locked Knight does not hang in the air, but take no input.
-                IntegrateKnightVertical(dt, allowInput: false);
-                ApplyKnightMotion(0f, dt);
+                if (knightBenchSeated)
+                {
+                    // A seated Knight is placed, not falling. It used to keep its gravity through
+                    // the whole rest, so a seat over a gap dropped it out of the scene and the
+                    // bench hold then held it there.
+                    knightVerticalVelocity = 0f;
+                    knightJumpHoldTimer = 0f;
+                }
+                else
+                {
+                    // Still fall, so a locked Knight does not hang in the air, but take no input.
+                    // A damage stagger keeps its push - being knocked back is the whole point of
+                    // it - while a cutscene or a dormant Knight is held still.
+                    IntegrateKnightVertical(dt, allowInput: false);
+                    ApplyKnightMotion(
+                        hornetControlsLocked || isInactive ? 0f : knockbackSpeed,
+                        dt,
+                        facingSpeed: 0f);
+                }
+
+                // The recovery runs on this path too. It used to sit past the return, so for as
+                // long as the hold lasted - a room transition's entry walk, or a whole rest at a
+                // bench - nothing could bring the Knight back: it fell away behind Hornet and
+                // stayed there, which is why it never appeared at the entrance of the next room.
+                //
+                // Not during spawn protection: that is the window where the Knight has been set
+                // down and Hornet may not be at her entry position yet, and a leash measured
+                // against a position still settling would place the Knight against it.
+                ClampKnightToCameraView();
+                if (!sceneProtectionActive)
+                {
+                    EnforceKnightLeash();
+                }
                 UpdateKnightAnimation(0f);
                 return;
             }
@@ -245,6 +282,17 @@ public partial class LegacyHelper
             float horizontal = capturedHorizontalInput;
             UpdateKnightTimers(dt, horizontal);
             UpdateKnightDash(dt, horizontal);
+
+            float runSpeed = KnightGroundSpeed;
+            float facingDriver = float.NaN;
+
+            // Channelling roots a platformer body the way it roots Hornet, and nothing held the
+            // Knight before - it walked at full speed through a focus with or without the charm.
+            // Shape of Unn buys the movement back, at half speed rather than in full.
+            if (isFocusing)
+            {
+                runSpeed *= allowFocusMovement ? KnightFocusMoveScale : 0f;
+            }
 
             float speed;
             if (knightDashTimer > 0f)
@@ -254,17 +302,25 @@ public partial class LegacyHelper
             }
             else
             {
-                speed = horizontal * KnightRunSpeed;
+                speed = horizontal * runSpeed;
                 if (knightWallJumpLockTimer > 0f)
                 {
                     // Hold the push off the wall briefly, or holding toward it cancels the jump.
-                    speed = -knightWallDirection * KnightRunSpeed;
+                    speed = -knightWallDirection * runSpeed;
+                }
+                else
+                {
+                    // Kept out of the facing driver below: a recoil is a push, not a decision to
+                    // turn round, and letting it steer spun the Knight away from what it just hit.
+                    facingDriver = speed;
+                    speed += knockbackSpeed;
                 }
 
                 IntegrateKnightVertical(dt, allowInput: true);
             }
 
-            ApplyKnightMotion(speed, dt);
+            ApplyKnightMotion(speed, dt, float.IsNaN(facingDriver) ? (float?)null : facingDriver);
+            UpdateSharpShadowDashState();
             ClampKnightToCameraView();
             EnforceKnightLeash();
             UpdateKnightAnimation(speed);
@@ -352,6 +408,9 @@ public partial class LegacyHelper
         /// Terrain the Knight stands on. Hornet's own collision mask is the authority; falling back
         /// to a named layer keeps the Knight solid if the hero is momentarily absent.
         /// </summary>
+        /// <summary>Terrain and soft terrain, for anything of ours that must not pass through walls.</summary>
+        internal static int TerrainMask() => KnightTerrainMask();
+
         private static int KnightTerrainMask()
         {
             int terrain = LayerMask.NameToLayer("Terrain");
@@ -540,8 +599,18 @@ public partial class LegacyHelper
             }
         }
 
-        private void ApplyKnightMotion(float horizontalSpeed, float dt)
+        /// <summary>
+        /// Moves the Knight and turns it to face where it is going.
+        /// <para>
+        /// <paramref name="facingSpeed"/> is separate from the motion because they are not always
+        /// the same question: a nail recoil is horizontal motion the Knight did not choose, and
+        /// facing it turns the Knight to look at what it just hit away from. Pass the input-driven
+        /// speed there and the total in <paramref name="horizontalSpeed"/>.
+        /// </para>
+        /// </summary>
+        private void ApplyKnightMotion(float horizontalSpeed, float dt, float? facingSpeed = null)
         {
+            float facingDriver = facingSpeed ?? horizontalSpeed;
             Vector2 delta = new Vector2(horizontalSpeed, knightVerticalVelocity) * dt;
             Vector2 current = transform.position;
             Vector2 target = current + delta;
@@ -561,8 +630,8 @@ public partial class LegacyHelper
 
             if (knightDashTimer <= 0f && knightWallJumpLockTimer <= 0f)
             {
-                if (horizontalSpeed > 0.1f) facing = 1;
-                else if (horizontalSpeed < -0.1f) facing = -1;
+                if (facingDriver > 0.1f) facing = 1;
+                else if (facingDriver < -0.1f) facing = -1;
             }
             else if (knightDashTimer > 0f && knightDashDirection != 0)
             {
@@ -709,6 +778,63 @@ public partial class LegacyHelper
             knightVerticalVelocity = 0f;
             knightDashTimer = 0f;
             knightAirJumpSpent = false;
+        }
+
+        /// <summary>
+        /// The Knight's ground speed with the charm loadout's movement modifiers folded in.
+        /// <para>
+        /// Carried across as a <em>ratio</em> rather than by reading <c>moveSpeed</c> outright:
+        /// that number is the Shade's flight speed, tuned against a leash, while the Knight's is
+        /// tuned against its own gravity and jump arc. Taking the ratio keeps the Knight's feel and
+        /// still lets every movement-speed charm reach it. Nothing carried it before, which is why
+        /// Sprintmaster - and every other movement-stat charm - did nothing for the Knight.
+        /// </para>
+        /// </summary>
+        private float KnightGroundSpeed
+        {
+            get
+            {
+                float baseline = s_defaultCharmStats.MoveSpeed;
+                if (baseline <= 0.0001f)
+                {
+                    return KnightRunSpeed;
+                }
+
+                return KnightRunSpeed * Mathf.Clamp(moveSpeed / baseline, 0.25f, 3f);
+            }
+        }
+
+        /// <summary>
+        /// Spends one frame of <c>ApplyKnockback</c>'s push and reports it as a horizontal speed.
+        /// <para>
+        /// The Shade spends the same field in its leash step, which the Knight never reaches, so
+        /// without this the recoil from its own nail hits was written and never read - the Knight
+        /// stood perfectly still on every hit, which is what Steady Body is supposed to buy.
+        /// Suppression still works, because <c>ApplyKnockback</c> declines to write anything.
+        /// </para>
+        /// <para>
+        /// Horizontal only. The vertical component of a nail recoil would fight the down-slash
+        /// pogo for the same frames, and an up-slash would drive the Knight into the floor.
+        /// Both directions are already owned by <c>knightVerticalVelocity</c>.
+        /// </para>
+        /// </summary>
+        private float ConsumeKnightKnockback(float dt)
+        {
+            if (knockbackTimer <= 0f)
+            {
+                knockbackVelocity = Vector2.zero;
+                return 0f;
+            }
+
+            float horizontal = knockbackVelocity.x;
+            knockbackVelocity = Vector2.Lerp(knockbackVelocity, Vector2.zero, 10f * dt);
+            knockbackTimer -= dt;
+            if (knockbackTimer <= 0f)
+            {
+                knockbackVelocity = Vector2.zero;
+            }
+
+            return horizontal;
         }
 
         /// <summary>
@@ -881,12 +1007,40 @@ public partial class LegacyHelper
                 return;
             }
 
+            // Above the movement states, which would otherwise stamp the run or idle clip over the
+            // pose on the next physics step - the same reason the map and spell poses sit high.
+            if (isFocusing)
+            {
+                if (allowFocusMovement && knightView.HasClip(KnightView.ClipSlugIdle))
+                {
+                    bool crawling = Mathf.Abs(horizontalSpeed) > 0.1f && knightView.HasClip(KnightView.ClipSlugWalk);
+                    knightView.Play(crawling ? KnightView.ClipSlugWalk : KnightView.ClipSlugIdle);
+                }
+                else
+                {
+                    knightView.Play(KnightView.ClipFocus);
+                }
+
+                return;
+            }
+
             if (knightDashTimer > 0f)
             {
                 // Which dash matters: the per-frame animation step ran straight after the dash
                 // started and stamped the plain Dash clip over the Shade Cloak one, so the cloak
                 // never showed its own animation for a single frame.
-                knightView.Play(knightDashIsShadeCloak ? KnightView.ClipShadeCloak : KnightView.ClipDash);
+                if (!knightDashIsShadeCloak)
+                {
+                    knightView.Play(KnightView.ClipDash);
+                    return;
+                }
+
+                // Sharp Shadow has its own cloak animation - the blade the charm describes is in
+                // the clip, so without it the charm reads as doing nothing even while it damages.
+                string cloakClip = sharpShadowEquipped && knightView.HasClip(KnightView.ClipShadeCloakSharp)
+                    ? KnightView.ClipShadeCloakSharp
+                    : KnightView.ClipShadeCloak;
+                knightView.Play(cloakClip);
                 return;
             }
 
@@ -908,7 +1062,17 @@ public partial class LegacyHelper
                 return;
             }
 
-            knightView.Play(Mathf.Abs(horizontalSpeed) > 0.1f ? KnightView.ClipRun : KnightView.ClipIdle);
+            if (Mathf.Abs(horizontalSpeed) <= 0.1f)
+            {
+                knightView.Play(KnightView.ClipIdle);
+                return;
+            }
+
+            // Sprintmaster brings its own walk cycle. Asked for rather than assumed: Play leaves
+            // the previous clip running when it cannot find one, so a bundle without it would
+            // freeze the Knight mid-stride rather than fall back to the ordinary run.
+            bool sprintCycle = sprintmasterEquipped && knightView.HasClip(KnightView.ClipSprint);
+            knightView.Play(sprintCycle ? KnightView.ClipSprint : KnightView.ClipRun);
         }
     }
 }

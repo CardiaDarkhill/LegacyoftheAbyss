@@ -1,6 +1,8 @@
 #nullable enable
 
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using UnityEngine;
 
 namespace LegacyoftheAbyss.Shade
@@ -31,7 +33,14 @@ namespace LegacyoftheAbyss.Shade
             float orbitRadius,
             float seekRange,
             float lifeSeconds = 0f,
-            bool expiresOnHit = false)
+            bool expiresOnHit = false,
+            bool scaleWithDamageMultiplier = true,
+            bool groundBound = false,
+            bool wanders = false,
+            bool faceOutward = false,
+            float orbitVerticalScale = 0.6f,
+            float orbitSpeed = 0f,
+            float visualScale = 1f)
         {
             if (controller == null)
             {
@@ -54,12 +63,23 @@ namespace LegacyoftheAbyss.Shade
                 minion.seekRange = seekRange;
                 minion.lifeSeconds = lifeSeconds;
                 minion.expiresOnHit = expiresOnHit;
+                minion.scaleWithDamageMultiplier = scaleWithDamageMultiplier;
+                minion.groundBound = groundBound;
+                minion.wanders = wanders;
+                minion.faceOutward = faceOutward;
+                minion.orbitVerticalScale = orbitVerticalScale;
+                if (orbitSpeed > 0f)
+                {
+                    minion.orbitSpeed = orbitSpeed;
+                }
 
-                ApplyVisual(go, charm);
+                minion.contactRadius = 0.45f;
+
+                ApplyVisual(go, controller, charm, visualScale);
 
                 var trigger = go.AddComponent<CircleCollider2D>();
                 trigger.isTrigger = true;
-                trigger.radius = 0.45f;
+                trigger.radius = minion.contactRadius;
 
                 set.Members.Add(go);
             }
@@ -76,7 +96,8 @@ namespace LegacyoftheAbyss.Shade
             int damage,
             float seekRange,
             float lifeSeconds,
-            bool expiresOnHit)
+            bool expiresOnHit,
+            bool scaleWithDamageMultiplier = true)
         {
             if (controller == null)
             {
@@ -101,14 +122,36 @@ namespace LegacyoftheAbyss.Shade
             minion.seekRange = seekRange;
             minion.lifeSeconds = lifeSeconds;
             minion.expiresOnHit = expiresOnHit;
+            minion.scaleWithDamageMultiplier = scaleWithDamageMultiplier;
+            minion.contactRadius = 0.4f;
 
-            ApplyVisual(go, charm);
+            ApplyVisual(go, controller, charm, 1f);
 
             var trigger = go.AddComponent<CircleCollider2D>();
             trigger.isTrigger = true;
-            trigger.radius = 0.4f;
+            trigger.radius = minion.contactRadius;
 
             set.Members.Add(go);
+        }
+
+        /// <summary>
+        /// Grimmchild, which is not one of the generic orbiting minions: it flies, aims and shoots.
+        /// Registered in the same set so dismissal and companion teardown reach it unchanged.
+        /// </summary>
+        internal static void SpawnGrimmchild(LegacyHelper.ShadeController controller)
+        {
+            if (controller == null)
+            {
+                return;
+            }
+
+            Dismiss(controller, ShadeCharmId.Grimmchild);
+
+            var go = LegacyHelper.ShadeCharmGrimmchild.Create(controller);
+            if (go != null)
+            {
+                GetSet(controller, ShadeCharmId.Grimmchild).Members.Add(go);
+            }
         }
 
         /// <summary>Ticks a spawn timer and reports when it has come round. For trickle charms.</summary>
@@ -183,6 +226,119 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
+        /// <summary>
+        /// The bundle prefab that is this charm's summon, or null when it has none and the charm
+        /// icon has to stand in. Grimmchild is absent on purpose: it is drawn from the Grimmchild
+        /// III skin, which the developer asked for by name.
+        /// </summary>
+        private static string? BundlePrefabFor(ShadeCharmId charm)
+        {
+            switch (charm)
+            {
+                case ShadeCharmId.Weaversong:
+                    return Knight.KnightEffects.Weaverling;
+                case ShadeCharmId.GlowingWomb:
+                    return Knight.KnightEffects.Hatchling;
+                case ShadeCharmId.Dreamshield:
+                    return Knight.KnightEffects.OrbitShield;
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>The Shade skin whose sheets Grimmchild is drawn from. Named by the developer.</summary>
+        private const string GrimmchildSkinId = "Grimmchild Phase 3";
+
+        private const string GrimmchildSheetName = "Shade_Idle_Sheet.png";
+
+        /// <summary>
+        /// What a summon is drawn as.
+        /// <para>
+        /// The charm definition's own <c>Icon</c>, which it resolved from the file name on disk.
+        /// Asking the icon loader for the enum name instead - which is what this did - found
+        /// nothing at all: the files are named "shade_charm_glowingwomb0009charmhatchling.png",
+        /// not "GlowingWomb.png". That is why the summons were invisible rather than merely plain,
+        /// and why they were reported as possibly not spawning.
+        /// </para>
+        /// </summary>
+        private static Sprite? ResolveMinionSprite(LegacyHelper.ShadeController? controller, ShadeCharmId charm)
+        {
+            if (charm == ShadeCharmId.Grimmchild)
+            {
+                var grimmchild = TryLoadGrimmchildSprite();
+                if (grimmchild != null)
+                {
+                    return grimmchild;
+                }
+            }
+
+            try
+            {
+                var inventory = controller != null ? controller.Companion?.Charms : ShadeRuntime.Charms;
+                return inventory?.GetDefinition(charm).Icon;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static Sprite? s_grimmchildSprite;
+        private static bool s_grimmchildSpriteResolved;
+
+        /// <summary>
+        /// Grimmchild's own art, taken from the Grimmchild III shade skin rather than from its
+        /// charm icon. Cached including the failure, so a missing skin folder is not re-probed on
+        /// every spawn.
+        /// </summary>
+        private static Sprite? TryLoadGrimmchildSprite()
+        {
+            if (s_grimmchildSpriteResolved)
+            {
+                return s_grimmchildSprite;
+            }
+
+            s_grimmchildSpriteResolved = true;
+
+            try
+            {
+                ShadeSkinManager.EnsureLoaded();
+                var skin = ShadeSkinManager.Skins?.FirstOrDefault(s => s != null && s.Matches(GrimmchildSkinId));
+                if (skin == null)
+                {
+                    return null;
+                }
+
+                string path = ShadeSkinManager.ResolveSpritePath(skin, GrimmchildSheetName);
+                if (!File.Exists(path))
+                {
+                    return null;
+                }
+
+                var bytes = File.ReadAllBytes(path);
+                var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point };
+                if (!texture.LoadImage(bytes))
+                {
+                    return null;
+                }
+
+                // The idle sheet is a horizontal strip; the first frame is the pose to hold.
+                int frameWidth = Mathf.Max(1, texture.height);
+                int width = Mathf.Min(frameWidth, texture.width);
+                s_grimmchildSprite = Sprite.Create(
+                    texture,
+                    new Rect(0f, 0f, width, texture.height),
+                    new Vector2(0.5f, 0.5f),
+                    100f);
+            }
+            catch
+            {
+                s_grimmchildSprite = null;
+            }
+
+            return s_grimmchildSprite;
+        }
+
         private static SummonSet GetSet(LegacyHelper.ShadeController controller, ShadeCharmId charm)
         {
             var key = (controller, charm);
@@ -200,15 +356,30 @@ namespace LegacyoftheAbyss.Shade
         /// bundled Hollow Knight prefabs: those live in the ~54 MB Knight bundle, and pulling it in
         /// because someone equipped a charm would be a steep cost for a sprite this small.
         /// </summary>
-        private static void ApplyVisual(GameObject go, ShadeCharmId charm)
+        private static void ApplyVisual(GameObject go, LegacyHelper.ShadeController controller, ShadeCharmId charm, float visualScale)
         {
             var renderer = go.AddComponent<SpriteRenderer>();
-            renderer.sprite = ShadeCharmIconLoader.TryLoadIcon(null, charm.ToString());
+            var ownerRenderer = controller != null ? controller.GetComponent<SpriteRenderer>() : null;
+
+            // Hollow Knight's own object for this charm where the bundle has one - a weaverling, a
+            // hatchling, the orbit shield. The charm icon standing in for them is what made these
+            // read as unimplemented, and it is only the fallback now.
+            string? prefabName = BundlePrefabFor(charm);
+            if (prefabName != null
+                && Knight.KnightEffects.TrySpawnSorted(prefabName, go.transform, ownerRenderer, visualScale) != null)
+            {
+                // The prefab draws; this renderer only carries the sorting the fallback would use.
+                renderer.enabled = false;
+                return;
+            }
+
+            renderer.sprite = ResolveMinionSprite(controller, charm);
             renderer.color = new Color(1f, 1f, 1f, 0.9f);
             go.transform.localScale = Vector3.one * 0.5f;
 
-            var owner = LegacyHelper.ShadeController.PrimaryInstance;
-            var ownerRenderer = owner != null ? owner.GetComponent<SpriteRenderer>() : null;
+            // This companion's renderer, not the primary's: two companions can each be wearing the
+            // charm, and sorting a second one's summons against the first draws them in the wrong
+            // layer the moment the two are in different scenes' worth of sorting.
             if (ownerRenderer != null)
             {
                 renderer.sortingLayerID = ownerRenderer.sortingLayerID;

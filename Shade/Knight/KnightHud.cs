@@ -29,5 +29,23 @@ namespace LegacyoftheAbyss.Shade.Knight
         /// <c>KnightAssets.TryBuildSpriteFromTexture</c>.
         /// </summary>
         internal const string SoulOrbFillTexture = "soul_orb_full_v020000";
+
+        /// <summary>
+        /// Baldur Shell's five HUD states, in order from an unbroken shell to a spent one.
+        /// <para>
+        /// Each is the <em>last</em> frame of its clip: these are break animations, so the frame
+        /// that shows the state they leave behind is the one at the end, not the one at the start.
+        /// <c>KnightAssets.TryBuildSprite</c> clamps its frame index, so asking past the end is how
+        /// a caller says "the last one" without knowing the clip's length.
+        /// </para>
+        /// </summary>
+        internal static readonly string[] BaldurShellStageClips =
+        {
+            "UI Appear",
+            "UI Break 1",
+            "UI Break 2",
+            "UI Break 3",
+            "UI Break 4"
+        };
     }
 }

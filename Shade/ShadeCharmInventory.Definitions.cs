@@ -35,6 +35,13 @@ namespace LegacyoftheAbyss.Shade
                     MoveSpeedMultiplier = 1.2f,
                     SprintSpeedMultiplier = 1.2f
                 },
+                hooks: new ShadeCharmHooks
+                {
+                    // Speed comes from the modifiers above; this is only the walk cycle the Knight
+                    // swaps to, which has no stat to hang off.
+                    OnApplied = ctx => ctx.Controller?.SetSprintmasterEquipped(true),
+                    OnRemoved = ctx => ctx.Controller?.SetSprintmasterEquipped(false)
+                },
                 displayName: "Sprintmaster",
                 description: "Bears the likeness of a strange bug known only as 'The Sprintmaster'. Increases the running speed of the bearer, allowing them to avoid danger or overtake rivals.",
                 notchCost: 1,
@@ -59,8 +66,16 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.ShamanStone),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx => ctx.Controller?.MultiplySpellDamage(1.3f),
-                    OnRemoved = ctx => ctx.Controller?.MultiplySpellDamage(1f / 1.3f)
+                    OnApplied = ctx =>
+                    {
+                        ctx.Controller?.MultiplySpellDamage(1.3f);
+                        ctx.Controller?.SetShamanStoneEquipped(true);
+                    },
+                    OnRemoved = ctx =>
+                    {
+                        ctx.Controller?.MultiplySpellDamage(1f / 1.3f);
+                        ctx.Controller?.SetShamanStoneEquipped(false);
+                    }
                 },
                 displayName: "Shaman Stone",
                 description: "Said to contain the knowledge of past generations. Increases the power of Spells, dealing more damage to foes.",
@@ -306,11 +321,12 @@ namespace LegacyoftheAbyss.Shade
                 enumId: ShadeCharmId.FuryOfTheFallen,
                 iconName: "shade_charm_fury_of_the_fallen"));
 
-            // TODO: Teach the companion to unleash Nail Arts faster when Nailmaster's Glory is equipped.
+            // Nail Arts do not exist for the companion yet, so this charm is inert and its
+            // description says so. Drop the trailing sentence when the mechanic lands.
             definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.NailmastersGlory),
                 displayName: "Nailmaster's Glory",
-                description: "Contains the passion of Nailmasters past. Increases the power of Nail Arts, allowing them to be unleashed much quicker.",
+                description: "Contains the passion of Nailmasters past. Increases the power of Nail Arts, allowing them to be unleashed much quicker.\n\nThis charm will be implemented at a later date, when the mechanics related to it are added to the mod.",
                 notchCost: 3,
                 fallbackTint: new Color(0.83f, 0.68f, 0.41f),
                 enumId: ShadeCharmId.NailmastersGlory,
@@ -400,51 +416,23 @@ namespace LegacyoftheAbyss.Shade
                 enumId: ShadeCharmId.SharpShadow,
                 iconName: "shade_charm_sharp_shadow"));
 
-            {
-                bool shamanActive = false;
-                void RefreshShamanState(LegacyHelper.ShadeController controller)
+            // Purely additive: the nail swings as it always does and a beam goes with it. The
+            // health condition lives with the beam, in ShadeController.Slash, so the charm is just
+            // a switch - an update hook re-deciding it every frame is what used to swap the whole
+            // moveset out from under the swing.
+            definitions.Add(new ShadeCharmDefinition(
+                nameof(ShadeCharmId.GrubberflysElegy),
+                hooks: new ShadeCharmHooks
                 {
-                    if (controller == null)
-                    {
-                        return;
-                    }
-
-                    int maxNormal = controller.GetMaxNormalHP();
-                    int currentNormal = controller.GetCurrentNormalHP();
-                    bool shouldEnable = maxNormal <= 0 || currentNormal >= maxNormal;
-                    if (shouldEnable == shamanActive)
-                    {
-                        return;
-                    }
-
-                    shamanActive = shouldEnable;
-                    controller.SetShamanMovesetOverride(shouldEnable);
-                }
-
-                definitions.Add(new ShadeCharmDefinition(
-                    nameof(ShadeCharmId.GrubberflysElegy),
-                    hooks: new ShadeCharmHooks
-                    {
-                        OnApplied = ctx =>
-                        {
-                            shamanActive = false;
-                            RefreshShamanState(ctx.Controller);
-                        },
-                        OnRemoved = ctx =>
-                        {
-                            shamanActive = false;
-                            ctx.Controller?.SetShamanMovesetOverride(false);
-                        },
-                        OnShadeDamaged = (ctx, _) => RefreshShamanState(ctx.Controller),
-                        OnUpdate = (ctx, _) => RefreshShamanState(ctx.Controller)
-                    },
-                    displayName: "Grubberfly's Elegy",
-                    description: "Calls upon the gratitude of every rescued grub. While at full health the shade's nail strikes with brilliant, searing force.",
-                    notchCost: 3,
-                    fallbackTint: new Color(0.50f, 0.68f, 0.94f),
-                    enumId: ShadeCharmId.GrubberflysElegy,
-                    iconName: "shade_charm_grubberflys_elegy"));
-            }
+                    OnApplied = ctx => ctx.Controller?.SetGrubberflyElegyEquipped(true),
+                    OnRemoved = ctx => ctx.Controller?.SetGrubberflyElegyEquipped(false)
+                },
+                displayName: "Grubberfly's Elegy",
+                description: "Calls upon the gratitude of every rescued grub. While at full health, the bearer's nail sends out a wave of energy with every strike.",
+                notchCost: 3,
+                fallbackTint: new Color(0.50f, 0.68f, 0.94f),
+                enumId: ShadeCharmId.GrubberflysElegy,
+                iconName: "shade_charm_grubberflys_elegy"));
 
             definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.HeavyBlow),
@@ -661,13 +649,16 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.Weaversong),
                 hooks: new ShadeCharmHooks
                 {
+                    // Exactly 3, always 3: the weaverlings carry a fixed number rather than a
+                    // share of the nail, so the difficulty multiplier is deliberately not applied.
                     OnApplied = ctx => ShadeCharmSummons.Spawn(
                         ctx.Controller, ShadeCharmId.Weaversong,
-                        count: 3, damage: 5, orbitRadius: 1.9f, seekRange: 9f),
+                        count: 3, damage: 3, orbitRadius: 1.9f, seekRange: 9f,
+                        scaleWithDamageMultiplier: false, groundBound: true, wanders: true),
                     OnRemoved = ctx => ShadeCharmSummons.Dismiss(ctx.Controller, ShadeCharmId.Weaversong)
                 },
                 displayName: "Weaversong",
-                description: "Contains the lingering souls of a departed tribe of weavers. Summons weaverlings to the bearer's side, who will attack nearby foes.",
+                description: "Contains the lingering souls of a departed tribe of weavers. Summons weaverlings that scurry along at the bearer's heel and set upon nearby foes.",
                 notchCost: 2,
                 fallbackTint: new Color(0.45f, 0.36f, 0.62f),
                 enumId: ShadeCharmId.Weaversong,
@@ -683,8 +674,16 @@ namespace LegacyoftheAbyss.Shade
                         if (controller == null)
                             return;
 
-                        if (ShadeCharmSummons.TickSpawnTimer(controller, ShadeCharmId.DefendersCrest, delta, 0.6f))
-                            controller.SpawnCharmDamageBurst(radius: 2.6f, damage: 3, lifeSeconds: 0.3f);
+                        // A cloud every 0.75s that stands for 1.1s and bites every 0.3s, so two
+                        // overlap briefly - which is what makes it a cloud rather than a pulse.
+                        if (ShadeCharmSummons.TickSpawnTimer(controller, ShadeCharmId.DefendersCrest, delta, 0.75f))
+                            // Half the radius it had and a fifth of the opacity: at full strength
+                            // the borrowed cloud filled the screen and buried everything behind it.
+                            controller.SpawnCharmDamageBurst(
+                                radius: 2.1f, damage: 3, lifeSeconds: 1.1f, hitIntervalSeconds: 0.3f,
+                                effectPrefab: LegacyoftheAbyss.Shade.Knight.KnightEffects.DungCloud,
+                                effectScale: 0.25f,
+                                effectAlpha: 0.2f);
                     }
                 },
                 displayName: "Defender's Crest",
@@ -733,7 +732,21 @@ namespace LegacyoftheAbyss.Shade
                         if (evt.WasPrevented || evt.ActualDamage <= 0)
                             return;
 
-                        ctx.Controller?.SpawnCharmDamageBurst(radius: 3.2f, damage: 12, lifeSeconds: 0.25f);
+                        var controller = ctx.Controller;
+                        if (controller == null)
+                            return;
+
+                        // Exactly one nail slash. Taken from the same figure the nail uses, which
+                        // already carries the difficulty multiplier - hence not applying it twice.
+                        // The vines are 6 frames at 20fps, so the volume stands for as long as
+                        // they are drawn rather than the other way round.
+                        controller.SpawnCharmDamageBurst(
+                            radius: 3.2f,
+                            damage: controller.NailSlashDamage,
+                            lifeSeconds: 0.3f,
+                            applyDamageMultiplier: false,
+                            effectClip: LegacyoftheAbyss.Shade.Knight.KnightEffects.ThornAttackClip,
+                            effectClipFps: LegacyoftheAbyss.Shade.Knight.KnightEffects.ThornAttackFps);
                     }
                 },
                 displayName: "Thorns of Agony",
@@ -754,7 +767,7 @@ namespace LegacyoftheAbyss.Shade
                             return;
 
                         // Costs SOUL to birth one, as it costs the Knight in Hallownest.
-                        if (!ShadeCharmSummons.TickSpawnTimer(controller, ShadeCharmId.GlowingWomb, delta, 3.5f))
+                        if (!ShadeCharmSummons.TickSpawnTimer(controller, ShadeCharmId.GlowingWomb, delta, 4f))
                             return;
 
                         if (controller.GetShadeSoul() < 8)
@@ -764,7 +777,8 @@ namespace LegacyoftheAbyss.Shade
                         ShadeCharmSummons.AddOne(
                             controller, ShadeCharmId.GlowingWomb,
                             maxAlive: 4, damage: 9, seekRange: 12f,
-                            lifeSeconds: 12f, expiresOnHit: true);
+                            lifeSeconds: 12f, expiresOnHit: true,
+                            scaleWithDamageMultiplier: false);
                     },
                     OnRemoved = ctx => ShadeCharmSummons.Dismiss(ctx.Controller, ShadeCharmId.GlowingWomb)
                 },
@@ -793,31 +807,23 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.Grimmchild),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx => ShadeCharmSummons.Spawn(
-                        ctx.Controller, ShadeCharmId.Grimmchild,
-                        count: 1, damage: 14, orbitRadius: 2.2f, seekRange: 11f),
+                    OnApplied = ctx => ShadeCharmSummons.SpawnGrimmchild(ctx.Controller),
                     OnRemoved = ctx => ShadeCharmSummons.Dismiss(ctx.Controller, ShadeCharmId.Grimmchild)
                 },
                 displayName: "Grimmchild",
-                description: "A child of the Nightmare's Heart, held close. It drifts beside the bearer and darts at foes who come near, hungry for the flames within them.",
+                description: "A child of the Nightmare's Heart, held close. It rides at the bearer's shoulder and spits fire at any foe that draws near, hungry for the flames within them.",
                 notchCost: 2,
                 fallbackTint: new Color(0.76f, 0.26f, 0.30f),
                 enumId: ShadeCharmId.Grimmchild,
                 iconName: "shade_charm_grimmchildcharmgrimmkin04"));
 
+            // Inert on purpose: the companion has no Dream Nail, so the SOUL bonuses this used to
+            // grant were a stand-in for a mechanic that does not exist and did not match the
+            // charm. Equippable and collectable, but it does nothing until the Dream Nail lands.
             definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.DreamWielder),
-                statModifiers: new ShadeCharmStatModifiers
-                {
-                    ShadeSoulCapacityFlatBonus = 11
-                },
-                hooks: new ShadeCharmHooks
-                {
-                    OnApplied = ctx => ctx.Controller?.AddSoulGainBonus(4),
-                    OnRemoved = ctx => ctx.Controller?.AddSoulGainBonus(-4)
-                },
                 displayName: "Dream Wielder",
-                description: "Charm of an ancient dream-seer. The bearer draws SOUL more readily from every strike, and holds a little more of it than they otherwise could.",
+                description: "Transient charm created for those who wield the Dream Nail and collect Essence. Allows the bearer to charge the Dream Nail faster and collect more SOUL when striking foes.\n\nThis charm will be implemented at a later date, when the mechanics related to it are added to the mod.",
                 notchCost: 1,
                 fallbackTint: new Color(0.60f, 0.72f, 0.88f),
                 enumId: ShadeCharmId.DreamWielder,
@@ -829,7 +835,9 @@ namespace LegacyoftheAbyss.Shade
                 {
                     OnApplied = ctx => ShadeCharmSummons.Spawn(
                         ctx.Controller, ShadeCharmId.Dreamshield,
-                        count: 1, damage: 10, orbitRadius: 2.4f, seekRange: 0f),
+                        count: 1, damage: 10, orbitRadius: 0.6f, seekRange: 0f,
+                        faceOutward: true, orbitVerticalScale: 1f,
+                        orbitSpeed: 60f, visualScale: 0.6f),
                     OnRemoved = ctx => ShadeCharmSummons.Dismiss(ctx.Controller, ShadeCharmId.Dreamshield)
                 },
                 displayName: "Dreamshield",

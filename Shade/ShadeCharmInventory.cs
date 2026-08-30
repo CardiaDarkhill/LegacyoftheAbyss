@@ -27,6 +27,16 @@ namespace LegacyoftheAbyss.Shade
 
         private const float HivebloodRegenDurationSeconds = 10f;
 
+        /// <summary>Blows Baldur Shell absorbs before the shell breaks.</summary>
+        public const int BaldurShellMaxCharges = 4;
+
+        /// <summary>
+        /// Shell durability. Lives here rather than on the controller because the controller is
+        /// rebuilt with the scene and the shell is not supposed to mend itself in a doorway - the
+        /// companion, and so its inventory, outlives the room.
+        /// </summary>
+        private int _baldurShellCharges = BaldurShellMaxCharges;
+
         public event Action? StateChanged;
 
         public bool HivebloodMaskRegenerating => _hivebloodPendingMaskRestore;
@@ -89,6 +99,38 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
+        /// <summary>Blows the shell can still absorb. Zero is broken until the next bench.</summary>
+        public int BaldurShellCharges => _baldurShellCharges;
+
+        /// <summary>
+        /// Spends one blow. False once the shell is gone, which is how it "just stops working"
+        /// - there is no broken-charm notification for it, by design.
+        /// </summary>
+        public bool TryConsumeBaldurShellCharge()
+        {
+            if (_baldurShellCharges <= 0)
+            {
+                return false;
+            }
+
+            _baldurShellCharges--;
+            RaiseStateChanged();
+            return true;
+        }
+
+        /// <summary>Mends the shell. Called from the bench, alongside the fragile-charm repairs.</summary>
+        public bool RefillBaldurShellCharges()
+        {
+            if (_baldurShellCharges >= BaldurShellMaxCharges)
+            {
+                return false;
+            }
+
+            _baldurShellCharges = BaldurShellMaxCharges;
+            RaiseStateChanged();
+            return true;
+        }
+
         public bool IsEquipped(ShadeCharmId id) => _equipped.Contains(id);
 
         public bool IsOwned(ShadeCharmId id) => _owned.Contains(id);
@@ -124,6 +166,27 @@ namespace LegacyoftheAbyss.Shade
                 .Select(id => _definitionMap[id])
                 .ToArray();
         }
+
+        /// <summary>
+        /// The charms whose effects are actually running: equipped, minus the broken ones.
+        /// <para>
+        /// A broken fragile charm stays in the loadout so that repairing it at a bench - the same
+        /// place the loadout is edited - restores it rather than making the player rebuild the
+        /// set. It keeps its notches for the same reason: freeing them on the break could leave a
+        /// repair overcharming a loadout that was legal when it was assembled. So "equipped" is no
+        /// longer the same question as "in effect", and anything applying effects wants this one.
+        /// </para>
+        /// </summary>
+        public IReadOnlyCollection<ShadeCharmDefinition> GetActiveDefinitions()
+        {
+            return _equippedOrder
+                .Where(id => !_broken.Contains(id) && _definitionMap.ContainsKey(id))
+                .Select(id => _definitionMap[id])
+                .ToArray();
+        }
+
+        /// <summary>Equipped, unbroken, and therefore actually doing something.</summary>
+        public bool IsActive(ShadeCharmId id) => _equipped.Contains(id) && !_broken.Contains(id);
 
         public IReadOnlyCollection<ShadeCharmId> GetOwnedCharms() => _owned.ToArray();
 
@@ -395,6 +458,10 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
+        /// <summary>
+        /// Marks a charm broken without unequipping it. See <see cref="GetActiveDefinitions"/> for
+        /// why it stays in the loadout.
+        /// </summary>
         public bool BreakCharm(ShadeCharmId id)
         {
             if (!_definitionMap.ContainsKey(id))
@@ -403,13 +470,7 @@ namespace LegacyoftheAbyss.Shade
             }
 
             bool newlyBroken = _broken.Add(id);
-            bool removed = RemoveEquippedInternal(id);
-            if (removed)
-            {
-                _overcharmAttemptCounter = 0;
-                RecalculateOvercharmed();
-            }
-            if (newlyBroken || removed)
+            if (newlyBroken)
             {
                 RaiseStateChanged();
             }
@@ -469,13 +530,10 @@ namespace LegacyoftheAbyss.Shade
 
             if (equipped != null)
             {
+                // Broken charms are equipped like any other now, so a save written after one broke
+                // restores the loadout the player left rather than the gaps in it.
                 foreach (var id in SanitizeIds(equipped))
                 {
-                    if (_broken.Contains(id))
-                    {
-                        continue;
-                    }
-
                     _owned.Add(id);
                     AddEquippedInternal(id);
                 }

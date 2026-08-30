@@ -92,4 +92,79 @@ public partial class LegacyHelper
             return heroCollider == null || heroCollider.GetComponentInParent<ShadeController>() == null;
         }
     }
+
+    /// <summary>
+    /// Gathering Swarm, run through the game's own rosary magnet rather than a second one.
+    /// <para>
+    /// Every <c>CurrencyObjectBase</c> already knows how to fly to the hero; it asks
+    /// <c>MagnetToolIsEquipped</c> once, from <c>OnEnable</c>, and starts its <c>Getter</c>
+    /// coroutine if the answer is yes. Answering yes for the charm gets the real behaviour -
+    /// the start delay, the little lift, the effect object, the attraction curve - none of which
+    /// a hand-written pull reproduced. The companion is deliberately not the destination: the
+    /// game's magnet drags to <c>HeroController.instance</c>, and rosaries gathered to the
+    /// companion would be gathered to something that cannot spend them.
+    /// </para>
+    /// <para>
+    /// Pooled pickups are re-enabled on every drop, so anything dropped after the charm goes on
+    /// picks this up by itself. <see cref="LegacyoftheAbyss.Shade.ShadeCharmSummons"/> is not
+    /// involved: there is nothing to summon.
+    /// </para>
+    /// </summary>
+    [HarmonyPatch]
+    internal static class CurrencyObjectBase_MagnetToolIsEquipped_GatheringSwarm
+    {
+        private static IEnumerable<MethodBase> TargetMethods()
+        {
+            var method = AccessTools.DeclaredMethod(typeof(CurrencyObjectBase), "MagnetToolIsEquipped", System.Type.EmptyTypes);
+            if (method == null)
+            {
+                LogWarning("Gathering Swarm: CurrencyObjectBase.MagnetToolIsEquipped did not resolve; the charm will not draw rosaries in.");
+                yield break;
+            }
+
+            yield return method;
+        }
+
+        private static void Postfix(ref bool __result)
+        {
+            if (__result)
+            {
+                return;
+            }
+
+            __result = GatheringSwarmActive;
+        }
+    }
+
+    /// <summary>
+    /// Whether any companion is wearing Gathering Swarm. Asked per pickup rather than pushed, so
+    /// a companion appearing or changing its loadout needs no bookkeeping here.
+    /// </summary>
+    internal static bool GatheringSwarmActive
+    {
+        get
+        {
+            try
+            {
+                var instances = ShadeController.ActiveInstances;
+                if (instances == null)
+                {
+                    return false;
+                }
+
+                foreach (var instance in instances)
+                {
+                    if (instance != null && instance.HasGatheringSwarm)
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+    }
 }

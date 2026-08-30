@@ -84,6 +84,9 @@ public partial class LegacyHelper
         public Vector2 muzzleOffset = new Vector2(0.9f, 0f);
 
         private Transform hornetTransform;
+
+        /// <summary>Hornet, for anything spawned by this companion that must not hit her.</summary>
+        internal Transform HornetRoot => hornetTransform;
         private float fireTimer;
         private SpriteRenderer sr;
         private float _spriteScale = 1.5f;
@@ -140,6 +143,9 @@ public partial class LegacyHelper
         private static Mesh s_simpleQuadMesh;
         private static Material s_sprintBurstMat;
         private int facing = 1;
+
+        /// <summary>Which way this companion is drawn, for anything that has to sit beside it.</summary>
+        internal int Facing => facing;
         private float nailTimer;
 
         /// <summary>
@@ -215,6 +221,24 @@ public partial class LegacyHelper
         private Vector2 activeDashDir;
         private bool voidHeartEvadeActive;
         private bool sharpShadowEquipped;
+
+        /// <summary>Drives the Knight's Sprintmaster walk cycle; the speed comes from the snapshot.</summary>
+        private bool sprintmasterEquipped;
+
+        /// <summary>Whether the nail throws a Grubberfly beam alongside its swing.</summary>
+        private bool grubberflyElegyEquipped;
+
+        /// <summary>
+        /// Shaman Stone, as a plain flag. Its multiplier is not a substitute: Flukenest's damage is
+        /// a fixed pair of numbers rather than a scaling, so it has to ask for the charm by name.
+        /// </summary>
+        private bool shamanStoneEquipped;
+
+        /// <summary>
+        /// Whether Fury of the Fallen is presently paying out. Set alongside the aura, so the one
+        /// answer serves both the effect and anything that keys off the same "last mask" state.
+        /// </summary>
+        private bool furyModeActive;
         private bool sharpShadowDashActive;
         private GameObject sharpShadowDashHitbox;
         private ShadeAoE sharpShadowDashAoE;
@@ -309,17 +333,19 @@ public partial class LegacyHelper
         private float focusAlphaWhileChannel = 0.75f;
         private float focusHealRange = 6f;
         private float focusSoulAccumulator;
+
+        /// <summary>
+        /// SOUL this channel has already spent. The drain has to be able to tell "the meter ran
+        /// dry because something else spent it" from "this channel spent the last of it", and the
+        /// remaining total cannot: a full meter is an exact multiple of the cost, so the last heal
+        /// legitimately ends on zero.
+        /// </summary>
+        private int focusSoulDrainedThisChannel;
         private Renderer focusAuraRenderer;
         private float focusAuraBaseSize = 12f;
         private bool focusDamageShieldEnabled;
         private bool focusDamageShieldAbsorbedThisChannel;
         private bool focusHealingDisabled;
-        private bool shamanMovesetActive;
-        private GameObject shamanHorizontalSlashTemplate;
-        private GameObject shamanHorizontalAltSlashTemplate;
-        private GameObject shamanUpSlashTemplate;
-        private GameObject shamanDownSlashTemplate;
-        private HeroControllerConfig shamanSlashConfigSource;
         private bool carefreeMelodyEquipped;
         private float carefreeMelodyChance;
         private GameObject carefreeMelodyShieldEffect;
