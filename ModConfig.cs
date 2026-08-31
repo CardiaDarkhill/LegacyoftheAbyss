@@ -401,6 +401,16 @@ public class ModConfig
     // the companion body's collider with it so the hurtbox does not stay a head taller than the
     // art. Cosmetic tuning - raise it if the Knight reads as too small beside her.
     public float knightScale = 0.57f;
+    /// <summary>
+    /// How high a lip the Knight steps over rather than stopping at, as a share of its own height.
+    /// <para>
+    /// Hornet is moved by Unity's physics, which rides her up small irregularities on its own. The
+    /// Knight is moved by a swept cast, which stops dead at anything the sweep touches - so without
+    /// this it catches on seams between terrain colliders and on ground that is a few centimetres
+    /// uneven, none of which is visible. Zero switches stepping off entirely.
+    /// </para>
+    /// </summary>
+    public float knightStepHeight = 0.35f;
     // Give the Shade a clone of Hornet's hero light. Scene darkness is a shader cutout fed by a
     // camera that renders that object, so this is what lets the Shade be seen - and light its own
     // surroundings - in a dark room away from Hornet.
@@ -809,24 +819,34 @@ public sealed class DifficultyPreset
     };
 
     /// <summary>
-    /// Deliberately not balanced. Every lever this screen has, pulled: half damage on both of them,
-    /// a Shade down to a single mask that can heal neither of you, and a Bind that returns one mask
-    /// to Hornet and none to the Shade. Meant to be beaten rather than played at.
+    /// Deliberately not balanced: half damage on both characters, a Shade down to a single mask, and
+    /// a Bind that returns one mask to Hornet rather than three.
+    /// <para>
+    /// What is deliberately <em>not</em> taken away is the companion's ability to keep playing. It
+    /// heals - itself, and Hornet, and at full masks so it can spend SOUL purely on her - and
+    /// Hornet's Bind still returns it a mask, so a death is not the end of the second player's
+    /// evening. A Shade on one mask with the damage this preset deals is punishing enough without
+    /// also being unrevivable; a difficulty that ends one player's session is not a difficulty.
+    /// </para>
     /// </summary>
     public static readonly DifficultyPreset AbyssPreset = new DifficultyPreset
     {
         Name = Abyss,
-        Description = "Entirely unfair, and meant to be. Half damage from needle and nail, a Shade on a single mask, and healing that reaches neither of you. A challenge to be beaten rather than a difficulty to be played at.",
+        Description = "Entirely unfair, and meant to be. Half damage from needle and nail, a Shade on a single mask, and a Bind that returns Hornet one. The Shade can still heal you both, and can still be revived - the second player should be tested, not benched.",
         HornetNeedleDamage = 0.5f,
         HornetSilkSkillDamage = 0.6f,
         ShadeNailDamage = 0.5f,
         ShadeSpellDamage = 0.6f,
         BindHornetHeal = 1,
-        BindShadeHeal = 0,
-        FocusHornetHeal = 0,
-        FocusShadeHeal = 0,
+        BindShadeHeal = 1,
+        FocusHornetHeal = 1,
+        FocusShadeHeal = 1,
         // The lowest step, which ComputeShadeMaskCount reads as "always 1" rather than as a tenth.
-        ShadeMaskFraction = ModConfig.MinShadeMaskFraction
+        ShadeMaskFraction = ModConfig.MinShadeMaskFraction,
+        // On, so the companion can channel Focus while undamaged and act as Hornet's healer. On a
+        // single mask it has almost no self-healing to do, which would otherwise leave the SOUL it
+        // earns with nowhere to go.
+        ShadeFocusAtFullMasks = true
     };
 
     /// <summary>Every preset, in the order the menu cycles through them.</summary>

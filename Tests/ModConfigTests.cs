@@ -154,15 +154,32 @@ public class ModConfigTests
         var abyss = DifficultyPreset.AbyssPreset;
 
         Assert.True(abyss.HornetNeedleDamage < hard.HornetNeedleDamage);
+        Assert.True(abyss.HornetSilkSkillDamage < hard.HornetSilkSkillDamage);
         Assert.True(abyss.ShadeNailDamage < hard.ShadeNailDamage);
+        Assert.True(abyss.ShadeSpellDamage < hard.ShadeSpellDamage);
         Assert.True(abyss.BindHornetHeal < hard.BindHornetHeal);
-        Assert.True(abyss.BindShadeHeal < hard.BindShadeHeal);
-        Assert.True(abyss.FocusShadeHeal < hard.FocusShadeHeal);
         Assert.True(abyss.ShadeMaskFraction < hard.ShadeMaskFraction);
 
         // The lowest step, which ComputeShadeMaskCount reads as "always 1 mask" rather than as a
         // tenth of Hornet's - so this is the floor, not merely a small fraction.
         Assert.Equal(ModConfig.MinShadeMaskFraction, abyss.ShadeMaskFraction);
+    }
+
+    /// <summary>
+    /// The deliberate exception to Abyss being unfair, asserted so it cannot be tuned away as an
+    /// oversight: the companion keeps its healing and stays revivable. On a single mask and at half
+    /// damage the difficulty is already there, and a preset that takes the second player out of the
+    /// game for good is not a difficulty setting.
+    /// </summary>
+    [Fact]
+    public void AbyssStillLetsTheCompanionHealAndBeRevived()
+    {
+        var abyss = DifficultyPreset.AbyssPreset;
+
+        Assert.True(abyss.BindShadeHeal >= 1, "Hornet's Bind must still revive and heal the companion.");
+        Assert.True(abyss.FocusShadeHeal >= 1, "The companion must still be able to heal itself.");
+        Assert.True(abyss.FocusHornetHeal >= 1, "The companion must still be able to heal Hornet.");
+        Assert.True(abyss.ShadeFocusAtFullMasks, "On one mask, Focus is only useful if it works at full health.");
     }
 
     [Fact]

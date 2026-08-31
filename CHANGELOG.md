@@ -5,6 +5,11 @@ controls it; the reasoning belongs in the commit and the code.
 
 ## Unreleased
 
+### Fixed
+
+- The Hornet Needle damage slider now does something. It was scaling a field that needle strikes
+  never read, so only Silk Skills responded.
+
 ### Added
 
 - Soul Vessels. The companion earns one for every two increases to Hornet's silk maximum, up to
@@ -17,8 +22,11 @@ controls it; the reasoning belongs in the commit and the code.
 - Starting a new game now asks first: whether to reset that save slot's shade progress, which
   difficulty to play at, and whether to play as the Shade or the Knight. `shadeNewGameOptionsEnabled`
   turns the screen off.
-- A fourth difficulty, Abyss, which is deliberately unfair. What used to be Abyss is now Hard, so a
-  run already being played at those values keeps them under the new name.
+- A fourth difficulty, Abyss, which is deliberately unfair - though the companion keeps its healing
+  and stays revivable, so a death does not end the second player's evening. What used to be Abyss is
+  now Hard, so a run already being played at those values keeps them under the new name.
+- The Knight steps over small lips and seams in the ground instead of stopping dead at them.
+  `knightStepHeight` sets how high a lip that is, as a share of its own height.
 
 - A buff bar under the companion's mask row, showing Baldur Shell's remaining blows. "Buff Bar" is
   on by default; `hudBuffBarOffsetX`, `hudBuffBarOffsetY`, `hudBuffIconSize`, `hudBuffIconScale` and

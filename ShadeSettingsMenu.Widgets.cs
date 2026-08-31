@@ -922,6 +922,27 @@ public static partial class ShadeSettingsMenu
             fallbackFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
     }
 
+    /// <summary>
+    /// Cuts the game's own Submit/Cancel wiring out of a borrowed object.
+    /// <para>
+    /// <see cref="EventTrigger"/> is where the game keeps it. It lives in a UnityEngine namespace,
+    /// so every "strip anything that is not Unity's" pass waves it through, and it dispatches
+    /// alongside <c>MenuButton</c> rather than through it - so clearing <c>OnSubmitPressed</c> does
+    /// not disconnect it. A borrowed row keeps doing its old job until this runs.
+    /// </para>
+    /// </summary>
+    private static void StripBorrowedEventTriggers(GameObject target)
+    {
+        if (target == null)
+            return;
+
+        foreach (var trigger in target.GetComponents<EventTrigger>())
+        {
+            if (trigger != null)
+                Object.DestroyImmediate(trigger);
+        }
+    }
+
     private static void SanitizeSelectableHierarchy(GameObject root)
     {
         if (root == null)
@@ -933,6 +954,22 @@ public static partial class ShadeSettingsMenu
                 continue;
             if (comp is CancelRouter || comp is SliderMenuDriver)
                 continue;
+
+            // EventTrigger is the one UnityEngine component that carries *game* behaviour: the
+            // Options screen's rows navigate from a Submit entry on one of these, not from
+            // MenuButton.OnSubmitPressed, so clearing that event's listeners leaves the row still
+            // wired to whatever it used to open. A cloned row of ours therefore opened the base
+            // game's Game Options screen when pressed. The pause settings screens have always done
+            // this too and only got away with it because they hide gameOptionsMenuScreen and
+            // swallow ShowMenu for it while they are up; nothing hides it on the title screen.
+            //
+            // Kept above the namespace test below, which is what would otherwise wave it through.
+            if (comp is EventTrigger)
+            {
+                Object.DestroyImmediate(comp);
+                continue;
+            }
+
             var type = comp.GetType();
             string ns = type.Namespace ?? string.Empty;
             if (ns.StartsWith("UnityEngine"))

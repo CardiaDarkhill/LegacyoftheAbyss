@@ -200,8 +200,36 @@ public class GameApiContractTests
     {
         GameApiContract.RequireField(
             typeof(DamageEnemies), field, typeof(bool),
-            "Read by DamageEnemies_Start_Mod to decide whether a damage object is Hornet's, and "
-            + "whether it is a needle strike or a silk skill.");
+            "Read by DamageEnemies_DoDamage_HornetScaling to decide whether a damage object is "
+            + "Hornet's, and whether it is a needle strike or a silk skill.");
+    }
+
+    /// <summary>
+    /// Where Hornet's damage is scaled, and the two fields it scales.
+    /// <para>
+    /// <c>nailDamageMultiplier</c> is the one that matters for the Needle slider and the reason this
+    /// is asserted at all: a needle damager never reads <c>damageDealt</c>, so scaling that field
+    /// moved a number nothing consumed and the slider did nothing for a release. If the multiplier
+    /// field or the hook stops resolving, that silence comes straight back.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void HornetsDamageCanBeScaledWhereTheHitResolves()
+    {
+        GameApiContract.RequireMethod(
+            typeof(DamageEnemies), "DoDamage",
+            "Patched to scale Hornet's damage at the moment of the hit rather than at spawn.",
+            "target", "isFirstHit");
+
+        GameApiContract.RequireField(
+            typeof(DamageEnemies), "nailDamageMultiplier", typeof(float),
+            "The only thing a needle hit multiplies - DoDamage restarts the damage stack from "
+            + "PlayerData.nailDamage and applies this, ignoring damageDealt entirely.");
+
+        GameApiContract.RequireField(
+            typeof(DamageEnemies), "useNailDamage", typeof(bool),
+            "Tells the two apart: set means the hit reads nailDamageMultiplier, clear means it "
+            + "reads damageDealt.");
     }
 
     [Fact]

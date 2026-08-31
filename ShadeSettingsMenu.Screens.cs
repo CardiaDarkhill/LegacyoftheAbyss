@@ -47,6 +47,8 @@ public static partial class ShadeSettingsMenu
         if (ms == null)
             return;
 
+        StripBorrowedEventTriggers(ms.gameObject);
+
         foreach (var comp in ms.GetComponents<MonoBehaviour>())
         {
             if (comp == null)
@@ -283,6 +285,9 @@ public static partial class ShadeSettingsMenu
         if (pauseMenuComponent != null)
             Object.DestroyImmediate(pauseMenuComponent);
         ms.backButton.cancelAction = CancelAction.DoNothing;
+        // Skipped by StripTemplateComponents so that it survives at all, which also means it keeps
+        // the game's own way out of the screen it was borrowed from.
+        StripBorrowedEventTriggers(ms.backButton.gameObject);
         var router = ms.backButton.gameObject.GetComponent<CancelRouter>() ?? ms.backButton.gameObject.AddComponent<CancelRouter>();
         router.target = cancelTarget;
         var backLayout = ms.backButton.GetComponent<LayoutElement>() ?? ms.backButton.gameObject.AddComponent<LayoutElement>();

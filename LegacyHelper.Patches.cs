@@ -1268,12 +1268,30 @@ public partial class LegacyHelper
         }
     }
 
-    [HarmonyPatch(typeof(DamageEnemies), "Start")]
-    private class DamageEnemies_Start_Mod
+    /// <summary>
+    /// Scales Hornet's damage, needle and silk skills separately, at the moment of the hit.
+    /// <para>
+    /// This used to run once when a damage object was created, and scale <c>damageDealt</c>. That
+    /// worked for silk skills and did <em>nothing at all</em> for the needle, because a damager with
+    /// <c>useNailDamage</c> set never reads <c>damageDealt</c>: <c>DoDamage</c> starts the damage
+    /// stack over from <c>PlayerData.nailDamage</c> and applies <c>nailDamageMultiplier</c> to it,
+    /// discarding whatever was in the field. The Needle slider therefore moved a number nothing
+    /// consumed. Scaling at spawn was also at the mercy of anything that writes either field later -
+    /// pooled damagers, projectiles that cache and restore their own amounts.
+    /// </para>
+    /// <para>
+    /// So it happens here instead: the multiplier is applied to whichever of the two the hit is
+    /// actually going to read, immediately before the hit resolves, and put back immediately after.
+    /// The Shade's own slash is not caught by this - it clears <c>sourceIsHero</c> and
+    /// <c>isHeroDamage</c> on its cloned damager precisely so it is not mistaken for hers.
+    /// </para>
+    /// </summary>
+    [HarmonyPatch(typeof(DamageEnemies), nameof(DamageEnemies.DoDamage), new[] { typeof(GameObject), typeof(bool) })]
+    private class DamageEnemies_DoDamage_HornetScaling
     {
-        // Private on DamageEnemies and read once per damage object spawned, so resolved once here
-        // rather than per call. Asserted in Tests/GameApiContract.cs: if one stops resolving,
-        // Hornet's damage sliders silently stop telling needle from silk skill.
+        // Private on DamageEnemies, so resolved once here rather than per hit. Asserted in
+        // Tests/GameApiContract.cs: if one stops resolving, Hornet's damage sliders silently stop
+        // telling needle from silk skill.
 
         private static readonly FieldInfo SourceIsHeroField =
             typeof(DamageEnemies).GetField("sourceIsHero", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -1282,33 +1300,96 @@ public partial class LegacyHelper
         private static readonly FieldInfo IsNailAttackField =
             typeof(DamageEnemies).GetField("isNailAttack", BindingFlags.Instance | BindingFlags.NonPublic);
 
+        /// <summary>
+        /// What the prefix changed, so the postfix can put it back exactly. Built complete and
+        /// assigned in one go - Harmony's analyser reads any member assignment through a patch
+        /// parameter, an object initializer included, as a write that will not survive the call.
+        /// </summary>
+        internal readonly struct Scaled
+        {
+            internal Scaled(int damageDealt, float nailMultiplier)
+            {
+                Applied = true;
+                DamageDealt = damageDealt;
+                NailMultiplier = nailMultiplier;
+            }
+
+            public bool Applied { get; }
+            public int DamageDealt { get; }
+            public float NailMultiplier { get; }
+        }
+
         private static bool ReadPrivateBool(FieldInfo field, DamageEnemies instance)
         {
             return field?.GetValue(instance) is bool value && value;
         }
 
-        private static void Postfix(DamageEnemies __instance)
+        private static void Prefix(DamageEnemies __instance, ref Scaled __state)
         {
+            __state = default;
+
             try
             {
                 bool src = ReadPrivateBool(SourceIsHeroField, __instance);
                 bool hero = ReadPrivateBool(IsHeroDamageField, __instance);
-                if (src || hero)
+                if (!src && !hero)
                 {
-                    // Needle strikes and everything else are multiplied separately so the
-                    // difficulty presets can weaken melee without touching silk skills. The
-                    // three conditions here are the same ones DamageEnemies itself uses to
-                    // decide whether a hit counts as a nail hit (see its DoDamage).
-                    bool isNeedle = __instance.attackType == AttackTypes.Nail
-                        || __instance.attackType == AttackTypes.NailBeam
-                        || ReadPrivateBool(IsNailAttackField, __instance);
-                    float multiplier = isNeedle
-                        ? ModConfig.Instance.hornetDamageMultiplier
-                        : ModConfig.Instance.hornetSilkSkillDamageMultiplier;
+                    return;
+                }
+
+                // The three conditions here are the same ones DamageEnemies itself uses to decide
+                // whether a hit counts as a nail hit (see its DoDamage).
+                bool isNeedle = __instance.attackType == AttackTypes.Nail
+                    || __instance.attackType == AttackTypes.NailBeam
+                    || ReadPrivateBool(IsNailAttackField, __instance);
+                float multiplier = isNeedle
+                    ? ModConfig.Instance.hornetDamageMultiplier
+                    : ModConfig.Instance.hornetSilkSkillDamageMultiplier;
+
+                if (Mathf.Approximately(multiplier, 1f))
+                {
+                    return;
+                }
+
+                __state = new Scaled(__instance.damageDealt, __instance.nailDamageMultiplier);
+
+                if (__instance.useNailDamage)
+                {
+                    // Floored so a low setting weakens a hit rather than erasing it, which is what
+                    // the Max(1, ...) on the other branch has always done for silk skills.
+                    var playerData = PlayerData.instance;
+                    int nailDamage = playerData != null ? playerData.nailDamage : 0;
+                    float floor = nailDamage > 0 ? 1f / nailDamage : 0f;
+                    __instance.nailDamageMultiplier = Mathf.Max(__instance.nailDamageMultiplier * multiplier, floor);
+                }
+                else
+                {
                     __instance.damageDealt = Mathf.Max(1, Mathf.RoundToInt(__instance.damageDealt * multiplier));
                 }
             }
-            catch { }
+            catch
+            {
+            }
+        }
+
+        private static void Postfix(DamageEnemies __instance, Scaled __state)
+        {
+            // Copied out whole before anything is read off it. Harmony analyser reads any member
+            // access through a patch parameter as a write it is about to lose, reads included.
+            var scaled = __state;
+            if (!scaled.Applied)
+            {
+                return;
+            }
+
+            try
+            {
+                __instance.damageDealt = scaled.DamageDealt;
+                __instance.nailDamageMultiplier = scaled.NailMultiplier;
+            }
+            catch
+            {
+            }
         }
     }
 

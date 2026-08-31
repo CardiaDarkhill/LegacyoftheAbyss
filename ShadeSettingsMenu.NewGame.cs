@@ -430,8 +430,18 @@ public static partial class ShadeSettingsMenu
         const float RowSpacing = 24f;
         float cursorY = 0f;
 
-        var title = CreateNewGameLabel(content, "Legacy of the Abyss", cursorY, 72f, TextAnchor.MiddleCenter, Color.white);
-        cursorY += 72f + RowSpacing;
+        CreateNewGameLabel(content, "Legacy of the Abyss", cursorY, 72f, TextAnchor.MiddleCenter, Color.white, sliderLabelStyle);
+        cursorY += 72f;
+
+        var subtitle = CreateNewGameLabel(content,
+            "Difficulty and Character selection may be changed later from the pause menu",
+            cursorY, 52f, TextAnchor.UpperCenter, DescriptionColor, toggleLabelStyle);
+        if (subtitle != null)
+        {
+            subtitle.fontSize = Mathf.Max(12, Mathf.RoundToInt(subtitle.fontSize * 0.78f));
+        }
+
+        cursorY += 52f + RowSpacing;
 
         MenuSelectable AddRow(string label, string help, Func<string> value, Action<int> step)
         {
@@ -538,10 +548,6 @@ public static partial class ShadeSettingsMenu
             newGameScreen.defaultHighlight = first;
         }
 
-        if (title != null)
-        {
-            title.raycastTarget = false;
-        }
     }
 
     /// <summary>
@@ -563,6 +569,7 @@ public static partial class ShadeSettingsMenu
 
         back.OnSubmitPressed.RemoveAllListeners();
         back.cancelAction = CancelAction.DoNothing;
+        StripBorrowedEventTriggers(back.gameObject);
         back.OnSubmitPressed.AddListener(() =>
         {
             var manager = newGameBuiltFor ?? UIManager.instance;
@@ -592,7 +599,7 @@ public static partial class ShadeSettingsMenu
         return ((current + step) % count + count) % count;
     }
 
-    private static Text CreateNewGameLabel(RectTransform parent, string label, float cursorY, float height, TextAnchor alignment, Color color)
+    private static Text CreateNewGameLabel(RectTransform parent, string label, float cursorY, float height, TextAnchor alignment, Color color, TextStyle? style)
     {
         var go = new GameObject("Heading");
         var rect = go.AddComponent<RectTransform>();
@@ -604,9 +611,11 @@ public static partial class ShadeSettingsMenu
         rect.sizeDelta = new Vector2(0f, height);
 
         var text = go.AddComponent<Text>();
-        ApplyTextStyle(text, sliderLabelStyle, alignment, color);
+        ApplyTextStyle(text, style, alignment, color);
         text.text = label;
-        text.horizontalOverflow = HorizontalWrapMode.Overflow;
+        text.raycastTarget = false;
+        text.horizontalOverflow = HorizontalWrapMode.Wrap;
+        text.verticalOverflow = VerticalWrapMode.Overflow;
         return text;
     }
 }

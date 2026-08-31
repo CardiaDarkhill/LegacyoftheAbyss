@@ -639,9 +639,41 @@ public partial class LegacyHelper
             }
         }
 
+        /// <summary>How far a sweep stops short of what it hits, so the body never rests inside it.</summary>
+        private const float KnightSweepSkin = 0.01f;
+
+        /// <summary>
+        /// Sweeps the shape the body actually is.
+        /// <para>
+        /// The body is a capsule and this used to cast a box over it, which threw away the rounded
+        /// bottom corners - and those corners are the whole reason a capsule rides over a small lip
+        /// instead of catching on its edge. Sized off the collider's own bounds, as the box was, so
+        /// the reach is unchanged.
+        /// </para>
+        /// </summary>
+        private RaycastHit2D KnightSweep(Vector2 origin, Vector2 direction, float distance, int mask)
+        {
+            Vector2 size = (Vector2)bodyCol.bounds.size * 0.9f;
+
+            if (bodyCol is CapsuleCollider2D capsule)
+            {
+                return Physics2D.CapsuleCast(origin, size, capsule.direction, 0f, direction, distance, mask);
+            }
+
+            return Physics2D.BoxCast(origin, size, 0f, direction, distance, mask);
+        }
+
         /// <summary>
         /// Stops the body at terrain rather than letting MovePosition push it through. Each axis is
         /// swept separately so sliding along a wall or a ceiling still works.
+        /// <para>
+        /// Hornet is moved by Unity's physics, which rides her up over small irregularities without
+        /// anyone asking it to. The Knight is moved by a swept cast, which has no such generosity:
+        /// it stops at whatever the sweep touches, and much of Silksong's ground is a few
+        /// centimetres uneven or seamed between two colliders. So the step is tried again from
+        /// slightly higher up before it is called a wall, and the body is settled back down after -
+        /// which is the same thing physics does for her, done deliberately.
+        /// </para>
         /// </summary>
         private Vector2 ResolveKnightCollision(Vector2 current, Vector2 target)
         {
@@ -651,27 +683,35 @@ public partial class LegacyHelper
             }
 
             int mask = KnightTerrainMask();
-            var size = bodyCol.bounds.size;
-            var boxSize = new Vector2(size.x * 0.9f, size.y * 0.9f);
+            float stepHeight = KnightStepHeight;
 
             Vector2 resolved = current;
 
-            Vector2 horizontalStep = new Vector2(target.x - current.x, 0f);
-            if (Mathf.Abs(horizontalStep.x) > 0.0001f)
+            float dx = target.x - current.x;
+            if (Mathf.Abs(dx) > 0.0001f)
             {
-                var hit = Physics2D.BoxCast(resolved, boxSize, 0f, new Vector2(Mathf.Sign(horizontalStep.x), 0f), Mathf.Abs(horizontalStep.x), mask);
-                resolved.x = hit.collider != null
-                    ? resolved.x + Mathf.Sign(horizontalStep.x) * Mathf.Max(0f, hit.distance - 0.01f)
-                    : target.x;
+                Vector2 direction = new Vector2(Mathf.Sign(dx), 0f);
+                float distance = Mathf.Abs(dx);
+                var hit = KnightSweep(resolved, direction, distance, mask);
+
+                if (hit.collider == null)
+                {
+                    resolved.x = target.x;
+                }
+                else if (!TryStepOver(ref resolved, direction, distance, stepHeight, mask))
+                {
+                    resolved.x += direction.x * Mathf.Max(0f, hit.distance - KnightSweepSkin);
+                }
             }
 
-            Vector2 verticalStep = new Vector2(0f, target.y - current.y);
-            if (Mathf.Abs(verticalStep.y) > 0.0001f)
+            float dy = target.y - current.y;
+            if (Mathf.Abs(dy) > 0.0001f)
             {
-                var hit = Physics2D.BoxCast(resolved, boxSize, 0f, new Vector2(0f, Mathf.Sign(verticalStep.y)), Mathf.Abs(verticalStep.y), mask);
+                Vector2 direction = new Vector2(0f, Mathf.Sign(dy));
+                var hit = KnightSweep(resolved, direction, Mathf.Abs(dy), mask);
                 if (hit.collider != null)
                 {
-                    resolved.y += Mathf.Sign(verticalStep.y) * Mathf.Max(0f, hit.distance - 0.01f);
+                    resolved.y += direction.y * Mathf.Max(0f, hit.distance - KnightSweepSkin);
                     // Landing or hitting a ceiling both kill vertical speed.
                     knightVerticalVelocity = 0f;
                 }
@@ -681,7 +721,95 @@ public partial class LegacyHelper
                 }
             }
 
+            SettleKnightOntoGround(ref resolved, current, stepHeight, mask);
             return resolved;
+        }
+
+        /// <summary>How high a lip the Knight steps over, in world units, or zero when switched off.</summary>
+        private float KnightStepHeight
+        {
+            get
+            {
+                if (bodyCol == null)
+                {
+                    return 0f;
+                }
+
+                float share = Mathf.Clamp(ModConfig.Instance.knightStepHeight, 0f, 0.9f);
+                return share <= 0f ? 0f : bodyCol.bounds.size.y * share;
+            }
+        }
+
+        /// <summary>
+        /// Retries a blocked horizontal step from <paramref name="stepHeight"/> higher up, and
+        /// settles the body back down onto whatever it lands on. Returns false when the obstruction
+        /// is a real wall rather than a lip, in which case nothing has been moved.
+        /// </summary>
+        private bool TryStepOver(ref Vector2 resolved, Vector2 direction, float distance, float stepHeight, int mask)
+        {
+            // Only from the ground, and only when not already on the way up: stepping mid-jump would
+            // let the Knight climb a wall a step at a time.
+            if (stepHeight <= 0f || !knightGrounded || knightVerticalVelocity > 0.01f)
+            {
+                return false;
+            }
+
+            // However much headroom there is, up to a step. A low ceiling makes this a wall again.
+            var above = KnightSweep(resolved, Vector2.up, stepHeight, mask);
+            float lift = above.collider != null ? Mathf.Max(0f, above.distance - KnightSweepSkin) : stepHeight;
+            if (lift <= KnightSweepSkin)
+            {
+                return false;
+            }
+
+            Vector2 raised = new Vector2(resolved.x, resolved.y + lift);
+            if (KnightSweep(raised, direction, distance, mask).collider != null)
+            {
+                return false;
+            }
+
+            Vector2 crossed = new Vector2(raised.x + direction.x * distance, raised.y);
+
+            // Back down onto the surface that was stepped onto. Falling the whole lift again means
+            // there was nothing there after all, which is fine - the vertical pass takes it from
+            // here.
+            var below = KnightSweep(crossed, Vector2.down, lift, mask);
+            float drop = below.collider != null ? Mathf.Max(0f, below.distance - KnightSweepSkin) : lift;
+
+            resolved = new Vector2(crossed.x, crossed.y - drop);
+            return true;
+        }
+
+        /// <summary>
+        /// Keeps a walking Knight on the ground over a small drop.
+        /// <para>
+        /// Without this the ground falling away by a centimetre leaves the Knight airborne for a
+        /// frame, which costs it its grounded state, its coyote time and its walk animation - a
+        /// stutter every few steps on ground that looks flat. Only ever pulls the body down onto
+        /// something within a step, so walking off an actual ledge still falls.
+        /// </para>
+        /// </summary>
+        private void SettleKnightOntoGround(ref Vector2 resolved, Vector2 current, float stepHeight, int mask)
+        {
+            if (stepHeight <= 0f || !knightGrounded || knightVerticalVelocity > 0.01f)
+            {
+                return;
+            }
+
+            // Only when the move was a walk. A dash or a knockback should carry the Knight off a
+            // lip rather than being pinned to it.
+            if (Mathf.Abs(resolved.x - current.x) <= 0.0001f || knightDashTimer > 0f)
+            {
+                return;
+            }
+
+            var ground = KnightSweep(resolved, Vector2.down, stepHeight, mask);
+            if (ground.collider == null || ground.distance <= KnightSweepSkin)
+            {
+                return;
+            }
+
+            resolved.y -= Mathf.Max(0f, ground.distance - KnightSweepSkin);
         }
 
         /// <summary>
