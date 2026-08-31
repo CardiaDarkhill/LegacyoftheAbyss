@@ -127,7 +127,7 @@ public partial class LegacyHelper
 
             baselineStatsInitialized = true;
 
-            lastSavedHP = lastSavedMax = lastSavedLifeblood = lastSavedLifebloodMax = lastSavedSoul = -999;
+            lastSavedHP = lastSavedMax = lastSavedLifeblood = lastSavedLifebloodMax = lastSavedSoul = lastSavedVesselSoul = -999;
             PersistIfChanged();
             lastSoulForReady = shadeSoul;
             InitializeShadeAi();

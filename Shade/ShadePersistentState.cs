@@ -22,6 +22,13 @@ namespace LegacyoftheAbyss.Shade
         public int CurrentLifeblood { get; private set; } = -1;
         public int LifebloodMax { get; private set; } = -1;
         public int Soul { get; private set; } = -1;
+
+        /// <summary>
+        /// Soul held in the Soul Vessels. Saved separately from <see cref="Soul"/> rather than
+        /// folded into it: the two are spent and refilled by different rules, so a total would
+        /// restore as a meter that had already drunk its reserve.
+        /// </summary>
+        public int VesselSoul { get; private set; }
         public bool CanTakeDamage { get; private set; } = true;
         public int SpellProgress { get; private set; }
             = 0;
@@ -49,6 +56,7 @@ namespace LegacyoftheAbyss.Shade
                 CurrentLifeblood = CurrentLifeblood,
                 LifebloodMax = LifebloodMax,
                 Soul = Soul,
+                VesselSoul = VesselSoul,
                 CanTakeDamage = CanTakeDamage,
                 SpellProgress = SpellProgress,
                 NotchCapacity = NotchCapacity
@@ -64,7 +72,7 @@ namespace LegacyoftheAbyss.Shade
             return clone;
         }
 
-        public void Capture(int currentHp, int maxHp, int lifebloodCurrent, int lifebloodMax, int soul, bool? canTakeDamage = null, int? baseMaxHp = null)
+        public void Capture(int currentHp, int maxHp, int lifebloodCurrent, int lifebloodMax, int soul, bool? canTakeDamage = null, int? baseMaxHp = null, int vesselSoul = 0)
         {
             int previousMax = MaxHP;
             int previousHp = CurrentHP;
@@ -137,6 +145,7 @@ namespace LegacyoftheAbyss.Shade
             LifebloodMax = sanitizedLifebloodMax;
             CurrentLifeblood = Mathf.Clamp(sanitizedLifeblood, 0, LifebloodMax);
             Soul = Mathf.Max(0, soul);
+            VesselSoul = Mathf.Max(0, vesselSoul);
             if (canTakeDamage.HasValue)
             {
                 CanTakeDamage = canTakeDamage.Value;
@@ -152,6 +161,7 @@ namespace LegacyoftheAbyss.Shade
             CurrentLifeblood = -1;
             LifebloodMax = -1;
             Soul = -1;
+            VesselSoul = 0;
             CanTakeDamage = true;
             SpellProgress = 0;
             NotchCapacity = 0;
@@ -176,6 +186,7 @@ namespace LegacyoftheAbyss.Shade
                 CurrentLifeblood = CurrentLifeblood,
                 LifebloodMax = LifebloodMax,
                 Soul = Soul,
+                VesselSoul = VesselSoul,
                 CanTakeDamage = CanTakeDamage,
                 SpellProgress = SpellProgress,
                 NotchCapacity = NotchCapacity,
@@ -196,11 +207,12 @@ namespace LegacyoftheAbyss.Shade
             var snapshot = data.Value;
             if (snapshot.MaxHP > 0 || snapshot.LifebloodMax > 0)
             {
-                Capture(snapshot.CurrentHP, snapshot.MaxHP, snapshot.CurrentLifeblood, snapshot.LifebloodMax, snapshot.Soul, snapshot.CanTakeDamage, snapshot.BaseMaxHP);
+                Capture(snapshot.CurrentHP, snapshot.MaxHP, snapshot.CurrentLifeblood, snapshot.LifebloodMax, snapshot.Soul, snapshot.CanTakeDamage, snapshot.BaseMaxHP, snapshot.VesselSoul);
             }
             else
             {
                 Soul = Mathf.Max(0, snapshot.Soul);
+                VesselSoul = Mathf.Max(0, snapshot.VesselSoul);
                 CanTakeDamage = snapshot.CanTakeDamage;
             }
 
@@ -271,6 +283,8 @@ namespace LegacyoftheAbyss.Shade
             public int LifebloodMax { get; set; }
 
             public int Soul { get; set; }
+
+            public int VesselSoul { get; set; }
 
             public bool CanTakeDamage { get; set; }
 

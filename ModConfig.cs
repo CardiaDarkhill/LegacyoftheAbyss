@@ -266,6 +266,40 @@ public class ModConfig
     public float hudBuffBarOffsetX = -150f;
     public float hudBuffBarOffsetY = -14f;
 
+    // The Soul Vessels, in a column beside the orb. Placed here for the same reason the buff
+    // bar is, and because this HUD is mirrored: Hollow Knight hangs the vessels off the left of
+    // the orb, so on a right-hand HUD they belong on the right, and where exactly is a thing to
+    // see rather than derive. Ctrl+F5 rereads these.
+    public bool hudVesselsEnabled = true;
+    public float hudVesselSize = 30f;
+    public float hudVesselScale = 1f;
+    public float hudVesselSpacing = 4f;
+    public float hudVesselOffsetX = 86f;
+    public float hudVesselOffsetY = 0f;
+
+    /// <summary>
+    /// Whether starting a new game asks about the shade first. Off starts the game the way it did
+    /// before the screen existed, which also leaves the previous run's progress on the slot.
+    /// </summary>
+    public bool shadeNewGameOptionsEnabled = true;
+
+    // --- Soul Vessels ---------------------------------------------------------------
+    /// <summary>
+    /// Whether the companion earns Soul Vessels at all. Off leaves it on the base 99 soul, and
+    /// takes the vessels off the HUD with it.
+    /// </summary>
+    public bool shadeSoulVesselsEnabled = true;
+
+    /// <summary>
+    /// How long the soul meter must have room before the vessels start pouring into it. The delay
+    /// is what makes the vessels read as a reserve rather than as a longer bar; a second is the
+    /// starting guess and this is here so it can be judged in play rather than in a build.
+    /// </summary>
+    public float shadeSoulVesselDrainDelay = 1f;
+
+    /// <summary>Soul per second moved from the vessels into the meter. One vessel a second.</summary>
+    public float shadeSoulVesselDrainRate = 33f;
+
     public float hudMaskRowOffsetX = -120f;
     public float hudMaskRowOffsetY = 12f;
     public bool shadeUnlockPopupsMuted = false;
@@ -709,7 +743,7 @@ public class ModConfig
 
 
 /// <summary>
-/// The three difficulty presets the Difficulty menu offers, and the values each one stands for.
+/// The four difficulty presets the Difficulty menu offers, and the values each one stands for.
 /// <para>
 /// Each preset is the complete set of difficulty values, not a delta, so applying one always lands
 /// on a known state regardless of what was there before. <see cref="Identify"/> reads back the other
@@ -720,6 +754,7 @@ public sealed class DifficultyPreset
 {
     public const string Easy = "Easy";
     public const string Normal = "Normal";
+    public const string Hard = "Hard";
     public const string Abyss = "Abyss";
     public const string Custom = "Custom";
 
@@ -754,9 +789,14 @@ public sealed class DifficultyPreset
         BindShadeHeal = 1
     };
 
-    public static readonly DifficultyPreset AbyssPreset = new DifficultyPreset
+    /// <summary>
+    /// What used to be called Abyss. Renamed rather than retuned, so a run already playing at these
+    /// values keeps the difficulty it was being played at and simply reads by a different name -
+    /// and so the Abyss name is free for something that earns it.
+    /// </summary>
+    public static readonly DifficultyPreset HardPreset = new DifficultyPreset
     {
-        Name = Abyss,
+        Name = Hard,
         Description = "Needle and nail fall to 60%, the Shade carries fewer masks and its Focus no longer reaches Hornet. Demands sharper combat than vanilla Silksong, not just a longer fight.",
         HornetNeedleDamage = 0.6f,
         HornetSilkSkillDamage = 0.8f,
@@ -768,8 +808,29 @@ public sealed class DifficultyPreset
         ShadeMaskFraction = 0.4f
     };
 
+    /// <summary>
+    /// Deliberately not balanced. Every lever this screen has, pulled: half damage on both of them,
+    /// a Shade down to a single mask that can heal neither of you, and a Bind that returns one mask
+    /// to Hornet and none to the Shade. Meant to be beaten rather than played at.
+    /// </summary>
+    public static readonly DifficultyPreset AbyssPreset = new DifficultyPreset
+    {
+        Name = Abyss,
+        Description = "Entirely unfair, and meant to be. Half damage from needle and nail, a Shade on a single mask, and healing that reaches neither of you. A challenge to be beaten rather than a difficulty to be played at.",
+        HornetNeedleDamage = 0.5f,
+        HornetSilkSkillDamage = 0.6f,
+        ShadeNailDamage = 0.5f,
+        ShadeSpellDamage = 0.6f,
+        BindHornetHeal = 1,
+        BindShadeHeal = 0,
+        FocusHornetHeal = 0,
+        FocusShadeHeal = 0,
+        // The lowest step, which ComputeShadeMaskCount reads as "always 1" rather than as a tenth.
+        ShadeMaskFraction = ModConfig.MinShadeMaskFraction
+    };
+
     /// <summary>Every preset, in the order the menu cycles through them.</summary>
-    public static readonly DifficultyPreset[] All = { EasyPreset, NormalPreset, AbyssPreset };
+    public static readonly DifficultyPreset[] All = { EasyPreset, NormalPreset, HardPreset, AbyssPreset };
 
     /// <summary>Explanation shown for a set of values that matches no preset.</summary>
     public const string CustomDescription = "Values tuned by hand. Selecting a preset replaces every difficulty setting on this screen.";

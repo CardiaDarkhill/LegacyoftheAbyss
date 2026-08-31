@@ -487,8 +487,7 @@ public partial class LegacyHelper
             onDamaged = () =>
             {
                 int prevSoul = shadeSoul;
-                shadeSoul = Mathf.Min(shadeSoulMax, shadeSoul + Mathf.Max(0, soulGainPerHit + charmSoulGainBonus));
-                PushSoulToHud();
+                AddSoul(NailSoulGain());
                 CheckHazardOverlap();
 
                 if (prevSoul < focusSoulCost && shadeSoul >= focusSoulCost)

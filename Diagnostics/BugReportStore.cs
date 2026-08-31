@@ -434,6 +434,10 @@ namespace LegacyoftheAbyss.Diagnostics
                 Row(builder, "HP", shade.Hp + " / " + shade.MaxHp + " (base max " + shade.BaseMaxHp + ")");
                 Row(builder, "Lifeblood", shade.Lifeblood + " / " + shade.LifebloodMax);
                 Row(builder, "Soul", shade.Soul + " / " + shade.SoulMax);
+                if (shade.VesselCount > 0)
+                {
+                    Row(builder, "Vessels", shade.VesselSoul + " / " + (shade.VesselCount * 33) + " in " + shade.VesselCount);
+                }
                 Row(builder, "Can take damage", shade.CanTakeDamage ? "yes" : "no");
                 Row(builder, "Assist mode", shade.AssistMode ? "on" : "off");
                 // "The Shade did nothing" is the shape of most Shade reports, and whether an AI was

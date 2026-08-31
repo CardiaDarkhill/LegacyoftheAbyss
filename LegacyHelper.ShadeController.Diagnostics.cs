@@ -86,6 +86,8 @@ public partial class LegacyHelper
             state.LifebloodMax = shadeLifebloodMax;
             state.Soul = shadeSoul;
             state.SoulMax = shadeSoulMax;
+            state.VesselSoul = shadeVesselSoul;
+            state.VesselCount = GetShadeVesselCount();
             state.CanTakeDamage = canTakeDamage;
             state.AssistMode = assistModeEnabled;
             state.Facing = facing;

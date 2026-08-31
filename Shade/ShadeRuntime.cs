@@ -104,9 +104,9 @@ namespace LegacyoftheAbyss.Shade
             return true;
         }
 
-        public static void CaptureState(int currentHp, int maxHp, int lifebloodCurrent, int lifebloodMax, int soul, bool? canTakeDamage = null, int? baseMaxHp = null)
+        public static void CaptureState(int currentHp, int maxHp, int lifebloodCurrent, int lifebloodMax, int soul, bool? canTakeDamage = null, int? baseMaxHp = null, int vesselSoul = 0)
         {
-            s_persistentState.Capture(currentHp, maxHp, lifebloodCurrent, lifebloodMax, soul, canTakeDamage, baseMaxHp);
+            s_persistentState.Capture(currentHp, maxHp, lifebloodCurrent, lifebloodMax, soul, canTakeDamage, baseMaxHp, vesselSoul);
         }
 
         public static void RestoreFullHealth()
@@ -344,6 +344,62 @@ namespace LegacyoftheAbyss.Shade
 
             int desired = TryGetProfileId(gameManager);
             SetActiveSlot(desired);
+        }
+
+        /// <summary>
+        /// Which slot index a <see cref="GameManager"/>'s profile is. Exposed so the new-game screen
+        /// asks about the same slot the runtime would write to - the game numbers its profiles from
+        /// one and this repository indexes from zero, and a caller that got that wrong would quietly
+        /// erase the neighbouring save file's charms.
+        /// </summary>
+        internal static int ResolveSlotIndex(GameManager? gameManager) => TryGetProfileId(gameManager);
+
+        /// <summary>
+        /// Whether a save slot holds any shade progress worth offering to erase.
+        /// <para>
+        /// Asked by the new-game screen, which hides its reset question rather than offering to
+        /// clear something that is already empty.
+        /// </para>
+        /// </summary>
+        internal static bool SlotHasShadeProgress(int slot)
+        {
+            if (!s_saveSlots.TryGetSlot(slot, out var state))
+            {
+                return false;
+            }
+
+            return state.HasData
+                || state.DiscoveredCharmIds.Count > 0
+                || state.CollectedNotchIds.Count > 0
+                || state.NotchCapacity > 0
+                || state.SpellProgress > 0
+                || s_saveSlots.GetCollectedCharms(slot).Count > 0;
+        }
+
+        /// <summary>
+        /// Erases one save slot's shade progress: charms, notches, spell unlocks, health and soul.
+        /// <para>
+        /// Starting a new game over an old file used to leave every one of those behind, so a fresh
+        /// run began with the previous run's charms. Reaches the live inventory too when the slot
+        /// being cleared is the one in play, or the in-memory copy would write itself straight back.
+        /// </para>
+        /// </summary>
+        internal static void ResetSlotProgress(int slot)
+        {
+            s_saveSlots.ClearSlot(slot);
+            s_saveSlots.GetOrCreateSlot(slot);
+
+            if (s_hasActiveSlot && s_activeSlot == slot)
+            {
+                s_persistentState.Reset();
+
+                // The live inventory is reloaded *from* the cleared slot rather than reset in place.
+                // ResetLoadout only unequips - the charms stay owned - and the change it raises is
+                // persisted straight back into the slot that was just cleared, so the reset undid
+                // itself. This path holds the re-entrancy guard, so nothing is written back.
+                SyncInventoryFromActiveSlot();
+                LegacyHelper.RequestShadeLoadoutRecompute();
+            }
         }
 
         internal static void SetActiveSlot(int slot)

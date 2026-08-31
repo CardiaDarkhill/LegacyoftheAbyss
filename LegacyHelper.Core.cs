@@ -44,14 +44,14 @@ public partial class LegacyHelper : BaseUnityPlugin
     // Persist shade state across scene transitions
     internal static bool HasSavedShadeState => ShadeRuntime.PersistentState.HasData;
 
-    internal static void SaveShadeState(int curHp, int maxHp, int lifebloodCur, int lifebloodMax, int soul, bool? canTakeDamage = null, int? baseMaxHp = null)
+    internal static void SaveShadeState(int curHp, int maxHp, int lifebloodCur, int lifebloodMax, int soul, bool? canTakeDamage = null, int? baseMaxHp = null, int vesselSoul = 0)
     {
-        ShadeRuntime.CaptureState(curHp, maxHp, lifebloodCur, lifebloodMax, soul, canTakeDamage, baseMaxHp);
+        ShadeRuntime.CaptureState(curHp, maxHp, lifebloodCur, lifebloodMax, soul, canTakeDamage, baseMaxHp, vesselSoul);
     }
 
-    internal static void SaveShadeState(ShadeCompanion companion, int curHp, int maxHp, int lifebloodCur, int lifebloodMax, int soul, bool? canTakeDamage = null, int? baseMaxHp = null)
+    internal static void SaveShadeState(ShadeCompanion companion, int curHp, int maxHp, int lifebloodCur, int lifebloodMax, int soul, bool? canTakeDamage = null, int? baseMaxHp = null, int vesselSoul = 0)
     {
-        companion.State.Capture(curHp, maxHp, lifebloodCur, lifebloodMax, soul, canTakeDamage, baseMaxHp);
+        companion.State.Capture(curHp, maxHp, lifebloodCur, lifebloodMax, soul, canTakeDamage, baseMaxHp, vesselSoul);
     }
 
     // Called when Hornet gains a new spell. Advances Shade's unlock/upgrade track.
@@ -480,7 +480,7 @@ public partial class LegacyHelper : BaseUnityPlugin
                 sc.SuppressHazardDamage(SceneSpawnProtectionSeconds);
                 sc.ApplySceneTransitionProtection(SceneSpawnProtectionSeconds);
                 sc.TriggerSpawnEntrance();
-                SaveShadeState(companion, sc.GetCurrentNormalHP(), sc.GetMaxNormalHP(), sc.GetCurrentLifeblood(), sc.GetMaxLifeblood(), sc.GetShadeSoul(), sc.GetCanTakeDamage(), sc.GetBaseMaxHP());
+                SaveShadeState(companion, sc.GetCurrentNormalHP(), sc.GetMaxNormalHP(), sc.GetCurrentLifeblood(), sc.GetMaxLifeblood(), sc.GetShadeSoul(), sc.GetCanTakeDamage(), sc.GetBaseMaxHP(), sc.GetShadeVesselSoul());
                 RequestShadeLoadoutRecompute(companion.Id);
             }
             else
@@ -506,7 +506,7 @@ public partial class LegacyHelper : BaseUnityPlugin
         var saved = companion.State;
         if (saved.HasData)
         {
-            scNew.RestorePersistentState(saved.CurrentHP, saved.MaxHP, saved.BaseMaxHP, saved.CurrentLifeblood, saved.LifebloodMax, saved.Soul, saved.CanTakeDamage);
+            scNew.RestorePersistentState(saved.CurrentHP, saved.MaxHP, saved.BaseMaxHP, saved.CurrentLifeblood, saved.LifebloodMax, saved.Soul, saved.CanTakeDamage, saved.VesselSoul);
         }
 
         scNew.SuppressHazardDamage(SceneSpawnProtectionSeconds);

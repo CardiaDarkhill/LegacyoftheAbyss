@@ -19,7 +19,9 @@ public static partial class ShadeSettingsMenu
         PauseMenu,
         ShadeMain,
         /// <summary>Back out to the Shade AI screen - for anything nested under it.</summary>
-        ShadeAi
+        ShadeAi,
+        /// <summary>Back out of the new-game questions to the save slots, starting nothing.</summary>
+        ShadeNewGame
     }
 
     private class CancelRouter : MonoBehaviour, ICancelHandler
@@ -29,7 +31,15 @@ public static partial class ShadeSettingsMenu
         public void OnCancel(BaseEventData eventData)
         {
             eventData?.Use();
-            if (target == CancelTarget.ShadeAi)
+            if (target == CancelTarget.ShadeNewGame)
+            {
+                var manager = newGameBuiltFor ?? UIManager.instance;
+                if (manager != null)
+                {
+                    manager.StartCoroutine(CancelNewGame(manager));
+                }
+            }
+            else if (target == CancelTarget.ShadeAi)
             {
                 ShowShadeAiMenu();
             }
@@ -795,6 +805,12 @@ public static partial class ShadeSettingsMenu
         private Func<string> describeValue;
         private Action<int> step;
 
+        /// <summary>
+        /// The screen this row belongs to, set when it is registered. Every stepper used to refresh
+        /// the Difficulty screen by name, which is only the right screen when the row is on it.
+        /// </summary>
+        public DifficultyMenuController Owner { get; set; }
+
         public void Initialize(MenuButton menuButton, string labelText, Func<string> valueText, Action<int> stepBy)
         {
             button = menuButton;
@@ -825,7 +841,7 @@ public static partial class ShadeSettingsMenu
             // Every stepper on the Difficulty screen can change what another one reads - applying a
             // preset rewrites the sliders, and editing a slider turns the preset into Custom - so
             // the whole screen refreshes rather than just this row.
-            difficultyController?.RefreshAll();
+            (Owner ?? difficultyController)?.RefreshAll();
         }
 
         public void UpdateLabel()
@@ -874,7 +890,10 @@ public static partial class ShadeSettingsMenu
         public void RegisterStepper(LabeledStepperDriver stepper)
         {
             if (stepper != null && !steppers.Contains(stepper))
+            {
                 steppers.Add(stepper);
+                stepper.Owner = this;
+            }
         }
 
         public void RegisterSliderRefresh(Action refresh)

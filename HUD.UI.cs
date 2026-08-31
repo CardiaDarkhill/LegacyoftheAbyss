@@ -167,6 +167,7 @@ public partial class SimpleHUD
 
         BuildMasks(hRect, uiScale);
         BuildBuffBar(canvas, uiScale);
+        BuildVesselColumn(canvas);
 
         unlockPopup = gameObject.GetComponent<ShadeUnlockPopup>();
         if (unlockPopup == null)
@@ -509,6 +510,7 @@ public partial class SimpleHUD
 
     private void RefreshSoul()
     {
+        RefreshVessels();
         if (soulOrbRoot == null) return;
         float max = shadeSoulOverride ? Mathf.Max(1f, shadeSoulMax) : Mathf.Max(1f, playerData.silkMax);
         float silkVal = shadeSoulOverride ? Mathf.Clamp(shadeSoul, 0f, max) : (debugUseCustomSilk ? debugSilk : playerData.silk);

@@ -787,7 +787,7 @@ public partial class LegacyHelper
                         continue;
 
                     sc.FullHealOnRespawn();
-                    SaveShadeState(companion, sc.GetCurrentNormalHP(), sc.GetMaxNormalHP(), sc.GetCurrentLifeblood(), sc.GetMaxLifeblood(), sc.GetShadeSoul(), sc.GetCanTakeDamage(), sc.GetBaseMaxHP());
+                    SaveShadeState(companion, sc.GetCurrentNormalHP(), sc.GetMaxNormalHP(), sc.GetCurrentLifeblood(), sc.GetMaxLifeblood(), sc.GetShadeSoul(), sc.GetCanTakeDamage(), sc.GetBaseMaxHP(), sc.GetShadeVesselSoul());
                     healedAny = true;
                 }
 
@@ -800,6 +800,37 @@ public partial class LegacyHelper
                 }
             }
             catch { }
+        }
+    }
+
+    /// <summary>
+    /// Puts the new-game questions in front of a new game.
+    /// <para>
+    /// Patched here rather than on one of the <c>UIStartNewGame</c> wrappers because there are
+    /// several of those and they all land on this: the save slot button, the play mode screen, and
+    /// the overscan and brightness prompts that call back into it once they have been answered.
+    /// <see cref="ShadeSettingsMenu.InterceptNewGame"/> decides which of those passes is the one
+    /// that is actually about to start a game.
+    /// </para>
+    /// </summary>
+    [HarmonyPatch(typeof(UIManager), nameof(UIManager.StartNewGame))]
+    private class UIManager_StartNewGame_Patch
+    {
+        private static bool Prefix(UIManager __instance, bool permaDeath, bool bossRush)
+        {
+            try
+            {
+                if (ShadeSettingsMenu.InterceptNewGame(__instance, permaDeath, bossRush))
+                    return false;
+            }
+            catch (Exception e)
+            {
+                // Never at the cost of the new game itself: a mod screen that cannot be shown is a
+                // missing screen, not a save file the player cannot start.
+                LogWarning($"New game options threw; starting the game as normal: {e}");
+            }
+
+            return true;
         }
     }
 
@@ -1230,7 +1261,7 @@ public partial class LegacyHelper
                         continue;
 
                     sc.FullHealFromBench();
-                    SaveShadeState(companion, sc.GetCurrentNormalHP(), sc.GetMaxNormalHP(), sc.GetCurrentLifeblood(), sc.GetMaxLifeblood(), sc.GetShadeSoul(), sc.GetCanTakeDamage(), sc.GetBaseMaxHP());
+                    SaveShadeState(companion, sc.GetCurrentNormalHP(), sc.GetMaxNormalHP(), sc.GetCurrentLifeblood(), sc.GetMaxLifeblood(), sc.GetShadeSoul(), sc.GetCanTakeDamage(), sc.GetBaseMaxHP(), sc.GetShadeVesselSoul());
                 }
             }
             catch { }

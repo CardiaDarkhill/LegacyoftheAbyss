@@ -146,8 +146,16 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.SoulCatcher),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx => ctx.Controller?.AddSoulGainBonus(3),
-                    OnRemoved = ctx => ctx.Controller?.AddSoulGainBonus(-3)
+                    OnApplied = ctx =>
+                    {
+                        ctx.Controller?.AddSoulGainBonus(3);
+                        ctx.Controller?.AddVesselSoulGainBonus(2);
+                    },
+                    OnRemoved = ctx =>
+                    {
+                        ctx.Controller?.AddSoulGainBonus(-3);
+                        ctx.Controller?.AddVesselSoulGainBonus(-2);
+                    }
                 },
                 displayName: "Soul Catcher",
                 description: "Used by shamans to draw more SOUL from the world around them. Increases the amount of SOUL gained when striking an enemy with the nail.",
@@ -160,8 +168,16 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.SoulEater),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx => ctx.Controller?.AddSoulGainBonus(8),
-                    OnRemoved = ctx => ctx.Controller?.AddSoulGainBonus(-8)
+                    OnApplied = ctx =>
+                    {
+                        ctx.Controller?.AddSoulGainBonus(8);
+                        ctx.Controller?.AddVesselSoulGainBonus(6);
+                    },
+                    OnRemoved = ctx =>
+                    {
+                        ctx.Controller?.AddSoulGainBonus(-8);
+                        ctx.Controller?.AddVesselSoulGainBonus(-6);
+                    }
                 },
                 displayName: "Soul Eater",
                 description: "Forgotten shaman artefact, used to draw SOUL from still-living creatures. Greatly increases the amount of SOUL gained when striking an enemy with the nail.",

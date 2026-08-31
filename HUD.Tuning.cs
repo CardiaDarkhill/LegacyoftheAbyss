@@ -51,6 +51,7 @@ public partial class SimpleHUD
         ApplyFrameTuning(config, uiScale, orbCentre);
         ApplyMaskTuning(config, uiScale, orbCentre);
         ApplyBuffBarTuning(config, uiScale, orbCentre);
+        ApplyVesselTuning(config, uiScale, orbCentre);
     }
 
     private void ApplyFrameTuning(ModConfig config, float uiScale, Vector2 orbCentre)

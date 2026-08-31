@@ -113,6 +113,7 @@ public partial class LegacyHelper
             charmNailScaleMultiplier = 1f;
             charmNailKnockbackMultiplier = 1f;
             charmSoulGainBonus = 0;
+            charmVesselSoulGainBonus = 0;
             charmFocusHealBonus = 0;
             charmHornetFocusHealBonus = 0;
             charmFocusTimeMultiplier = 1f;
@@ -150,18 +151,13 @@ public partial class LegacyHelper
             RefreshBaldurShellFocusState(immediate: true);
         }
 
+        /// <summary>
+        /// Soul from a charm - Grubsong and its like. One of the "all other sources" that fill the
+        /// vessels at their normal rate, so it goes through the same overflow as everything else.
+        /// </summary>
         internal void GainShadeSoul(int amount)
         {
-            if (amount <= 0)
-                return;
-
-            int before = shadeSoul;
-            shadeSoul = Mathf.Clamp(shadeSoul + amount, 0, shadeSoulMax);
-            if (shadeSoul != before)
-            {
-                PushSoulToHud();
-                PersistIfChanged();
-            }
+            AddSoul(amount);
         }
 
         internal void AddFocusHealBonus(int amount)

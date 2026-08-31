@@ -122,6 +122,49 @@ public class ModConfigTests
     /// The presets have to be distinguishable from each other, or stepping through them would show
     /// the wrong name for values that are genuinely different.
     /// </summary>
+    /// <summary>
+    /// The rename promise: a run already being played at what used to be Abyss keeps those values
+    /// and simply reads as Hard, rather than being quietly retuned to the new Abyss.
+    /// </summary>
+    [Fact]
+    public void TheOldAbyssValuesNowReadAsHard()
+    {
+        var cfg = new ModConfig
+        {
+            hornetDamageMultiplier = 0.6f,
+            hornetSilkSkillDamageMultiplier = 0.8f,
+            shadeDamageMultiplier = 0.6f,
+            shadeSpellDamageMultiplier = 0.8f,
+            bindHornetHeal = 2,
+            bindShadeHeal = 1,
+            focusHornetHeal = 0,
+            focusShadeHeal = 1,
+            shadeMaskFraction = 0.4f,
+            shadeFocusAtFullMasks = false
+        };
+
+        Assert.Equal(DifficultyPreset.Hard, DifficultyPreset.IdentifyName(cfg));
+    }
+
+    /// <summary>Abyss has to actually be the hard one, not merely the last one in the list.</summary>
+    [Fact]
+    public void AbyssIsHarderThanHard()
+    {
+        var hard = DifficultyPreset.HardPreset;
+        var abyss = DifficultyPreset.AbyssPreset;
+
+        Assert.True(abyss.HornetNeedleDamage < hard.HornetNeedleDamage);
+        Assert.True(abyss.ShadeNailDamage < hard.ShadeNailDamage);
+        Assert.True(abyss.BindHornetHeal < hard.BindHornetHeal);
+        Assert.True(abyss.BindShadeHeal < hard.BindShadeHeal);
+        Assert.True(abyss.FocusShadeHeal < hard.FocusShadeHeal);
+        Assert.True(abyss.ShadeMaskFraction < hard.ShadeMaskFraction);
+
+        // The lowest step, which ComputeShadeMaskCount reads as "always 1 mask" rather than as a
+        // tenth of Hornet's - so this is the floor, not merely a small fraction.
+        Assert.Equal(ModConfig.MinShadeMaskFraction, abyss.ShadeMaskFraction);
+    }
+
     [Fact]
     public void DifficultyPresetsAreDistinct()
     {

@@ -200,9 +200,21 @@ public static partial class ShadeSettingsMenu
     {
         if (ms == null)
             return null;
+        // Snapshotted before anything is destroyed. Transform's enumerator walks by index and
+        // DestroyImmediate removes the child there and then, so destroying inside the loop shifts
+        // every later child down one and skips it. The screens cloned from the pause menu happen to
+        // survive that; a screen with more children than that would not.
+        var templateChildren = new List<Transform>();
         foreach (Transform child in ms.transform)
+            templateChildren.Add(child);
+
+        foreach (var child in templateChildren)
         {
-            if (ms.backButton != null && child.gameObject == ms.backButton.gameObject)
+            if (child == null)
+                continue;
+            // By ancestry, not identity: on some screens the back button sits inside a container,
+            // and destroying the container takes the screen's only way out with it.
+            if (ms.backButton != null && ms.backButton.transform.IsChildOf(child))
                 continue;
             Object.DestroyImmediate(child.gameObject);
         }

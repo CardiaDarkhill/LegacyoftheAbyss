@@ -23,6 +23,37 @@ public class ShadePersistentStateTests
         Assert.False(state.CanTakeDamage);
     }
 
+    /// <summary>
+    /// The reserve is saved beside the meter, not folded into it. Folded, a companion that had
+    /// spent its meter would come back with the vessels already drunk into it.
+    /// </summary>
+    [Fact]
+    public void VesselSoulSurvivesARoundTrip()
+    {
+        var state = new ShadePersistentState();
+        state.Capture(3, 3, 0, 0, 0, true, 3, 66);
+
+        Assert.Equal(0, state.Soul);
+        Assert.Equal(66, state.VesselSoul);
+
+        var restored = new ShadePersistentState();
+        restored.LoadFromData(state.ToData());
+
+        Assert.Equal(0, restored.Soul);
+        Assert.Equal(66, restored.VesselSoul);
+        Assert.Equal(66, state.Clone().VesselSoul);
+    }
+
+    /// <summary>A save written before the vessels existed simply has none, rather than failing.</summary>
+    [Fact]
+    public void VesselSoulDefaultsToNothing()
+    {
+        var state = new ShadePersistentState();
+        state.Capture(3, 3, 0, 0, 40, true);
+
+        Assert.Equal(0, state.VesselSoul);
+    }
+
     [Fact]
     public void ForceMinimumHealthRespectsBounds()
     {

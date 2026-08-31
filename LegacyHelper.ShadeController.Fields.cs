@@ -482,6 +482,7 @@ public partial class LegacyHelper
         private int lastSavedLifeblood;
         private int lastSavedLifebloodMax;
         private int lastSavedSoul;
+        private int lastSavedVesselSoul;
         private bool lastSavedCanTakeDamage = true;
         private int persistenceSuppressionDepth;
         private bool pendingDeferredHealthSync;

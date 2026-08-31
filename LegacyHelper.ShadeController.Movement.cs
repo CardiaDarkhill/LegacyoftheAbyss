@@ -61,6 +61,14 @@ public partial class LegacyHelper
             UpdateShadowParticles();
             EnsureShadeLight();
 
+            // Ahead of the pause gate for the same reason the wisps are: the vessels are the
+            // companion's own clock, not something Hornet drives, and the tick decides for itself
+            // that a paused game does not drain.
+            if (!GameIsPaused())
+            {
+                UpdateSoulVessels(Time.deltaTime);
+            }
+
             if (hornetTransform == null) return;
 
             bool pushedSoulThisFrame = false;

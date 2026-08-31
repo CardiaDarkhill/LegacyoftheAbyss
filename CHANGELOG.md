@@ -7,6 +7,19 @@ controls it; the reasoning belongs in the commit and the code.
 
 ### Added
 
+- Soul Vessels. The companion earns one for every two increases to Hornet's silk maximum, up to
+  three, each holding 33 SOUL beyond the meter and refilling it a second after it has room.
+  `shadeSoulVesselsEnabled` turns them off; `shadeSoulVesselDrainDelay` and
+  `shadeSoulVesselDrainRate` tune the refill.
+- The vessels show as a column of orbs beside the soul meter. `hudVesselsEnabled`,
+  `hudVesselOffsetX`, `hudVesselOffsetY`, `hudVesselSize`, `hudVesselScale` and `hudVesselSpacing`
+  place them, and Ctrl+F5 rereads them.
+- Starting a new game now asks first: whether to reset that save slot's shade progress, which
+  difficulty to play at, and whether to play as the Shade or the Knight. `shadeNewGameOptionsEnabled`
+  turns the screen off.
+- A fourth difficulty, Abyss, which is deliberately unfair. What used to be Abyss is now Hard, so a
+  run already being played at those values keeps them under the new name.
+
 - A buff bar under the companion's mask row, showing Baldur Shell's remaining blows. "Buff Bar" is
   on by default; `hudBuffBarOffsetX`, `hudBuffBarOffsetY`, `hudBuffIconSize`, `hudBuffIconScale` and
   `hudBuffIconSpacing` place it, and Ctrl+F5 rereads them.

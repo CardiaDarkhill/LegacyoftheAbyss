@@ -23,6 +23,8 @@ namespace LegacyoftheAbyss.Diagnostics
         public int LifebloodMax;
         public int Soul;
         public int SoulMax;
+        public int VesselSoul;
+        public int VesselCount;
         public bool CanTakeDamage;
         public bool AssistMode;
         public int Facing;

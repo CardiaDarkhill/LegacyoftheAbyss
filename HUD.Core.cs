@@ -227,7 +227,10 @@ public partial class SimpleHUD : MonoBehaviour
                 {
                     foreach (var sc in LegacyHelper.ShadeController.ActiveInstances)
                     {
-                        if (sc != null) sc.shadeSoul = Mathf.Min(sc.shadeSoul + 11, sc.shadeSoulMax);
+                        // Through the real gain, so the key fills the vessels once the meter is
+                        // full rather than stopping at it - a debug key that does not exercise
+                        // what is being debugged is worse than no key at all.
+                        if (sc != null) sc.AddSoul(11);
                     }
                     shadeSoul = Mathf.Min(shadeSoul + 11f, Mathf.Max(1f, shadeSoulMax));
                     if (ModConfig.Instance.logHud)
@@ -252,7 +255,7 @@ public partial class SimpleHUD : MonoBehaviour
                 {
                     foreach (var sc in LegacyHelper.ShadeController.ActiveInstances)
                     {
-                        if (sc != null) sc.shadeSoul = Mathf.Max(sc.shadeSoul - 11, 0);
+                        if (sc != null) sc.DebugSpendSoul(11);
                     }
                     shadeSoul = Mathf.Max(shadeSoul - 11f, 0f);
                     if (ModConfig.Instance.logHud)
@@ -388,11 +391,12 @@ public partial class SimpleHUD : MonoBehaviour
     }
 
     // ShadeController drives this to show Shade's soul pool in the HUD
-    public void SetShadeSoul(int current, int max)
+    public void SetShadeSoul(int current, int max, int vesselSoul = 0, int vesselCount = 0)
     {
         shadeSoulOverride = true;
         shadeSoul = Mathf.Max(0, current);
         shadeSoulMax = Mathf.Max(1, max);
+        SetShadeVessels(vesselSoul, vesselCount);
     }
 
     // Allow ShadeController to drive Shade HP and max

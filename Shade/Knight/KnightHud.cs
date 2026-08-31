@@ -31,6 +31,38 @@ namespace LegacyoftheAbyss.Shade.Knight
         internal const string SoulOrbFillTexture = "soul_orb_full_v020000";
 
         /// <summary>
+        /// A Soul Vessel's five resting states, from empty to full.
+        /// <para>
+        /// Each is the <em>last</em> frame of the clip that fills to that level, not the clip named
+        /// after the level. The named ones cannot be used: <c>V_Half</c> is a single frame and that
+        /// frame is the <em>empty</em> vessel, byte for byte what <c>V_Empty</c> draws, so a half
+        /// vessel taken from it would read as an empty one and look exactly like the soul never
+        /// arriving. The fill animations are correct throughout, and the frame they come to rest on
+        /// is the state they leave behind - which is the frame wanted here.
+        /// </para>
+        /// <para>
+        /// Verified against the bundle, with the sprite each resolves to. Note the sizes: a full
+        /// vessel is drawn half as big again as the others because it carries its glow, so whoever
+        /// draws these must size them against one another rather than to a fixed box.
+        /// </para>
+        /// <list type="bullet">
+        /// <item><c>V_Empty</c> -> <c>appear0006 1</c>, 37x37</item>
+        /// <item><c>V_UpToQuarter</c> -> <c>level_010005</c>, 37x37</item>
+        /// <item><c>V_UpToHalf</c> -> <c>level_020005</c>, 37x38, packed turned</item>
+        /// <item><c>V_UpTo3Quarter</c> -> <c>level_030005</c>, 37x37</item>
+        /// <item><c>V_UpToFull</c> -> <c>full0009</c>, 62x60</item>
+        /// </list>
+        /// </summary>
+        internal static readonly string[] SoulVesselStageClips =
+        {
+            "V_Empty",
+            "V_UpToQuarter",
+            "V_UpToHalf",
+            "V_UpTo3Quarter",
+            "V_UpToFull"
+        };
+
+        /// <summary>
         /// Baldur Shell's five HUD states, in order from an unbroken shell to a spent one.
         /// <para>
         /// Each is the <em>last</em> frame of its clip: these are break animations, so the frame

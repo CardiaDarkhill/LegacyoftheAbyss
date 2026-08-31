@@ -7,7 +7,7 @@ public partial class LegacyHelper
 {
     public partial class ShadeController
     {
-        public void RestorePersistentState(int hp, int max, int baseMax, int lifeblood, int lifebloodMax, int soul, bool canDamage = true)
+        public void RestorePersistentState(int hp, int max, int baseMax, int lifeblood, int lifebloodMax, int soul, bool canDamage = true, int vesselSoul = 0)
         {
             baseShadeMaxHP = Mathf.Max(0, baseMax);
             shadeMaxHP = Mathf.Max(0, max);
@@ -17,6 +17,7 @@ public partial class LegacyHelper
             shadeLifebloodMax = pendingRestoredLifebloodMax;
             shadeLifeblood = pendingRestoredLifeblood;
             shadeSoul = Mathf.Clamp(soul, 0, shadeSoulMax);
+            RestoreVesselSoul(vesselSoul);
             canTakeDamage = canDamage;
             assistModeEnabled = !canTakeDamage;
             sceneProtectionDesiredDamageState = canTakeDamage;
@@ -111,11 +112,11 @@ public partial class LegacyHelper
         {
             if (Companion != null)
             {
-                LegacyHelper.SaveShadeState(Companion, shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax, shadeSoul, damageState, baseShadeMaxHP);
+                LegacyHelper.SaveShadeState(Companion, shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax, shadeSoul, damageState, baseShadeMaxHP, shadeVesselSoul);
                 return;
             }
 
-            LegacyHelper.SaveShadeState(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax, shadeSoul, damageState, baseShadeMaxHP);
+            LegacyHelper.SaveShadeState(shadeHP, shadeMaxHP, shadeLifeblood, shadeLifebloodMax, shadeSoul, damageState, baseShadeMaxHP, shadeVesselSoul);
         }
 
         private void PersistIfChanged()
@@ -130,6 +131,7 @@ public partial class LegacyHelper
                 || lastSavedLifeblood != shadeLifeblood
                 || lastSavedLifebloodMax != shadeLifebloodMax
                 || lastSavedSoul != shadeSoul
+                || lastSavedVesselSoul != shadeVesselSoul
                 || lastSavedCanTakeDamage != canTakeDamage)
             {
                 SaveOwnState(canTakeDamage);
@@ -138,6 +140,7 @@ public partial class LegacyHelper
                 lastSavedLifeblood = shadeLifeblood;
                 lastSavedLifebloodMax = shadeLifebloodMax;
                 lastSavedSoul = shadeSoul;
+                lastSavedVesselSoul = shadeVesselSoul;
                 lastSavedCanTakeDamage = canTakeDamage;
             }
         }
@@ -223,7 +226,7 @@ public partial class LegacyHelper
 
             if (pendingHudSoulSync)
             {
-                hud.SetShadeSoul(shadeSoul, shadeSoulMax);
+                hud.SetShadeSoul(shadeSoul, shadeSoulMax, shadeVesselSoul, GetShadeVesselCount());
                 pendingHudSoulSync = false;
             }
         }
