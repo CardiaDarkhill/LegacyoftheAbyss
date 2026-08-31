@@ -1165,10 +1165,10 @@ public partial class LegacyHelper
 
             var context = new ShadeCharmContext(this, charmSnapshot);
             var evt = new ShadeCharmDamageEvent(attemptedDamage, actualDamage, wasHazard, prevented, lethal);
-            foreach (var callback in charmDamageCallbacks)
+            foreach (var entry in charmDamageCallbacks)
             {
-                try { callback(context, evt); }
-                catch { }
+                try { entry.Callback(context, evt); }
+                catch (Exception ex) { ReportCharmHookFailure(entry.Charm, "damage", ex); }
             }
         }
 
@@ -1199,6 +1199,27 @@ public partial class LegacyHelper
             CancelFocus();
             DispatchCharmDamageEvent(attemptedDamage, 0, wasHazard, true, false);
             return true;
+        }
+
+        /// <summary>
+        /// Names a charm hook that threw, once per charm and kind. Swallowing these is what made a
+        /// charm that fails on its first line look exactly like one that is not implemented.
+        /// </summary>
+        private void ReportCharmHookFailure(string charm, string kind, Exception ex)
+        {
+            string key = charm + ":" + kind;
+            if (!reportedCharmHookFailures.Add(key))
+            {
+                return;
+            }
+
+            try
+            {
+                LegacyHelper.LogWarning($"Charm '{charm}' threw from its {kind} hook and that effect will not run: {ex}");
+            }
+            catch
+            {
+            }
         }
 
         private bool TryPreventCarefreeMelody(int attemptedDamage, bool wasHazard)
@@ -1316,7 +1337,9 @@ public partial class LegacyHelper
                 return;
             }
 
-            if (GetTotalCurrentHealth() <= 0)
+            int lost = before - GetTotalCurrentHealth();
+            bool lethal = GetTotalCurrentHealth() <= 0;
+            if (lethal)
             {
                 StartDeathAnimation();
             }
@@ -1328,6 +1351,16 @@ public partial class LegacyHelper
 
             PushShadeStatsToHud(suppressDamageAudio: true);
             PersistIfChanged();
+
+            // Debug damage runs the charm hooks that real damage runs. Without this the key set
+            // health and nothing else, so every damage-triggered charm - Thorns of Agony, Baldur
+            // Shell, Carefree Melody - looked broken when tested with it, which is exactly how it
+            // was tested. A debug key that does not exercise the thing being debugged is worse
+            // than no key at all.
+            if (lost > 0)
+            {
+                DispatchCharmDamageEvent(lost, lost, wasHazard: false, prevented: false, lethal: lethal);
+            }
         }
 
         private IEnumerator DeathAnimationRoutine()

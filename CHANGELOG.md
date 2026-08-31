@@ -71,15 +71,19 @@ controls it; the reasoning belongs in the commit and the code.
 - The Dreamshield circles the bearer evenly with its point turned outward.
 - Idle weaverlings wander instead of piling up, and one that cannot reach its target goes back to
   the bearer and tries again.
-- Thorns of Agony bursts Hollow Knight's own vines instead of stray lines, and Defender's Crest no
-  longer throws orange streaks across the room.
+- Thorns of Agony bursts Hollow Knight's own vines instead of stray lines, at the companion's own
+  size and centred on it, with the companion standing aside so the burst is its body rather than a
+  second one. Defender's Crest no longer throws orange streaks across the room.
 - Grubberfly's Elegy beams face the way they are travelling.
 - Flukes carry a hitbox their own size, so they no longer burst the instant they are thrown.
 - The Dreamshield is smaller, closer and slower.
 - The Shade's charm grid is drawn at the right size on high-resolution displays instead of at twice
   its intended size, where it overlapped the notch row and the charm description. It also no longer
   changes size between the first and later times it is opened in a scene.
-- Grubberfly's Elegy beams point the way they are fired.
+- Grubberfly's Elegy beams point the way they are fired, leave from directly above and below on
+  vertical shots, carry about an arm's reach past the companion, and stop at walls.
+- The debug HP keys now trigger the charms that react to damage, so Thorns of Agony, Baldur Shell
+  and Carefree Melody can be tested with them. Requires "Debug Keys (HP/Soul)".
 - Thorns of Agony bursts its vines again. Borrowed Hollow Knight effects are switched on when they
   are spawned, which several charms needed and none of them were getting.
 - The Shade's charm grid size can be set with `shadeCharmGridScale`, reread with Ctrl+F5.

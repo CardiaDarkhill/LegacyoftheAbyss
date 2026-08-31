@@ -34,8 +34,7 @@ namespace LegacyoftheAbyss.Shade.Knight
         /// </summary>
         internal const string ThornAttackClip = "Thorn Attack";
 
-        /// <summary>The clip's own rate, so the vines burst at the speed they were drawn at.</summary>
-        internal const float ThornAttackFps = 20f;
+
         internal const string SpellFluke = "Spell Fluke";
 
         /// <summary>
@@ -67,7 +66,7 @@ namespace LegacyoftheAbyss.Shade.Knight
         /// everything that is not art, and returns it. Null when the bundle or the prefab is
         /// missing, which every caller is expected to handle by keeping whatever it drew before.
         /// </summary>
-        internal static GameObject? TrySpawn(string prefabName, Transform parent, float scale = 1f)
+        internal static GameObject? TrySpawn(string prefabName, Transform parent, float scale = 1f, bool keepPrefabTransform = true)
         {
             if (string.IsNullOrEmpty(prefabName) || parent == null)
             {
@@ -114,17 +113,28 @@ namespace LegacyoftheAbyss.Shade.Knight
             // The prefab's own rotation is kept for the same reason its scale is: the up and down
             // Grubberfly beams are the sideways one turned a quarter, and resetting to identity
             // laid them both flat.
-            instance.transform.localRotation = prefab.transform.localRotation;
+            // Kept when the prefab *is* the art, dropped when it is only a body to play someone
+            // else's clip on - a host's own rotation and scale say nothing about the animation
+            // being played on it, and Shadow Burst's baked 1.92 was what drew the thorns oversized.
+            if (!keepPrefabTransform)
+            {
+                instance.transform.localRotation = Quaternion.identity;
+                instance.transform.localScale = Vector3.one * scale;
+            }
+            else
+            {
+                instance.transform.localRotation = prefab.transform.localRotation;
 
-            // Multiplied into the prefab's own scale rather than replacing it. Hollow Knight
-            // mirrors a lot of its art with a negative x scale on the prefab - the left-facing and
-            // right-facing beams are the same sprite turned around that way - so overwriting it
-            // pointed every direction the same way.
-            Vector3 prefabScale = prefab.transform.localScale;
-            instance.transform.localScale = new Vector3(
-                prefabScale.x * scale,
-                prefabScale.y * scale,
-                prefabScale.z == 0f ? scale : prefabScale.z * scale);
+                // Multiplied into the prefab's own scale rather than replacing it. Hollow Knight
+                // mirrors a lot of its art with a negative x scale on the prefab - the left-facing
+                // and right-facing beams are the same sprite turned around that way - so
+                // overwriting it pointed every direction the same way.
+                Vector3 prefabScale = prefab.transform.localScale;
+                instance.transform.localScale = new Vector3(
+                    prefabScale.x * scale,
+                    prefabScale.y * scale,
+                    prefabScale.z == 0f ? scale : prefabScale.z * scale);
+            }
 
             Object.Destroy(stage);
             return instance;
@@ -135,9 +145,9 @@ namespace LegacyoftheAbyss.Shade.Knight
         /// A borrowed prefab keeps Hollow Knight's sorting layers, which do not all exist here, so
         /// an effect left alone routinely lands behind the room.
         /// </summary>
-        internal static GameObject? TrySpawnSorted(string prefabName, Transform parent, Renderer? sortLike, float scale = 1f, int sortingOffset = 1, float alpha = 1f)
+        internal static GameObject? TrySpawnSorted(string prefabName, Transform parent, Renderer? sortLike, float scale = 1f, int sortingOffset = 1, float alpha = 1f, bool keepPrefabTransform = true)
         {
-            var instance = TrySpawn(prefabName, parent, scale);
+            var instance = TrySpawn(prefabName, parent, scale, keepPrefabTransform);
             if (instance == null)
             {
                 return null;
@@ -285,11 +295,17 @@ namespace LegacyoftheAbyss.Shade.Knight
                 }
             }
 
-            foreach (var animator in instance.GetComponentsInChildren<tk2dSpriteAnimator>(true))
+            // Every Behaviour still here is art - Strip removed the rest - so they all go back on.
+            // Enabling only the animator was not enough: a tk2dSprite ships disabled too, and a
+            // disabled one never builds its mesh, so the animator sets frames on something that
+            // draws nothing and no part of it reports a problem.
+            // Renderer is not a Behaviour in Unity, so the loop above is the only thing that
+            // reaches them and this one cannot double back over them.
+            foreach (var behaviour in instance.GetComponentsInChildren<Behaviour>(true))
             {
-                if (animator != null)
+                if (behaviour != null)
                 {
-                    animator.enabled = true;
+                    behaviour.enabled = true;
                 }
             }
         }
@@ -301,14 +317,15 @@ namespace LegacyoftheAbyss.Shade.Knight
         /// sprites by hand, because it draws through the bundle's own material rather than through
         /// a renderer built here with whatever material happens to be the default.
         /// </summary>
-        internal static GameObject? TrySpawnAnimatedClip(string clipName, Transform parent, Renderer? sortLike, float scale = 1f, float alpha = 1f)
+        internal static GameObject? TrySpawnAnimatedClip(string clipName, Transform parent, Renderer? sortLike, float scale = 1f, float alpha = 1f, Bounds? fitToBody = null)
         {
             if (string.IsNullOrEmpty(clipName) || parent == null)
             {
                 return null;
             }
 
-            var host = TrySpawnSorted(ClipHost, parent, sortLike, scale, sortingOffset: 1, alpha: alpha);
+            var host = TrySpawnSorted(
+                ClipHost, parent, sortLike, scale, sortingOffset: 1, alpha: alpha, keepPrefabTransform: false);
             if (host == null)
             {
                 LegacyHelper.LogWarning($"Knight clip '{clipName}' has no host to play on ('{ClipHost}' is not in the bundle).");
@@ -334,7 +351,96 @@ namespace LegacyoftheAbyss.Shade.Knight
 
             animator.enabled = true;
             animator.Play(clip);
+
+            // Sized and placed against the body it belongs to, measured rather than guessed.
+            // Playing the clip builds the mesh, so by here the renderer knows how big the art is.
+            if (fitToBody.HasValue)
+            {
+                FitToBody(host, fitToBody.Value, scale);
+            }
+
+            DescribeClipOnce(clipName, host, animator);
             return host;
+        }
+
+        /// <summary>
+        /// Scales and places a borrowed clip so the character drawn inside it lines up with the
+        /// character it is being played for.
+        /// <para>
+        /// Several of these clips are the Knight's <em>own body</em> doing something - Thorns of
+        /// Agony is the Knight spewing thorns, mask and all - so the size that reads correctly is
+        /// the one where that body matches the real one, not one derived from the damage volume.
+        /// Measured on the first frame, which is the pose before the effect has grown out of it,
+        /// and both axes are taken from the same factor so nothing is stretched.
+        /// </para>
+        /// </summary>
+        private static void FitToBody(GameObject instance, Bounds body, float bias)
+        {
+            try
+            {
+                var renderer = instance.GetComponentInChildren<Renderer>(true);
+                if (renderer == null || body.size.y <= 0.001f)
+                {
+                    return;
+                }
+
+                // The bias is re-applied on top, because matching the body cancels out whatever
+                // scale the effect was spawned with - without this a caller asking for a slightly
+                // larger or smaller burst would silently get neither.
+                float drawnHeight = renderer.bounds.size.y;
+                if (drawnHeight > 0.001f)
+                {
+                    instance.transform.localScale *= (body.size.y / drawnHeight) * Mathf.Max(0.05f, bias);
+                }
+
+                // Centred on the body rather than dropped at its transform: the companion's origin
+                // is at its feet and the clip's is its middle, so placing one at the other drew the
+                // whole burst half a body too low.
+                Vector3 drift = body.center - renderer.bounds.center;
+                instance.transform.position += drift;
+            }
+            catch
+            {
+            }
+        }
+
+        private static readonly System.Collections.Generic.HashSet<string> s_describedClips = new();
+
+        /// <summary>
+        /// Reports what a borrowed animation resolved to, the first time each clip is played.
+        /// <para>
+        /// "It draws nothing" and "it was never spawned" look identical from outside, and this one
+        /// has now been diagnosed wrong several times from their absence. One line, once per clip:
+        /// enough to tell a missing renderer from a transparent material from an object sitting at
+        /// the origin, without adding a line per hit taken.
+        /// </para>
+        /// </summary>
+        private static void DescribeClipOnce(string clipName, GameObject host, tk2dSpriteAnimator animator)
+        {
+            if (!s_describedClips.Add(clipName))
+            {
+                return;
+            }
+
+            try
+            {
+                var renderer = host.GetComponentInChildren<Renderer>(true);
+                string material = renderer != null && renderer.sharedMaterial != null
+                    ? renderer.sharedMaterial.name
+                    : "none";
+                string sortingLayer = renderer != null ? renderer.sortingLayerName : "?";
+                int sortingOrder = renderer != null ? renderer.sortingOrder : 0;
+
+                LegacyHelper.LogInfo(
+                    $"Knight clip '{clipName}' playing on '{host.name}': active={host.activeInHierarchy} "
+                    + $"renderer={(renderer != null ? renderer.enabled.ToString() : "missing")} "
+                    + $"material={material} sorting={sortingLayer}:{sortingOrder} "
+                    + $"pos={host.transform.position} scale={host.transform.lossyScale} "
+                    + $"animatorEnabled={animator.enabled} playing={animator.Playing}");
+            }
+            catch
+            {
+            }
         }
 
         /// <summary>

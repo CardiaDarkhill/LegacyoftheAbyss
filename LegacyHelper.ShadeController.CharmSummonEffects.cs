@@ -47,7 +47,7 @@ public partial class LegacyHelper
             float effectScale = 1f,
             float effectAlpha = 1f,
             string effectClip = null,
-            float effectClipFps = 20f)
+            bool clipReplacesBody = false)
         {
             if (damage <= 0 || radius <= 0f)
             {
@@ -67,8 +67,21 @@ public partial class LegacyHelper
             }
             else if (!string.IsNullOrEmpty(effectClip))
             {
+                // A clip that *is* the companion's body is matched to it and takes its place for
+                // as long as it plays; anything else is drawn where the volume is and left alone.
+                Bounds? body = null;
+                if (clipReplacesBody && TryGetCompanionRenderedBounds(out var measured))
+                {
+                    body = measured;
+                }
+
                 var drawn = LegacyoftheAbyss.Shade.Knight.KnightEffects.TrySpawnAnimatedClip(
-                    effectClip, go.transform, sr, effectScale, effectAlpha);
+                    effectClip, go.transform, sr, effectScale, effectAlpha, fitToBody: body);
+
+                if (drawn != null && clipReplacesBody)
+                {
+                    HideCompanionForClip(lifeSeconds);
+                }
                 if (drawn == null)
                 {
                     LegacyHelper.LogWarning($"Charm burst wanted the '{effectClip}' animation and got nothing; the effect will be invisible.");
@@ -86,6 +99,49 @@ public partial class LegacyHelper
             aoe.hitIntervalSeconds = hitIntervalSeconds;
             aoe.ConfigureDamage(damage, applyDamageMultiplier);
         }
+
+        /// <summary>
+        /// The companion's drawn extent - the Knight's rig where it has one, its sprite otherwise.
+        /// Bounds rather than the transform, because neither character's origin is where it draws.
+        /// </summary>
+        private bool TryGetCompanionRenderedBounds(out Bounds bounds)
+        {
+            bounds = default;
+
+            if (UsesGroundedMovement && knightView != null && knightView.TryGetRenderedBounds(out bounds))
+            {
+                return bounds.size.y > 0.0001f;
+            }
+
+            if (sr != null)
+            {
+                bounds = sr.bounds;
+                return bounds.size.y > 0.0001f;
+            }
+
+            return false;
+        }
+
+        /// <summary>Until when the companion's own body is stood down for a clip that replaces it.</summary>
+        private float bodyHiddenForClipUntil;
+
+        /// <summary>
+        /// Stands the companion's own body down while a clip that contains it is playing.
+        /// <para>
+        /// Thorns of Agony is the Knight's body bursting into thorns, so drawing it over the real
+        /// one puts two Knights on screen. The stagger from the hit that triggered it already holds
+        /// the controls and the invulnerability, so this only has to take care of the drawing - and
+        /// is extended to cover the clip in case the stagger is the shorter of the two.
+        /// </para>
+        /// </summary>
+        private void HideCompanionForClip(float seconds)
+        {
+            bodyHiddenForClipUntil = Mathf.Max(bodyHiddenForClipUntil, Time.time + seconds);
+            damageStaggerTimer = Mathf.Max(damageStaggerTimer, seconds);
+        }
+
+        /// <summary>Whether a clip is currently standing in for the companion's own body.</summary>
+        private bool BodyHiddenForClip => Time.time < bodyHiddenForClipUntil;
 
         /// <summary>Exactly one nail slash of damage, for the charms specified in those terms.</summary>
         internal int NailSlashDamage => GetShadeNailDamage();

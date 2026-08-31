@@ -17,8 +17,14 @@ public partial class LegacyHelper
 
         private ShadeCharmLoadoutSnapshot charmSnapshot = ShadeCharmLoadoutSnapshot.FromBaseline(s_defaultCharmStats);
         private readonly List<ShadeCharmDefinition> equippedCharms = new List<ShadeCharmDefinition>();
-        private readonly List<Action<ShadeCharmContext, float>> charmUpdateCallbacks = new List<Action<ShadeCharmContext, float>>();
-        private readonly List<Action<ShadeCharmContext, ShadeCharmDamageEvent>> charmDamageCallbacks = new List<Action<ShadeCharmContext, ShadeCharmDamageEvent>>();
+        // Paired with the charm they came from, so a hook that throws can be named. A bare
+        // callback list meant "this charm does nothing" and "this charm throws on its first line"
+        // produced identical silence, which cost several rounds on Thorns of Agony.
+        private readonly List<(string Charm, Action<ShadeCharmContext, float> Callback)> charmUpdateCallbacks = new List<(string, Action<ShadeCharmContext, float>)>();
+        private readonly List<(string Charm, Action<ShadeCharmContext, ShadeCharmDamageEvent> Callback)> charmDamageCallbacks = new List<(string, Action<ShadeCharmContext, ShadeCharmDamageEvent>)>();
+
+        /// <summary>Charm hooks already reported as throwing, so each is logged once, not per hit.</summary>
+        private readonly HashSet<string> reportedCharmHookFailures = new HashSet<string>();
         private ShadeCharmAbilityToggles abilityOverrides = ShadeCharmAbilityToggles.None;
 
         // Movement and leash

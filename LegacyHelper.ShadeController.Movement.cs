@@ -236,7 +236,9 @@ public partial class LegacyHelper
                 shadeHidden = false;
             }
 
-            ApplyScriptedHoldVisibility(shadeHidden);
+            // A clip standing in for the companion's body hides it for as long as it plays, on
+            // top of whatever the scripted hold wanted.
+            ApplyScriptedHoldVisibility(shadeHidden || BodyHiddenForClip);
             if (hornetControlsLocked && !wasControlsLocked)
             {
                 // Entering the locked state mid-action: drop whatever the Shade was doing rather than
@@ -303,10 +305,10 @@ public partial class LegacyHelper
             {
                 var context = new ShadeCharmContext(this, charmSnapshot);
                 float delta = Time.deltaTime;
-                foreach (var callback in charmUpdateCallbacks)
+                foreach (var entry in charmUpdateCallbacks)
                 {
-                    try { callback(context, delta); }
-                    catch { }
+                    try { entry.Callback(context, delta); }
+                    catch (Exception ex) { ReportCharmHookFailure(entry.Charm, "update", ex); }
                 }
             }
         }

@@ -741,12 +741,12 @@ namespace LegacyoftheAbyss.Shade
                         // The vines are 6 frames at 20fps, so the volume stands for as long as
                         // they are drawn rather than the other way round.
                         controller.SpawnCharmDamageBurst(
-                            radius: 3.2f,
+                            radius: 1.0f,
                             damage: controller.NailSlashDamage,
                             lifeSeconds: 0.3f,
                             applyDamageMultiplier: false,
                             effectClip: LegacyoftheAbyss.Shade.Knight.KnightEffects.ThornAttackClip,
-                            effectClipFps: LegacyoftheAbyss.Shade.Knight.KnightEffects.ThornAttackFps);
+                            clipReplacesBody: true);
                     }
                 },
                 displayName: "Thorns of Agony",

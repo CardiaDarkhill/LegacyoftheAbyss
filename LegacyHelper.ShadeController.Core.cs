@@ -369,11 +369,11 @@ public partial class LegacyHelper
             {
                 if (equipped.Hooks.OnUpdate != null)
                 {
-                    charmUpdateCallbacks.Add(equipped.Hooks.OnUpdate);
+                    charmUpdateCallbacks.Add((equipped.Id, equipped.Hooks.OnUpdate));
                 }
                 if (equipped.Hooks.OnShadeDamaged != null)
                 {
-                    charmDamageCallbacks.Add(equipped.Hooks.OnShadeDamaged);
+                    charmDamageCallbacks.Add((equipped.Id, equipped.Hooks.OnShadeDamaged));
                 }
             }
 

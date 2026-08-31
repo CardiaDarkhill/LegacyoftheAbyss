@@ -717,16 +717,21 @@ public partial class LegacyHelper
             TryPlayFireballSfx();
         }
 
-        /// <summary>
-        /// How long a Grubberfly beam lives. Short: it is a flourish on the swing rather than a
-        /// projectile to be aimed, and it should be gone before the next one is thrown.
-        /// </summary>
-        private const float GrubberflyBeamSeconds = 0.34f;
-
         private const float GrubberflyBeamSpeed = 52f;
 
-        /// <summary>Far enough that the lifetime is what ends it, not the range.</summary>
-        private const float GrubberflyBeamRange = GrubberflyBeamSpeed * GrubberflyBeamSeconds;
+        /// <summary>
+        /// How far a Grubberfly beam carries: a little past arm's reach, measured against the gap
+        /// between the companion and Hornet in the report that asked for it (about six units).
+        /// This is what ends the beam, not the lifetime - at this speed a third of a second would
+        /// take it most of a room, which is what "off the edge of the screen" was.
+        /// </summary>
+        private const float GrubberflyBeamRange = 7f;
+
+        /// <summary>
+        /// A backstop for a beam that somehow never covers its range - stuck against geometry, or
+        /// spawned while the game is paused. Half again the time the range should take.
+        /// </summary>
+        private const float GrubberflyBeamSeconds = (GrubberflyBeamRange / GrubberflyBeamSpeed) * 1.5f;
 
         /// <summary>
         /// Grubberfly's Elegy: a wave of energy thrown alongside an ordinary slash while the bearer
@@ -758,7 +763,15 @@ public partial class LegacyHelper
             int damage = Mathf.Max(1, Mathf.CeilToInt(GetShadeNailDamage() * 0.5f));
 
             var proj = new GameObject("ShadeGrubberflyBeam");
-            proj.transform.position = transform.position + (Vector3)new Vector2(muzzleOffset.x * facing, muzzleOffset.y);
+
+            // The muzzle sits out to the side because a horizontal beam leaves from the nail. A
+            // vertical one leaves from directly above or below, so it drops that offset entirely
+            // rather than firing down past the bearer's shoulder.
+            bool verticalShot = Mathf.Abs(dir.y) > 0.5f;
+            Vector2 muzzle = verticalShot
+                ? new Vector2(0f, muzzleOffset.y)
+                : new Vector2(muzzleOffset.x * facing, muzzleOffset.y);
+            proj.transform.position = transform.position + (Vector3)muzzle;
             proj.tag = "Hero Spell";
             int spellLayer = LayerMask.NameToLayer("Hero Spell");
             int atkLayer = LayerMask.NameToLayer("Hero Attack");
@@ -822,6 +835,10 @@ public partial class LegacyHelper
             beam.hornetRoot = hornetTransform;
             beam.maxRange = GrubberflyBeamRange;
             beam.lifeSeconds = GrubberflyBeamSeconds;
+
+            // Stops at walls as well. The bundle's own beam carries a "Terrain Detector" child for
+            // exactly this, and that child is stripped out of anything borrowed.
+            beam.destroyOnTerrain = true;
 
             LoggingManager.LogShadeAttackDamage(CharacterLogName, "Grubberfly's Elegy beam", damage);
         }
