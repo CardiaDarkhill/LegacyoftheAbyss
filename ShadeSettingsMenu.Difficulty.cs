@@ -454,6 +454,7 @@ public static partial class ShadeSettingsMenu
 
         presets[next].ApplyTo(ModConfig.Instance);
         ApplyShadeMaskFractionToLiveShade();
+        PersistDifficultyChange();
     }
 
     private static string DescribeShadeMaskSetting()
@@ -475,6 +476,7 @@ public static partial class ShadeSettingsMenu
             steps = 10;
         ModConfig.Instance.shadeMaskFraction = steps / 10f;
         ApplyShadeMaskFractionToLiveShade();
+        PersistDifficultyChange();
     }
 
     /// <summary>
@@ -542,6 +544,30 @@ public static partial class ShadeSettingsMenu
     private static void RefreshDifficultyHeader()
     {
         difficultyController?.RefreshAll();
+        PersistDifficultyChange();
+    }
+
+    /// <summary>
+    /// Puts a difficulty change where it belongs: <c>config.json</c>, which is the default for a
+    /// save that has no difficulty of its own, and the save slot in play, which is where difficulty
+    /// actually lives now.
+    /// <para>
+    /// Called from every write on this screen rather than from <c>DifficultyMenuController</c>,
+    /// which the new-game screen shares - that screen holds its choices locally until Begin, and a
+    /// refresh there must not push the current values onto whichever slot happens to be active.
+    /// </para>
+    /// </summary>
+    private static void PersistDifficultyChange()
+    {
+        try
+        {
+            ModConfig.Save();
+            ShadeRuntime.PersistDifficultyToActiveSlot();
+        }
+        catch (Exception e)
+        {
+            LogMenuWarning($"Difficulty change could not be saved: {e}");
+        }
     }
 
     /// <summary>

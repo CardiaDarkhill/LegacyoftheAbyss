@@ -62,8 +62,12 @@ public partial class LegacyHelper
 
             var scenes = BuildSceneLookup(map);
             float pinHeight = ResolvePinHeight(map);
-            int placed = 0;
+            bool showCollected = ModConfig.Instance.debugShowCollectedPickupsOnMap;
 
+            // Counted per room before anything is drawn, so a room with several pickups can fan them
+            // out rather than stacking them all on the same spot. Pins are room-level - see the note
+            // on this class - so the count is the only detail a room can carry.
+            var perRoom = new Dictionary<GameMapScene, int>();
             foreach (var placement in placements)
             {
                 if (placement == null || string.IsNullOrWhiteSpace(placement.SceneName))
@@ -71,7 +75,7 @@ public partial class LegacyHelper
                     continue;
                 }
 
-                if (ShadeCharmPlacementService.IsPlacementAlreadySatisfied(placement))
+                if (!showCollected && ShadeCharmPlacementService.IsPlacementAlreadySatisfied(placement))
                 {
                     continue;
                 }
@@ -81,13 +85,24 @@ public partial class LegacyHelper
                     continue;
                 }
 
-                CreatePin(scene, sprite, pinHeight);
-                placed++;
+                perRoom.TryGetValue(scene, out int count);
+                perRoom[scene] = count + 1;
+            }
+
+            int placed = 0;
+            foreach (var room in perRoom)
+            {
+                for (int i = 0; i < room.Value; i++)
+                {
+                    CreatePin(room.Key, sprite, pinHeight, i, room.Value);
+                    placed++;
+                }
             }
 
             if (ModConfig.Instance.logGeneral)
             {
-                LogInfo($"Wayward Compass: {placed} pickup pin(s) placed across {scenes.Count} mapped rooms.");
+                LogInfo($"Wayward Compass: {placed} pickup pin(s) placed across {perRoom.Count} mapped rooms"
+                    + (showCollected ? ", collected ones included." : "."));
             }
         }
 
@@ -148,7 +163,11 @@ public partial class LegacyHelper
             return FallbackPinHeight;
         }
 
-        private static void CreatePin(GameMapScene scene, Sprite sprite, float pinHeight)
+        /// <summary>
+        /// One pin. <paramref name="slot"/> and <paramref name="total"/> spread a room's pins along
+        /// a row centred on it, so two pickups in one room read as two rather than as one.
+        /// </summary>
+        private static void CreatePin(GameMapScene scene, Sprite sprite, float pinHeight, int slot, int total)
         {
             var go = new GameObject(PinName) { layer = scene.gameObject.layer };
             var pinTransform = go.transform;
@@ -170,10 +189,20 @@ public partial class LegacyHelper
             }
 
             float spriteHeight = sprite.bounds.size.y * Mathf.Abs(scene.transform.lossyScale.y);
+            float pinScale = 1f;
             if (spriteHeight > 0.0001f)
             {
-                float scale = pinHeight / spriteHeight;
-                pinTransform.localScale = new Vector3(scale, scale, 1f);
+                pinScale = pinHeight / spriteHeight;
+                pinTransform.localScale = new Vector3(pinScale, pinScale, 1f);
+            }
+
+            if (total > 1)
+            {
+                // Stepped by the pin's own drawn width, so the row is as wide as it needs to be and
+                // no wider - a room sprite is not a reliable yardstick for anything else.
+                float step = sprite.bounds.size.x * pinScale;
+                float offset = (slot - (total - 1) * 0.5f) * step;
+                pinTransform.localPosition = new Vector3(offset, 0f, -1f);
             }
 
             Pins.Add(go);

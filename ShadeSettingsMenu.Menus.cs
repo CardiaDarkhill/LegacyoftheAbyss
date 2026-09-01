@@ -381,6 +381,10 @@ public static partial class ShadeSettingsMenu
         AddToggle("HUD Debug Logs", ModConfig.Instance.logHud, v => ModConfig.Instance.logHud = v);
         AddToggle("Damage Summary File", ModConfig.Instance.logDamage, v => ModConfig.Instance.logDamage = v);
         AddToggle("Debug Keys (HP/Soul)", ModConfig.Instance.debugKeysEnabled, v => ModConfig.Instance.debugKeysEnabled = v);
+        // A surveying tool: with this on the map shows every pickup rather than only the ones still
+        // out there, which is what placing a new charm well actually needs to see.
+        AddToggle("Map Shows Collected Pickups", ModConfig.Instance.debugShowCollectedPickupsOnMap,
+            v => ModConfig.Instance.debugShowCollectedPickupsOnMap = v);
         SetupButtonList(ms, selectables);
         if (selectables.Count > 0)
         {

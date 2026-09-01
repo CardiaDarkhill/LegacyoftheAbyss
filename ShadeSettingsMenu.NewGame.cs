@@ -238,17 +238,23 @@ public static partial class ShadeSettingsMenu
     {
         try
         {
-            var preset = DifficultyPreset.All[Mathf.Clamp(newGameDifficultyIndex, 0, DifficultyPreset.All.Length - 1)];
-            preset.ApplyTo(ModConfig.Instance);
-            ModConfig.Save();
-
-            // The primary companion's, which is the one a new game starts with.
-            ShadeCharacterManager.Select(0, newGameCharacter);
-
+            // The reset first, so nothing below is written into a slot that is about to be wiped.
             if (newGameResetProgress && newGameSlotHasProgress)
             {
                 ShadeRuntime.ResetSlotProgress(newGameSlot);
             }
+
+            var preset = DifficultyPreset.All[Mathf.Clamp(newGameDifficultyIndex, 0, DifficultyPreset.All.Length - 1)];
+            preset.ApplyTo(ModConfig.Instance);
+            ModConfig.Save();
+
+            // Difficulty belongs to the save slot, so it is written to the one being started rather
+            // than only to the live config - which the slot would otherwise overwrite the moment it
+            // loads and finds a difficulty of its own.
+            ShadeRuntime.SetSlotDifficulty(newGameSlot, ShadeDifficultySettings.CaptureFrom(ModConfig.Instance));
+
+            // The primary companion's, which is the one a new game starts with.
+            ShadeCharacterManager.Select(0, newGameCharacter);
 
             LogMenuInfo($"New game on slot {newGameSlot}: difficulty={preset.Name} character={newGameCharacter} reset={newGameResetProgress && newGameSlotHasProgress}");
         }

@@ -10,6 +10,12 @@ controls it; the reasoning belongs in the commit and the code.
 - The Hornet Needle damage slider now does something. It was scaling a field that needle strikes
   never read, so only Silk Skills responded.
 
+### Changed
+
+- Difficulty settings now belong to the save profile rather than to the install, so two files can be
+  played at two difficulties. A profile with none stored keeps whatever `config.json` holds, so an
+  existing save carries on at the difficulty it was being played at.
+
 ### Added
 
 - Soul Vessels. The companion earns one for every two increases to Hornet's silk maximum, up to
@@ -27,6 +33,9 @@ controls it; the reasoning belongs in the commit and the code.
   now Hard, so a run already being played at those values keeps them under the new name.
 - The Knight steps over small lips and seams in the ground instead of stopping dead at them.
   `knightStepHeight` sets how high a lip that is, as a share of its own height.
+- "Map Shows Collected Pickups" in Debug Options makes Wayward Compass mark every pickup on the map
+  rather than only the ones still out there, for working out where a new one should go. A room
+  holding several now shows several pins instead of one.
 
 - A buff bar under the companion's mask row, showing Baldur Shell's remaining blows. "Buff Bar" is
   on by default; `hudBuffBarOffsetX`, `hudBuffBarOffsetY`, `hudBuffIconSize`, `hudBuffIconScale` and
@@ -39,7 +48,7 @@ controls it; the reasoning belongs in the commit and the code.
   Controls, unbound to anything the Shade uses.
 - Ten charms join the roster: Weaversong, Defender's Crest, Flukenest, Spore Shroom, Thorns of
   Agony, Glowing Womb, Gathering Swarm, Grimmchild, Dream Wielder and Dreamshield. All work for
-  both the Shade and the Knight, sold by the Bonebottom shopkeeper and Grindle.
+  both the Shade and the Knight, and each is found out in the world rather than bought.
 - The charm inventory now scales its grid to fit the larger roster instead of running off the pane.
 - The camera now leans toward the midpoint between Hornet and her companion, and widens by up to a
   quarter once they no longer both fit, so the pair stay on screen. The Knight is held inside the

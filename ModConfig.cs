@@ -396,6 +396,16 @@ public class ModConfig
     // character instead of an unlit overlay. Toggleable because it is the one visual change
     // here that depends on a game-side shader we do not control.
     public bool shadeUseHornetMaterial = true;
+    /// <summary>
+    /// Marks pickups on the map that have already been collected, as well as the ones that have
+    /// not. Wayward Compass still has to be equipped for any of it to draw.
+    /// <para>
+    /// A surveying tool rather than a gameplay one: placing a charm well means seeing where all the
+    /// existing pickups are at once, which is exactly what a compass that hides the collected ones
+    /// cannot show. Off by default - with this on the map stops being a record of what is left.
+    /// </para>
+    /// </summary>
+    public bool debugShowCollectedPickupsOnMap = false;
     // The Knight's rig comes out of Hollow Knight at its own scale, which stands it nearly as tall
     // as Hornet; it should be a little over half her height. Multiplies the rig's own scale, and
     // the companion body's collider with it so the hurtbox does not stay a head taller than the

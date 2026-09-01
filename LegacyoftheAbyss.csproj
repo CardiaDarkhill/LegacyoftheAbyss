@@ -139,6 +139,22 @@
           <LocalDevBinaries Include="$(TargetDir)$(TargetName).pdb" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
       </ItemGroup>
       <Copy SourceFiles="@(LocalDevBinaries)" DestinationFolder="$(MSBuildProjectDirectory)\.." SkipUnchangedFiles="false" />
+
+      <!--
+      Shipped data files, which the deploy above does not cover because it only carries the assembly.
+      The live Assets folder is one level up, beside the dll, and is *not* this repo's Assets/ - it
+      also holds this install's config.json, save slots and logs, so it cannot simply be mirrored.
+      Only files that are content rather than player state are listed here.
+
+      Editing charm_placements.json without this is a silent no-op: the repo copy changes, the build
+      succeeds, and the running game goes on reading the old placements from the folder next to the
+      dll. Add any future shipped data file to this list rather than copying it by hand.
+      -->
+      <ItemGroup>
+          <LocalDevAssets Include="$(MSBuildProjectDirectory)\Assets\charm_placements.json" />
+      </ItemGroup>
+      <Copy SourceFiles="@(LocalDevAssets)" DestinationFolder="$(MSBuildProjectDirectory)\..\Assets" SkipUnchangedFiles="false" />
+
       <Message Text="Deployed local dev build to $(MSBuildProjectDirectory)\.." Importance="High" />
   </Target>
 

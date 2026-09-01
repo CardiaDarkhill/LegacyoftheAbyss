@@ -402,6 +402,53 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
+        /// <summary>
+        /// Pushes the active slot's difficulty onto the live config, or adopts the live config as
+        /// this slot's difficulty when it has none stored.
+        /// <para>
+        /// The adoption is what makes this change invisible to a save that predates it: such a slot
+        /// keeps being played at whatever <c>config.json</c> holds, and only diverges from the other
+        /// slots once the Difficulty screen is next touched.
+        /// </para>
+        /// </summary>
+        private static void SyncDifficultyFromActiveSlot()
+        {
+            var config = ModConfig.Instance;
+            if (config == null)
+            {
+                return;
+            }
+
+            var stored = s_saveSlots.GetDifficulty(s_activeSlot);
+            if (stored != null)
+            {
+                stored.ApplyTo(config);
+                return;
+            }
+
+            s_saveSlots.SetDifficulty(s_activeSlot, ShadeDifficultySettings.CaptureFrom(config));
+        }
+
+        /// <summary>Writes the live difficulty to the slot in play. Called whenever it is changed.</summary>
+        internal static void PersistDifficultyToActiveSlot()
+        {
+            if (!s_hasActiveSlot)
+            {
+                return;
+            }
+
+            s_saveSlots.SetDifficulty(s_activeSlot, ShadeDifficultySettings.CaptureFrom(ModConfig.Instance));
+        }
+
+        /// <summary>
+        /// Writes a difficulty to a slot that is not the one in play - the new-game screen choosing
+        /// for the file it is about to start, before that file has been loaded.
+        /// </summary>
+        internal static void SetSlotDifficulty(int slot, ShadeDifficultySettings settings)
+        {
+            s_saveSlots.SetDifficulty(slot, settings);
+        }
+
         internal static void SetActiveSlot(int slot)
         {
             int clamped = s_saveSlots.MaxSlots > 0
@@ -415,6 +462,7 @@ namespace LegacyoftheAbyss.Shade
                 DisableDebugUnlockIfActive();
                 s_saveSlots.GetOrCreateSlot(s_activeSlot);
                 SyncInventoryFromActiveSlot();
+                SyncDifficultyFromActiveSlot();
                 LegacyHelper.RequestShadeLoadoutRecompute();
                 return;
             }
@@ -426,10 +474,16 @@ namespace LegacyoftheAbyss.Shade
                     PersistInventoryToSlot(s_activeSlot);
                 }
 
+                // Deliberately no difficulty flush for the outgoing slot here. The live config does
+                // not reliably belong to it by this point: the new-game screen writes the *incoming*
+                // slot's choice onto the config before the game loads, so flushing would stamp the
+                // new file's difficulty onto the one last played. Every change is written to its own
+                // slot as it is made instead - see PersistDifficultyToActiveSlot's callers.
                 DisableDebugUnlockIfActive();
                 s_activeSlot = clamped;
                 s_saveSlots.GetOrCreateSlot(s_activeSlot);
                 SyncInventoryFromActiveSlot();
+                SyncDifficultyFromActiveSlot();
                 LegacyHelper.RequestShadeLoadoutRecompute();
                 return;
             }

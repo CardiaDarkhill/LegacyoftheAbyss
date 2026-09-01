@@ -538,174 +538,114 @@
       "notes": "Charm notch pickup near Hornet location (Arborium_03)"
     },
     {
-      "placementKind": "ShopListing",
-      "charmId": "GatheringSwarm",
-      "shop": {
-        "ownerNameContainsAll": [
-          "bone",
-          "shop"
-        ],
-        "stockContainsAnyPlayerDataBools": [
-          "PurchasedBonebottomFaithToken",
-          "PurchasedBonebottomHeartPiece",
-          "PurchasedBonebottomToolMetal"
-        ],
-        "geoCost": 120
-      },
-      "notes": "Gathering Swarm sold early by the Bonebottom shopkeeper"
-    },
-    {
-      "placementKind": "ShopListing",
-      "charmId": "DefendersCrest",
-      "shop": {
-        "ownerNameContainsAll": [
-          "bone",
-          "shop"
-        ],
-        "stockContainsAnyPlayerDataBools": [
-          "PurchasedBonebottomFaithToken",
-          "PurchasedBonebottomHeartPiece",
-          "PurchasedBonebottomToolMetal"
-        ],
-        "geoCost": 180
-      },
-      "notes": "Defender's Crest sold by the Bonebottom shopkeeper"
-    },
-    {
-      "placementKind": "ShopListing",
-      "charmId": "ThornsOfAgony",
-      "shop": {
-        "ownerNameContainsAll": [
-          "bone",
-          "shop"
-        ],
-        "stockContainsAnyPlayerDataBools": [
-          "PurchasedBonebottomFaithToken",
-          "PurchasedBonebottomHeartPiece",
-          "PurchasedBonebottomToolMetal"
-        ],
-        "geoCost": 200
-      },
-      "notes": "Thorns of Agony sold by the Bonebottom shopkeeper"
-    },
-    {
-      "placementKind": "ShopListing",
-      "charmId": "SporeShroom",
-      "shop": {
-        "ownerNameContainsAll": [
-          "bone",
-          "shop"
-        ],
-        "stockContainsAnyPlayerDataBools": [
-          "PurchasedBonebottomFaithToken",
-          "PurchasedBonebottomHeartPiece",
-          "PurchasedBonebottomToolMetal"
-        ],
-        "geoCost": 220
-      },
-      "notes": "Spore Shroom sold by the Bonebottom shopkeeper"
-    },
-    {
-      "placementKind": "ShopListing",
-      "charmId": "DreamWielder",
-      "shop": {
-        "ownerNameContainsAll": [
-          "bone",
-          "shop"
-        ],
-        "stockContainsAnyPlayerDataBools": [
-          "PurchasedBonebottomFaithToken",
-          "PurchasedBonebottomHeartPiece",
-          "PurchasedBonebottomToolMetal"
-        ],
-        "geoCost": 260
-      },
-      "notes": "Dream Wielder sold by the Bonebottom shopkeeper"
-    },
-    {
-      "placementKind": "ShopListing",
-      "charmId": "Weaversong",
-      "shop": {
-        "ownerNameContainsAll": [
-          "grindle"
-        ],
-        "stockContainsAnyPlayerDataBools": [
-          "purchasedGrindleSimpleKey",
-          "purchasedGrindleMemoryLocket",
-          "purchasedGrindleSpoolPiece",
-          "purchasedGrindleToolKit"
-        ],
-        "geoCost": 320
-      },
-      "notes": "Weaversong stocked by Grindle"
-    },
-    {
-      "placementKind": "ShopListing",
-      "charmId": "GlowingWomb",
-      "shop": {
-        "ownerNameContainsAll": [
-          "grindle"
-        ],
-        "stockContainsAnyPlayerDataBools": [
-          "purchasedGrindleSimpleKey",
-          "purchasedGrindleMemoryLocket",
-          "purchasedGrindleSpoolPiece",
-          "purchasedGrindleToolKit"
-        ],
-        "geoCost": 340
-      },
-      "notes": "Glowing Womb stocked by Grindle"
-    },
-    {
-      "placementKind": "ShopListing",
-      "charmId": "Flukenest",
-      "shop": {
-        "ownerNameContainsAll": [
-          "grindle"
-        ],
-        "stockContainsAnyPlayerDataBools": [
-          "purchasedGrindleSimpleKey",
-          "purchasedGrindleMemoryLocket",
-          "purchasedGrindleSpoolPiece",
-          "purchasedGrindleToolKit"
-        ],
-        "geoCost": 380
-      },
-      "notes": "Flukenest stocked by Grindle"
-    },
-    {
-      "placementKind": "ShopListing",
-      "charmId": "Dreamshield",
-      "shop": {
-        "ownerNameContainsAll": [
-          "grindle"
-        ],
-        "stockContainsAnyPlayerDataBools": [
-          "purchasedGrindleSimpleKey",
-          "purchasedGrindleMemoryLocket",
-          "purchasedGrindleSpoolPiece",
-          "purchasedGrindleToolKit"
-        ],
-        "geoCost": 420
-      },
-      "notes": "Dreamshield stocked by Grindle"
-    },
-    {
-      "placementKind": "ShopListing",
+      "sceneName": "Belltown_08",
+      "placementKind": "Ground",
       "charmId": "Grimmchild",
-      "shop": {
-        "ownerNameContainsAll": [
-          "grindle"
-        ],
-        "stockContainsAnyPlayerDataBools": [
-          "purchasedGrindleSimpleKey",
-          "purchasedGrindleMemoryLocket",
-          "purchasedGrindleSpoolPiece",
-          "purchasedGrindleToolKit"
-        ],
-        "geoCost": 450
+      "worldPosition": {
+        "x": 98.8,
+        "y": 8.2,
+        "z": 0.004
       },
-      "notes": "Grimmchild stocked by Grindle"
+      "notes": "Requested Grimmchild placement"
+    },
+    {
+      "sceneName": "Shellwood_11B",
+      "placementKind": "Ground",
+      "charmId": "Dreamshield",
+      "worldPosition": {
+        "x": 26.0,
+        "y": 148.6,
+        "z": 0.004
+      },
+      "notes": "Requested Dreamshield placement"
+    },
+    {
+      "sceneName": "Shadow_04",
+      "placementKind": "Ground",
+      "charmId": "Flukenest",
+      "worldPosition": {
+        "x": 54.4,
+        "y": 7.6,
+        "z": 0.004
+      },
+      "notes": "Requested Flukenest placement"
+    },
+    {
+      "sceneName": "Room_Witch",
+      "placementKind": "Ground",
+      "charmId": "GlowingWomb",
+      "worldPosition": {
+        "x": 9.1,
+        "y": 5.9,
+        "z": 0.004
+      },
+      "notes": "Requested Glowing Womb placement"
+    },
+    {
+      "sceneName": "Weave_12",
+      "placementKind": "Ground",
+      "charmId": "Weaversong",
+      "worldPosition": {
+        "x": 14.2,
+        "y": 10.6,
+        "z": 0.004
+      },
+      "notes": "Requested Weaversong placement"
+    },
+    {
+      "sceneName": "Song_Enclave",
+      "placementKind": "Ground",
+      "charmId": "DreamWielder",
+      "worldPosition": {
+        "x": 93.4,
+        "y": 7.6,
+        "z": 0.004
+      },
+      "notes": "Requested Dream Wielder placement"
+    },
+    {
+      "sceneName": "Clover_01",
+      "placementKind": "Ground",
+      "charmId": "ThornsOfAgony",
+      "worldPosition": {
+        "x": 121.6,
+        "y": 5.6,
+        "z": 0.004
+      },
+      "notes": "Requested Thorns of Agony placement"
+    },
+    {
+      "sceneName": "Bellway_Aqueduct",
+      "placementKind": "Ground",
+      "charmId": "SporeShroom",
+      "worldPosition": {
+        "x": 86.4,
+        "y": 62.6,
+        "z": 0.004
+      },
+      "notes": "Requested Spore Shroom placement"
+    },
+    {
+      "sceneName": "Abandoned_Town",
+      "placementKind": "Ground",
+      "charmId": "DefendersCrest",
+      "worldPosition": {
+        "x": 360.0,
+        "y": 7.6,
+        "z": 0.004
+      },
+      "notes": "Requested Defender's Crest placement"
+    },
+    {
+      "sceneName": "Mosstown_02C",
+      "placementKind": "Ground",
+      "charmId": "GatheringSwarm",
+      "worldPosition": {
+        "x": 27.9,
+        "y": 3.6,
+        "z": 0.004
+      },
+      "notes": "Requested Gathering Swarm placement"
     }
   ]
 }

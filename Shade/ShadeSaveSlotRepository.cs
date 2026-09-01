@@ -57,6 +57,13 @@ namespace LegacyoftheAbyss.Shade
 
             public int DebugNotchCapacity { get; set; }
 
+            /// <summary>
+            /// This slot's difficulty, or null for a slot that has never had one written - which is
+            /// every slot saved before difficulty became per-profile. Null means "adopt whatever is
+            /// in config.json", so an existing run keeps the difficulty it was being played at.
+            /// </summary>
+            public ShadeDifficultySettings? Difficulty { get; set; }
+
             public ShadeSaveSlotRecord Clone()
             {
                 return new ShadeSaveSlotRecord(
@@ -70,7 +77,8 @@ namespace LegacyoftheAbyss.Shade
                     DebugEquipped = DebugEquipped?.ToArray() ?? Array.Empty<ShadeCharmId>(),
                     DebugBroken = DebugBroken?.ToArray() ?? Array.Empty<ShadeCharmId>(),
                     DebugNewlyDiscovered = DebugNewlyDiscovered?.ToArray() ?? Array.Empty<ShadeCharmId>(),
-                    DebugNotchCapacity = DebugNotchCapacity
+                    DebugNotchCapacity = DebugNotchCapacity,
+                    Difficulty = Difficulty?.Clone()
                 };
             }
 
@@ -101,6 +109,8 @@ namespace LegacyoftheAbyss.Shade
             public ShadeCharmId[]? DebugNewlyDiscovered { get; set; }
 
             public int DebugNotchCapacity { get; set; }
+
+            public ShadeDifficultySettings? Difficulty { get; set; }
         }
 
         private readonly Dictionary<int, ShadeSaveSlotRecord> _slots;
@@ -185,6 +195,51 @@ namespace LegacyoftheAbyss.Shade
             var clone = (data ?? new ShadePersistentState()).Clone();
             record.ReplaceState(clone);
             PersistSlot(slot);
+        }
+
+        /// <summary>This slot's stored difficulty, or null when it has never had one written.</summary>
+        public ShadeDifficultySettings? GetDifficulty(int slot)
+        {
+            if (!IsValidSlot(slot) || !_slots.TryGetValue(slot, out var record))
+            {
+                return null;
+            }
+
+            return record.Difficulty?.Clone();
+        }
+
+        /// <summary>
+        /// Stores this slot's difficulty. Returns false when it already held the same one, so a
+        /// menu refresh that changed nothing does not rewrite the file.
+        /// </summary>
+        public bool SetDifficulty(int slot, ShadeDifficultySettings? settings)
+        {
+            if (!IsValidSlot(slot))
+            {
+                return false;
+            }
+
+            var record = GetOrCreateRecord(slot);
+            if (settings == null)
+            {
+                if (record.Difficulty == null)
+                {
+                    return false;
+                }
+
+                record.Difficulty = null;
+                PersistSlot(slot);
+                return true;
+            }
+
+            if (settings.Matches(record.Difficulty))
+            {
+                return false;
+            }
+
+            record.Difficulty = settings.Clone();
+            PersistSlot(slot);
+            return true;
         }
 
         public void ClearSlot(int slot)
@@ -706,6 +761,7 @@ namespace LegacyoftheAbyss.Shade
                     record.DebugBroken = data.DebugBroken ?? Array.Empty<ShadeCharmId>();
                     record.DebugNewlyDiscovered = data.DebugNewlyDiscovered ?? Array.Empty<ShadeCharmId>();
                     record.DebugNotchCapacity = data.DebugNotchCapacity;
+                    record.Difficulty = data.Difficulty;
                 }
                 finally
                 {
@@ -747,7 +803,8 @@ namespace LegacyoftheAbyss.Shade
                 DebugEquipped = record.DebugEquipped?.ToArray(),
                 DebugBroken = record.DebugBroken?.ToArray(),
                 DebugNewlyDiscovered = record.DebugNewlyDiscovered?.ToArray(),
-                DebugNotchCapacity = record.DebugNotchCapacity
+                DebugNotchCapacity = record.DebugNotchCapacity,
+                Difficulty = record.Difficulty
             };
 
             string path = GetSlotFilePath(slot);
@@ -786,7 +843,7 @@ namespace LegacyoftheAbyss.Shade
                 && (record.DebugNewlyDiscovered?.Length ?? 0) == 0
                 && record.DebugNotchCapacity == 0;
 
-            return stateEmpty && collectionsEmpty && debugEmpty;
+            return stateEmpty && collectionsEmpty && debugEmpty && record.Difficulty == null;
         }
 
         private ShadeSaveSlotRecord GetOrCreateRecord(int slot)
