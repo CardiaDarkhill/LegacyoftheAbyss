@@ -152,12 +152,43 @@ public partial class LegacyHelper
         }
 
         /// <summary>
-        /// Soul from a charm - Grubsong and its like. One of the "all other sources" that fill the
-        /// vessels at their normal rate, so it goes through the same overflow as everything else.
+        /// A charm's soul, in either direction - Grubsong grants it, Glowing Womb spends it.
+        /// <para>
+        /// Both directions matter and they are not the same path. A gain is one of the "all other
+        /// sources" that fill the Soul Vessels at their normal rate, so it overflows like the rest;
+        /// a spend comes off the meter alone and never touches the vessels, which is the whole point
+        /// of them. Routing the lot through <see cref="AddSoul"/> made every spend a no-op, because
+        /// that ignores a negative amount - Glowing Womb birthed its hatchlings for free.
+        /// </para>
         /// </summary>
         internal void GainShadeSoul(int amount)
         {
-            AddSoul(amount);
+            if (amount >= 0)
+            {
+                AddSoul(amount);
+                return;
+            }
+
+            SpendShadeSoul(-amount);
+        }
+
+        /// <summary>Takes soul off the meter, as casting does. The vessels are not spent from.</summary>
+        internal void SpendShadeSoul(int amount)
+        {
+            if (amount <= 0)
+            {
+                return;
+            }
+
+            int before = shadeSoul;
+            shadeSoul = Mathf.Max(0, shadeSoul - amount);
+            if (shadeSoul == before)
+            {
+                return;
+            }
+
+            PushSoulToHud();
+            PersistIfChanged();
         }
 
         internal void AddFocusHealBonus(int amount)

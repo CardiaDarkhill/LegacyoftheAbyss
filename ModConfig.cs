@@ -351,6 +351,11 @@ public class ModConfig
     // HealthManager's enemy types are Regular/Shade/Armoured and the journal only knows
     // Enemy/Other.
     public int shadeAiSpellWorthNailHits = 20;
+    // Config-only. How much health an enemy needs before a cast will count it at all. Below this it
+    // is nailed like anything else but never bought a spell: two harmless birds used to be enough
+    // to meet the cluster size above and cost a third of the meter. Clamped 0-50; 0 counts
+    // everything, which is how this behaved before.
+    public int shadeAiSpellMinTargetHealth = 6;
     // While an AI drives the Shade there is no second player, so Hornet has no reason to be locked
     // to one input device. With this on, the keyboard/controller split the two-player presets set up
     // is ignored for as long as the AI is driving and Hornet answers to both at once, exactly as she
@@ -640,6 +645,7 @@ public class ModConfig
             instance.shadeAiEngageRadius = Mathf.Clamp(instance.shadeAiEngageRadius, 2f, 40f);
             instance.shadeAiSpellClusterSize = Mathf.Clamp(instance.shadeAiSpellClusterSize, 1, 8);
             instance.shadeAiSpellWorthNailHits = Mathf.Clamp(instance.shadeAiSpellWorthNailHits, 1, 100);
+            instance.shadeAiSpellMinTargetHealth = Mathf.Clamp(instance.shadeAiSpellMinTargetHealth, 0, 50);
             instance.shadeAiAttackSpeedFraction = Mathf.Clamp(instance.shadeAiAttackSpeedFraction, 0.05f, 1f);
             instance.shadeAiSelfHealBelow = Mathf.Clamp01(instance.shadeAiSelfHealBelow);
             instance.shadeAiHornetHealBelow = Mathf.Clamp01(instance.shadeAiHornetHealBelow);

@@ -62,13 +62,14 @@ namespace LegacyoftheAbyss.Shade.Ai
     /// <summary>One enemy the Shade could hit, flattened out of its <c>HealthManager</c>.</summary>
     internal readonly struct ShadeAiTarget
     {
-        internal ShadeAiTarget(int id, Vector2 position, float radius, bool isBoss, bool hasLineOfSight)
+        internal ShadeAiTarget(int id, Vector2 position, float radius, bool isBoss, bool hasLineOfSight, bool worthASpell)
         {
             Id = id;
             Position = position;
             Radius = radius;
             IsBoss = isBoss;
             HasLineOfSight = hasLineOfSight;
+            WorthASpell = worthASpell;
         }
 
         /// <summary>Stable per-enemy identity, so a commitment survives the scan list being rebuilt.</summary>
@@ -89,6 +90,21 @@ namespace LegacyoftheAbyss.Shade.Ai
         /// </summary>
 
         internal bool HasLineOfSight { get; }
+
+        /// <summary>
+        /// Whether spending SOUL on this enemy is worth it at all - separate from whether it is
+        /// worth attacking, which is what every other flag here answers.
+        /// <para>
+        /// False for something too small to be worth a cast, and false when no spell could land on
+        /// it from any side. A nail swing at either costs nothing but a moment; a spell costs a
+        /// third of the meter, and two harmless birds were enough to buy one.
+        /// </para>
+        /// <para>
+        /// An armoured enemy is <em>true</em> here: its armour faces one way and a spell can come in
+        /// from another, so it is worth casting at even while it is blocking.
+        /// </para>
+        /// </summary>
+        internal bool WorthASpell { get; }
     }
 
     /// <summary>
@@ -114,6 +130,24 @@ namespace LegacyoftheAbyss.Shade.Ai
 
         /// <summary>Of those, behind terrain.</summary>
         internal int Blocked;
+
+        /// <summary>
+        /// Of those returned, how many a spell will not count: too small to be worth the SOUL, or
+        /// currently unhurtable. They are still nail targets - this is only about casting.
+        /// </summary>
+        internal int NotWorthASpell;
+
+        /// <summary>
+        /// Of those returned, how many are drawing nothing at all - every renderer in the hierarchy
+        /// absent or disabled.
+        /// <para>
+        /// Recorded rather than filtered. An enemy the Shade attacks while nothing is on screen has
+        /// been reported, and this is the number that would say whether "not drawn" is what those
+        /// have in common - the note on <c>IsAttackable</c> is emphatic that a filter added here
+        /// without evidence has twice left the Shade attacking nothing at all.
+        /// </para>
+        /// </summary>
+        internal int NotDrawn;
     }
 
     /// <summary>

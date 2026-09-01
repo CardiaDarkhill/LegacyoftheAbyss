@@ -484,6 +484,22 @@ public static partial class ShadeSettingsMenu
             }
             return;
         }
+        // Where our row belongs: directly above Quit, which should stay the last thing on the
+        // screen. Found by what the button *is* rather than by where it sits - the pause menu's
+        // contents are not fixed, so "the last one" is not reliably the one that leaves the game.
+        // A menu with no Quit button at all falls back to appending, which is where this used to go.
+        PauseMenuButton quitButton = null;
+        foreach (var b in buttons)
+        {
+            if (b != null
+                && b.pauseButtonType == PauseMenuButton.PauseButtonType.Quit
+                && b.GetComponentInParent<MenuButtonList>(true) == list)
+            {
+                quitButton = b;
+                break;
+            }
+        }
+
         var templateTargetImage = template.targetGraphic as Image;
         var field = typeof(MenuButtonList).GetField("entries", BindingFlags.NonPublic | BindingFlags.Instance);
         var entries = (Array)field.GetValue(list);
@@ -499,6 +515,13 @@ public static partial class ShadeSettingsMenu
 
         var go = Object.Instantiate(template.gameObject, template.transform.parent);
         go.name = "ShadeSettingsButton";
+
+        // Instantiate appends, so without this the row is drawn below Quit. Taking Quit's own index
+        // inserts this row where Quit was and pushes Quit down one, which is the whole change.
+        if (quitButton != null && quitButton.transform.parent == go.transform.parent)
+        {
+            go.transform.SetSiblingIndex(quitButton.transform.GetSiblingIndex());
+        }
         Object.DestroyImmediate(go.GetComponentInChildren<AutoLocalizeTextUI>());
         bool hasLabel = false;
         var txt = go.GetComponentInChildren<Text>(true);
@@ -588,9 +611,16 @@ public static partial class ShadeSettingsMenu
         var newEntry = Activator.CreateInstance(entryType);
         var selField = entryType.GetField("selectable", BindingFlags.NonPublic | BindingFlags.Instance);
         selField.SetValue(newEntry, pauseBtn);
+
+        // The same position again, in the list the stick and keyboard walk. Drawing order and
+        // navigation order are separate things here, and a row that is drawn above Quit but
+        // navigated to after it is worse than one that is simply last.
+        int insertAt = FindQuitEntryIndex(entries, selField, quitButton);
+
         var arr = Array.CreateInstance(entryType, entries.Length + 1);
-        entries.CopyTo(arr, 0);
-        arr.SetValue(newEntry, entries.Length);
+        Array.Copy(entries, 0, arr, 0, insertAt);
+        arr.SetValue(newEntry, insertAt);
+        Array.Copy(entries, insertAt, arr, insertAt + 1, entries.Length - insertAt);
         field.SetValue(list, arr);
 
         var dirtyField = typeof(MenuButtonList).GetField("isDirty", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -599,6 +629,34 @@ public static partial class ShadeSettingsMenu
         list.SetupActive();
         injectedFor = ui;
         LogMenuInfo("Injected ShadeSettingsButton into pause menu");
+    }
+
+    /// <summary>
+    /// Where Quit sits in a <see cref="MenuButtonList"/>'s entries, which is where our row goes.
+    /// Falls back to the end of the list - the old behaviour - when Quit is not in it.
+    /// </summary>
+    private static int FindQuitEntryIndex(Array entries, FieldInfo selectableField, PauseMenuButton quitButton)
+    {
+        if (entries == null || selectableField == null || quitButton == null)
+        {
+            return entries?.Length ?? 0;
+        }
+
+        for (int i = 0; i < entries.Length; i++)
+        {
+            var entry = entries.GetValue(i);
+            if (entry == null)
+            {
+                continue;
+            }
+
+            if (ReferenceEquals(selectableField.GetValue(entry), quitButton))
+            {
+                return i;
+            }
+        }
+
+        return entries.Length;
     }
 
     internal static IEnumerator Show(UIManager ui)

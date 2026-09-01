@@ -211,7 +211,8 @@ public partial class LegacyHelper
                 tuning.EngageRadius * 2f,
                 GetAiSpellWorthHealth(tuning),
                 now,
-                config.shadeAiScanIntervalSeconds);
+                config.shadeAiScanIntervalSeconds,
+                config.shadeAiSpellMinTargetHealth);
             aiTargetCount = targets.Count;
 
             var threats = CollectAiThreats(shadePosition, config);
@@ -731,7 +732,7 @@ public partial class LegacyHelper
         {
             var scan = aiScanner.Stats;
             return FormattableString.Invariant(
-                $"scan=found:{scan.Found}/alive:{scan.Tracked}/dormant:{scan.Dormant}/far:{scan.OutOfRange}/seen:{scan.Returned - scan.Blocked}/blocked:{scan.Blocked}");
+                $"scan=found:{scan.Found}/alive:{scan.Tracked}/dormant:{scan.Dormant}/far:{scan.OutOfRange}/seen:{scan.Returned - scan.Blocked}/blocked:{scan.Blocked}/nospell:{scan.NotWorthASpell}/notdrawn:{scan.NotDrawn}");
         }
 
         private static string DescribeAiAction(ShadeAiAction action) => action switch

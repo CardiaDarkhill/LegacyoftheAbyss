@@ -72,7 +72,7 @@ namespace LegacyoftheAbyss.Shade.Ai
         /// HP at or above which a single enemy is worth a spell on its own. The driver derives this
         /// from the Shade's own nail damage; see <see cref="ShadeAiTuning.BossNailHits"/>.
         /// </param>
-        internal IReadOnlyList<ShadeAiTarget> Collect(Vector2 origin, float maxDistance, int spellWorthHealth, float time, float scanInterval)
+        internal IReadOnlyList<ShadeAiTarget> Collect(Vector2 origin, float maxDistance, int spellWorthHealth, float time, float scanInterval, int minSpellTargetHealth)
         {
             if (time >= nextScanTime)
             {
@@ -87,6 +87,8 @@ namespace LegacyoftheAbyss.Shade.Ai
             stats.OutOfRange = 0;
             stats.Returned = 0;
             stats.Blocked = 0;
+            stats.NotWorthASpell = 0;
+            stats.NotDrawn = 0;
             float limit = Mathf.Max(1f, maxDistance);
             float limitSqr = limit * limit;
 
@@ -134,7 +136,18 @@ namespace LegacyoftheAbyss.Shade.Ai
                     stats.Blocked++;
                 }
 
-                targets.Add(new ShadeAiTarget(entry.Id, position, radius, entry.IsBoss, visible));
+                bool worthASpell = IsWorthASpell(entry.Health, minSpellTargetHealth);
+                if (!worthASpell)
+                {
+                    stats.NotWorthASpell++;
+                }
+
+                if (!IsDrawingAnything(entry.Health))
+                {
+                    stats.NotDrawn++;
+                }
+
+                targets.Add(new ShadeAiTarget(entry.Id, position, radius, entry.IsBoss, visible, worthASpell));
             }
 
             stats.Returned = targets.Count;
@@ -164,6 +177,9 @@ namespace LegacyoftheAbyss.Shade.Ai
             Vector2 endPoint = origin + (toTarget / distance * trimmed);
             return !ShadeAiTerrain.LineBlocked(origin, endPoint);
         }
+
+        /// <summary>The four sides <c>HealthManager.IsBlockingByDirection</c> distinguishes.</summary>
+        private const int CardinalDirections = 4;
 
         private void Rescan(int spellWorthHealth)
         {
@@ -216,6 +232,103 @@ namespace LegacyoftheAbyss.Shade.Ai
                 && !entry.Health.isDead
                 && entry.Health.hp > 0
                 && entry.Health.isActiveAndEnabled;
+        }
+
+        /// <summary>
+        /// Whether spending SOUL on this enemy is worth it - which is a different question from
+        /// whether to attack it, and answered separately for that reason.
+        /// <para>
+        /// Two enemies in a cast's area used to be enough to buy one, whatever they were, so a pair
+        /// of harmless birds cost a third of the meter. And an enemy no spell can currently touch
+        /// takes the whole cast for nothing, which is what a boss does through its pre-fight
+        /// dialogue: present, at full health, and blocking everything until the conversation ends.
+        /// </para>
+        /// </summary>
+        private static bool IsWorthASpell(HealthManager health, int minSpellTargetHealth)
+        {
+            if (health == null)
+            {
+                return false;
+            }
+
+            if (minSpellTargetHealth > 0 && health.hp < minSpellTargetHealth)
+            {
+                return false;
+            }
+
+            return CanASpellLandOn(health);
+        }
+
+        /// <summary>
+        /// Whether a spell could land on this enemy from <em>any</em> direction.
+        /// <para>
+        /// Emphatically not <c>IsInvincible</c>. That flag is the master switch for the whole
+        /// blocking system rather than a statement that the enemy cannot be hurt: an armoured enemy
+        /// - the helmeted ones that fill the game's second region, which are meant to be hit from
+        /// the sides or below - sets it <em>and</em> sets <c>InvincibleFromDirection</c> to say which
+        /// way its armour faces. Reading the flag alone would have written off every armoured enemy
+        /// in the game as never worth a spell.
+        /// </para>
+        /// <para>
+        /// So the question is put to the game's own answer instead, once per cardinal direction: if
+        /// there is a side a spell could come in from, the enemy is worth casting at, because the
+        /// Shade can move. Only something blocking all four - a boss that is simply switched off -
+        /// falls through. Asking <c>IsBlockingByDirection</c> also picks up the two exemptions it
+        /// knows about and this code should not have to: the <c>Spell Vulnerable</c> tag, and the
+        /// enemies that armour cannot stop a piercing hit on.
+        /// </para>
+        /// </summary>
+        private static bool CanASpellLandOn(HealthManager health)
+        {
+            try
+            {
+                // Cheap for the ordinary case: the method returns false at once for anything that is
+                // not blocking at all, so a normal enemy costs one call.
+                for (int direction = 0; direction < CardinalDirections; direction++)
+                {
+                    if (!health.IsBlockingByDirection(direction, AttackTypes.Spell))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+            catch
+            {
+                // Never let a lookup failure cost the Shade its spells.
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Whether anything of this enemy is actually being drawn. Recorded for the diagnostics
+        /// only - see <c>ShadeAiScanStats.NotDrawn</c> - and deliberately not <c>isVisible</c>,
+        /// which is a camera-culling flag that goes false whenever an enemy is off screen.
+        /// </summary>
+        private static bool IsDrawingAnything(HealthManager health)
+        {
+            if (health == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                foreach (var renderer in health.GetComponentsInChildren<Renderer>(false))
+                {
+                    if (renderer != null && renderer.enabled)
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch
+            {
+                return true;
+            }
+
+            return false;
         }
 
         /// <summary>

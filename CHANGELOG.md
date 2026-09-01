@@ -9,6 +9,14 @@ controls it; the reasoning belongs in the commit and the code.
 
 - The Hornet Needle damage slider now does something. It was scaling a field that needle strikes
   never read, so only Silk Skills responded.
+- "Legacy of the Abyss" now sits directly above Quit in the pause menu instead of below it, in both
+  the drawn order and the order the stick and keyboard walk.
+- Glowing Womb takes the SOUL it is supposed to for each hatchling again, and no charm summons
+  anything while the companion is down waiting to be revived.
+- The Shade AI stops spending SOUL on things not worth it: enemies below
+  `shadeAiSpellMinTargetHealth` (new, default 6), and anything no spell could land on from any side,
+  no longer count toward a cast. Armoured enemies still do — their armour faces one way and a cast
+  can come in from another. Everything skipped is still attacked normally.
 
 ### Changed
 

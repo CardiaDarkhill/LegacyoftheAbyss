@@ -805,6 +805,20 @@ namespace LegacyoftheAbyss.Shade.Ai
             return hitCount > 0 && (hitsBoss || hitCount >= tuning.MinClusterForSpell);
         }
 
+        /// <summary>
+        /// Whether a cast should count this enemy at all: in sight, and worth the SOUL.
+        /// <para>
+        /// The second half is what stops a pair of harmless birds buying a spell, and what stops one
+        /// being thrown at a boss standing invulnerable through its own pre-fight dialogue. Both are
+        /// still perfectly good things to hit with the nail, which is why this is asked here and not
+        /// in target selection.
+        /// </para>
+        /// </summary>
+        private static bool CountsTowardSpell(in ShadeAiTarget candidate)
+        {
+            return candidate.HasLineOfSight && candidate.WorthASpell;
+        }
+
         private static bool CanAfford(in ShadeAiSnapshot snapshot, int cost)
         {
             return snapshot.Soul - cost >= snapshot.SoulReserve;
@@ -823,7 +837,7 @@ namespace LegacyoftheAbyss.Shade.Ai
             for (int i = 0; i < targets.Count; i++)
             {
                 var candidate = targets[i];
-                if (!candidate.HasLineOfSight)
+                if (!CountsTowardSpell(candidate))
                 {
                     continue;
                 }
@@ -863,7 +877,7 @@ namespace LegacyoftheAbyss.Shade.Ai
             for (int i = 0; i < targets.Count; i++)
             {
                 var candidate = targets[i];
-                if (!candidate.HasLineOfSight)
+                if (!CountsTowardSpell(candidate))
                 {
                     continue;
                 }
@@ -905,7 +919,7 @@ namespace LegacyoftheAbyss.Shade.Ai
             for (int i = 0; i < targets.Count; i++)
             {
                 var candidate = targets[i];
-                if (!candidate.HasLineOfSight)
+                if (!CountsTowardSpell(candidate))
                 {
                     continue;
                 }

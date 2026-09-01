@@ -18,14 +18,35 @@ public class ShadeAiBrainTests
     private static readonly ShadeAiTuning Tuning = ShadeAiTuning.Default;
 
     private static ShadeAiTarget Basic(int id, float x, float y, float radius = 0.5f)
-        => new ShadeAiTarget(id, new Vector2(x, y), radius, false, true);
+        => new ShadeAiTarget(id, new Vector2(x, y), radius, false, true, true);
 
     private static ShadeAiTarget Boss(int id, float x, float y, float radius = 0.5f)
-        => new ShadeAiTarget(id, new Vector2(x, y), radius, true, true);
+        => new ShadeAiTarget(id, new Vector2(x, y), radius, true, true, true);
 
     /// <summary>An enemy behind terrain. Present, alive, and not a target.</summary>
     private static ShadeAiTarget Hidden(int id, float x, float y, float radius = 0.5f)
-        => new ShadeAiTarget(id, new Vector2(x, y), radius, false, false);
+        => new ShadeAiTarget(id, new Vector2(x, y), radius, false, false, true);
+
+    /// <summary>
+    /// An enemy worth hitting but not worth a spell - a harmless critter, or anything currently
+    /// invulnerable. Visible, alive, and must never buy a cast.
+    /// </summary>
+    private static ShadeAiTarget NotWorthASpell(int id, float x, float y, float radius = 0.5f)
+        => new ShadeAiTarget(id, new Vector2(x, y), radius, false, true, false);
+
+    /// <summary>
+    /// A boss no spell can touch from any side - standing through its own pre-fight dialogue.
+    /// Distinct from an armoured enemy, which blocks one way and is still worth casting at.
+    /// </summary>
+    private static ShadeAiTarget UnhurtableBoss(int id, float x, float y, float radius = 0.5f)
+        => new ShadeAiTarget(id, new Vector2(x, y), radius, true, true, false);
+
+    /// <summary>
+    /// An armoured enemy - the helmeted sort that must be hit from the sides or below. It is
+    /// blocking, but only one way round, so a spell can still come in and it is worth casting at.
+    /// </summary>
+    private static ShadeAiTarget Armoured(int id, float x, float y, float radius = 0.5f)
+        => new ShadeAiTarget(id, new Vector2(x, y), radius, false, true, true);
 
 
     private static ShadeAiThreat Threat(float x, float y, float radius)
@@ -559,6 +580,75 @@ public class ShadeAiBrainTests
 
         Assert.Equal(ShadeAiAction.Shriek, plan.Action);
         Assert.Equal(ShadeAiReason.ClusterSpell, plan.Reason);
+        Assert.Equal(2, plan.ReasonCount);
+    }
+
+    /// <summary>
+    /// Two harmless critters are not a crowd worth a third of the meter. Reported from a flock of
+    /// non-hostile birds, which met the cluster size on their own and bought a spell each time.
+    /// </summary>
+    [Fact]
+    public void DoesNotShriekAtACrowdOfHarmlessThings()
+    {
+        var plan = new ShadeAiBrain().Decide(Snapshot(
+            new[] { NotWorthASpell(1, 0f, 4f), NotWorthASpell(2, 1f, 5f) },
+            shriek: true,
+            descendingDark: true,
+            projectile: true));
+
+        Assert.Equal(ShadeAiAction.None, plan.Action);
+    }
+
+    /// <summary>
+    /// A boss standing through its own pre-fight dialogue is present, at full health and unhurtable.
+    /// It is still a fine thing to walk up to and hit; it is not a thing to spend SOUL on.
+    /// </summary>
+    [Fact]
+    public void DoesNotSpendSoulOnABossThatCannotBeHurtYet()
+    {
+        var plan = new ShadeAiBrain().Decide(Snapshot(
+            new[] { UnhurtableBoss(1, 0f, 4f) },
+            shriek: true,
+            descendingDark: true,
+            projectile: true));
+
+        Assert.Equal(ShadeAiAction.None, plan.Action);
+    }
+
+    /// <summary>
+    /// The other half of the rule: something not worth a spell must not be dropped as a target. It
+    /// is the difference between "do not cast at this" and "do not fight this", and an earlier pass
+    /// at filtering left the Shade attacking nothing at all.
+    /// </summary>
+    [Fact]
+    public void StillEngagesSomethingNotWorthASpell()
+    {
+        var plan = new ShadeAiBrain().Decide(Snapshot(
+            new[] { NotWorthASpell(1, 0f, 1.5f) },
+            shriek: true,
+            descendingDark: true,
+            projectile: true));
+
+        Assert.NotEqual(ShadeAiReason.ClusterSpell, plan.Reason);
+        Assert.NotEqual(ShadeAiReason.BossSpell, plan.Reason);
+        Assert.True(plan.TargetId == 1 || plan.Action != ShadeAiAction.None,
+            "A harmless enemy is still an enemy - it should be engaged, just not cast at.");
+    }
+
+    /// <summary>
+    /// The armour case, kept explicit because getting it wrong is silent and expensive: an armoured
+    /// enemy blocks from one direction and is perfectly good to cast at from another. An earlier
+    /// version of this rule read the master invincibility flag alone, which would have written off
+    /// every helmeted enemy in the game as never worth a spell.
+    /// </summary>
+    [Fact]
+    public void StillShrieksAtACrowdOfArmouredEnemies()
+    {
+        var plan = new ShadeAiBrain().Decide(Snapshot(
+            new[] { Armoured(1, 0f, 4f), Armoured(2, 1f, 5f) },
+            shriek: true));
+
+        Assert.Equal(ShadeAiAction.Shriek, plan.Action);
         Assert.Equal(2, plan.ReasonCount);
     }
 

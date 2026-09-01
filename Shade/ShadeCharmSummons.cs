@@ -166,6 +166,15 @@ namespace LegacyoftheAbyss.Shade
                 return false;
             }
 
+            // A downed companion summons nothing. Gated here rather than in each charm because it is
+            // true of all of them: the bearer is what the summons come from, and one that is waiting
+            // to be revived should not still be birthing hatchlings. The timer is held rather than
+            // advanced, so reviving does not immediately spend the whole time spent dead.
+            if (controller.IsInactive)
+            {
+                return false;
+            }
+
             var set = GetSet(controller, charm);
             set.Timer += Mathf.Max(0f, delta);
             if (set.Timer < interval)

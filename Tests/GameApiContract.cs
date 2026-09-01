@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using UnityEngine.UI;
 using Xunit;
 
 /// <summary>
@@ -230,6 +231,82 @@ public class GameApiContractTests
             typeof(DamageEnemies), "useNailDamage", typeof(bool),
             "Tells the two apart: set means the hit reads nailDamageMultiplier, clear means it "
             + "reads damageDealt.");
+    }
+
+    /// <summary>
+    /// What the pause-menu injection reaches into to put "Legacy of the Abyss" in the list, and to
+    /// put it directly above Quit rather than below it.
+    /// <para>
+    /// All three are private and reached by reflection, and the failure is quiet in an unhelpful
+    /// way: a missing <c>entries</c> or <c>selectable</c> leaves the button drawn on the screen but
+    /// absent from the list the stick and keyboard walk, so it can be clicked and not selected.
+    /// </para>
+    /// </summary>
+    /// <summary>
+    /// How the Shade AI decides a spell is worth casting at an enemy.
+    /// <para>
+    /// The important half is what this is <em>not</em>. <c>HealthManager.IsInvincible</c> is the
+    /// master switch for the blocking system, not a statement that an enemy cannot be hurt: an
+    /// armoured enemy sets it and sets <c>InvincibleFromDirection</c> alongside to say which way its
+    /// armour faces. Deciding spell worth from the flag alone writes off every armoured enemy in the
+    /// game, so the AI asks <c>IsBlockingByDirection</c> per side instead. Both members are asserted
+    /// because the distinction between them is the entire fix.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AnEnemysArmourCanBeToldFromBeingSwitchedOff()
+    {
+        GameApiContract.RequireMethod(
+            typeof(HealthManager), "IsBlockingByDirection",
+            "Asked once per cardinal direction to decide whether a spell could land at all - an "
+            + "enemy blocking every side is not worth casting at, one with armour facing a single "
+            + "way still is.",
+            "cardinalDirection", "attackType", "specialType");
+
+        GameApiContract.RequireField(
+            typeof(HealthManager), "invincibleFromDirection", typeof(int),
+            "What makes IsInvincible mean 'armoured this way round' rather than 'cannot be hurt'. "
+            + "If this ever stops existing, IsBlockingByDirection has changed shape and the spell "
+            + "worth check needs rereading before it silently writes off armoured enemies.");
+    }
+
+    [Fact]
+    public void ThePauseMenuListCanBeExtended()
+    {
+        var entries = GameApiContract.RequireField(
+            typeof(MenuButtonList), "entries", typeof(MenuButtonList.Entry[]),
+            "ShadeSettingsMenu.Inject rebuilds this array to add its own row to the pause menu.");
+
+        var entryType = entries.FieldType.GetElementType();
+        Assert.NotNull(entryType);
+
+        GameApiContract.RequireField(
+            // Selectable, not MenuSelectable - the entry holds the base type even though every
+            // button that ends up in one is a MenuSelectable.
+            entryType!, "selectable", typeof(Selectable),
+            "Written to point a new entry at the injected button, and read to find where Quit sits "
+            + "so the injected row can go directly above it.");
+
+        GameApiContract.RequireField(
+            typeof(MenuButtonList), "isDirty", typeof(bool),
+            "Set so MenuButtonList rebuilds its navigation after the entries array is replaced.");
+    }
+
+    /// <summary>
+    /// Quit is found by what it is rather than by where it sits, so that the injected row lands
+    /// above it on a pause menu whose contents are not fixed. Without this the row goes back to the
+    /// end of the list, below the option that leaves the game.
+    /// </summary>
+    [Fact]
+    public void ThePauseMenusQuitButtonCanBeRecognised()
+    {
+        GameApiContract.RequireField(
+            typeof(PauseMenuButton), "pauseButtonType", typeof(PauseMenuButton.PauseButtonType),
+            "ShadeSettingsMenu.Inject reads it to place its row directly above Quit.");
+
+        Assert.True(
+            Enum.IsDefined(typeof(PauseMenuButton.PauseButtonType), "Quit"),
+            "PauseButtonType has no Quit member, so the injected row cannot find what to sit above.");
     }
 
     [Fact]
