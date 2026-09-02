@@ -623,6 +623,19 @@ public class ModConfig
             }
 
             instance.shadeInput ??= ShadeInputConfig.CreateDefault();
+
+            // Bindings a pad press was captured into before the capture path told controllers from
+            // keys. They fire on every attached controller, so they are dropped rather than left to
+            // drive the Shade from the other player's hands. Announced because a control quietly
+            // going unbound is worth knowing about.
+            int clearedPadKeys = instance.shadeInput.ClearControllerKeyBindings();
+            if (clearedPadKeys > 0)
+            {
+                Debug.LogWarning(
+                    $"[LegacyoftheAbyss] Cleared {clearedPadKeys} Shade binding(s) that were captured as "
+                    + "device-agnostic controller buttons and fired on every pad. Rebind them and they "
+                    + "will be recorded against the controller they are pressed on.");
+            }
             if (string.IsNullOrWhiteSpace(instance.shadeSkin))
             {
                 instance.shadeSkin = "Default";

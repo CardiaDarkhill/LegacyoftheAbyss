@@ -30,6 +30,18 @@ public partial class LegacyHelper
         /// <summary>The part of a drained point not yet whole, so a fractional rate stays honest.</summary>
         private float vesselDrainRemainder;
 
+        /// <summary>
+        /// The meter as it stood at the last tick, so that spending from it can be seen.
+        /// <para>
+        /// Watched rather than reported. Every spender would otherwise have to remember to say so -
+        /// there are five of them today and the focus drain spends a fraction of a mask at a time -
+        /// and one that forgot would look exactly like this bug again. A fall in the meter is a
+        /// spend whoever caused it, and the drain's own refills raise it, so they cannot be
+        /// mistaken for one.
+        /// </para>
+        /// </summary>
+        private int vesselDrainLastSoul = -1;
+
         public int GetShadeVesselSoul() => Mathf.Max(0, shadeVesselSoul);
 
         public int GetShadeVesselCount() => Mathf.Clamp(shadeSoulVessels, 0, MaxSoulVessels);
@@ -49,6 +61,7 @@ public partial class LegacyHelper
             shadeVesselSoul = Mathf.Clamp(soul, 0, GetShadeVesselCapacity());
             vesselDrainIdleTimer = 0f;
             vesselDrainRemainder = 0f;
+            vesselDrainLastSoul = shadeSoul;
         }
 
         /// <summary>
@@ -172,6 +185,18 @@ public partial class LegacyHelper
         private void UpdateSoulVessels(float deltaTime)
         {
             RefreshSoulVesselCount();
+
+            // The delay is counted from the last time soul was spent, not from the last time the
+            // meter had room. Casting mid-drain used to leave the reserve pouring straight back in
+            // behind the spell, which reads as the spell being free - the vessels are a reserve to
+            // be earned back, so every spend starts the wait again.
+            int previousSoul = vesselDrainLastSoul;
+            vesselDrainLastSoul = shadeSoul;
+            if (ShadeSoulVessels.IsSpend(previousSoul, shadeSoul))
+            {
+                vesselDrainIdleTimer = 0f;
+                vesselDrainRemainder = 0f;
+            }
 
             if (shadeVesselSoul <= 0 || shadeSoul >= shadeSoulMax)
             {

@@ -37,11 +37,16 @@ public partial class LegacyHelper
         private const float KnightDashSpeed = 20f;
         private const float KnightDashSeconds = 0.25f;
         /// <summary>
-        /// Zero on purpose. The Knight's Mothwing dash is ready the instant the previous one
-        /// finishes, as it is in Hollow Knight; only Shade Cloak carries a recharge. The Shade's
-        /// own sprint dash keeps its cooldown, which is a separate ability.
+        /// Hollow Knight's own Mothwing recharge, measured from the end of the dash.
+        /// <para>
+        /// This was zero, on the reasoning that the Knight needs to keep up with Hornet. It does,
+        /// but a dash with no recharge is a dash that can be held down - and it left Dashmaster,
+        /// whose whole job is shortening this, with nothing to shorten. Shade Cloak keeps its own
+        /// longer recharge on top; the Shade's sprint dash is a separate ability and is untouched.
+        /// </para>
         /// </summary>
-        private const float KnightDashCooldownSeconds = 0f;
+        private const float KnightDashCooldownSeconds = 0.4f;
+
 
         /// <summary>
         /// Shade Cloak's own cooldown, separate from and longer than the plain dash's, as it is in
@@ -75,6 +80,68 @@ public partial class LegacyHelper
 
         private bool knightGrounded;
         private bool knightWasGrounded;
+
+        /// <summary>Whether the Knight was holding a wall last frame, so the catch can be spotted.</summary>
+        private bool knightWasClinging;
+
+        /// <summary>
+        /// Counts down to the moment after a room load when the Knight is put back beside Hornet.
+        /// <para>
+        /// Many rooms drop it out of the world outright: it is set down before the incoming room's
+        /// geometry is where it will end up, so it starts inside a floor or in the gap under one and
+        /// falls. The ordinary leash cannot catch that, because the leash is deliberately switched
+        /// off during spawn protection - which is exactly this window - and by the time protection
+        /// lifts the Knight is somewhere below the level.
+        /// </para>
+        /// <para>
+        /// So the placement is simply redone once the room has settled, whether or not anything went
+        /// wrong. A Knight that landed correctly is put back where it already is.
+        /// </para>
+        /// </summary>
+        private float knightRoomEntrySettleTimer;
+
+        /// <summary>How long after a room load that replacement happens.</summary>
+        private const float KnightRoomEntrySettleSeconds = 0.75f;
+
+        /// <summary>Starts the settle countdown. Called when a scene transition begins.</summary>
+        internal void ScheduleKnightRoomEntrySettle()
+        {
+            knightRoomEntrySettleTimer = KnightRoomEntrySettleSeconds;
+        }
+
+        /// <summary>
+        /// Puts the Knight back beside Hornet once the incoming room has settled. Ticked ahead of
+        /// the control lock below, because a room entry <em>is</em> a control lock - leaving it
+        /// after the early return meant it never ran on the transitions that need it.
+        /// </summary>
+        private void UpdateKnightRoomEntrySettle(float dt)
+        {
+            if (knightRoomEntrySettleTimer <= 0f)
+            {
+                return;
+            }
+
+            knightRoomEntrySettleTimer -= dt;
+            if (knightRoomEntrySettleTimer > 0f || hornetTransform == null)
+            {
+                return;
+            }
+
+            knightRoomEntrySettleTimer = 0f;
+
+            // Not while resting: the bench seat is a placement of its own and Hornet is sitting in
+            // it, so moving the Knight onto her would undo the seating that just happened.
+            if (knightBenchActive)
+            {
+                return;
+            }
+
+            TeleportToPosition(hornetTransform.position);
+            knightVerticalVelocity = 0f;
+            knightDashTimer = 0f;
+            knightAirJumpSpent = false;
+            knightDashSpentInAir = false;
+        }
         private int knightWallDirection;
         private float knightVerticalVelocity;
         private float knightJumpHoldTimer;
@@ -214,6 +281,7 @@ public partial class LegacyHelper
             }
 
             RefreshKnightAbilities();
+            UpdateKnightRoomEntrySettle(dt);
             PushKnightOutOfTerrain();
             ProbeKnightSurroundings();
 
@@ -281,6 +349,16 @@ public partial class LegacyHelper
 
             float horizontal = capturedHorizontalInput;
             UpdateKnightTimers(dt, horizontal);
+
+            // Channelling roots the Knight the way it roots Hornet: no dash, and no jump. Shape of
+            // Unn buys back walking - see the speed scale below - and nothing else. Both were
+            // reachable mid-channel, which let the Knight heal while jumping around.
+            if (isFocusing)
+            {
+                knightJumpBufferTimer = 0f;
+                knightDashPressLatched = false;
+            }
+
             UpdateKnightDash(dt, horizontal);
 
             float runSpeed = KnightGroundSpeed;
@@ -402,6 +480,28 @@ public partial class LegacyHelper
                     knightLandTimer = 0.12f;
                 }
             }
+            else if (knightWallDirection != 0)
+            {
+                // A wall refunds what the ground refunds. UpdateKnightDash has always said "until
+                // the ground or a wall gives it back" and only the ground ever did, so a Knight
+                // climbing a shaft had one dash and one air jump for the whole climb. The double
+                // jump was refunded by *jumping off* a wall but not by holding one, which is the
+                // same omission a step earlier.
+                knightAirJumpSpent = false;
+                knightDashSpentInAir = false;
+            }
+
+            // Momentum is killed the instant the wall is caught, not once the rise has decayed on
+            // its own. Jumping into a wall used to carry on upward for several frames before the
+            // cling took hold, which is the delay before a wall jump would answer.
+            bool clinging = !knightGrounded && knightWallDirection != 0 && knightAbilities.MantisClaw;
+            if (clinging && !knightWasClinging && knightVerticalVelocity > 0f)
+            {
+                knightVerticalVelocity = 0f;
+                knightJumpHoldTimer = 0f;
+            }
+
+            knightWasClinging = clinging;
         }
 
         /// <summary>
@@ -445,9 +545,11 @@ public partial class LegacyHelper
 
         private void IntegrateKnightVertical(float dt, bool allowInput)
         {
+            // No upward-velocity condition: the probe zeroes the rise on the frame the wall is
+            // caught, so requiring a downward velocity here only delayed the cling - and with it the
+            // wall jump - by however long the Knight had left to climb.
             bool clingingToWall = knightWallDirection != 0
-                && knightAbilities.MantisClaw
-                && knightVerticalVelocity <= 0f;
+                && knightAbilities.MantisClaw;
 
             if (allowInput && TryKnightJump(clingingToWall))
             {
@@ -526,6 +628,29 @@ public partial class LegacyHelper
             return false;
         }
 
+        /// <summary>
+        /// How much of the dash recharge the equipped charms leave, taken from the Shade's own dash
+        /// cooldown rather than from a flag of its own.
+        /// <para>
+        /// Dashmaster is a stat multiplier on <c>SprintDashCooldown</c>, so reading the ratio it has
+        /// already produced means the charm shortens both characters dash recharge without knowing
+        /// that either exists - and any future charm touching that stat does the same for free.
+        /// </para>
+        /// </summary>
+        private float KnightDashCooldownScale
+        {
+            get
+            {
+                float baseline = s_defaultCharmStats.SprintDashCooldown;
+                if (baseline <= 0.0001f)
+                {
+                    return 1f;
+                }
+
+                return Mathf.Clamp(sprintDashCooldown / baseline, 0.1f, 2f);
+            }
+        }
+
         private void UpdateKnightDash(float dt, float horizontal)
         {
             if (knightDashTimer > 0f)
@@ -563,7 +688,10 @@ public partial class LegacyHelper
 
             knightDashDirection = Mathf.Abs(horizontal) > 0.1f ? (int)Mathf.Sign(horizontal) : facing;
             knightDashTimer = KnightDashSeconds;
-            knightDashCooldownTimer = KnightDashCooldownSeconds;
+
+            // Counted from the end of the dash rather than its start, so the charm shortens the wait
+            // between dashes rather than part of the dash itself.
+            knightDashCooldownTimer = KnightDashSeconds + (KnightDashCooldownSeconds * KnightDashCooldownScale);
             knightDashIsShadeCloak = cloakReady;
             knightVerticalVelocity = 0f;
             knightJumpHoldTimer = 0f;
@@ -1052,6 +1180,94 @@ public partial class LegacyHelper
         /// Holds the Knight still for a cast. A no-op for the Shade, which floats and has no
         /// momentum worth cancelling, so the spell routines can call it unguarded.
         /// </summary>
+        /// <summary>
+        /// Five frames at sixty, which is what the report asked for and what the up slash reads as
+        /// in Hollow Knight: a swing that connects plants the Knight rather than carrying it along.
+        /// </summary>
+        private const float KnightUpSlashFreezeSeconds = 5f / 60f;
+
+        /// <summary>
+        /// Freezes the Knight when an up slash connects, and only then.
+        /// <para>
+        /// The freeze is the recoil off whatever was hit, so an up slash into open air must not
+        /// have it - swung on the way up, an unconditional freeze stopped the jump dead every time.
+        /// Nothing at the press knows whether the swing will land, and a probe for it would be
+        /// guessing at the slash's reach when the slash itself measures it; so the spawned damager
+        /// is subscribed to instead, and answers on the frame it responds to a hit.
+        /// </para>
+        /// <para>
+        /// Every damager under the slash, because the swing is a parent with its hitboxes below it,
+        /// and unsubscribed on the first of them to report - a multi-hitter would otherwise re-freeze
+        /// the Knight for every enemy in the swing.
+        /// </para>
+        /// </summary>
+        private void WatchForKnightUpSlashHit(GameObject slash)
+        {
+            if (!UsesGroundedMovement || slash == null)
+            {
+                return;
+            }
+
+            var damagers = slash.GetComponentsInChildren<DamageEnemies>(true);
+            if (damagers == null || damagers.Length == 0)
+            {
+                return;
+            }
+
+            bool answered = false;
+            System.Action<DamageEnemies.HitResponse> onHit = null;
+            onHit = _ =>
+            {
+                if (answered)
+                {
+                    return;
+                }
+
+                answered = true;
+                for (int i = 0; i < damagers.Length; i++)
+                {
+                    if (damagers[i] != null)
+                    {
+                        damagers[i].HitResponded -= onHit;
+                    }
+                }
+
+                BeginKnightUpSlashFreeze();
+            };
+
+            for (int i = 0; i < damagers.Length; i++)
+            {
+                if (damagers[i] != null)
+                {
+                    damagers[i].HitResponded += onHit;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Plants the Knight for an up slash: momentum cancelled outright, position held briefly.
+        /// <para>
+        /// Reuses the cast freeze, which already stops the body without letting gravity accumulate
+        /// underneath it - the whole point of that hold is that a frame of gravity at this scale is
+        /// a visible drop.
+        /// </para>
+        /// </summary>
+        internal void BeginKnightUpSlashFreeze()
+        {
+            if (!UsesGroundedMovement)
+            {
+                return;
+            }
+
+            knightVerticalVelocity = 0f;
+            knightJumpHoldTimer = 0f;
+            knockbackVelocity = Vector2.zero;
+            knockbackTimer = 0f;
+
+            knightCastFrozen = true;
+            knightCastFreezeUntil = Time.time + KnightUpSlashFreezeSeconds;
+        }
+
         private void BeginKnightCastFreeze()
         {
             if (!UsesGroundedMovement)

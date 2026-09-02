@@ -36,6 +36,19 @@ public partial class LegacyHelper
         private const float KnightBenchArriveTolerance = 0.2f;
 
         /// <summary>
+        /// How far off Hornet's level the Knight may be before the seat is given a height as well
+        /// as a side. Generous, because the two origins mean different things - hers sits near her
+        /// middle and the Knight's at its feet - so a unit of difference is what standing on the
+        /// same floor looks like.
+        /// </summary>
+        private const float KnightBenchElevationTolerance = 1.5f;
+
+        /// <summary>How far below Hornet's level the seat looks for a floor, and from how far above it.</summary>
+        private const float KnightBenchGroundProbe = 14f;
+
+        private const float KnightBenchGroundProbeLift = 2f;
+
+        /// <summary>
         /// How far along the bench the seated Knight may be before it walks back. Generous: it only
         /// has to catch a Knight that is no longer at the bench at all, not one settling into it.
         /// </summary>
@@ -256,11 +269,7 @@ public partial class LegacyHelper
         {
             if (snap)
             {
-                // Horizontal only. The walk stops within a tolerance of the seat and the remainder
-                // is small enough to place rather than to keep walking off. Emphatically not
-                // Hornet's y: her origin sits near her middle and the Knight's at its feet, so
-                // matching them stands the Knight in the air at her shoulder.
-                TeleportToPosition(new Vector3(knightBenchTargetX, transform.position.y, transform.position.z));
+                TeleportToPosition(BenchSeatPlacement());
             }
 
             knightBenchSeated = true;
@@ -275,6 +284,62 @@ public partial class LegacyHelper
             {
                 facing = heroState.facingRight ? 1 : -1;
             }
+        }
+
+        /// <summary>
+        /// Where the Knight is actually put down: the measured seat, and a height to go with it
+        /// when the Knight is not already on Hornet's level.
+        /// <para>
+        /// Horizontal alone was not enough. The approach is a straight walk and nothing more, so a
+        /// Knight that is on a ledge above the bench or on the floor below never arrives; the walk
+        /// times out and the Knight is placed - and the placement kept its own y, which seated it
+        /// in the air beside the bench or under the floor it had been standing on. That is the
+        /// report. A seated Knight has its gravity switched off for the whole rest, so it cannot
+        /// fall to the floor afterwards either: the height has to be right when it is set down.
+        /// </para>
+        /// <para>
+        /// Still not Hornet's y directly - her origin sits near her middle and the Knight's at its
+        /// feet, so matching them stands it at her shoulder. Her level is where the search starts,
+        /// and the floor beneath it is where the feet go.
+        /// </para>
+        /// </summary>
+        private Vector3 BenchSeatPlacement()
+        {
+            Vector3 seat = BenchSeatPosition();
+            if (hornetTransform == null || bodyCol == null)
+            {
+                return seat;
+            }
+
+            float rise = hornetTransform.position.y - transform.position.y;
+            if (Mathf.Abs(rise) <= KnightBenchElevationTolerance)
+            {
+                return seat;
+            }
+
+            seat.y += rise;
+
+            // Cast from where the feet would be at her level, and move the body by however far
+            // they fall. The transform is not the middle of the collider, so the two are measured
+            // apart rather than assumed equal. Started a little above the feet, so a seat that
+            // lands slightly inside the floor still finds its surface rather than the next one down.
+            var bounds = bodyCol.bounds;
+            var feet = new Vector2(
+                seat.x + (bounds.center.x - transform.position.x),
+                seat.y + (bounds.min.y - transform.position.y));
+
+            var hit = Physics2D.Raycast(
+                feet + new Vector2(0f, KnightBenchGroundProbeLift),
+                Vector2.down,
+                KnightBenchGroundProbe + KnightBenchGroundProbeLift,
+                KnightTerrainMask());
+
+            if (hit.collider != null)
+            {
+                seat.y += hit.point.y - feet.y;
+            }
+
+            return seat;
         }
 
         /// <summary>The clip the seated Knight should be holding, or null when it is not seated.</summary>

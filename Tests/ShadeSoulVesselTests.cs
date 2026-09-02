@@ -120,6 +120,23 @@ namespace LegacyoftheAbyss.Tests
             Assert.Equal(0, newReserve);
         }
 
+        [Fact]
+        public void SpendingRestartsTheDrainDelayButRefillingDoesNot()
+        {
+            // The bug: the reserve poured back into the meter while soul was still being spent, so
+            // a spell cast during the drain was paid for out of the vessels as fast as it was cast.
+            Assert.True(ShadeSoulVessels.IsSpend(previousSoul: 66, currentSoul: 33));
+            Assert.True(ShadeSoulVessels.IsSpend(previousSoul: 33, currentSoul: 32));
+
+            // The drain raises the meter a point at a time, and must never read as a spend - that
+            // would stop it dead one point in.
+            Assert.False(ShadeSoulVessels.IsSpend(previousSoul: 32, currentSoul: 33));
+            Assert.False(ShadeSoulVessels.IsSpend(previousSoul: 33, currentSoul: 33));
+
+            // Nothing seen yet, the first tick after a load.
+            Assert.False(ShadeSoulVessels.IsSpend(previousSoul: -1, currentSoul: 0));
+        }
+
         private static int[] Split(int reserve)
         {
             var held = new int[ShadeSoulVessels.MaxVessels];

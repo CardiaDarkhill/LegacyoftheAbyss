@@ -111,6 +111,25 @@ namespace LegacyoftheAbyss.Shade
         }
 
         /// <summary>
+        /// Whether the meter falling from <paramref name="previousSoul"/> to
+        /// <paramref name="currentSoul"/> was a spend, and so restarts the wait before the reserve
+        /// begins pouring back in.
+        /// <para>
+        /// Read off the meter rather than reported by whoever spent. There are five spenders today
+        /// and the focus drain takes a fraction of a mask at a time, so a rule that each of them had
+        /// to remember would eventually be forgotten by one - and a forgetful spender looks exactly
+        /// like the reserve refilling from behind a spell, which is the bug this answers. The
+        /// drain's own refills only ever raise the meter, so they cannot be mistaken for a spend.
+        /// </para>
+        /// <para>
+        /// A negative <paramref name="previousSoul"/> means nothing has been seen yet - the first
+        /// tick after a load - and is not a spend.
+        /// </para>
+        /// </summary>
+        internal static bool IsSpend(int previousSoul, int currentSoul)
+            => previousSoul >= 0 && currentSoul < previousSoul;
+
+        /// <summary>
         /// Takes the meter down first and the reserve after it. Only the debug key spends this way -
         /// spending in play never reaches the vessels, which is the point of them.
         /// </summary>

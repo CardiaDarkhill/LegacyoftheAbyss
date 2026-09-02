@@ -137,7 +137,9 @@ public partial class SimpleHUD
             slot.anchoredPosition = new Vector2(-x, 0f);
             x += maskSize.x + spacing;
 
-            img.rectTransform.sizeDelta = maskSpriteRotated
+            // Per image rather than by the plain mask's packing: a mask holding Hiveblood's art
+            // is not turned, and sizing it as though it were leaves it stretched across its slot.
+            img.rectTransform.sizeDelta = IsMaskArtRotated(img)
                 ? new Vector2(maskSize.y, maskSize.x)
                 : maskSize;
         }

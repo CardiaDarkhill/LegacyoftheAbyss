@@ -262,6 +262,49 @@ public class ShadeInputConfig
                BindingUsesController(focus) || BindingUsesController(sprint) || BindingUsesController(commandShade);
     }
 
+    /// <summary>
+    /// Whether a controller is <em>the Shade player's</em>, and so has to be kept away from Hornet.
+    /// <para>
+    /// Not the same question as <see cref="IsControllerIndexInUse"/>, and the difference is the
+    /// whole point of this method. <see cref="commandShade"/> is bound to the first pad on purpose -
+    /// ordering the Shade about is Hornet's player's control, not the Shade player's - so a literal
+    /// "is any shade binding on this pad" reads Hornet's own controller as the Shade's. With exactly
+    /// two pads that made the Shade look like it had claimed both, which tripped the guard that
+    /// stops Hornet being left with no controller at all, and neither pad ended up reserved: Hornet
+    /// answered to both, and the Shade player's stick drove both characters at once.
+    /// </para>
+    /// </summary>
+    public bool ReservesControllerIndex(int index)
+    {
+        if (index < 0)
+            return false;
+        int fallbackIndex = Mathf.Max(-1, controllerDeviceIndex);
+        return BindingUsesControllerIndex(moveLeft, fallbackIndex, index) ||
+               BindingUsesControllerIndex(moveRight, fallbackIndex, index) ||
+               BindingUsesControllerIndex(moveUp, fallbackIndex, index) ||
+               BindingUsesControllerIndex(moveDown, fallbackIndex, index) ||
+               BindingUsesControllerIndex(fire, fallbackIndex, index) ||
+               BindingUsesControllerIndex(nail, fallbackIndex, index) ||
+               BindingUsesControllerIndex(nailUp, fallbackIndex, index) ||
+               BindingUsesControllerIndex(nailDown, fallbackIndex, index) ||
+               BindingUsesControllerIndex(teleport, fallbackIndex, index) ||
+               BindingUsesControllerIndex(focus, fallbackIndex, index) ||
+               BindingUsesControllerIndex(sprint, fallbackIndex, index);
+    }
+
+    /// <summary>Whether any pad at all is the Shade player's. See <see cref="ReservesControllerIndex"/>.</summary>
+    public bool ReservesAnyController()
+    {
+        return BindingUsesController(moveLeft) || BindingUsesController(moveRight) || BindingUsesController(moveUp) ||
+               BindingUsesController(moveDown) || BindingUsesController(fire) || BindingUsesController(nail) ||
+               BindingUsesController(nailUp) || BindingUsesController(nailDown) || BindingUsesController(teleport) ||
+               BindingUsesController(focus) || BindingUsesController(sprint);
+    }
+
+    /// <summary>
+    /// Whether any shade binding at all sits on this controller, the command binding included.
+    /// For reserving a pad away from Hornet use <see cref="ReservesControllerIndex"/> instead.
+    /// </summary>
     public bool IsControllerIndexInUse(int index)
     {
         if (index < 0)
@@ -279,6 +322,47 @@ public class ShadeInputConfig
                BindingUsesControllerIndex(focus, fallbackIndex, index) ||
                BindingUsesControllerIndex(sprint, fallbackIndex, index) ||
                BindingUsesControllerIndex(commandShade, fallbackIndex, index);
+    }
+
+    /// <summary>Every action a binding can be held for, so a sweep cannot miss one.</summary>
+    internal static readonly ShadeAction[] AllActions =
+        (ShadeAction[])Enum.GetValues(typeof(ShadeAction));
+
+    /// <summary>
+    /// Clears any binding that was captured as a device-agnostic joystick key, and reports how many
+    /// it cleared.
+    /// <para>
+    /// Rebinding on a pad used to store <c>KeyCode.JoystickButtonN</c>, which fires on every
+    /// attached controller regardless of the device the binding names. Those are now ignored when
+    /// read, but an ignored binding is an invisible one - the Controls screen would still show the
+    /// button while nothing happened. Clearing them instead leaves the row plainly unbound, and
+    /// rebinding it now records the device properly.
+    /// </para>
+    /// </summary>
+    public int ClearControllerKeyBindings()
+    {
+        int cleared = 0;
+
+        foreach (var action in AllActions)
+        {
+            var binding = GetBinding(action);
+            if (binding == null)
+                continue;
+
+            if (binding.primary.type == ShadeBindingOptionType.Key && ShadeInput.IsControllerKeyCode(binding.primary.key))
+            {
+                binding.primary = ShadeBindingOption.None();
+                cleared++;
+            }
+
+            if (binding.secondary.type == ShadeBindingOptionType.Key && ShadeInput.IsControllerKeyCode(binding.secondary.key))
+            {
+                binding.secondary = ShadeBindingOption.None();
+                cleared++;
+            }
+        }
+
+        return cleared;
     }
 
     public ShadeBinding GetBinding(ShadeAction action) => action switch
@@ -435,6 +519,28 @@ public class ShadeInputConfig
 public static class ShadeInput
 {
     private static readonly KeyCode[] AllKeyCodes = Enum.GetValues(typeof(KeyCode)) as KeyCode[] ?? Array.Empty<KeyCode>();
+
+    /// <summary>
+    /// Whether a <see cref="KeyCode"/> is a controller button rather than a key.
+    /// <para>
+    /// These have no place in a Shade binding, and the reason is the whole point of this method.
+    /// <c>KeyCode.JoystickButton0</c> and its siblings are Unity's <em>device-agnostic</em> pad
+    /// buttons: <c>Input.GetKey(JoystickButton1)</c> is true when button 1 is down on <em>any</em>
+    /// attached pad. A Shade control captured as one of those fires when Hornet's player presses the
+    /// same button, whatever device the binding claims to be on - the key path never consults a
+    /// device at all. The numbered <c>Joystick1Button0</c> forms are per-device, but they are keyed
+    /// to Unity's joystick numbering rather than to InControl's device list, which is what the rest
+    /// of this file reserves and reads by, so they are no use here either.
+    /// </para>
+    /// <para>
+    /// Controller presses belong on the controller path, which records which device they came from.
+    /// See <see cref="TryCaptureKey"/> and <see cref="TryCaptureControl"/>.
+    /// </para>
+    /// </summary>
+    internal static bool IsControllerKeyCode(KeyCode code)
+    {
+        return code >= KeyCode.JoystickButton0;
+    }
     private static readonly InputControlType[] CaptureControls =
     {
         InputControlType.Action1,
@@ -689,7 +795,9 @@ public static class ShadeInput
 
         return option.type switch
         {
-            ShadeBindingOptionType.Key => option.key != KeyCode.None && Input.GetKey(option.key) ? 1f : 0f,
+            // The joystick guard matters for configs written before capture was fixed: such a
+            // binding reads every attached pad, so it is ignored rather than left cross-firing.
+            ShadeBindingOptionType.Key => option.key != KeyCode.None && !IsControllerKeyCode(option.key) && Input.GetKey(option.key) ? 1f : 0f,
             ShadeBindingOptionType.Controller => GetControl(option, out var control) ? Mathf.Clamp01(Mathf.Abs(control.Value)) : 0f,
             _ => 0f
         };
@@ -715,16 +823,26 @@ public static class ShadeInput
         }
     }
 
+    /// <summary>
+    /// The one device a Shade controller binding is allowed to read, or null.
+    /// <para>
+    /// Null rather than a stand-in, deliberately. This used to fall back to
+    /// <c>InputManager.ActiveDevice</c> when the binding named no device and to the last attached
+    /// pad when it named one that is not plugged in - both of which hand the Shade whichever
+    /// controller the other player happens to be holding. A Shade control whose device is absent
+    /// should do nothing, not something on someone else's pad.
+    /// </para>
+    /// </summary>
     private static InputDevice? GetDeviceForOption(ShadeBindingOption option)
     {
         int index = GetEffectiveControllerIndex(option);
         if (index < 0)
-            return InputManager.ActiveDevice ?? InputDevice.Null;
+            return null;
+
         var devices = InputManager.Devices;
-        if (devices == null || devices.Count == 0)
-            return InputManager.ActiveDevice ?? InputDevice.Null;
-        if (index >= devices.Count)
-            index = devices.Count - 1;
+        if (devices == null || index >= devices.Count)
+            return null;
+
         var selected = devices[index];
         return selected ?? InputDevice.Null;
     }
@@ -801,6 +919,13 @@ public static class ShadeInput
         {
             if (code == KeyCode.None)
                 continue;
+
+            // Skipped so the press falls through to TryCaptureControl, which records the device it
+            // came from. This check ran first and matched everything, so every rebind made on a pad
+            // was stored as a device-agnostic joystick key and fired on both players' controllers.
+            if (IsControllerKeyCode(code))
+                continue;
+
             if (Input.GetKeyDown(code))
             {
                 key = code;

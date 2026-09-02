@@ -163,6 +163,12 @@ namespace LegacyoftheAbyss.Diagnostics
         /// <summary>What Hornet's inventory/map actions are bound to right now.</summary>
         public string? HeroMenuBindings;
 
+        /// <summary>
+        /// Which pad the mod has reserved, which one InControl is treating as active, and what the
+        /// game is being told about both. See <c>InputDeviceBlocker.DescribeDeviceOwnership</c>.
+        /// </summary>
+        public string? InputDevices;
+
         /// <summary>Where the last few inventory-open presses got to. See <c>InventoryOpenProbe</c>.</summary>
         public string? InventoryProbe;
     }
@@ -210,6 +216,7 @@ namespace LegacyoftheAbyss.Diagnostics
             TryRun(() => state.ShadePaneLayoutFailure = ShadeInventoryPane.LastLayoutFailure);
             TryRun(() => state.ShadeCharmGridLayout = ShadeInventoryPane.LastCharmGridLayout);
             TryRun(() => state.HeroMenuBindings = LegacyHelper.InputDeviceBlocker.DescribeHeroMenuBindings());
+            TryRun(() => state.InputDevices = LegacyHelper.InputDeviceBlocker.DescribeDeviceOwnership());
             TryRun(() => state.InventoryProbe = InventoryOpenProbe.Describe());
 
             var gameManager = MenuStateUtility.TryGetGameManager();

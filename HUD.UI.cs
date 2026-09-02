@@ -237,7 +237,7 @@ public partial class SimpleHUD
             {
                 if (i < 0 || i >= maskImages.Length) continue;
                 bool lifeblood = i >= normalMax;
-                StartCoroutine(LoseHealth(maskImages[i], shadeOvercharmed, lifeblood, hivebloodEquipped));
+                StartCoroutine(LoseHealth(maskImages[i], shadeOvercharmed, lifeblood, HivebloodMaskNeedsTint));
             }
         }
         else if (suppressNextDamageSound)
@@ -249,16 +249,14 @@ public partial class SimpleHUD
         Sprite normalMaskSprite = useHivebloodSprite && hivebloodMaskSprite != null
             ? hivebloodMaskSprite
             : maskSprite;
+        bool normalMaskRotated = useHivebloodSprite ? hivebloodMaskSpriteRotated : maskSpriteRotated;
 
         Color filledColor = GetNormalMaskFilledColor();
         for (int i = 0; i < normalMax && i < maskImages.Length; i++)
         {
             var img = maskImages[i];
             if (img == null) continue;
-            if (normalMaskSprite != null)
-            {
-                img.sprite = normalMaskSprite;
-            }
+            ApplyMaskArt(img, normalMaskSprite, normalMaskRotated);
             img.color = i < currentNormal ? filledColor : missingMaskColor;
         }
 
@@ -268,10 +266,7 @@ public partial class SimpleHUD
             if (index >= maskImages.Length) break;
             var img = maskImages[index];
             if (img == null) continue;
-            if (maskSprite != null)
-            {
-                img.sprite = maskSprite;
-            }
+            ApplyMaskArt(img, maskSprite, maskSpriteRotated);
             bool filled = i < currentLifeblood;
             if (filled)
             {
@@ -301,8 +296,46 @@ public partial class SimpleHUD
             return overcharmMaskColor;
         }
 
-        return hivebloodEquipped ? hivebloodMaskColor : Color.white;
+        return HivebloodMaskNeedsTint ? hivebloodMaskColor : Color.white;
     }
+
+    /// <summary>
+    /// Whether the Hiveblood look still has to be painted on. False once the masks are the game's
+    /// own Hiveblood art, which is already that colour - tinting it again only oversaturates it.
+    /// </summary>
+    private bool HivebloodMaskNeedsTint => hivebloodEquipped && !hivebloodMaskIsBundleArt;
+
+    /// <summary>
+    /// Points one mask at a sprite, turning its box to match how the atlas stored that sprite.
+    /// <para>
+    /// The orientation cannot be settled once when the masks are built, because the two sprites a
+    /// mask can hold are packed differently: the plain mask is stored turned and Hiveblood's is
+    /// not, so equipping the charm mid-run would otherwise leave the new art lying on its side.
+    /// Only touched when the sprite actually changes; this runs for every mask every frame.
+    /// </para>
+    /// </summary>
+    private void ApplyMaskArt(Image img, Sprite sprite, bool rotated)
+    {
+        if (img == null || sprite == null || img.sprite == sprite)
+        {
+            return;
+        }
+
+        img.sprite = sprite;
+
+        var rect = img.rectTransform;
+        var slot = rect.parent as RectTransform;
+        Vector2 size = slot != null ? slot.sizeDelta : rect.sizeDelta;
+
+        rect.sizeDelta = rotated ? new Vector2(size.y, size.x) : size;
+        rect.localEulerAngles = rotated ? new Vector3(0f, 0f, 90f) : Vector3.zero;
+    }
+
+    /// <summary>Which way the art one mask is currently holding was packed.</summary>
+    private bool IsMaskArtRotated(Image img)
+        => img != null && img.sprite != null && img.sprite == hivebloodMaskSprite
+            ? hivebloodMaskSpriteRotated
+            : maskSpriteRotated;
 
     private void RefreshHivebloodPreview()
     {
@@ -381,7 +414,7 @@ public partial class SimpleHUD
         {
             previewImage.sprite = previewSprite;
         }
-        previewImage.color = hivebloodMaskColor;
+        previewImage.color = HivebloodMaskNeedsTint ? hivebloodMaskColor : Color.white;
         previewImage.enabled = true;
         var previewGO = previewImage.gameObject;
         if (!previewGO.activeSelf)
@@ -430,7 +463,7 @@ public partial class SimpleHUD
         }
     }
 
-    private IEnumerator LoseHealth(Image img, bool wasOvercharmed, bool wasLifeblood, bool hivebloodActive)
+    private IEnumerator LoseHealth(Image img, bool wasOvercharmed, bool wasLifeblood, bool hivebloodTinted)
     {
         if (img == null) yield break;
 
@@ -448,7 +481,7 @@ public partial class SimpleHUD
         }
         else
         {
-            filledColor = wasOvercharmed ? overcharmMaskColor : (hivebloodActive ? hivebloodMaskColor : Color.white);
+            filledColor = wasOvercharmed ? overcharmMaskColor : (hivebloodTinted ? hivebloodMaskColor : Color.white);
             flickerColor = wasOvercharmed ? filledColor : Color.red;
             emptyColor = missingMaskColor;
         }

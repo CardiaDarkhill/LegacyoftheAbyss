@@ -191,7 +191,17 @@ public partial class LegacyHelper
             {
                 nailTimer = nailCooldown;
                 nailDurationTimer = nailDuration;
-                PerformNailSlash(forcedV);
+
+                GameObject swing = PerformNailSlash(forcedV);
+
+                // An up slash plants the Knight, but only when it connects: the freeze is the
+                // recoil off something solid, not a property of the animation. Whether it connects
+                // is not knowable at the press - so rather than predict it with a probe, the
+                // swing's own damager is asked, on the frame it answers.
+                if (UsesGroundedMovement && forcedV > 0.5f)
+                {
+                    WatchForKnightUpSlashHit(swing);
+                }
 
                 // After the slash, not instead of it: the beam rides along with the swing.
                 TryFireGrubberflyBeam(forcedV);
@@ -203,14 +213,15 @@ public partial class LegacyHelper
             }
         }
 
-        private void PerformNailSlash(float forcedV = 0f)
+        /// <summary>Swings the nail. Returns the spawned slash, or null when one could not be built.</summary>
+        private GameObject PerformNailSlash(float forcedV = 0f)
         {
             var hc = HeroController.instance;
-            if (hc == null) return;
+            if (hc == null) return null;
 
             float v = forcedV;
             GameObject source = FindHeroSlashTemplate(hc, v);
-            if (source == null) return;
+            if (source == null) return null;
 
             DestroyOtherSlashes(null);
 
@@ -223,6 +234,7 @@ public partial class LegacyHelper
             ConfigureSpawnedSlash(hc, slash, source, v, invertDown: false, orientationFacing: facing, "Shade slash oriented");
 
             DestroyOtherSlashes(slash);
+            return slash;
         }
 
         /// <summary>

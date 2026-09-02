@@ -21,6 +21,13 @@ namespace LegacyoftheAbyss.Shade.Knight
     internal static class KnightHud
     {
         internal const string MaskClip = "Health Idle";
+
+        /// <summary>
+        /// Hiveblood's own masks. <c>Hive Health Idle</c> -> <c>HUD_yellow_health0000</c>, 56x78,
+        /// packed straight - note that the plain mask beside it is packed turned, so the two do not
+        /// share an orientation and whoever draws them must ask per sprite.
+        /// </summary>
+        internal const string HiveMaskClip = "Hive Health Idle";
         internal const string MaskBackboardClip = "Health Empty";
         internal const string FrameClip = "HUD Frame Idle";
         internal const string SoulOrbClip = "Soul Orb Glow";

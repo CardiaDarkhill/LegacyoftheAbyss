@@ -767,6 +767,11 @@ public partial class LegacyHelper
             }
 
             sceneProtectionTimer = Mathf.Max(sceneProtectionTimer, duration);
+
+            // A room load is where the Knight most often ends up under the level; see
+            // UpdateKnightRoomEntrySettle for why the leash cannot catch that on its own.
+            ScheduleKnightRoomEntrySettle();
+
             bool activating = !sceneProtectionActive;
             if (activating)
             {
@@ -1005,6 +1010,23 @@ public partial class LegacyHelper
             {
                 Vector2 dir = ((Vector2)transform.position - sourcePos).normalized;
                 float scale = Mathf.Max(0f, forceMultiplier);
+
+                // The Knight is pushed horizontally and only horizontally - ConsumeKnightKnockback
+                // reads the x component alone, because a platformer body cannot be shoved upward
+                // without fighting its own gravity. That makes a hit from directly above or below
+                // land with almost no x, so it was shrugged off entirely and the same enemy could
+                // hit again immediately. A vertical hit now pushes the Knight back off it instead.
+                if (UsesGroundedMovement && Mathf.Abs(dir.x) < 0.35f)
+                {
+                    float away = Mathf.Abs(dir.x) > 0.001f ? Mathf.Sign(dir.x) : -Mathf.Sign(facing);
+                    if (Mathf.Approximately(away, 0f))
+                    {
+                        away = 1f;
+                    }
+
+                    dir = new Vector2(away, dir.y).normalized;
+                }
+
                 knockbackVelocity = dir * hitKnockbackForce * scale;
                 knockbackTimer = Mathf.Max(0f, duration);
             }

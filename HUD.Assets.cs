@@ -45,7 +45,22 @@ public partial class SimpleHUD
             // it should still get a HUD rather than a row of white boxes.
             if (maskSprite == null) maskSprite = LoadSprite(maskPath);
             if (maskSprite == null) maskSprite = FindSpriteInGame("select_game_HUD_0001_health");
-            hivebloodMaskSprite = CreateTintedSprite(maskSprite, hivebloodMaskColor);
+
+            // Hiveblood's own masks, which the bundle turns out to carry. They were the plain mask
+            // painted orange, and that stand-in could not survive the move to bundle art: the tint
+            // copies pixels out of its source, and the source is now a region of an atlas texture
+            // the CPU may not read back. The read fails, the tint falls back to a blank white box,
+            // and the box is what was drawn - five orange rectangles where the masks should be.
+            hivebloodMaskSprite = KnightAssets.TryBuildSprite(KnightHud.HiveMaskClip, 0);
+            hivebloodMaskIsBundleArt = hivebloodMaskSprite != null;
+            hivebloodMaskSpriteRotated = hivebloodMaskIsBundleArt
+                && KnightAssets.IsSpriteRotated(KnightHud.HiveMaskClip, 0);
+
+            if (hivebloodMaskSprite == null)
+            {
+                hivebloodMaskSprite = CreateTintedSprite(maskSprite, hivebloodMaskColor);
+                hivebloodMaskSpriteRotated = maskSpriteRotated;
+            }
             if (frameSprite == null) frameSprite = LoadSprite(framePath);
             if (frameSprite == null) frameSprite = FindSpriteInGame("select_game_HUD_0002_health_frame");
             slashFrames = LoadSpriteSheet(slashPath, 8, 8);
@@ -60,6 +75,7 @@ public partial class SimpleHUD
             {
                 var fallbackMask = BuildMaskSprite();
                 hivebloodMaskSprite = CreateTintedSprite(fallbackMask, hivebloodMaskColor);
+                hivebloodMaskSpriteRotated = false;
                 if (fallbackMask != null)
                 {
                     var fallbackTexture = fallbackMask.texture;

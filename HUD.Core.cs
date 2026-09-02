@@ -35,6 +35,15 @@ public partial class SimpleHUD : MonoBehaviour
     /// <summary>Set when the mask art came out of the atlas on its side. See KnightAssets.IsSpriteRotated.</summary>
     private bool maskSpriteRotated;
 
+    /// <summary>The same, for Hiveblood's masks. The two are packed differently, so they are asked separately.</summary>
+    private bool hivebloodMaskSpriteRotated;
+
+    /// <summary>
+    /// Whether the Hiveblood masks are the game's own art rather than the plain mask painted
+    /// orange. The art carries its colour, so painting it again would only oversaturate it.
+    /// </summary>
+    private bool hivebloodMaskIsBundleArt;
+
     private bool frameSpriteRotated;
 
     /// <summary>The HUD plate behind the orb, or null when there is no frame art to draw.</summary>

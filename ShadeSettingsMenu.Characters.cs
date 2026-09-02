@@ -360,7 +360,6 @@ public static partial class ShadeSettingsMenu
 
         private void RefreshCharacterButtons(int companionId)
         {
-            var selected = ShadeCharacterManager.GetSelected(companionId);
             for (int i = characterButtons.Count - 1; i >= 0; i--)
             {
                 var driver = characterButtons[i];
@@ -370,7 +369,7 @@ public static partial class ShadeSettingsMenu
                     continue;
                 }
 
-                driver.Refresh(selected.Id);
+                driver.Refresh();
             }
         }
 
@@ -576,15 +575,33 @@ public static partial class ShadeSettingsMenu
                 button.buttonType = MenuButton.MenuButtonType.Activate;
             }
             controller?.RegisterCharacterButton(this);
-            Refresh(ShadeCharacterManager.GetSelected(companionId).Id);
+            Refresh();
         }
 
-        public void Refresh(ShadeCharacterId selected)
+        /// <summary>
+        /// Re-derives this row's label from the live selection whenever the screen comes up, so a
+        /// row the sweep below happens to miss cannot go on claiming to be equipped.
+        /// </summary>
+        private void OnEnable()
+        {
+            Refresh();
+        }
+
+        /// <summary>
+        /// Marks this row equipped or not.
+        /// <para>
+        /// The selection is read here rather than passed in, and that is the point: two rows were
+        /// seen both reading "Equipped" at once, which can only happen when they were last told
+        /// different things. A label derived from the live answer cannot disagree with another
+        /// label derived from the same answer, however the refresh was reached.
+        /// </para>
+        /// </summary>
+        public void Refresh()
         {
             if (label == null || Character == null)
                 return;
 
-            bool equipped = Character.Id == selected;
+            bool equipped = Character.Id == ShadeCharacterManager.GetSelected(companionId).Id;
             label.text = equipped ? baseLabel + "  —  Equipped" : baseLabel;
             label.color = equipped ? SkinEquippedColor : Color.white;
         }

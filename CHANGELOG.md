@@ -7,6 +7,39 @@ controls it; the reasoning belongs in the commit and the code.
 
 ### Fixed
 
+- Holding a wall gives the Knight back its air dash and its double jump, as the ground does. The
+  wall only ever refunded the double jump when you jumped off it.
+- The Knight catches a wall the instant it touches one, with its upward momentum cancelled, instead
+  of drifting up it for several frames before the wall jump would answer.
+- The Knight can no longer jump or dash while focusing. Shape of Unn still buys back walking.
+- The Knight is put back beside Hornet 0.75s after a room load, so rooms that used to drop it out of
+  the world no longer do.
+- An up slash cancels the Knight momentum and holds it still for five frames, but only when the
+  swing connects with something - it was doing it on every swing, including into open air.
+- The Hiveblood masks are Hollow Knight own Hiveblood art rather than the plain mask painted orange,
+  which had stopped working and was drawing five orange rectangles.
+- Soul Vessels no longer refill the meter while the Shade is spending from it. Any spend restarts the
+  wait, set by Soul vessel drain delay.
+- The Knight sits down beside Hornet when it starts a rest on a different level to her, instead of
+  ending up in the air beside the bench or under the floor.
+- A hit from almost directly above or below now knocks the Knight back, rather than being shrugged
+  off and letting the same enemy hit again immediately.
+- The Knight dash has its recharge back (0.4s), and Dashmaster shortens it — it had none, which left
+  the charm with nothing to do.
+- Hornet is no longer left without input when the Shade player holds a button across a room
+  transition or while the quick map is open. Their pad was becoming the active device during those
+  moments — when input blocking is deliberately off — and staying there for as long as it was held.
+- Rebinding a Shade control on a controller now records which controller it was pressed on, so it
+  answers to that pad alone. It was being stored as a device-agnostic pad button, which fired on
+  every attached controller — a rebound Shade control could be triggered from Hornet's pad. Any
+  binding already saved that way is cleared on load, with a warning, so it can be rebound.
+- A Shade control whose controller is unplugged now does nothing, instead of falling back to
+  whichever pad was last used.
+- Two controllers work again: the Shade player's pad is reserved from Hornet as it should be. The
+  button that orders the Shade about lives on Hornet's own pad, and counting it as the Shade's made
+  the mod think the Shade had claimed both - so neither was reserved and one stick drove both
+  characters.
+- The Characters screen no longer shows two characters as equipped at once.
 - The Hornet Needle damage slider now does something. It was scaling a field that needle strikes
   never read, so only Silk Skills responded.
 - "Legacy of the Abyss" now sits directly above Quit in the pause menu instead of below it, in both
@@ -26,6 +59,8 @@ controls it; the reasoning belongs in the commit and the code.
 
 ### Added
 
+- Bug reports record who owns which controller: every pad and whether it is attached, which one the
+  game has as active, and what Hornet own action set is holding.
 - Soul Vessels. The companion earns one for every two increases to Hornet's silk maximum, up to
   three, each holding 33 SOUL beyond the meter and refilling it a second after it has room.
   `shadeSoulVesselsEnabled` turns them off; `shadeSoulVesselDrainDelay` and

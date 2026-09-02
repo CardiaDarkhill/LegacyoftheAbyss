@@ -1,6 +1,7 @@
 #nullable disable
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection;
 using HarmonyLib;
 using InControl;
@@ -63,6 +64,17 @@ public partial class LegacyHelper
     internal static class InputDeviceBlocker
     {
         private static readonly HashSet<InputDevice> restrictedShadeDevices = new();
+
+        /// <summary>
+        /// Pads the Shade player owns, whether or not their input is being blocked this instant.
+        /// <para>
+        /// Distinct from <see cref="restrictedShadeDevices"/>, which means "shade-owned <em>and</em>
+        /// blocked right now" and is therefore empty during a menu or a scene load - exactly the
+        /// moments when it matters most to know whose pad a device is. Ownership does not change
+        /// because the map is open.
+        /// </para>
+        /// </summary>
+        private static readonly HashSet<InputDevice> shadeOwnedDevices = new();
         private static readonly List<InputDevice> cleanupList = new();
         // Names must match HeroActions.CreatePlayerAction(...) exactly; the lookup is ordinal.
         // "Quick Map" in particular is two words there - the old "QuickMap" spelling silently
@@ -135,6 +147,93 @@ public partial class LegacyHelper
             }
         }
 
+        /// <summary>
+        /// Who owns which pad this instant, and what the game is being told about it.
+        /// <para>
+        /// Written for the bug report rather than the log. "Hornet cannot be controlled" is a
+        /// report about the contents of three static sets and one property, none of which is
+        /// visible from a screenshot - the first report of it arrived with no way to tell whether
+        /// the active device had been left on the Shade's pad, whether a pad had been reserved that
+        /// nobody was holding, or whether the input path was not involved at all.
+        /// </para>
+        /// </summary>
+        internal static string DescribeDeviceOwnership()
+        {
+            try
+            {
+                var parts = new List<string>();
+
+                var devices = InputManager.Devices;
+                int count = devices?.Count ?? 0;
+                if (count == 0)
+                {
+                    parts.Add("devices: none");
+                }
+                else
+                {
+                    var described = new List<string>();
+                    for (int i = 0; i < count; i++)
+                    {
+                        var device = devices[i];
+                        if (device == null)
+                        {
+                            described.Add(i.ToString(CultureInfo.InvariantCulture) + ":<null>");
+                            continue;
+                        }
+
+                        var flags = new List<string>();
+                        if (IsShadeOwnedDevice(device)) flags.Add("shade");
+                        if (IsRestrictedDevice(device)) flags.Add("restricted");
+                        try
+                        {
+                            if (!device.IsAttached) flags.Add("detached");
+                        }
+                        catch
+                        {
+                            flags.Add("unreadable");
+                        }
+
+                        described.Add(FormattableString.Invariant(
+                            $"{i}:{device.Name}[{string.Join("+", flags.ToArray())}]"));
+                    }
+
+                    parts.Add("devices: " + string.Join(", ", described.ToArray()));
+                }
+
+                var active = InputManager.ActiveDevice;
+                parts.Add("active: " + (active == null || active == InputDevice.Null ? "none" : active.Name));
+
+                var lastHornet = InputManager_UpdateActiveDevice_BlockShadeDevices.LastHornetDevice;
+                parts.Add("lastHornet: "
+                    + (lastHornet == null || lastHornet == InputDevice.Null ? "none" : lastHornet.Name));
+
+                parts.Add("blocking: " + ShouldBlockShadeDeviceInput().ToString());
+                parts.Add("hornetKeyboard: " + HornetInput.EffectiveKeyboardEnabled().ToString());
+                parts.Add("hornetController: " + HornetInput.EffectiveControllerEnabled().ToString());
+                parts.Add("shadeAi: " + HornetInput.ShadeAiHoldsTheShade().ToString());
+
+                var handler = InputHandler.UnsafeInstance;
+                if (handler != null)
+                {
+                    parts.Add("acceptingInput: " + handler.acceptingInput.ToString());
+                    var actions = handler.inputActions;
+                    if (actions != null)
+                    {
+                        var heroDevice = actions.Device;
+                        parts.Add("heroDevice: "
+                            + (heroDevice == null || heroDevice == InputDevice.Null ? "none" : heroDevice.Name));
+                        parts.Add("heroLastInput: " + actions.LastInputType.ToString());
+                    }
+                }
+
+                return string.Join(" | ", parts.ToArray());
+            }
+            catch (System.Exception e)
+            {
+                return "unreadable: " + e.Message;
+            }
+        }
+
         private static readonly Dictionary<InputDevice, bool> IgnoreDeviceCache = new();
         private static int ignoreDeviceCacheFrame = -1;
         private static int blockShadeCacheFrame = -1;
@@ -157,6 +256,8 @@ public partial class LegacyHelper
 
         private static void ReleaseTrackedDevices(InputHandler handler)
         {
+            shadeOwnedDevices.Clear();
+
             if (restrictedShadeDevices.Count == 0)
                 return;
 
@@ -416,7 +517,18 @@ public partial class LegacyHelper
             return null;
         }
 
-        private static bool ShadeUsesAllControllers(ShadeInputConfig config, int targetIndex, int deviceCount)
+        /// <summary>
+        /// Whether the Shade has claimed every attached pad, in which case reserving them all would
+        /// leave Hornet with nothing to play on.
+        /// <para>
+        /// Asks <c>ReservesControllerIndex</c> rather than <c>IsControllerIndexInUse</c>: the
+        /// shade-command binding sits on Hornet's own pad by design, and counting it here made two
+        /// pads look like two claimed pads. This escape hatch then fired on the ordinary
+        /// two-controller setup and nothing was reserved at all - Hornet answered to both pads, so
+        /// the Shade player's stick drove both characters.
+        /// </para>
+        /// </summary>
+        internal static bool ShadeUsesAllControllers(ShadeInputConfig config, int targetIndex, int deviceCount)
         {
             if (config == null)
                 return false;
@@ -424,7 +536,7 @@ public partial class LegacyHelper
             {
                 if (i == targetIndex)
                     continue;
-                if (!config.IsControllerIndexInUse(i))
+                if (!config.ReservesControllerIndex(i))
                     return false;
             }
             return true;
@@ -458,7 +570,7 @@ public partial class LegacyHelper
                 }
 
                 var shadeConfig = cfg.shadeInput;
-                if (shadeConfig == null || !shadeConfig.UsesControllerBindings())
+                if (shadeConfig == null || !shadeConfig.ReservesAnyController())
                 {
                     ReleaseTrackedDevices(handler);
                     return;
@@ -506,13 +618,13 @@ public partial class LegacyHelper
                     if (cfg != null)
                     {
                         var shadeConfig = cfg.shadeInput;
-                        if (shadeConfig != null && shadeConfig.UsesControllerBindings())
+                        if (shadeConfig != null && shadeConfig.ReservesAnyController())
                         {
                             var devices = InputManager.Devices;
                             if (devices != null && devices.Count > 0)
                             {
                                 int index = devices.IndexOf(device);
-                                if (index >= 0 && shadeConfig.IsControllerIndexInUse(index))
+                                if (index >= 0 && shadeConfig.ReservesControllerIndex(index))
                                 {
                                     bool hornetWantsController = cfg.hornetControllerEnabled;
                                     bool shadeUsesAll = ShadeUsesAllControllers(shadeConfig, index, devices.Count);
@@ -529,6 +641,18 @@ public partial class LegacyHelper
             catch
             {
                 restrict = false;
+            }
+
+            if (device != null && device != InputDevice.Null)
+            {
+                if (restrict)
+                {
+                    shadeOwnedDevices.Add(device);
+                }
+                else
+                {
+                    shadeOwnedDevices.Remove(device);
+                }
             }
 
             bool block = false;
@@ -553,6 +677,46 @@ public partial class LegacyHelper
         internal static bool IsRestrictedDevice(InputDevice device)
         {
             return device != null && device != InputDevice.Null && restrictedShadeDevices.Contains(device);
+        }
+
+        /// <summary>Whether this pad belongs to the Shade player, blocked this instant or not.</summary>
+        internal static bool IsShadeOwnedDevice(InputDevice device)
+        {
+            return device != null && device != InputDevice.Null && shadeOwnedDevices.Contains(device);
+        }
+
+        /// <summary>
+        /// A device Hornet may be handed back: real, still attached, and not the Shade player's.
+        /// <para>
+        /// Attachment rather than membership of <c>InputManager.Devices</c> on purpose. That list is
+        /// controllers only, and Hornet is routinely on the keyboard while the Shade has the pad -
+        /// requiring membership would refuse to hand her back her own input in exactly the setup the
+        /// mod ships as its default.
+        /// </para>
+        /// </summary>
+        internal static bool IsUsableHornetDevice(InputDevice device)
+            => IsUsableHornetDevice(device, IsShadeOwnedDevice(device));
+
+        /// <summary>
+        /// The rule itself, with ownership handed in rather than looked up, so it can be exercised
+        /// without an InputManager behind it.
+        /// </summary>
+        internal static bool IsUsableHornetDevice(InputDevice device, bool shadeOwned)
+        {
+            if (device == null || device == InputDevice.Null || device.IsUnknown)
+                return false;
+
+            if (shadeOwned)
+                return false;
+
+            try
+            {
+                return device.IsAttached;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         internal static bool AllowsHeroAction(PlayerAction action)
@@ -690,12 +854,40 @@ public partial class LegacyHelper
         /// </summary>
         private static InputDevice previousActiveDevice = InputDevice.Null;
 
+        /// <summary>
+        /// The most recent active device that was not the Shade player's, so there is something to
+        /// hand Hornet back that is actually hers.
+        /// <para>
+        /// <see cref="previousActiveDevice"/> alone is not enough, and this is the bug it caused.
+        /// Blocking is deliberately off during a scene load and while a menu is open, so if the
+        /// Shade player is holding anything across one of those, their pad becomes the active device
+        /// and stays there. When gameplay resumes, "whatever it was a frame ago" <em>is</em> the
+        /// Shade's pad: the restore below finds nothing to change, the pad stays active for as long
+        /// as it is held, and Hornet - whose actions are fed exactly one device, and that one nulled
+        /// for being restricted - cannot move until the other player lets go. Opening the quick map
+        /// made it reproducible on demand.
+        /// </para>
+        /// </summary>
+        private static InputDevice lastHornetDevice = InputDevice.Null;
+
+        /// <summary>The same, for the bug report. See <c>InputDeviceBlocker.DescribeDeviceOwnership</c>.</summary>
+        internal static InputDevice LastHornetDevice => lastHornetDevice;
+
         private static void Prefix()
         {
             try
             {
                 InputDeviceBlocker.RefreshShadeDevices(InputHandler.UnsafeInstance);
-                previousActiveDevice = InputManager.ActiveDevice ?? InputDevice.Null;
+
+                var active = InputManager.ActiveDevice ?? InputDevice.Null;
+                previousActiveDevice = active;
+
+                // Recorded by ownership rather than by the blocking state, which is off in exactly
+                // the moments this needs to survive.
+                if (InputDeviceBlocker.IsUsableHornetDevice(active))
+                {
+                    lastHornetDevice = active;
+                }
             }
             catch
             {
@@ -741,8 +933,15 @@ public partial class LegacyHelper
                 if (ActiveDeviceSetter == null)
                     return;
 
-                var restoreDevice = previousActiveDevice ?? InputDevice.Null;
-                if (restoreDevice == activeDevice)
+                // Hornet's own pad first, then whatever was active a frame ago. Never
+                // InputDevice.Null: forcing that on every gameplay frame is what the earlier attempt
+                // at this reduced to, and it takes Hornet's controller with it. If there is nothing
+                // of hers to restore, this leaves the active device alone exactly as before.
+                var restoreDevice = InputDeviceBlocker.IsUsableHornetDevice(lastHornetDevice)
+                    ? lastHornetDevice
+                    : (previousActiveDevice ?? InputDevice.Null);
+
+                if (restoreDevice == activeDevice || !InputDeviceBlocker.IsUsableHornetDevice(restoreDevice))
                     return;
 
                 ActiveDeviceSetter.Invoke(null, new object[] { restoreDevice });
