@@ -677,6 +677,226 @@ public static partial class ShadeSettingsMenu
     }
 
     /// <summary>
+    /// Hands the two pads out by asking each player to press a button on theirs.
+    /// <para>
+    /// The mod stores which controller belongs to the companion as an index into
+    /// <c>InputManager.Devices</c>, and that index is not something a player can see, work out or
+    /// reliably guess - two identical pads are indistinguishable in any list, and the order they
+    /// appear in is the order the machine happened to enumerate them. So neither player is asked
+    /// which number they are holding. They are asked to press a button, and the device the press
+    /// arrives on is the answer.
+    /// </para>
+    /// <para>
+    /// Both are asked rather than only the companion, even though only the companion's index is
+    /// stored. Hornet's press is what proves the two players are on different pads: pressing the
+    /// same one twice is the mistake this is meant to catch, and catching it costs one extra step.
+    /// </para>
+    /// </summary>
+    internal class ControllerAssignmentDriver : MonoBehaviour
+    {
+        private MenuButton button;
+        private Text uiText;
+        private Component tmpTextComponent;
+        private PropertyInfo tmpTextProperty;
+        private bool capturing;
+
+        public void Initialize(MenuButton menuButton)
+        {
+            button = menuButton;
+            uiText = button.GetComponentInChildren<Text>(true);
+            var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
+            if (tmpType != null)
+            {
+                tmpTextComponent = button.GetComponentInChildren(tmpType, true);
+                tmpTextProperty = tmpType.GetProperty("text");
+            }
+
+            button.OnSubmitPressed.RemoveAllListeners();
+            button.OnSubmitPressed.AddListener(BeginCapture);
+            UpdateLabel();
+        }
+
+        private void SetButtonText(string value)
+        {
+            if (uiText != null)
+            {
+                uiText.text = value;
+                return;
+            }
+
+            if (tmpTextComponent != null && tmpTextProperty != null)
+            {
+                tmpTextProperty.SetValue(tmpTextComponent, value);
+            }
+        }
+
+        public void UpdateLabel()
+        {
+            SetButtonText("Assign Controllers: " + Describe());
+        }
+
+        /// <summary>The split as it stands, named by device rather than by index.</summary>
+        private static string Describe()
+        {
+            try
+            {
+                var devices = InControl.InputManager.Devices;
+                int count = devices?.Count ?? 0;
+                if (count == 0)
+                {
+                    return "no controllers attached";
+                }
+
+                int companion = ModConfig.Instance.shadeInput != null
+                    ? ModConfig.Instance.shadeInput.controllerDeviceIndex
+                    : -1;
+
+                if (companion < 0 || companion >= count)
+                {
+                    return "companion is not on a controller";
+                }
+
+                string companionName = DeviceName(devices[companion], companion);
+
+                // Hornet's is whichever else is attached. Named rather than numbered for the same
+                // reason the companion's is, and left vague when there is more than one candidate -
+                // the mod reserves one pad and leaves her the rest, so there may be no single answer.
+                string hornetName = "the keyboard";
+                int others = 0;
+                for (int i = 0; i < count; i++)
+                {
+                    if (i == companion)
+                    {
+                        continue;
+                    }
+
+                    others++;
+                    if (others == 1)
+                    {
+                        hornetName = DeviceName(devices[i], i);
+                    }
+                }
+
+                if (others > 1)
+                {
+                    hornetName = "any other controller";
+                }
+
+                return $"Hornet {hornetName}, companion {companionName}";
+            }
+            catch
+            {
+                return "unavailable";
+            }
+        }
+
+        private static string DeviceName(InControl.InputDevice device, int index)
+        {
+            string name = device != null ? device.Name : null;
+            if (string.IsNullOrEmpty(name))
+            {
+                return "controller " + (index + 1).ToString(CultureInfo.InvariantCulture);
+            }
+
+            return name;
+        }
+
+        private void BeginCapture()
+        {
+            if (!capturing)
+            {
+                StartCoroutine(CaptureRoutine());
+            }
+        }
+
+        private IEnumerator CaptureRoutine()
+        {
+            capturing = true;
+
+            int hornetIndex = -1;
+            int companionIndex = -1;
+
+            while (true)
+            {
+                SetButtonText("Press a button on HORNET's controller... (Esc cancels)");
+                yield return WaitForPad(result => hornetIndex = result);
+                if (hornetIndex < 0)
+                {
+                    break;
+                }
+
+                SetButtonText("Now press a button on the COMPANION's controller... (Esc cancels)");
+                yield return WaitForPad(result => companionIndex = result);
+                if (companionIndex < 0)
+                {
+                    break;
+                }
+
+                if (companionIndex == hornetIndex)
+                {
+                    // The whole point of asking twice. Say so and start again rather than storing a
+                    // split that would leave one pad driving both characters - which is the state
+                    // this screen exists to get out of.
+                    SetButtonText("That is the same controller - try again");
+                    yield return new WaitForSecondsRealtime(1.5f);
+                    hornetIndex = -1;
+                    companionIndex = -1;
+                    continue;
+                }
+
+                ShadeInput.EnsureControllerIndex(companionIndex);
+
+                // Hornet needs her controller switched back on, or the pad she just pressed is
+                // reserved from her by a setting she did not touch.
+                ModConfig.Instance.hornetControllerEnabled = true;
+                ModConfig.Save();
+
+                try { HornetInput.RefreshHornetDeviceBindings(); }
+                catch { }
+
+                NotifyBindingChanged();
+                break;
+            }
+
+            capturing = false;
+            UpdateLabel();
+        }
+
+        /// <summary>
+        /// Waits for a button on any pad and reports which device it came from, or -1 if the player
+        /// backed out. Uses the same capture the rebinding rows use, so a press is attributed to the
+        /// device it was made on rather than to whichever pad was last active.
+        /// </summary>
+        private static IEnumerator WaitForPad(Action<int> report)
+        {
+            while (true)
+            {
+                yield return null;
+
+                if (Input.GetKeyDown(KeyCode.Escape))
+                {
+                    report(-1);
+                    yield break;
+                }
+
+                if (ShadeInput.TryCaptureControl(out _, out int deviceIndex) && deviceIndex >= 0)
+                {
+                    report(deviceIndex);
+
+                    // Let the button go before listening for the next one, or one long press is read
+                    // as both players' answers.
+                    while (ShadeInput.TryCaptureControl(out _, out _))
+                    {
+                        yield return null;
+                    }
+
+                    yield break;
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Writes a label onto a cloned menu row, whichever text component the game's prefab happens to
     /// use. Shared by every row that renders its own state into its label.
     /// </summary>

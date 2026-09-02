@@ -62,8 +62,13 @@ public partial class LegacyHelper
             // the bearer walks out of it - which is the whole behaviour of a dropped cloud.
             if (!string.IsNullOrEmpty(effectPrefab))
             {
-                LegacyoftheAbyss.Shade.Knight.KnightEffects.TrySpawnSorted(
+                var drawnCloud = LegacyoftheAbyss.Shade.Knight.KnightEffects.TrySpawnSorted(
                     effectPrefab, go.transform, sr, effectScale, sortingOffset: 1, alpha: effectAlpha);
+
+                // Drawn at the size it damages. The two were independent, and Spore Shroom's cloud
+                // covered several times the circle below it - so an enemy plainly inside the cloud
+                // took nothing, which is the only honest reading of that picture.
+                LegacyoftheAbyss.Shade.Knight.KnightEffects.ScaleCloudToRadius(drawnCloud, effectPrefab, radius);
             }
             else if (!string.IsNullOrEmpty(effectClip))
             {
@@ -166,12 +171,35 @@ public partial class LegacyHelper
 
             sporeShroomCooldown = SporeShroomCooldownSeconds;
             SpawnCharmDamageBurst(
-                radius: 3.4f,
+                radius: SporeShroomRadius,
                 damage: SporeShroomTickDamage,
                 lifeSeconds: SporeShroomCloudSeconds,
                 hitIntervalSeconds: SporeShroomTickSeconds,
                 effectPrefab: LegacyoftheAbyss.Shade.Knight.KnightEffects.SporeCloud);
         }
+
+        /// <summary>
+        /// Hollow Knight's own cloud radius, read from the prefab rather than chosen: the
+        /// <c>Knight Spore Cloud</c> prefab carries a <c>CircleCollider2D</c> of 6.06 at a prefab
+        /// scale of 1.35, so 8.18 units. The drawing is scaled to whatever this says, so taking the
+        /// figure from the same place the art comes from leaves the two identical and the cloud at
+        /// its authored size.
+        /// </summary>
+        private static float SporeShroomRadius
+        {
+            get
+            {
+                float authored = LegacyoftheAbyss.Shade.Knight.KnightEffects.TryGetPrefabRadius(
+                    LegacyoftheAbyss.Shade.Knight.KnightEffects.SporeCloud);
+
+                // Only if the bundle is there to be asked. Without it the cloud is invisible anyway,
+                // and the old figure is a better guess than nothing.
+                return authored > 0.01f ? authored : SporeShroomFallbackRadius;
+            }
+        }
+
+        /// <summary>What the cloud measured before the prefab was asked, for a run without the bundle.</summary>
+        private const float SporeShroomFallbackRadius = 3.4f;
 
         /// <summary>The cloud stands this long, ticking every <see cref="SporeShroomTickSeconds"/>.</summary>
         private const float SporeShroomCloudSeconds = 4.1f;

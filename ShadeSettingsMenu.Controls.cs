@@ -83,6 +83,36 @@ public static partial class ShadeSettingsMenu
         var selectables = new List<MenuSelectable>();
         var presetButtons = new List<MenuButton>();
 
+        // A full-width row of its own rather than a fifth preset card: the preset row's four cards
+        // already claim more than the screen's width at their minimum, and this is not a preset -
+        // it rewrites nobody's bindings, it only says which hand each pad is in.
+        var assignSelectable = CreateMenuButton(
+            content, buttonTemplate, "Assign Controllers", null, CancelTarget.ShadeMain);
+        if (assignSelectable is MenuButton assignButton)
+        {
+            var assignRect = assignButton.GetComponent<RectTransform>();
+            if (assignRect != null)
+            {
+                assignRect.anchorMin = new Vector2(0f, 1f);
+                assignRect.anchorMax = new Vector2(1f, 1f);
+                assignRect.pivot = new Vector2(0.5f, 1f);
+                assignRect.anchoredPosition = new Vector2(0f, -sectionCursorY);
+                assignRect.sizeDelta = new Vector2(0f, ButtonRowHeight);
+            }
+
+            var assignLayout = assignButton.GetComponent<LayoutElement>();
+            if (assignLayout != null)
+            {
+                assignLayout.minHeight = ButtonRowHeight;
+                assignLayout.preferredHeight = ButtonRowHeight;
+                assignLayout.flexibleHeight = 0f;
+            }
+
+            assignButton.gameObject.AddComponent<ControllerAssignmentDriver>().Initialize(assignButton);
+            selectables.Add(assignButton);
+            sectionCursorY += ButtonRowHeight + SectionSpacing;
+        }
+
         var presetRow = new GameObject("PresetOptions");
         var presetRect = presetRow.AddComponent<RectTransform>();
         presetRect.SetParent(content, false);

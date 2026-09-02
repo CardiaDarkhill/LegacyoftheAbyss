@@ -156,10 +156,13 @@ public class ShadeInputConfig
         // Matches the defaults these carried as hardcoded, unrebindable KeyCode constants
         // in SimpleHUD before they moved into the normal binding system -- unbound except
         // for soul reset, so existing behaviour doesn't change until someone rebinds them.
-        debugDamageShade = new ShadeBinding(ShadeBindingOption.None(), ShadeBindingOption.None());
-        debugHealShade = new ShadeBinding(ShadeBindingOption.None(), ShadeBindingOption.None());
-        debugSoulIncrease = new ShadeBinding(ShadeBindingOption.None(), ShadeBindingOption.None());
-        debugSoulDecrease = new ShadeBinding(ShadeBindingOption.None(), ShadeBindingOption.None());
+        // The row of keys to the right of the letters, in the order they sit on the board, so
+        // the whole debug set is reachable without looking: [ and ] hurt and heal, - and = take
+        // and give soul, \ empties it.
+        debugDamageShade = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.LeftBracket), ShadeBindingOption.None());
+        debugHealShade = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.RightBracket), ShadeBindingOption.None());
+        debugSoulIncrease = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Equals), ShadeBindingOption.None());
+        debugSoulDecrease = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Minus), ShadeBindingOption.None());
         debugSoulReset = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Backslash), ShadeBindingOption.None());
     }
 
@@ -339,6 +342,79 @@ public class ShadeInputConfig
     /// rebinding it now records the device properly.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The debug keys' defaults, for a config saved before they had any.
+    /// </summary>
+    private static readonly (ShadeAction Action, KeyCode Key)[] DebugKeyDefaults =
+    {
+        (ShadeAction.DebugDamageShade, KeyCode.LeftBracket),
+        (ShadeAction.DebugHealShade, KeyCode.RightBracket),
+        (ShadeAction.DebugSoulIncrease, KeyCode.Equals),
+        (ShadeAction.DebugSoulDecrease, KeyCode.Minus),
+        (ShadeAction.DebugSoulReset, KeyCode.Backslash)
+    };
+
+    /// <summary>
+    /// Gives the debug keys their defaults on a config that predates them, and takes nothing away.
+    /// <para>
+    /// Two rules, both of them about not surprising anyone who has already set their controls up.
+    /// A debug action that is already bound to something is left exactly as it is - the default is
+    /// a starting point, not a preference. And a default whose key is being used for anything else
+    /// is dropped rather than applied, because the player who bound <c>-</c> to the Shade's nail
+    /// would otherwise find it quietly draining their soul the day they switched the debug keys on.
+    /// </para>
+    /// <para>
+    /// Returns how many were filled in, for the load-time log line.
+    /// </para>
+    /// </summary>
+    public int ApplyMissingDebugDefaults()
+    {
+        int filled = 0;
+
+        foreach (var (action, key) in DebugKeyDefaults)
+        {
+            var binding = GetBinding(action);
+            if (binding == null || IsBound(binding) || IsKeyInUse(key))
+            {
+                continue;
+            }
+
+            binding.primary = ShadeBindingOption.FromKey(key);
+            filled++;
+        }
+
+        return filled;
+    }
+
+    private static bool IsBound(ShadeBinding binding)
+        => binding.primary.type != ShadeBindingOptionType.None
+            || binding.secondary.type != ShadeBindingOptionType.None;
+
+    /// <summary>Whether any action - debug or not - already answers to this key.</summary>
+    private bool IsKeyInUse(KeyCode key)
+    {
+        foreach (var action in AllActions)
+        {
+            var binding = GetBinding(action);
+            if (binding == null)
+            {
+                continue;
+            }
+
+            if (binding.primary.type == ShadeBindingOptionType.Key && binding.primary.key == key)
+            {
+                return true;
+            }
+
+            if (binding.secondary.type == ShadeBindingOptionType.Key && binding.secondary.key == key)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public int ClearControllerKeyBindings()
     {
         int cleared = 0;

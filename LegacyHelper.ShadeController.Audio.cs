@@ -220,6 +220,10 @@ public partial class LegacyHelper
             focusSfx.Stop();
         }
 
+        /// <summary>
+        /// Plays a focus sound. The clip must come from one of the accessors below and never from
+        /// the field directly - see <see cref="FocusCompleteSfx"/> for why.
+        /// </summary>
         private void PlayFocusSfx(AudioClip clip)
         {
             EnsureFocusSfx();
@@ -227,7 +231,29 @@ public partial class LegacyHelper
                 focusSfx.PlayOneShot(clip, Mathf.Clamp01(GetEffectiveSfxVolume()));
         }
 
-        private void TryPlayFocusCompleteSfx() => PlayFocusSfx(sfxFocusComplete);
+        /// <summary>
+        /// The focus-complete clip, resolved if it has not been already.
+        /// <para>
+        /// An accessor rather than the bare field because the clips are found lazily, and the order
+        /// C# evaluates arguments in made that a trap: <c>PlayFocusSfx(sfxFocusComplete)</c> reads
+        /// the field <em>before</em> the call that resolves it, so it passed the null it was still
+        /// holding. The sound was silent the first time and correct every time after, once per
+        /// scene, because the companion and its clips are built anew in each one. That was reported
+        /// as most Shade sounds failing the first time they are used in a room.
+        /// </para>
+        /// </summary>
+        private AudioClip FocusCompleteSfx
+        {
+            get { EnsureFocusSfx(); return sfxFocusComplete; }
+        }
+
+        /// <summary>The focus-ready chime, resolved if it has not been already. See <see cref="FocusCompleteSfx"/>.</summary>
+        private AudioClip FocusReadySfx
+        {
+            get { EnsureFocusSfx(); return sfxFocusReady; }
+        }
+
+        private void TryPlayFocusCompleteSfx() => PlayFocusSfx(FocusCompleteSfx);
 
         /// <summary>Chimes the first frame SOUL crosses the Focus cost, not while it sits above it.</summary>
         private void CheckFocusReadySfx()
@@ -239,7 +265,7 @@ public partial class LegacyHelper
             }
 
             if (lastSoulForReady < focusSoulCost && shadeSoul >= focusSoulCost)
-                PlayFocusSfx(sfxFocusReady);
+                PlayFocusSfx(FocusReadySfx);
 
             lastSoulForReady = shadeSoul;
         }
@@ -352,6 +378,10 @@ public partial class LegacyHelper
             sfxVoidScream ??= bestVoidScream;
         }
 
+        /// <summary>
+        /// Plays a spell sound. The clip must come from one of the accessors below and never from
+        /// the field directly - see <see cref="FocusCompleteSfx"/> for why.
+        /// </summary>
         private void PlaySpellSfx(AudioClip clip)
         {
             EnsureSpellSfx();
@@ -359,13 +389,23 @@ public partial class LegacyHelper
                 spellSfx.PlayOneShot(clip, Mathf.Clamp01(GetEffectiveSfxVolume()));
         }
 
-        private void TryPlayFireballSfx() => PlaySpellSfx(sfxFireball);
+        // Resolved on read, for the reason given on FocusCompleteSfx: reading one of these fields
+        // as an argument reads it before the call that fills it in, which cost every one of these
+        // sounds its first use in each room.
+        private AudioClip FireballSfx { get { EnsureSpellSfx(); return sfxFireball; } }
+        private AudioClip ScreamSfx { get { EnsureSpellSfx(); return sfxScream; } }
+        private AudioClip VoidScreamSfx { get { EnsureSpellSfx(); return sfxVoidScream; } }
+        private AudioClip QuakePrepareSfx { get { EnsureSpellSfx(); return sfxQuakePrepare; } }
+        private AudioClip QuakeImpactSfx { get { EnsureSpellSfx(); return sfxQuakeImpact; } }
+        private AudioClip VoidQuakeImpactSfx { get { EnsureSpellSfx(); return sfxVoidQuakeImpact; } }
 
-        private void TryPlayShriekSfx(bool upgraded) => PlaySpellSfx(upgraded ? sfxVoidScream : sfxScream);
+        private void TryPlayFireballSfx() => PlaySpellSfx(FireballSfx);
 
-        private void TryPlayQuakePrepareSfx() => PlaySpellSfx(sfxQuakePrepare);
+        private void TryPlayShriekSfx(bool upgraded) => PlaySpellSfx(upgraded ? VoidScreamSfx : ScreamSfx);
 
-        private void TryPlayQuakeImpactSfx(bool upgraded) => PlaySpellSfx(upgraded ? sfxVoidQuakeImpact : sfxQuakeImpact);
+        private void TryPlayQuakePrepareSfx() => PlaySpellSfx(QuakePrepareSfx);
+
+        private void TryPlayQuakeImpactSfx(bool upgraded) => PlaySpellSfx(upgraded ? VoidQuakeImpactSfx : QuakeImpactSfx);
 
     }
 }

@@ -386,7 +386,7 @@ public partial class LegacyHelper
             // damage decision worth a record. Logged, they fire per frame per overlap and one boss
             // fight buries the log ring in identical lines.
             if (ShouldIgnoreDamageSource(source) || ShouldIgnoreDamageSource(dh)) { return; }
-            if (!CouldReachHornet(source)) { return; }
+            if (!CouldReachHornet(source) || IsSwitchedOffCollider(source)) { return; }
 
             if (!dh.enabled || !dh.CanCauseDamage) { LogShadeDamage(dh, source, false); return; }
             int dmg = GetDamageAmount(dh);
@@ -460,6 +460,22 @@ public partial class LegacyHelper
         /// should err in.
         /// </para>
         /// </summary>
+        /// <summary>
+        /// Whether this collider has been parked on the layer the game uses for things it is done
+        /// with.
+        /// <para>
+        /// Unity's built-in Ignore Raycast is that layer in Silksong: <c>HeroController</c> moves
+        /// <em>itself</em> there the moment Hornet dies, in the same breath as switching her HeroBox
+        /// off. Enemies are treated the same way, and two reports came back with exactly that
+        /// signature - a "phantom hitbox" hurting the Knight in an arena, and the Shade being hit by
+        /// an inactive enemy - both recorded in the event ring as damage from an enemy root on
+        /// <c>[Ignore Raycast]</c>. Hornet never feels those because her HeroBox goes off with them;
+        /// the companion has no HeroBox, so nothing was telling it the fight was over.
+        /// </para>
+        /// </summary>
+        private static bool IsSwitchedOffCollider(Collider2D collider)
+            => collider && collider.gameObject.layer == (int)GlobalEnums.PhysLayers.IGNORE_RAYCAST;
+
         private static bool CouldReachHornet(Collider2D damager)
         {
             if (!damager)
@@ -748,6 +764,12 @@ public partial class LegacyHelper
             ClearShadowParticles();
         }
 
+        /// <summary>
+        /// How long a hazard respawn leaves the Knight unhurtable. The same second its controls are
+        /// held for, so the pause cannot be spent being hit by the thing it was put down next to.
+        /// </summary>
+        private const float KnightHazardRespawnInvulnerabilitySeconds = 1f;
+
         public void SuppressHazardDamage(float duration)
         {
             if (duration <= 0f)
@@ -937,6 +959,11 @@ public partial class LegacyHelper
                 if (dh != null)
                 {
                     if (ShouldIgnoreDamageSource(c) || ShouldIgnoreDamageSource(dh)) { continue; }
+
+                    // The same two guards the trigger path uses. This one is the body's own overlap
+                    // sweep and had neither, which is how a switched-off collider reached it.
+                    if (!CouldReachHornet(c) || IsSwitchedOffCollider(c)) { continue; }
+
                     bool canDamage = false;
                     try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
                     if (!canDamage) { LogShadeDamage(dh, c, false); continue; }
@@ -1048,7 +1075,21 @@ public partial class LegacyHelper
         {
             if (hazardCooldown > 0f) return;
             TeleportToHornet();
-            hazardCooldown = 0.25f;
+
+            // A second of stillness and invulnerability for the Knight, which is what the report
+            // asked for: it is put back mid-input and often within reach of whatever killed it, so
+            // without the pause it walked straight back in on the input still being held.
+            if (UsesGroundedMovement)
+            {
+                BeginKnightHazardRespawnLock();
+                hazardCooldown = KnightHazardRespawnInvulnerabilitySeconds;
+                hurtCooldown = Mathf.Max(hurtCooldown, KnightHazardRespawnInvulnerabilitySeconds);
+            }
+            else
+            {
+                hazardCooldown = 0.25f;
+            }
+
             int attempted = ApplyOvercharmPenalty(1);
 
             if (!canTakeDamage)

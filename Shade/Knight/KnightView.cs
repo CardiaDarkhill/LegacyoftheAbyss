@@ -278,6 +278,28 @@ namespace LegacyoftheAbyss.Shade.Knight
         /// <summary>Whether the rig is currently drawing. The Shade answers this with its renderer.</summary>
         internal bool IsVisible => rig != null && rig.gameObject.activeSelf;
 
+        /// <summary>The rig's body renderer, for the sorting line in a bug report.</summary>
+        internal Renderer? FirstRenderer
+        {
+            get
+            {
+                if (rig == null)
+                {
+                    return null;
+                }
+
+                foreach (var renderer in rig.GetComponentsInChildren<Renderer>(true))
+                {
+                    if (renderer != null && renderer.enabled)
+                    {
+                        return renderer;
+                    }
+                }
+
+                return null;
+            }
+        }
+
         // The rig's one-shot effects live as their own children under "Effects", each with its own
         // animator sharing the body's clip library. Names are the prefab's, verified against the
         // bundle: guessing at them ("Wings", "Monarch Wings") found nothing and cost the flourish

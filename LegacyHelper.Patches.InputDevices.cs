@@ -209,6 +209,11 @@ public partial class LegacyHelper
 
                 parts.Add("blocking: " + ShouldBlockShadeDeviceInput().ToString());
                 parts.Add("hornetKeyboard: " + HornetInput.EffectiveKeyboardEnabled().ToString());
+
+                // How often her keyboard has had to be put back. Non-zero means something is
+                // clearing her bindings and not remapping them, which is still unidentified - the
+                // repair hides the symptom rather than explaining it.
+                parts.Add("keyboardRepairs: " + HornetInput.KeyboardRepairs.ToString(CultureInfo.InvariantCulture));
                 parts.Add("hornetController: " + HornetInput.EffectiveControllerEnabled().ToString());
                 parts.Add("shadeAi: " + HornetInput.ShadeAiHoldsTheShade().ToString());
 

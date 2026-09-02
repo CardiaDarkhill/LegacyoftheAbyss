@@ -227,8 +227,74 @@ public partial class LegacyHelper
             }
 
             LegacyHelper.ApplyShadeSpriteRendering(sr);
+
+            // The Knight's rig sorts separately and had been given its order once, when it was
+            // built - so a re-resolve here left the two of them a step apart for the rest of the
+            // session.
+            RefreshKnightSorting();
+
             SyncChildRendererSorting();
             EnsureShadeLight();
+        }
+
+        /// <summary>
+        /// Everything that decides whether the companion draws in front of something Hornet is
+        /// behind: both of their sorting layers, their orders, and their depths.
+        /// <para>
+        /// Written for the bug report because a screenshot cannot distinguish the three things that
+        /// could cause it. A different sorting layer, a different order within a shared one, or - if
+        /// those two agree, which they now deliberately do - a difference in z, which is all Unity
+        /// has left to sort by. Two reports of the companion standing on the wrong side of the same
+        /// clump of grass have each been answered with a guess; this is so the third is not.
+        /// </para>
+        /// </summary>
+        internal string DescribeSorting()
+        {
+            try
+            {
+                var parts = new System.Collections.Generic.List<string>();
+
+                var hero = ResolveHeroController();
+                var heroRenderer = LegacyHelper.ResolveHornetBodyRenderer(hero);
+                if (heroRenderer != null)
+                {
+                    parts.Add(FormattableString.Invariant(
+                        $"hornet: {heroRenderer.GetType().Name} '{SortingLayer.IDToName(heroRenderer.sortingLayerID)}' order {heroRenderer.sortingOrder} z {heroRenderer.transform.position.z:0.####}"));
+                }
+                else
+                {
+                    parts.Add("hornet: unresolved");
+                }
+
+                if (sr != null)
+                {
+                    parts.Add(FormattableString.Invariant(
+                        $"body: '{SortingLayer.IDToName(sr.sortingLayerID)}' order {sr.sortingOrder} z {transform.position.z:0.####} drawn {sr.enabled}"));
+                }
+
+                if (knightView != null)
+                {
+                    var rigRenderer = knightView.FirstRenderer;
+                    if (rigRenderer != null)
+                    {
+                        parts.Add(FormattableString.Invariant(
+                            $"knight rig: '{SortingLayer.IDToName(rigRenderer.sortingLayerID)}' order {rigRenderer.sortingOrder} z {rigRenderer.transform.position.z:0.####}"));
+                    }
+                }
+
+                var config = ModConfig.Instance;
+                if (config != null)
+                {
+                    parts.Add(FormattableString.Invariant(
+                        $"config: layer '{config.shadeSortingLayer}' offset {config.shadeSortingOrderOffset}"));
+                }
+
+                return string.Join(" | ", parts.ToArray());
+            }
+            catch (Exception e)
+            {
+                return "unreadable: " + e.Message;
+            }
         }
 
         private void SyncChildRendererSorting()

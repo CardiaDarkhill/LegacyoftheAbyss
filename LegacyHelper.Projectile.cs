@@ -101,9 +101,13 @@ public partial class LegacyHelper
                 IsFirstHit = true
             };
 
+            // Once, not twice. HitTaker.Hit already walks up to three parents collecting every
+            // IHitResponder and hits each of them, and an enemy's HealthManager *is* one of those -
+            // TryGetHealthManager below it is the identical walk, so anything it finds has just been
+            // hit. The extra call was therefore a second full application of the same HitInstance,
+            // and every spell the Shade has ever cast landed for double its stated damage. That is
+            // the Howling Wraiths report: 14 on paper, 28 in the enemy.
             HitTaker.Hit(other.gameObject, hit);
-            if (HitTaker.TryGetHealthManager(other.gameObject, out var hm))
-                hm.Hit(hit);
 
             if (destroyOnTerrain && terrainLayer >= 0 && other.gameObject.layer == terrainLayer)
                 Destroy(gameObject);
@@ -183,9 +187,13 @@ public partial class LegacyHelper
                 IsFirstHit = isFirstHit
             };
 
+            // Once, not twice. HitTaker.Hit already walks up to three parents collecting every
+            // IHitResponder and hits each of them, and an enemy's HealthManager *is* one of those -
+            // TryGetHealthManager below it is the identical walk, so anything it finds has just been
+            // hit. The extra call was therefore a second full application of the same HitInstance,
+            // and every spell the Shade has ever cast landed for double its stated damage. That is
+            // the Howling Wraiths report: 14 on paper, 28 in the enemy.
             HitTaker.Hit(other.gameObject, hit);
-            if (HitTaker.TryGetHealthManager(other.gameObject, out var hm))
-                hm.Hit(hit);
         }
     }
 }

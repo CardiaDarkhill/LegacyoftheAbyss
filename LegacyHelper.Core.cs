@@ -180,6 +180,10 @@ public partial class LegacyHelper : BaseUnityPlugin
             HandleDebugInput();
         }
 
+        // Cheap, throttled to once a second, and the only thing standing between a mis-timed
+        // "does Hornet have the keyboard" answer and a session she cannot play. See there.
+        HornetInput.EnsureHornetKeyboardBindings();
+
         var ui = cachedUI;
         if (ui == null)
         {

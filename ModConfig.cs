@@ -636,6 +636,17 @@ public class ModConfig
                     + "device-agnostic controller buttons and fired on every pad. Rebind them and they "
                     + "will be recorded against the controller they are pressed on.");
             }
+            // Debug keys that had no defaults until now. Only ever fills in an action that is
+            // unbound, and only with a key nothing else is using - see ApplyMissingDebugDefaults.
+            int filledDebugKeys = instance.shadeInput.ApplyMissingDebugDefaults();
+            if (filledDebugKeys > 0)
+            {
+                Debug.Log(
+                    $"[LegacyoftheAbyss] Gave {filledDebugKeys} debug key(s) their default binding. "
+                    + "Any key already in use was left alone, and can be bound from the Controls menu "
+                    + "with Debug Keys switched on.");
+            }
+
             if (string.IsNullOrWhiteSpace(instance.shadeSkin))
             {
                 instance.shadeSkin = "Default";

@@ -207,9 +207,10 @@ public partial class LegacyHelper
                 TryFireGrubberflyBeam(forcedV);
 
                 // A down slash that finds something below bounces the Knight off it - Hornet
-                // included, which is what keeps the game's verticality open to it.
+                // included, which is what keeps the game's verticality open to it. The swing is
+                // handed over so the two agree on how far down they reach.
                 if (forcedV < -0.35f)
-                    TryKnightPogo();
+                    TryKnightPogo(swing);
             }
         }
 

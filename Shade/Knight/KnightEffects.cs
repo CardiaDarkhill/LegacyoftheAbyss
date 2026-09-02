@@ -177,6 +177,82 @@ namespace LegacyoftheAbyss.Shade.Knight
         }
 
         /// <summary>
+        /// The radius Hollow Knight itself gave this effect, in world units, or 0 if it carries no
+        /// circle to read.
+        /// <para>
+        /// The clouds are prefabs with a <c>CircleCollider2D</c> on the root, and that circle is the
+        /// game's own statement of how big the cloud is - <c>Knight Spore Cloud</c> and
+        /// <c>Knight Dung Cloud</c> both hold 6.06, the spore one at a prefab scale of 1.35, so 8.18
+        /// units of reach. Read from the prefab rather than the instance, because
+        /// <see cref="Strip"/> destroys every collider on the way in.
+        /// </para>
+        /// </summary>
+        internal static float TryGetPrefabRadius(string prefabName)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(prefabName) || !KnightAssets.TryLoad())
+                {
+                    return 0f;
+                }
+
+                var prefab = KnightAssets.FindPrefab(prefabName);
+                var circle = prefab != null ? prefab.GetComponent<CircleCollider2D>() : null;
+                if (circle == null)
+                {
+                    return 0f;
+                }
+
+                var scale = prefab!.transform.localScale;
+                return Mathf.Abs(circle.radius) * Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.y));
+            }
+            catch
+            {
+                return 0f;
+            }
+        }
+
+        /// <summary>
+        /// Scales a spawned cloud so it draws at <paramref name="worldRadius"/> rather than at the
+        /// size Hollow Knight built it.
+        /// <para>
+        /// A charm cloud is two things that were never told about each other: a circle that does the
+        /// damage, and a borrowed effect that does the drawing. Spore Shroom's circle is 3.4 units
+        /// and its effect is authored for 8.18, so an enemy standing well inside the visible cloud
+        /// was nowhere near the volume - reported, reasonably, as two separate bugs.
+        /// </para>
+        /// <para>
+        /// The factor comes from the prefab's own collider and nothing else. An earlier attempt
+        /// estimated the drawn reach from the particles - where they start plus how far they travel
+        /// before they die - and was wrong by a factor of fifty, because every system in these
+        /// clouds has a velocity clamp of zero sitting on top of a start speed of up to 48: they are
+        /// authored to be flung outward and stopped dead. Nothing about a particle system's numbers
+        /// tells you how big it looks. The collider does.
+        /// </para>
+        /// </summary>
+        internal static void ScaleCloudToRadius(GameObject? instance, string prefabName, float worldRadius)
+        {
+            if (instance == null || worldRadius <= 0f)
+            {
+                return;
+            }
+
+            float authored = TryGetPrefabRadius(prefabName);
+            if (authored <= 0.0001f)
+            {
+                return;
+            }
+
+            float factor = worldRadius / authored;
+            if (factor > 0.999f && factor < 1.001f)
+            {
+                return;
+            }
+
+            instance.transform.localScale *= factor;
+        }
+
+        /// <summary>
         /// Fades a borrowed renderer. Written on the instanced material rather than the shared one:
         /// these materials come out of the bundle and are shared by every copy of the effect, so
         /// tinting the shared material would fade the art everywhere it is used, for the session.

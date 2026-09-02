@@ -171,6 +171,12 @@ namespace LegacyoftheAbyss.Diagnostics
 
         /// <summary>Where the last few inventory-open presses got to. See <c>InventoryOpenProbe</c>.</summary>
         public string? InventoryProbe;
+
+        /// <summary>
+        /// Both characters' sorting layers, orders and depths - everything that decides which of
+        /// them draws in front of a piece of scenery. See <c>ShadeController.DescribeSorting</c>.
+        /// </summary>
+        public string? Sorting;
     }
 
     /// <summary>
@@ -218,6 +224,11 @@ namespace LegacyoftheAbyss.Diagnostics
             TryRun(() => state.HeroMenuBindings = LegacyHelper.InputDeviceBlocker.DescribeHeroMenuBindings());
             TryRun(() => state.InputDevices = LegacyHelper.InputDeviceBlocker.DescribeDeviceOwnership());
             TryRun(() => state.InventoryProbe = InventoryOpenProbe.Describe());
+            TryRun(() =>
+            {
+                var shade = LegacyHelper.ShadeController.PrimaryInstance;
+                state.Sorting = shade != null ? shade.DescribeSorting() : "no companion";
+            });
 
             var gameManager = MenuStateUtility.TryGetGameManager();
             if (gameManager != null)

@@ -7,6 +7,31 @@ controls it; the reasoning belongs in the commit and the code.
 
 ### Fixed
 
+- The Knight draws where Hornet draws, instead of one step in front of her. It was appearing over
+  scenery she is behind.
+- Balloons and hanging pods can be pogoed at all. Both carry the marker that says "do not bounce off
+  this", which in their case means "this object does the bouncing itself" - and it only does it for
+  Hornet.
+- The Knight's pogo reaches further down for Hornet specifically. Her collider is nothing like her
+  silhouette, so hits that plainly looked like hits were missing her.
+- The Knight is put back beside Hornet a quarter second after a room load rather than three quarters.
+- Spore Shroom's cloud is drawn the size it damages. It was a 3.4 unit circle under a particle
+  effect covering most of the room, so an enemy plainly inside the cloud took nothing.
+- The companion is hidden while a pre-rendered cutscene plays.
+- Every Shade spell was landing twice. The damage log said 14 for Howling Wraiths and the enemy took
+  28; the numbers in the log are now the numbers dealt.
+- Shade sounds no longer fail the first time they are used in a room. The fireball, both screams,
+  both quakes and the focus sounds were all silent on their first use and correct after it.
+- Hornet no longer loses her keyboard on a room change. She could be left with no bindings at all,
+  and nothing put them back before a restart; they are now restored within a second.
+- The Knight can pogo off the environment - bouncers, tinkable fixtures, levers, breakables - rather
+  than only off enemies and Hornet.
+- The Knight can no longer pogo off background scenery, which is the same prop as the foreground one
+  pushed back behind the playable plane.
+- The Shade and the Knight no longer take damage from switched-off hitboxes: the phantom hitbox in
+  the arena and the inactive enemy were both colliders parked on the layer the game retires things to.
+- The Knight holds still and cannot be hurt for a second after a hazard puts it back, instead of
+  walking straight back in on the input still being held.
 - Holding a wall gives the Knight back its air dash and its double jump, as the ground does. The
   wall only ever refunded the double jump when you jumped off it.
 - The Knight catches a wall the instant it touches one, with its upward momentum cancelled, instead
@@ -59,6 +84,12 @@ controls it; the reasoning belongs in the commit and the code.
 
 ### Added
 
+- Assign Controllers, at the top of the Controls screen: each player presses a button on their own
+  pad and the mod records which is which.
+- Balloons launch the Knight the way they launch Hornet - 18 units a second for half a second, with
+  its air moves back at the top - instead of doing nothing for it.
+- The debug keys have defaults: = and - for soul, [ and ] to hurt and heal the companion, \ to empty
+  its soul. A key already bound to something else is left alone.
 - Bug reports record who owns which controller: every pad and whether it is attached, which one the
   game has as active, and what Hornet own action set is holding.
 - Soul Vessels. The companion earns one for every two increases to Hornet's silk maximum, up to

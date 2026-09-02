@@ -205,11 +205,18 @@ public static class HornetInput
         try
         {
             var cfg = ModConfig.Instance;
-            return (cfg != null && cfg.hornetKeyboardEnabled) || ShadeAiHoldsTheShade();
+            // Open when the config cannot be read, exactly as the controller below is, and for a
+            // sharper reason than symmetry. This answer gates the game's own keyboard mapping - a
+            // false here does not merely decline to add bindings, it leaves Hornet with none at
+            // all, because the game clears every binding immediately before remapping them (see
+            // InputHandler.LoadSavedInputBindings). The worst an unreadable config can cost by
+            // erring this way is that both players answer to the keyboard for a moment; erring the
+            // other way costs Hornet her controls until the game is restarted.
+            return cfg == null || cfg.hornetKeyboardEnabled || ShadeAiHoldsTheShade();
         }
         catch
         {
-            return false;
+            return true;
         }
     }
 
@@ -389,6 +396,104 @@ public static class HornetInput
 
         try { EnsureShadeInventoryBindings(actions); }
         catch { }
+    }
+
+    /// <summary>How many times her keyboard has had to be put back this session, for the report.</summary>
+    internal static int KeyboardRepairs { get; private set; }
+
+    private static bool loggedKeyboardRepair;
+
+    /// <summary>
+    /// Gives Hornet her keyboard back if she has been left without one.
+    /// <para>
+    /// The game rebuilds her bindings by clearing every one of them and then remapping from the
+    /// saved layout (<c>InputHandler.LoadSavedInputBindings</c>, called whenever the save store
+    /// mounts). This mod patches the remapping half, so anything that answers "no keyboard" at that
+    /// instant - a config that could not be read, a flag read mid-load - does not skip a remap, it
+    /// strips her. Twice now that has been reported as Hornet losing her controls on a room change,
+    /// with her movement and map actions holding no key bindings at all afterwards and nothing to
+    /// put them back before the game was restarted.
+    /// </para>
+    /// <para>
+    /// So the invariant is checked rather than reasoned about: if she is meant to answer to the
+    /// keyboard and none of her movement actions hold a key, the layout is mapped again. Cheap
+    /// enough to run once a second - it walks the bindings of two actions - and it fixes a live
+    /// session rather than only the next one. Ours are <c>BindingSource</c> subclasses and the
+    /// game's are <c>KeyBindingSource</c>, so the Shade's own additions cannot be mistaken for hers.
+    /// </para>
+    /// </summary>
+    internal static void EnsureHornetKeyboardBindings()
+    {
+        try
+        {
+            if (!EffectiveKeyboardEnabled())
+            {
+                return;
+            }
+
+            var handler = FindHandler();
+            var actions = handler != null ? handler.inputActions : null;
+            if (actions == null)
+            {
+                return;
+            }
+
+            if (HasKeyBinding(actions.Left) || HasKeyBinding(actions.Right))
+            {
+                loggedKeyboardRepair = false;
+                return;
+            }
+
+            // On the frame it is noticed, and checked every frame. An earlier version waited a
+            // second first, on the theory that the game clears these bindings before remapping them
+            // and a repair might land in the middle of that - but the clear and the remap are two
+            // statements of one synchronous method, so no Update can ever observe the gap between
+            // them. All the wait achieved was a second of Hornet standing still, which is the "her
+            // controls are locked after a room transition" report.
+            KeyboardRepairs++;
+
+            if (!loggedKeyboardRepair)
+            {
+                loggedKeyboardRepair = true;
+                Debug.LogWarning(
+                    "[LegacyoftheAbyss] Hornet had no keyboard bindings while the keyboard is hers. "
+                    + "Remapping her saved layout. This is the room-change control loss; if it "
+                    + "recurs, the bug report's InputDevices line records who owned what at the time.");
+            }
+
+            try { ResolveMapKeyboard()?.Invoke(handler, null); }
+            catch { }
+
+            try { EnsureShadeInventoryBindings(actions); }
+            catch { }
+        }
+        catch
+        {
+        }
+    }
+
+    private static bool HasKeyBinding(PlayerAction action)
+    {
+        if (action == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            foreach (var binding in action.Bindings)
+            {
+                if (binding is KeyBindingSource)
+                {
+                    return true;
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return false;
     }
 
     public static void ApplyKeyboardDefaults(bool disableController)

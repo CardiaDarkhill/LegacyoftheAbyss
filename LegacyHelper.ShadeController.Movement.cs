@@ -245,8 +245,13 @@ public partial class LegacyHelper
             }
 
             // A clip standing in for the companion's body hides it for as long as it plays, on
-            // top of whatever the scripted hold wanted.
-            ApplyScriptedHoldVisibility(shadeHidden || BodyHiddenForClip);
+            // top of whatever the scripted hold wanted - and a pre-rendered cutscene hides it for
+            // as long as the film is up, whatever else is true. See CutsceneVideo for why that is
+            // asked of the video player rather than of the scene or of Hornet's control.
+            ApplyScriptedHoldVisibility(
+                shadeHidden || BodyHiddenForClip || LegacyoftheAbyss.Shade.CutsceneVideo.IsPlaying);
+
+            KeepOnHeroPlane();
             if (hornetControlsLocked && !wasControlsLocked)
             {
                 // Entering the locked state mid-action: drop whatever the Shade was doing rather than
@@ -1027,6 +1032,34 @@ public partial class LegacyHelper
                 shadowParticleRenderer.enabled = !hidden;
             }
         }
+
+        /// <summary>
+        /// Keeps the companion at Hornet's own depth.
+        /// <para>
+        /// Sorting layer and order decide most of what draws over what, but when two things agree on
+        /// both - which the companion and Hornet now deliberately do - Unity falls back to distance
+        /// from the camera, and that is z. The companion's z was drifting to zero: the Knight's
+        /// motion assigns a <c>Vector2</c> into <c>transform.position</c>, and that conversion fills
+        /// z with 0 rather than leaving it alone. Hornet's plane is 0.004, so the companion sat a
+        /// few thousandths in front of her and in front of everything else on that plane - which is
+        /// grass drawn over her and not over it, reported twice.
+        /// </para>
+        /// </summary>
+        private void KeepOnHeroPlane()
+        {
+            float plane = hornetTransform != null ? hornetTransform.position.z : HeroPlaneZ;
+
+            var position = transform.position;
+            if (Mathf.Approximately(position.z, plane))
+            {
+                return;
+            }
+
+            transform.position = new Vector3(position.x, position.y, plane);
+        }
+
+        /// <summary>Where the playable plane sits, from <c>Extensions.IsOnHeroPlane</c>.</summary>
+        private const float HeroPlaneZ = 0.004f;
 
         private static bool HornetIsDowned()
         {
