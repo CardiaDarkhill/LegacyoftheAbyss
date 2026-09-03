@@ -11,8 +11,14 @@ controls it; the reasoning belongs in the commit and the code.
   depth. It was appearing over scenery she is behind.
 - Hornet no longer stands still for a second after a room transition. Her keyboard bindings are put
   back on the frame they go missing rather than a second later.
+- Vengeful Spirit rides over uneven ground instead of bursting on it. It holds its line and shifts
+  its height to clear what it is scraping, as Hollow Knight's fireball does, up to about a
+  character's height from the line it was thrown along - so a wall still stops it.
 - Desolate Dive's shockwave is visible. Its burst was being drawn about four units across against
   Descending Dark's ten, for a tenth of a second - the damage was always there, the effect was not.
+- Shaman Stone matches Hollow Knight per spell rather than adding a flat 30% to everything: a third
+  on the projectiles, half on the screams, 51% and 47% on the two quakes. Desolate Dive with the
+  charm is 53, as the wiki has it.
 - Spells deal Hollow Knight's own damage, flat: Vengeful Spirit 15, Shade Soul 30, Howling Wraiths
   13 x 3, Abyss Shriek 20 x 4, Desolate Dive 15 + 20, Descending Dark 15 + 48. They no longer scale
   with Hornet's needle - the Knight's spells upgrade in their own right and its spell charms are far

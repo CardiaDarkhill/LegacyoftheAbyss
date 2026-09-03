@@ -66,16 +66,11 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.ShamanStone),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx =>
-                    {
-                        ctx.Controller?.MultiplySpellDamage(1.3f);
-                        ctx.Controller?.SetShamanStoneEquipped(true);
-                    },
-                    OnRemoved = ctx =>
-                    {
-                        ctx.Controller?.MultiplySpellDamage(1f / 1.3f);
-                        ctx.Controller?.SetShamanStoneEquipped(false);
-                    }
+                    // No damage multiplier here: Hollow Knight's increase differs per spell - 33%
+                    // for the projectiles, 51% and 47% for the two quakes, 50% for the screams -
+                    // so each spell carries its own alongside its damage. See ShadeSpellDamage.
+                    OnApplied = ctx => ctx.Controller?.SetShamanStoneEquipped(true),
+                    OnRemoved = ctx => ctx.Controller?.SetShamanStoneEquipped(false)
                 },
                 displayName: "Shaman Stone",
                 description: "Said to contain the knowledge of past generations. Increases the power of Spells, dealing more damage to foes.",

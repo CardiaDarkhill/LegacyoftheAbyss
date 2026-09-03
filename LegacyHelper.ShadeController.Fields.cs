@@ -320,7 +320,6 @@ public partial class LegacyHelper
         private int baseSoulGainPerHit = 11;
         private int charmSoulGainBonus;
         private float charmNailDamageMultiplier = 1f;
-        private float charmSpellDamageMultiplier = 1f;
         private float charmNailScaleMultiplier = 1f;
         private float charmNailKnockbackMultiplier = 1f;
         private int projectileSoulCost = s_defaultCharmStats.ProjectileSoulCost;

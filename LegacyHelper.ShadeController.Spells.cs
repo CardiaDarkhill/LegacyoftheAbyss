@@ -314,7 +314,7 @@ public partial class LegacyHelper
                 upgraded ? KnightView.ClipScreamUpgraded : KnightView.ClipScream,
                 0.5f);
             int hits = upgraded ? ShadeSpellDamage.AbyssShriekHits : ShadeSpellDamage.HowlingWraithsHits;
-            int dmg = SpellDamage(upgraded ? ShadeSpellDamage.AbyssShriekPerHit : ShadeSpellDamage.HowlingWraithsPerHit);
+            int dmg = SpellDamage(upgraded ? ShadeSpellDamage.AbyssShriek : ShadeSpellDamage.HowlingWraiths);
             LoggingManager.LogShadeSpellDamage(
                 CharacterLogName,
                 upgraded ? "Abyss Shriek" : "Howling Wraiths",
@@ -372,7 +372,7 @@ public partial class LegacyHelper
             TryPlayQuakePrepareSfx();
             // Two volumes with two figures, as Hollow Knight has it: the dive itself and the
             // shockwave it throws out along the ground.
-            int diveDamage = SpellDamage(ShadeSpellDamage.QuakeDive);
+            int diveDamage = SpellDamage(upgraded ? ShadeSpellDamage.DescendingDarkImpact : ShadeSpellDamage.DesolateDiveImpact);
             int shockwaveDamage = SpellDamage(upgraded ? ShadeSpellDamage.DescendingDarkBursts : ShadeSpellDamage.DesolateDiveShockwave);
             LoggingManager.LogShadeSpellDamage(
                 CharacterLogName,
@@ -470,13 +470,10 @@ public partial class LegacyHelper
         /// <summary>
         /// One piece of a spell, in damage. The figures are Hollow Knight's own and live in
         /// <see cref="ShadeSpellDamage"/>, which also says why they are used flat rather than
-        /// scaled off Hornet's needle.
+        /// scaled off Hornet's needle, and carries Shaman Stone's per-spell increase with each.
         /// </summary>
-        private int SpellDamage(int hollowKnightDamage)
-            => ShadeSpellDamage.PerHit(
-                hollowKnightDamage,
-                charmSpellDamageMultiplier,
-                ModConfig.Instance.shadeSpellDamageMultiplier);
+        private int SpellDamage(ShadeSpellDamage.SpellHit hit)
+            => hit.Resolve(shamanStoneEquipped, ModConfig.Instance.shadeSpellDamageMultiplier);
 
         private void IgnoreHornetForCollider(Collider2D col)
         {

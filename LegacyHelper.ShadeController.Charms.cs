@@ -69,14 +69,6 @@ public partial class LegacyHelper
             charmNailDamageMultiplier = Mathf.Clamp(charmNailDamageMultiplier * factor, 0.1f, 10f);
         }
 
-        internal void MultiplySpellDamage(float factor)
-        {
-            if (factor <= 0f)
-                return;
-
-            charmSpellDamageMultiplier = Mathf.Clamp(charmSpellDamageMultiplier * factor, 0.1f, 10f);
-        }
-
         internal void MultiplyNailScale(float factor)
         {
             if (factor <= 0f)
@@ -101,7 +93,6 @@ public partial class LegacyHelper
         internal void ResetCharmDerivedStats()
         {
             charmNailDamageMultiplier = 1f;
-            charmSpellDamageMultiplier = 1f;
             charmNailScaleMultiplier = 1f;
             charmNailKnockbackMultiplier = 1f;
             charmSoulGainBonus = 0;

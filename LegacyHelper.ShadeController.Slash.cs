@@ -725,9 +725,23 @@ public partial class LegacyHelper
             sp.destroyOnTerrain = destroyOnTerrain || !IsProjectileUpgraded();
             sp.maxRange = IsProjectileUpgraded() ? 22f : 0f;
 
+            // Only the bolts ride. A fluke is thrown in an arc and is meant to burst where it
+            // lands, so lifting it clear of the ground would be undoing the spell.
+            sp.terrainRide = colliderRadius > 0f ? 0f : ProjectileTerrainRide;
+
             // SFX
             TryPlayFireballSfx();
         }
+
+        /// <summary>
+        /// How far a bolt may climb or drop, in total, to hold its line over uneven ground.
+        /// <para>
+        /// About a character's height: enough for the lips, ramps and seams that make up most of
+        /// Silksong's floors, and short enough that a bolt which meets a real wall bursts against it
+        /// rather than wandering up the screen.
+        /// </para>
+        /// </summary>
+        private const float ProjectileTerrainRide = 1.5f;
 
         private const float GrubberflyBeamSpeed = 52f;
 
