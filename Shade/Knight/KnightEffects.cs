@@ -172,7 +172,7 @@ namespace LegacyoftheAbyss.Shade.Knight
                 }
             }
 
-            ApplyParticleTuning(instance, scale, alpha);
+            ApplyParticleTuning(instance, alpha);
             return instance;
         }
 
@@ -237,19 +237,25 @@ namespace LegacyoftheAbyss.Shade.Knight
                 return;
             }
 
+            // The radius first: it is the call that loads the bundle, and FindPrefab answers null
+            // until it has.
             float authored = TryGetPrefabRadius(prefabName);
-            if (authored <= 0.0001f)
+            var prefab = KnightAssets.FindPrefab(prefabName);
+            if (prefab == null || authored <= 0.0001f)
             {
                 return;
             }
 
-            float factor = worldRadius / authored;
-            if (factor > 0.999f && factor < 1.001f)
-            {
-                return;
-            }
-
-            instance.transform.localScale *= factor;
+            // Set from the prefab's own scale rather than multiplied into whatever the instance is
+            // already holding. A caller that also passed an effectScale would otherwise have both
+            // applied - Defender's Crest asked for 0.65 and came out at 0.22 - and the result would
+            // depend on the order the two happened to run in. Multiplying the prefab's scale rather
+            // than replacing it keeps the mirroring Hollow Knight bakes into its art as a negative x.
+            // x and y only: TrySpawn already sorted the z out, and a prefab authored with a zero z
+            // scale would be scaled to nothing here.
+            Vector3 scaled = prefab.transform.localScale * (worldRadius / authored);
+            Vector3 held = instance.transform.localScale;
+            instance.transform.localScale = new Vector3(scaled.x, scaled.y, held.z);
         }
 
         /// <summary>
@@ -290,7 +296,7 @@ namespace LegacyoftheAbyss.Shade.Knight
         /// Its colour is on the system rather than on the renderer's material, for the same reason.
         /// </para>
         /// </summary>
-        private static void ApplyParticleTuning(GameObject instance, float scale, float alpha)
+        private static void ApplyParticleTuning(GameObject instance, float alpha)
         {
             foreach (var system in instance.GetComponentsInChildren<ParticleSystem>(true))
             {

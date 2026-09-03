@@ -73,12 +73,6 @@ public struct ShadeBindingOption
         control = controlType,
         controllerDevice = controllerIndex
     };
-
-    public ShadeBindingOption WithControllerIndex(int index)
-    {
-        controllerDevice = index;
-        return this;
-    }
 }
 
 [Serializable]
@@ -134,7 +128,7 @@ public class ShadeInputConfig
     public void ResetToDefaults()
     {
         controllerDeviceIndex = 1;
-        controllerDeadzone = Mathf.Clamp(controllerDeadzone <= 0f ? 0.25f : controllerDeadzone, 0.01f, 1f);
+        NormaliseDeadzone();
 
         moveLeft = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.A), ShadeBindingOption.None());
         moveRight = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.D), ShadeBindingOption.None());
@@ -166,10 +160,15 @@ public class ShadeInputConfig
         debugSoulReset = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Backslash), ShadeBindingOption.None());
     }
 
-    public void ApplyDualControllerPreset()
+    /// <summary>
+    /// The Shade's controller layout, on whichever pad is its own. Shared by the two presets that
+    /// put it on a controller: they differ in which pad that is and in what Command Shade ends up
+    /// bound to, and in nothing else.
+    /// </summary>
+    private void ApplyControllerLayout(int deviceIndex)
     {
-        controllerDeviceIndex = 1;
-        controllerDeadzone = Mathf.Clamp(controllerDeadzone <= 0f ? 0.25f : controllerDeadzone, 0.01f, 1f);
+        controllerDeviceIndex = deviceIndex;
+        NormaliseDeadzone();
 
         moveLeft = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickLeft), ShadeBindingOption.None());
         moveRight = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickRight), ShadeBindingOption.None());
@@ -182,6 +181,18 @@ public class ShadeInputConfig
         teleport = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickButton), ShadeBindingOption.None());
         focus = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action2), ShadeBindingOption.None());
         sprint = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightTrigger), ShadeBindingOption.None());
+    }
+
+    /// <summary>Keeps the deadzone usable when the stored value is zero or out of range.</summary>
+    private void NormaliseDeadzone()
+    {
+        controllerDeadzone = Mathf.Clamp(controllerDeadzone <= 0f ? 0.25f : controllerDeadzone, 0.01f, 1f);
+    }
+
+    public void ApplyDualControllerPreset()
+    {
+        ApplyControllerLayout(deviceIndex: 1);
+
         // Every pad button worth having is spoken for, so the AI toggle keeps its keyboard binding
         // rather than displacing one. A preset that left this holding the previous preset's value
         // would be worse than leaving it plainly on the keyboard.
@@ -193,7 +204,7 @@ public class ShadeInputConfig
     public void ApplyKeyboardOnlyPreset()
     {
         controllerDeviceIndex = -1;
-        controllerDeadzone = Mathf.Clamp(controllerDeadzone <= 0f ? 0.25f : controllerDeadzone, 0.01f, 1f);
+        NormaliseDeadzone();
 
         moveLeft = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.LeftArrow), ShadeBindingOption.None());
         moveRight = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.RightArrow), ShadeBindingOption.None());
@@ -209,27 +220,10 @@ public class ShadeInputConfig
         commandShade = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Mouse2), ShadeBindingOption.None());
     }
 
-    public void ApplySharedKeyboardPreset()
-    {
-        ApplyKeyboardOnlyPreset();
-    }
-
     public void ApplyShadeControllerPreset()
     {
-        controllerDeviceIndex = 0;
-        controllerDeadzone = Mathf.Clamp(controllerDeadzone <= 0f ? 0.25f : controllerDeadzone, 0.01f, 1f);
+        ApplyControllerLayout(deviceIndex: 0);
 
-        moveLeft = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickLeft), ShadeBindingOption.None());
-        moveRight = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickRight), ShadeBindingOption.None());
-        moveUp = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickUp), ShadeBindingOption.None());
-        moveDown = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickDown), ShadeBindingOption.None());
-        fire = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightBumper), ShadeBindingOption.None());
-        nail = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action3), ShadeBindingOption.None());
-        nailUp = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action4), ShadeBindingOption.None());
-        nailDown = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action1), ShadeBindingOption.None());
-        teleport = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickButton), ShadeBindingOption.None());
-        focus = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action2), ShadeBindingOption.None());
-        sprint = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightTrigger), ShadeBindingOption.None());
         // The Shade owns pad 0 under this preset, so its left stick click is already Teleport.
         // Hornet is on the keyboard here, which leaves middle mouse as the whole binding.
         commandShade = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Mouse2), ShadeBindingOption.None());
@@ -257,13 +251,8 @@ public class ShadeInputConfig
         return OptionUsesControllerIndex(binding.primary, fallbackIndex, targetIndex) || OptionUsesControllerIndex(binding.secondary, fallbackIndex, targetIndex);
     }
 
-    public bool UsesControllerBindings()
-    {
-        return BindingUsesController(moveLeft) || BindingUsesController(moveRight) || BindingUsesController(moveUp) ||
-               BindingUsesController(moveDown) || BindingUsesController(fire) || BindingUsesController(nail) ||
-               BindingUsesController(nailUp) || BindingUsesController(nailDown) || BindingUsesController(teleport) ||
-               BindingUsesController(focus) || BindingUsesController(sprint) || BindingUsesController(commandShade);
-    }
+    /// <summary>Whether any of the Shade's controls, the command binding included, is on a pad.</summary>
+    public bool UsesControllerBindings() => AnyControllerBinding(index: null, includeCommandShade: true);
 
     /// <summary>
     /// Whether a controller is <em>the Shade player's</em>, and so has to be kept away from Hornet.
@@ -277,55 +266,76 @@ public class ShadeInputConfig
     /// answered to both, and the Shade player's stick drove both characters at once.
     /// </para>
     /// </summary>
-    public bool ReservesControllerIndex(int index)
-    {
-        if (index < 0)
-            return false;
-        int fallbackIndex = Mathf.Max(-1, controllerDeviceIndex);
-        return BindingUsesControllerIndex(moveLeft, fallbackIndex, index) ||
-               BindingUsesControllerIndex(moveRight, fallbackIndex, index) ||
-               BindingUsesControllerIndex(moveUp, fallbackIndex, index) ||
-               BindingUsesControllerIndex(moveDown, fallbackIndex, index) ||
-               BindingUsesControllerIndex(fire, fallbackIndex, index) ||
-               BindingUsesControllerIndex(nail, fallbackIndex, index) ||
-               BindingUsesControllerIndex(nailUp, fallbackIndex, index) ||
-               BindingUsesControllerIndex(nailDown, fallbackIndex, index) ||
-               BindingUsesControllerIndex(teleport, fallbackIndex, index) ||
-               BindingUsesControllerIndex(focus, fallbackIndex, index) ||
-               BindingUsesControllerIndex(sprint, fallbackIndex, index);
-    }
+    public bool ReservesControllerIndex(int index) => AnyControllerBinding(index, includeCommandShade: false);
 
     /// <summary>Whether any pad at all is the Shade player's. See <see cref="ReservesControllerIndex"/>.</summary>
-    public bool ReservesAnyController()
-    {
-        return BindingUsesController(moveLeft) || BindingUsesController(moveRight) || BindingUsesController(moveUp) ||
-               BindingUsesController(moveDown) || BindingUsesController(fire) || BindingUsesController(nail) ||
-               BindingUsesController(nailUp) || BindingUsesController(nailDown) || BindingUsesController(teleport) ||
-               BindingUsesController(focus) || BindingUsesController(sprint);
-    }
+    public bool ReservesAnyController() => AnyControllerBinding(index: null, includeCommandShade: false);
 
     /// <summary>
     /// Whether any shade binding at all sits on this controller, the command binding included.
     /// For reserving a pad away from Hornet use <see cref="ReservesControllerIndex"/> instead.
     /// </summary>
-    public bool IsControllerIndexInUse(int index)
+    public bool IsControllerIndexInUse(int index) => AnyControllerBinding(index, includeCommandShade: true);
+
+    /// <summary>
+    /// The one roll-call the four questions above are asked against.
+    /// <para>
+    /// Each of them used to carry its own hand-written list of every action, which is four places to
+    /// remember when one is added and four chances to differ by accident - and they already did, in
+    /// exactly the way that matters: only one of them left <see cref="commandShade"/> out.
+    /// </para>
+    /// <para>
+    /// A null <paramref name="index"/> asks "any pad at all"; a value asks about that one, counting
+    /// a binding that names no device of its own as being on whichever pad the config points at.
+    /// </para>
+    /// <para>
+    /// The debug actions are outside all of this, as they were in every one of the lists this
+    /// replaces. They are keyboard by default and only read at all while Debug Keys is switched on,
+    /// so one bound to a pad is not grounds for taking that pad away from Hornet.
+    /// </para>
+    /// </summary>
+    private bool AnyControllerBinding(int? index, bool includeCommandShade)
     {
-        if (index < 0)
+        if (index.HasValue && index.Value < 0)
+        {
             return false;
+        }
+
         int fallbackIndex = Mathf.Max(-1, controllerDeviceIndex);
-        return BindingUsesControllerIndex(moveLeft, fallbackIndex, index) ||
-               BindingUsesControllerIndex(moveRight, fallbackIndex, index) ||
-               BindingUsesControllerIndex(moveUp, fallbackIndex, index) ||
-               BindingUsesControllerIndex(moveDown, fallbackIndex, index) ||
-               BindingUsesControllerIndex(fire, fallbackIndex, index) ||
-               BindingUsesControllerIndex(nail, fallbackIndex, index) ||
-               BindingUsesControllerIndex(nailUp, fallbackIndex, index) ||
-               BindingUsesControllerIndex(nailDown, fallbackIndex, index) ||
-               BindingUsesControllerIndex(teleport, fallbackIndex, index) ||
-               BindingUsesControllerIndex(focus, fallbackIndex, index) ||
-               BindingUsesControllerIndex(sprint, fallbackIndex, index) ||
-               BindingUsesControllerIndex(commandShade, fallbackIndex, index);
+
+        foreach (var action in AllActions)
+        {
+            if (IsDebugAction(action))
+            {
+                continue;
+            }
+
+            if (!includeCommandShade && action == ShadeAction.CommandShade)
+            {
+                continue;
+            }
+
+            var binding = GetBinding(action);
+            if (binding == null)
+            {
+                continue;
+            }
+
+            bool matches = index.HasValue
+                ? BindingUsesControllerIndex(binding, fallbackIndex, index.Value)
+                : BindingUsesController(binding);
+
+            if (matches)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
+
+    /// <summary>The developer-only actions, which are never part of a device reservation.</summary>
+    private static bool IsDebugAction(ShadeAction action) => action >= ShadeAction.DebugDamageShade;
 
     /// <summary>Every action a binding can be held for, so a sweep cannot miss one.</summary>
     internal static readonly ShadeAction[] AllActions =
@@ -413,6 +423,56 @@ public class ShadeInputConfig
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Records which pad each player is holding.
+    /// <para>
+    /// Setting <see cref="controllerDeviceIndex"/> is not enough on its own. A binding captured on
+    /// a pad remembers that pad in its own <c>controllerDevice</c>, and that takes precedence over
+    /// the config-level index - so a companion moved to a different controller would go on
+    /// answering to the old one for every control the player had ever rebound, which is the
+    /// assignment appearing not to work at all.
+    /// </para>
+    /// <para>
+    /// <see cref="ShadeAction.CommandShade"/> goes the other way, onto Hornet's pad: it is the
+    /// button her player presses to send the companion somewhere, which is why it is the one action
+    /// excluded from the reservation. Every controller option is left holding an explicit device
+    /// afterwards - once both players have said which pad is theirs, there is nothing left for
+    /// "whichever one the config says" to usefully mean.
+    /// </para>
+    /// <para>Returns how many bindings moved, for the log line.</para>
+    /// </summary>
+    public int ApplyControllerAssignment(int hornetIndex, int companionIndex)
+    {
+        controllerDeviceIndex = companionIndex;
+
+        int moved = 0;
+        foreach (var action in AllActions)
+        {
+            var binding = GetBinding(action);
+            if (binding == null)
+            {
+                continue;
+            }
+
+            int wanted = action == ShadeAction.CommandShade ? hornetIndex : companionIndex;
+            moved += RepointControllerOption(ref binding.primary, wanted);
+            moved += RepointControllerOption(ref binding.secondary, wanted);
+        }
+
+        return moved;
+    }
+
+    private static int RepointControllerOption(ref ShadeBindingOption option, int deviceIndex)
+    {
+        if (option.type != ShadeBindingOptionType.Controller || option.controllerDevice == deviceIndex)
+        {
+            return 0;
+        }
+
+        option.controllerDevice = deviceIndex;
+        return 1;
     }
 
     public int ClearControllerKeyBindings()
@@ -565,31 +625,6 @@ public class ShadeInputConfig
         return clone;
     }
 
-    public void CopyBindingsFrom(ShadeInputConfig other)
-    {
-        if (other == null)
-            return;
-
-        controllerDeviceIndex = other.controllerDeviceIndex;
-        controllerDeadzone = other.controllerDeadzone;
-        moveLeft = CloneBinding(other.moveLeft);
-        moveRight = CloneBinding(other.moveRight);
-        moveUp = CloneBinding(other.moveUp);
-        moveDown = CloneBinding(other.moveDown);
-        fire = CloneBinding(other.fire);
-        nail = CloneBinding(other.nail);
-        nailUp = CloneBinding(other.nailUp);
-        nailDown = CloneBinding(other.nailDown);
-        teleport = CloneBinding(other.teleport);
-        focus = CloneBinding(other.focus);
-        sprint = CloneBinding(other.sprint);
-        commandShade = CloneBinding(other.commandShade);
-        debugDamageShade = CloneBinding(other.debugDamageShade);
-        debugHealShade = CloneBinding(other.debugHealShade);
-        debugSoulIncrease = CloneBinding(other.debugSoulIncrease);
-        debugSoulDecrease = CloneBinding(other.debugSoulDecrease);
-        debugSoulReset = CloneBinding(other.debugSoulReset);
-    }
 }
 
 public static class ShadeInput

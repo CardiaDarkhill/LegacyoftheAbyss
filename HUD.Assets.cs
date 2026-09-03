@@ -21,6 +21,54 @@ public partial class SimpleHUD
         return Sprite.Create(tex, new Rect(0, 0, 32, 32), new Vector2(0.5f, 0.5f));
     }
 
+    /// <summary>
+    /// Resolves a row of bundle clips into their resting sprites, and whether each was packed
+    /// turned.
+    /// <para>
+    /// <c>int.MaxValue</c> is "the last frame": <c>TryBuildSprite</c> clamps, and every clip set
+    /// drawn this way is an animation whose resting pose is the frame it ends on. Returns false
+    /// when nothing resolved, which usually means the bundle has not finished loading rather than
+    /// that the art is missing - so a caller keeps the rotation flags and asks again.
+    /// </para>
+    /// </summary>
+    private static bool TryResolveStageSprites(string[] clips, out Sprite[] sprites, out bool[] rotated)
+    {
+        sprites = new Sprite[clips.Length];
+        rotated = new bool[clips.Length];
+        bool any = false;
+
+        for (int i = 0; i < clips.Length; i++)
+        {
+            sprites[i] = KnightAssets.TryBuildSprite(clips[i], int.MaxValue);
+            rotated[i] = KnightAssets.IsSpriteRotated(clips[i], int.MaxValue);
+            any |= sprites[i] != null;
+        }
+
+        return any;
+    }
+
+    /// <summary>
+    /// The centred art child every HUD slot hangs its <see cref="Image"/> on.
+    /// <para>
+    /// Centred rather than filling the slot: a frame the atlas packed turned has to rotate about
+    /// its own middle to land square, and these slots are laid out from a corner - turning about
+    /// that corner would swing the art out of its own box.
+    /// </para>
+    /// </summary>
+    private static Image CreateSlotArt(GameObject slot)
+    {
+        var art = new GameObject("Art");
+        art.transform.SetParent(slot.transform, false);
+
+        var artRect = art.AddComponent<RectTransform>();
+        artRect.anchorMin = artRect.anchorMax = new Vector2(0.5f, 0.5f);
+        artRect.pivot = new Vector2(0.5f, 0.5f);
+
+        var image = art.AddComponent<Image>();
+        image.preserveAspect = true;
+        return image;
+    }
+
     private void LoadSprites()
     {
         try
@@ -35,9 +83,13 @@ public partial class SimpleHUD
             // than twice the resolution of the still we were shipping (70x57 against 33x41).
             maskSprite = KnightAssets.TryBuildSprite(KnightHud.MaskClip, 0);
             maskSpriteRotated = maskSprite != null && KnightAssets.IsSpriteRotated(KnightHud.MaskClip, 0);
-            frameSpriteRotated = KnightAssets.IsSpriteRotated(KnightHud.FrameClip, 0);
             maskBackboardSprite = KnightAssets.TryBuildSprite(KnightHud.MaskBackboardClip, 0);
             frameSprite = KnightAssets.TryBuildSprite(KnightHud.FrameClip, 0);
+
+            // After the build, never before it. KnightAssets records a frame's packing while it is
+            // cutting the sprite, so asking first is asking an empty set and always answers "not
+            // turned" - which is what was happening to the frame, and it is packed turned.
+            frameSpriteRotated = frameSprite != null && KnightAssets.IsSpriteRotated(KnightHud.FrameClip, 0);
             soulOrbSprite = KnightAssets.TryBuildSprite(KnightHud.SoulOrbClip, 0);
             soulOrbFillSprite = KnightAssets.TryBuildSpriteFromTexture(KnightHud.SoulOrbFillTexture);
 

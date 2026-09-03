@@ -313,12 +313,24 @@ public partial class LegacyHelper
             PlayKnightSpellAnimation(
                 upgraded ? KnightView.ClipScreamUpgraded : KnightView.ClipScream,
                 0.5f);
-            int dmg = ComputeSpellDamageMultiplier(4f, upgraded);
-            LoggingManager.LogShadeAttackDamage(CharacterLogName, upgraded ? "Abyss Shriek" : "Howling Wraiths", dmg);
+            int hits = upgraded ? ShadeSpellDamage.AbyssShriekHits : ShadeSpellDamage.HowlingWraithsHits;
+            int dmg = SpellDamage(upgraded ? ShadeSpellDamage.AbyssShriekPerHit : ShadeSpellDamage.HowlingWraithsPerHit);
+            LoggingManager.LogShadeSpellDamage(
+                CharacterLogName,
+                upgraded ? "Abyss Shriek" : "Howling Wraiths",
+                FormattableString.Invariant($"{dmg} x {hits} hits"),
+                dmg * hits);
             TryPlayShriekSfx(upgraded);
-            float life = 0.18f;
+
+            // Standing long enough to land every burst rather than one: Hollow Knight's wraiths are
+            // three hits in quick succession and the shriek is four, and a volume that hits once is
+            // a third of the spell.
             Vector2 localOffset = new Vector2(0f, 0.8f);
-            SpawnShriekCone(12f, 95f, dmg, life, localOffset);
+            // A whole interval per hit, so the volume outlives the last of them by one tick and
+            // cannot be destroyed a physics step before it lands - and dies before a further one
+            // would be due, so the count is exact.
+            float life = ShriekBurstInterval * hits;
+            SpawnShriekCone(12f, 95f, dmg, life, localOffset, ShriekBurstInterval);
             SpawnShriekFx(upgraded);
 
             if (shriekCastAnimFrames != null && shriekCastAnimFrames.Length > 0)
@@ -358,9 +370,16 @@ public partial class LegacyHelper
 
             bool upgraded = IsDescendingDarkUpgraded();
             TryPlayQuakePrepareSfx();
-            int dmg = ComputeSpellDamageMultiplier(3f, upgraded); // Descending Dark base 3x
-            LoggingManager.LogShadeAttackDamage(CharacterLogName, upgraded ? "Descending Dark" : "Desolate Dive", dmg);
-            TrackSpellCast(StartCoroutine(DescendingDarkRoutine(dmg, upgraded)));
+            // Two volumes with two figures, as Hollow Knight has it: the dive itself and the
+            // shockwave it throws out along the ground.
+            int diveDamage = SpellDamage(ShadeSpellDamage.QuakeDive);
+            int shockwaveDamage = SpellDamage(upgraded ? ShadeSpellDamage.DescendingDarkBursts : ShadeSpellDamage.DesolateDiveShockwave);
+            LoggingManager.LogShadeSpellDamage(
+                CharacterLogName,
+                upgraded ? "Descending Dark" : "Desolate Dive",
+                FormattableString.Invariant($"{diveDamage} dive + {shockwaveDamage} shockwave"),
+                diveDamage + shockwaveDamage);
+            TrackSpellCast(StartCoroutine(DescendingDarkRoutine(diveDamage, shockwaveDamage, upgraded)));
         }
 
         // Spell progression helpers.
@@ -448,14 +467,16 @@ public partial class LegacyHelper
                 return knightAbilities.ScreamLevel >= 2;
             return ShadeSpellProgress >= 6;
         }
-        private int ComputeSpellDamageMultiplier(float baseMult, bool upgraded)
-        {
-            int nail = Mathf.Max(1, GetHornetNailDamage());
-            float mult = upgraded ? baseMult : baseMult * 0.7f; // Soul variant = 30% less
-            mult *= charmSpellDamageMultiplier;
-            int dmg = Mathf.RoundToInt(nail * mult * ModConfig.Instance.shadeSpellDamageMultiplier);
-            return Mathf.Max(1, dmg);
-        }
+        /// <summary>
+        /// One piece of a spell, in damage. The figures are Hollow Knight's own and live in
+        /// <see cref="ShadeSpellDamage"/>, which also says why they are used flat rather than
+        /// scaled off Hornet's needle.
+        /// </summary>
+        private int SpellDamage(int hollowKnightDamage)
+            => ShadeSpellDamage.PerHit(
+                hollowKnightDamage,
+                charmSpellDamageMultiplier,
+                ModConfig.Instance.shadeSpellDamageMultiplier);
 
         private void IgnoreHornetForCollider(Collider2D col)
         {
@@ -469,7 +490,13 @@ public partial class LegacyHelper
             catch { }
         }
 
-        private void SpawnShriekCone(float height, float degrees, int damage, float lifeSeconds, Vector2 localOffset)
+        /// <summary>
+        /// How close together the bursts of a shriek land. Long enough to outlast a physics step, so
+        /// each one is a separate tick of the volume rather than the same frame counted twice.
+        /// </summary>
+        private const float ShriekBurstInterval = 0.07f;
+
+        private void SpawnShriekCone(float height, float degrees, int damage, float lifeSeconds, Vector2 localOffset, float hitIntervalSeconds)
         {
             var go = new GameObject("ShadeShriekCone");
             go.transform.position = transform.position + (Vector3)localOffset;
@@ -498,6 +525,7 @@ public partial class LegacyHelper
             aoe.ConfigureDamage(damage, applyDamageMultiplier: false);
             aoe.hornetRoot = hornetTransform;
             aoe.lifeSeconds = lifeSeconds;
+            aoe.hitIntervalSeconds = hitIntervalSeconds;
 
             IgnoreHornetForCollider(poly);
         }
@@ -542,7 +570,7 @@ public partial class LegacyHelper
             Destroy(fxSr.gameObject);
         }
 
-        private IEnumerator DescendingDarkRoutine(int totalDamage, bool upgraded)
+        private IEnumerator DescendingDarkRoutine(int diveDamage, int shockwaveDamage, bool upgraded)
         {
             isCastingSpell = true;
 
@@ -676,17 +704,18 @@ public partial class LegacyHelper
 
             // Spawn two hitboxes: ground strip (10 units wide), and teardrop (6x8) above
             TryPlayQuakeImpactSfx(upgraded);
-            int half = Mathf.Max(1, Mathf.RoundToInt(totalDamage * 0.5f));
-            SpawnQuakeImpact(groundY, half);
-            SpawnQuakeTeardrop(groundY, half);
+
+            // The strip along the ground is the shockwave; the column above the landing is the dive.
+            SpawnQuakeImpact(groundY, shockwaveDamage);
+            SpawnQuakeTeardrop(groundY, diveDamage);
             if (upgraded)
             {
-                SpawnGroundSlamFx(dDarkSlamAnimFrames, groundY);
+                SpawnGroundSlamFx(dDarkSlamAnimFrames, groundY, DarkSlamArtFraction);
                 SpawnDarkBurstFx(groundY);
             }
             else
             {
-                SpawnGroundSlamFx(dDiveSlamAnimFrames, groundY);
+                SpawnGroundSlamFx(dDiveSlamAnimFrames, groundY, DiveSlamArtFraction);
             }
 
             // Small delay to keep i-frames briefly after impact
@@ -730,7 +759,7 @@ public partial class LegacyHelper
 
             var box = go.AddComponent<BoxCollider2D>();
             box.isTrigger = true;
-            box.size = new Vector2(10f, 1.0f);
+            box.size = new Vector2(QuakeImpactWidth, 1.0f);
 
             var aoe = go.AddComponent<ShadeAoE>();
             aoe.ConfigureDamage(damage, applyDamageMultiplier: false);
@@ -801,20 +830,55 @@ public partial class LegacyHelper
             }
         }
 
-        private void SpawnGroundSlamFx(Sprite[] frames, float groundY)
+        /// <summary>How wide the impact is, as damage and as drawing. One number, so they agree.</summary>
+        private const float QuakeImpactWidth = 10f;
+
+        /// <summary>
+        /// How long the slam is drawn for, however many frames its sheet holds.
+        /// <para>
+        /// Per frame rather than in total is what the two sheets had before, and they are not the
+        /// same length: Descending Dark's six frames ran for 0.3s while Desolate Dive's two ran for
+        /// 0.1, which on a dark background is barely a flicker.
+        /// </para>
+        /// </summary>
+        private const float SlamFxSeconds = 0.3f;
+
+        /// <summary>
+        /// What share of its sprite cell each slam sheet's art actually fills, measured off the
+        /// PNGs. Needed because the textures are marked non-readable at runtime, so it cannot be
+        /// worked out there - and because the two differ enormously: Desolate Dive's burst covers
+        /// 153 pixels of a 520-wide cell, where Descending Dark's covers 334 of 510.
+        /// </summary>
+        private const float DiveSlamArtFraction = 153f / 520f;
+
+        private const float DarkSlamArtFraction = 334f / 510f;
+
+        /// <summary>
+        /// The slam's burst, drawn to span the strip it damages.
+        /// <para>
+        /// Sized by the art rather than by the sprite cell, which is not the same thing and is why
+        /// the two spells did not look alike. A single cell width drew Desolate Dive's burst about
+        /// four units across against Descending Dark's ten - small, dark, on a dark background, for
+        /// a tenth of a second - which is why the Dive shockwave was reported as never appearing.
+        /// </para>
+        /// </summary>
+        private void SpawnGroundSlamFx(Sprite[] frames, float groundY, float artFraction)
         {
             if (frames == null || frames.Length == 0 || sr == null) return;
             var go = new GameObject("ShadeQuakeSlamFx");
             var fxSr = go.AddComponent<SpriteRenderer>();
             fxSr.sortingLayerID = sr.sortingLayerID;
             fxSr.sortingOrder = sr.sortingOrder - 1;
-            float desiredWidth = 15f;
-            float spriteWidth = frames[0].bounds.size.x;
-            float scale = desiredWidth / spriteWidth;
+
+            float cellWidth = frames[0].bounds.size.x;
+            float artWidth = cellWidth * Mathf.Clamp(artFraction, 0.05f, 1f);
+            if (artWidth <= 0.0001f) return;
+
+            float scale = QuakeImpactWidth / artWidth;
             go.transform.localScale = new Vector3(scale, scale, 1f);
             float height = frames[0].bounds.size.y * scale;
             go.transform.position = new Vector3(transform.position.x, groundY + height / 2f, transform.position.z);
-            StartCoroutine(PlayAndDestroy(fxSr, frames, 0.05f));
+            StartCoroutine(PlayAndDestroy(fxSr, frames, SlamFxSeconds / frames.Length));
         }
 
         private void SpawnDarkBurstFx(float groundY)

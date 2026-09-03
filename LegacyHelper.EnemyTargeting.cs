@@ -10,6 +10,51 @@ using UnityEngine;
 public partial class LegacyHelper
 {
     /// <summary>
+    /// Every concrete <c>FsmStateAction</c> the game defines.
+    /// <para>
+    /// Both assemblies, because they are not the same one: <c>FsmStateAction</c> itself lives in
+    /// PlayMaker.dll, but every action either of the retargeting features cares about is Silksong's
+    /// own and lives in Assembly-CSharp. Scanning only the base type's assembly finds nothing.
+    /// </para>
+    /// </summary>
+    private static IEnumerable<Type> FsmActionTypes()
+    {
+        var assemblies = new HashSet<Assembly>
+        {
+            typeof(FsmStateAction).Assembly,
+            typeof(HeroController).Assembly
+        };
+
+        foreach (var type in assemblies.SelectMany(SafeGetTypes))
+        {
+            if (type != null && !type.IsAbstract && typeof(FsmStateAction).IsAssignableFrom(type))
+            {
+                yield return type;
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>Assembly.GetTypes()</c> throws outright if any single type fails to load; the partially
+    /// populated <c>Types</c> array on the exception is still usable and is all this needs.
+    /// </summary>
+    private static IEnumerable<Type> SafeGetTypes(Assembly assembly)
+    {
+        try
+        {
+            return assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            return ex.Types.Where(t => t != null);
+        }
+        catch
+        {
+            return Array.Empty<Type>();
+        }
+    }
+
+    /// <summary>
     /// Makes an alert range the Shade is standing in actually <i>report</i> the Shade, so an enemy
     /// can notice it at all. The half below <see cref="EnemyAiRetargeting"/>, and the one that has to
     /// work first: redirecting an enemy's target means nothing while it never leaves idle.
@@ -239,24 +284,10 @@ public partial class LegacyHelper
         {
             var methods = new List<MethodBase>();
 
-            // Both assemblies, because they are not the same one: FsmStateAction itself lives in
-            // PlayMaker.dll, but every action this cares about is Silksong's own and lives in
-            // Assembly-CSharp. Scanning only the base type's assembly finds nothing.
-            var assemblies = new HashSet<Assembly>
-            {
-                typeof(FsmStateAction).Assembly,
-                typeof(HeroController).Assembly
-            };
-
             try
             {
-                foreach (var type in assemblies.SelectMany(SafeGetTypes))
+                foreach (var type in FsmActionTypes())
                 {
-                    if (type == null || type.IsAbstract || !typeof(FsmStateAction).IsAssignableFrom(type))
-                    {
-                        continue;
-                    }
-
                     if (!IsEnemyAiAction(type))
                     {
                         continue;
@@ -296,25 +327,6 @@ public partial class LegacyHelper
             return methods;
         }
 
-        /// <summary>
-        /// <c>Assembly.GetTypes()</c> throws outright if any single type fails to load; the partially
-        /// populated <c>Types</c> array on the exception is still usable and is all this needs.
-        /// </summary>
-        private static IEnumerable<Type> SafeGetTypes(Assembly assembly)
-        {
-            try
-            {
-                return assembly.GetTypes();
-            }
-            catch (ReflectionTypeLoadException ex)
-            {
-                return ex.Types.Where(t => t != null);
-            }
-            catch
-            {
-                return Array.Empty<Type>();
-            }
-        }
 
         /// <summary>
         /// Reads PlayMaker's <c>ActionCategoryAttribute</c> without compiling against it. The

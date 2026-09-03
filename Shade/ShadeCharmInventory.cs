@@ -386,29 +386,6 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
-        public void GrantAllCharms()
-        {
-            bool changed = false;
-            foreach (var id in _definitionMap.Keys)
-            {
-                if (_owned.Add(id))
-                {
-                    _newlyDiscovered.Add(id);
-                    changed = true;
-                }
-            }
-
-            if (EnsureVoidHeartEquipped())
-            {
-                changed = true;
-            }
-
-            if (changed)
-            {
-                RaiseStateChanged();
-            }
-        }
-
         public void RevokeAllCharms(bool resetNotchCapacity = true)
         {
             bool changed = false;

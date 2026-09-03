@@ -137,6 +137,32 @@ internal static class LoggingManager
         AppendLine("- " + line);
     }
 
+    /// <summary>
+    /// A spell that lands in more than one piece, logged as the pieces and as the most it can do.
+    /// <para>
+    /// One figure is what made Howling Wraiths look broken: the log said 14 and the enemy took far
+    /// more, because 14 was one burst of three. The maximum is the number a player is comparing
+    /// against when they say a spell hits too hard, so it is the number the log leads with.
+    /// </para>
+    /// </summary>
+    internal static void LogShadeSpellDamage(string character, string spell, string breakdown, int maxTotal)
+    {
+        if (!ModConfig.Instance.logDamage) return;
+
+        Initialize();
+
+        string line = $"{character} {spell}: {breakdown} = {maxTotal} max";
+        consoleLogger?.LogInfo(line);
+
+        if (!wroteDealtHeader)
+        {
+            AppendLine("== Damage dealt ==");
+            wroteDealtHeader = true;
+        }
+
+        AppendLine("- " + line);
+    }
+
     private static void AppendHeader(bool succeeded)
     {
         if (succeeded && !wroteHitHeader)

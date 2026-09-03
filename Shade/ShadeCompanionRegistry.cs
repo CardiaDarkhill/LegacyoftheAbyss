@@ -85,10 +85,6 @@ namespace LegacyoftheAbyss.Shade
             Primary.Reset();
         }
 
-        /// <summary>The companion driven by the given controller, or null if it is not registered.</summary>
-        internal static ShadeCompanion? FromController(LegacyHelper.ShadeController? controller)
-            => controller == null ? null : s_ordered.FirstOrDefault(c => ReferenceEquals(c.Controller, controller));
-
         private static void Add(ShadeCompanion companion)
         {
             s_companions[companion.Id] = companion;

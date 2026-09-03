@@ -122,18 +122,6 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
-        internal static void ReloadDefinitions()
-        {
-            try
-            {
-                ShadeCharmPlacementDatabase.Reload();
-            }
-            catch (Exception ex)
-            {
-                LogWarning($"Failed to reload shade charm placements: {ex}");
-            }
-        }
-
         internal static bool IsCharmAlreadyCollected(ShadeCharmId charmId)
         {
             try

@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text;
 using UnityEngine;
 using GlobalSettings;
+using LegacyoftheAbyss.Shade;
 
 public partial class LegacyHelper
 {
@@ -711,8 +712,7 @@ public partial class LegacyHelper
             }
             else
             {
-                // Use spell progression for damage (2.5x upgraded, 30% less when unupgraded)
-                int dmg = ComputeSpellDamageMultiplier(2.5f, IsProjectileUpgraded());
+                int dmg = SpellDamage(IsProjectileUpgraded() ? ShadeSpellDamage.ShadeSoul : ShadeSpellDamage.VengefulSpirit);
                 sp.damage = Mathf.Max(1, Mathf.RoundToInt(dmg * damageScale));
             }
 

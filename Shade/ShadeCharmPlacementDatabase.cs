@@ -155,12 +155,6 @@ namespace LegacyoftheAbyss.Shade
             return s_allPlacements;
         }
 
-        internal static string GetSourcePath()
-        {
-            EnsureLoaded();
-            return s_sourcePath;
-        }
-
         private static ShadeCharmPlacementFile? Deserialize(string json)
         {
             if (string.IsNullOrWhiteSpace(json))

@@ -315,8 +315,12 @@ namespace LegacyoftheAbyss.Shade.Ai
 
             try
             {
-                foreach (var renderer in health.GetComponentsInChildren<Renderer>(false))
+                // Into a shared list rather than a fresh array: this runs for every tracked enemy on
+                // every scan, and the answer is only ever read by the bug report's scan stats.
+                health.GetComponentsInChildren(false, s_rendererScratch);
+                for (int i = 0; i < s_rendererScratch.Count; i++)
                 {
+                    var renderer = s_rendererScratch[i];
                     if (renderer != null && renderer.enabled)
                     {
                         return true;
@@ -327,9 +331,15 @@ namespace LegacyoftheAbyss.Shade.Ai
             {
                 return true;
             }
+            finally
+            {
+                s_rendererScratch.Clear();
+            }
 
             return false;
         }
+
+        private static readonly System.Collections.Generic.List<Renderer> s_rendererScratch = new System.Collections.Generic.List<Renderer>();
 
         /// <summary>
         /// An enemy sits at the centre of its body collider, not at its transform - pivots here are

@@ -327,18 +327,7 @@ public static partial class ShadeSettingsMenu
         footerRect.pivot = new Vector2(0.5f, 1f);
         footerRect.anchoredPosition = new Vector2(0f, -cursorY);
         footerRect.sizeDelta = new Vector2(0f, footerHeight);
-        var footerText = footer.AddComponent<Text>();
-        ApplyTextStyle(footerText, toggleLabelStyle, TextAnchor.UpperLeft, DescriptionColor);
-        footerText.text = string.Empty;
-        footerText.raycastTarget = false;
-        footerText.horizontalOverflow = HorizontalWrapMode.Wrap;
-        footerText.verticalOverflow = VerticalWrapMode.Truncate;
-        footerText.fontSize = Mathf.Max(12, Mathf.RoundToInt(footerText.fontSize * 0.78f));
-
-        var footerDriver = footer.AddComponent<MenuDescriptionDriver>();
-        footerDriver.target = footerText;
-        foreach (var entry in descriptions)
-            footerDriver.Register(entry.Key, entry.Value);
+        var footerDriver = CreateDescriptionFooter(footer, TextAnchor.UpperLeft, descriptions);
         if (presetSelectable != null)
             footerDriver.RegisterLive(presetSelectable, () => DifficultyPreset.IdentifyDescription(ModConfig.Instance));
 

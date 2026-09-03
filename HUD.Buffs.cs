@@ -65,29 +65,19 @@ public partial class SimpleHUD
             return;
         }
 
-        var clips = LegacyoftheAbyss.Shade.Knight.KnightHud.BaldurShellStageClips;
-        var sprites = new Sprite[clips.Length];
-        var rotated = new bool[clips.Length];
-        bool any = false;
+        bool any = TryResolveStageSprites(
+            LegacyoftheAbyss.Shade.Knight.KnightHud.BaldurShellStageClips,
+            out var sprites,
+            out var rotated);
 
-        for (int i = 0; i < clips.Length; i++)
-        {
-            // int.MaxValue is "the last frame": TryBuildSprite clamps, and these are break
-            // animations whose resting pose is at the end.
-            sprites[i] = LegacyoftheAbyss.Shade.Knight.KnightAssets.TryBuildSprite(clips[i], int.MaxValue);
-            rotated[i] = LegacyoftheAbyss.Shade.Knight.KnightAssets.IsSpriteRotated(clips[i], int.MaxValue);
-            any |= sprites[i] != null;
-        }
-
+        // The flags are kept either way. A charm can be worn before the bundle lands, so a miss
+        // here is usually "not yet" rather than "not there", and the sprites stay uncached so the
+        // next call asks again.
+        baldurStageRotated = rotated;
         if (!any)
         {
-            // Not cached. The bundle is read in the background and a charm can be worn before it
-            // lands, so "nothing resolved" here usually means "not yet" rather than "not there".
-            baldurStageRotated = rotated;
             return;
         }
-
-        baldurStageRotated = rotated;
         baldurStageSprites = sprites;
     }
 
@@ -137,16 +127,7 @@ public partial class SimpleHUD
             rect.pivot = new Vector2(1f, 1f);
             rect.sizeDelta = tuningBuffIconSize;
 
-            // The art is a centred child, as the masks' is: the slot is laid out from its top-right
-            // corner, and a rotated frame turning about that corner would swing out of its slot.
-            var art = new GameObject("Art");
-            art.transform.SetParent(slot.transform, false);
-            var artRect = art.AddComponent<RectTransform>();
-            artRect.anchorMin = artRect.anchorMax = new Vector2(0.5f, 0.5f);
-            artRect.pivot = new Vector2(0.5f, 0.5f);
-
-            var image = art.AddComponent<Image>();
-            image.preserveAspect = true;
+            var image = CreateSlotArt(slot);
             image.raycastTarget = false;
             image.enabled = false;
 

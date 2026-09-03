@@ -601,19 +601,8 @@ public partial class LegacyHelper
 
             try
             {
-                var assemblies = new HashSet<Assembly>
+                foreach (var type in FsmActionTypes())
                 {
-                    typeof(FsmStateAction).Assembly,
-                    typeof(HeroController).Assembly
-                };
-
-                foreach (var type in assemblies.SelectMany(SafeGetTypes))
-                {
-                    if (type == null || type.IsAbstract || !typeof(FsmStateAction).IsAssignableFrom(type))
-                    {
-                        continue;
-                    }
-
                     if (!DamageGateActionNames.Contains(type.Name) && !GrabGateActionNames.Contains(type.Name))
                     {
                         continue;
@@ -633,22 +622,6 @@ public partial class LegacyHelper
             }
 
             return methods;
-        }
-
-        private static IEnumerable<Type> SafeGetTypes(Assembly assembly)
-        {
-            try
-            {
-                return assembly.GetTypes();
-            }
-            catch (ReflectionTypeLoadException ex)
-            {
-                return ex.Types.Where(t => t != null);
-            }
-            catch
-            {
-                return Array.Empty<Type>();
-            }
         }
 
         /// <summary>The object delivering the effect - the FSM's owner, and nothing above it.</summary>

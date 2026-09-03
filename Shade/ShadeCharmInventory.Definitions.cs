@@ -693,12 +693,12 @@ namespace LegacyoftheAbyss.Shade
                         // A cloud every 0.75s that stands for 1.1s and bites every 0.3s, so two
                         // overlap briefly - which is what makes it a cloud rather than a pulse.
                         if (ShadeCharmSummons.TickSpawnTimer(controller, ShadeCharmId.DefendersCrest, delta, 0.75f))
-                            // Half the radius it had and a fifth of the opacity: at full strength
-                            // the borrowed cloud filled the screen and buried everything behind it.
+                            // A fifth of the opacity: at full strength the borrowed cloud buried
+                            // everything behind it. Its size is not set here - SpawnCharmDamageBurst
+                            // draws a cloud at the radius it damages, so the figure below is both.
                             controller.SpawnCharmDamageBurst(
                                 radius: 2.1f, damage: 3, lifeSeconds: 1.1f, hitIntervalSeconds: 0.3f,
                                 effectPrefab: LegacyoftheAbyss.Shade.Knight.KnightEffects.DungCloud,
-                                effectScale: 0.65f,
                                 effectAlpha: 0.2f);
                     }
                 },

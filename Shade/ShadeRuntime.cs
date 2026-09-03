@@ -80,30 +80,6 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
-        public static bool TryGetPersistentState(out int currentHp, out int maxHp, out int lifebloodCurrent, out int lifebloodMax, out int soul, out bool canTakeDamage, out int baseMaxHp)
-        {
-            if (!s_persistentState.HasData)
-            {
-                currentHp = -1;
-                maxHp = -1;
-                lifebloodCurrent = -1;
-                lifebloodMax = -1;
-                soul = -1;
-                canTakeDamage = true;
-                baseMaxHp = -1;
-                return false;
-            }
-
-            currentHp = s_persistentState.CurrentHP;
-            maxHp = s_persistentState.MaxHP;
-            lifebloodCurrent = s_persistentState.CurrentLifeblood;
-            lifebloodMax = s_persistentState.LifebloodMax;
-            soul = s_persistentState.Soul;
-            canTakeDamage = s_persistentState.CanTakeDamage;
-            baseMaxHp = s_persistentState.BaseMaxHP;
-            return true;
-        }
-
         public static void CaptureState(int currentHp, int maxHp, int lifebloodCurrent, int lifebloodMax, int soul, bool? canTakeDamage = null, int? baseMaxHp = null, int vesselSoul = 0)
         {
             s_persistentState.Capture(currentHp, maxHp, lifebloodCurrent, lifebloodMax, soul, canTakeDamage, baseMaxHp, vesselSoul);
@@ -224,12 +200,6 @@ namespace LegacyoftheAbyss.Shade
         {
             EnsureActiveSlot();
             return s_saveSlots.GetDiscoveredCharms(s_activeSlot);
-        }
-
-        public static bool IsCharmDiscovered(int charmId)
-        {
-            EnsureActiveSlot();
-            return s_saveSlots.GetDiscoveredCharms(s_activeSlot).Contains(charmId);
         }
 
         public static bool UnlockCharm(int charmId)

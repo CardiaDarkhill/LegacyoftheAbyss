@@ -476,17 +476,7 @@ public static partial class ShadeSettingsMenu
         // had its chance to run. See DeferredNavigationReapplyDriver for why.
         var navigationReapply = ms.gameObject.AddComponent<DeferredNavigationReapplyDriver>();
         navigationReapply.Reapply = () => ConfigureControlsMenuNavigation(presetButtons, leftColumnButtons, rightColumnButtons);
-        if (selectables.Count > 0)
-        {
-            var first = selectables[0];
-            screenFirstSelectables[ms] = first;
-            ms.defaultHighlight = first;
-        }
-        else if (ms.backButton != null)
-        {
-            screenFirstSelectables[ms] = ms.backButton;
-            ms.defaultHighlight = ms.backButton;
-        }
+        SetScreenFirstSelectable(ms, selectables);
         ConfigureBackButton(ms, CancelTarget.ShadeMain, ui);
         LayoutRebuilder.ForceRebuildLayoutImmediate(content);
         LayoutRebuilder.ForceRebuildLayoutImmediate(bindingsRect);

@@ -63,17 +63,7 @@ public static partial class ShadeSettingsMenu
             if (s != null) selectables.Add(s);
         }
         SetupButtonList(ms, selectables);
-        if (selectables.Count > 0)
-        {
-            var first = selectables[0];
-            screenFirstSelectables[ms] = first;
-            ms.defaultHighlight = first;
-        }
-        else if (ms.backButton != null)
-        {
-            screenFirstSelectables[ms] = ms.backButton;
-            ms.defaultHighlight = ms.backButton;
-        }
+        SetScreenFirstSelectable(ms, selectables);
         ConfigureBackButton(ms, CancelTarget.PauseMenu, ui);
         LayoutRebuilder.ForceRebuildLayoutImmediate(content);
     }
@@ -328,17 +318,7 @@ public static partial class ShadeSettingsMenu
             selectables.Add(unequipButton);
 
         SetupButtonList(ms, selectables);
-        if (selectables.Count > 0)
-        {
-            var first = selectables[0];
-            screenFirstSelectables[ms] = first;
-            ms.defaultHighlight = first;
-        }
-        else if (ms.backButton != null)
-        {
-            screenFirstSelectables[ms] = ms.backButton;
-            ms.defaultHighlight = ms.backButton;
-        }
+        SetScreenFirstSelectable(ms, selectables);
 
         ConfigureBackButton(ms, CancelTarget.ShadeMain, ui);
         charmsController?.Initialize(notchText, statusText, detailTitleText, detailDescriptionText, navigationText, equipButton, unequipButton);
@@ -386,17 +366,7 @@ public static partial class ShadeSettingsMenu
         AddToggle("Map Shows Collected Pickups", ModConfig.Instance.debugShowCollectedPickupsOnMap,
             v => ModConfig.Instance.debugShowCollectedPickupsOnMap = v);
         SetupButtonList(ms, selectables);
-        if (selectables.Count > 0)
-        {
-            var first = selectables[0];
-            screenFirstSelectables[ms] = first;
-            ms.defaultHighlight = first;
-        }
-        else if (ms.backButton != null)
-        {
-            screenFirstSelectables[ms] = ms.backButton;
-            ms.defaultHighlight = ms.backButton;
-        }
+        SetScreenFirstSelectable(ms, selectables);
         ConfigureBackButton(ms, CancelTarget.ShadeMain, ui);
         LayoutRebuilder.ForceRebuildLayoutImmediate(content);
     }
@@ -458,17 +428,7 @@ public static partial class ShadeSettingsMenu
         }
 
         SetupButtonList(ms, selectables);
-        if (selectables.Count > 0)
-        {
-            var first = selectables[0];
-            screenFirstSelectables[ms] = first;
-            ms.defaultHighlight = first;
-        }
-        else if (ms.backButton != null)
-        {
-            screenFirstSelectables[ms] = ms.backButton;
-            ms.defaultHighlight = ms.backButton;
-        }
+        SetScreenFirstSelectable(ms, selectables);
 
         ConfigureBackButton(ms, cancelTarget, ui);
         LayoutRebuilder.ForceRebuildLayoutImmediate(content);

@@ -674,44 +674,7 @@ public static partial class ShadeSettingsMenu
         return highlight;
     }
 
-    private static List<ShadowStyle> CaptureShadowStyles(Graphic graphic)
-    {
-        var list = new List<ShadowStyle>();
-        foreach (var shadow in graphic.GetComponents<Shadow>())
-        {
-            list.Add(new ShadowStyle
-            {
-                Type = shadow.GetType(),
-                EffectColor = shadow.effectColor,
-                EffectDistance = shadow.effectDistance,
-                UseGraphicAlpha = shadow.useGraphicAlpha
-            });
-        }
-        return list;
-    }
-
-    private static TextStyle CaptureTextStyle(Text text)
-    {
-        return new TextStyle
-        {
-            Font = text.font,
-            FontSize = text.fontSize,
-            FontStyle = text.fontStyle,
-            Alignment = text.alignment,
-            Color = text.color,
-            RichText = text.supportRichText,
-            BestFit = text.resizeTextForBestFit,
-            BestFitMin = text.resizeTextMinSize,
-            BestFitMax = text.resizeTextMaxSize,
-            LineSpacing = text.lineSpacing,
-            AlignByGeometry = text.alignByGeometry,
-            HorizontalOverflow = text.horizontalOverflow,
-            VerticalOverflow = text.verticalOverflow,
-            Shadows = CaptureShadowStyles(text)
-        };
-    }
-
-    private static void ClearAndApplyShadows(Graphic graphic, List<ShadowStyle> styles)
+    private static void ClearAndApplyShadows(Graphic graphic, List<UiShadowStyle> styles)
     {
         foreach (var shadow in graphic.GetComponents<Shadow>())
             Object.DestroyImmediate(shadow);
@@ -731,7 +694,7 @@ public static partial class ShadeSettingsMenu
         }
     }
 
-    private static void ApplyTextStyle(Text text, TextStyle? style, TextAnchor defaultAlignment, Color defaultColor)
+    private static void ApplyTextStyle(Text text, UiTextStyle? style, TextAnchor defaultAlignment, Color defaultColor)
     {
         var resolved = style.GetValueOrDefault();
         bool hasStyle = style.HasValue;
@@ -886,7 +849,7 @@ public static partial class ShadeSettingsMenu
                 {
                     if (!sliderLabelStyle.HasValue)
                     {
-                        sliderLabelStyle = CaptureTextStyle(text);
+                        sliderLabelStyle = UiTextStyles.Capture(text);
                         if (text.font != null)
                             fallbackFont ??= text.font;
                     }
@@ -895,7 +858,7 @@ public static partial class ShadeSettingsMenu
                 {
                     if (!sliderValueStyle.HasValue)
                     {
-                        sliderValueStyle = CaptureTextStyle(text);
+                        sliderValueStyle = UiTextStyles.Capture(text);
                         if (text.font != null)
                             fallbackFont ??= text.font;
                     }
@@ -911,7 +874,7 @@ public static partial class ShadeSettingsMenu
                     continue;
                 if (!toggleLabelStyle.HasValue)
                 {
-                    toggleLabelStyle = CaptureTextStyle(text);
+                    toggleLabelStyle = UiTextStyles.Capture(text);
                     if (text.font != null)
                         fallbackFont ??= text.font;
                 }
@@ -1376,6 +1339,61 @@ public static partial class ShadeSettingsMenu
         var driver = button.gameObject.AddComponent<LabeledToggleDriver>();
         driver.Initialize(button, label, value, onChange, unavailable);
         return button;
+    }
+
+    /// <summary>
+    /// Records which row a screen opens on, falling back to its back button when it has no rows.
+    /// <para>
+    /// Both halves matter: <c>defaultHighlight</c> is what the game's own navigation reads, and the
+    /// map is what re-highlights the row when the screen is shown again. Five screens each kept
+    /// their own copy of the pair.
+    /// </para>
+    /// </summary>
+    private static void SetScreenFirstSelectable(MenuScreen ms, List<MenuSelectable> selectables)
+    {
+        MenuSelectable first = selectables != null && selectables.Count > 0 ? selectables[0] : ms.backButton;
+        if (first == null)
+        {
+            return;
+        }
+
+        screenFirstSelectables[ms] = first;
+        ms.defaultHighlight = first;
+    }
+
+    /// <summary>
+    /// Turns an already-placed box into the footer line that explains whichever row is highlighted.
+    /// <para>
+    /// Where the footer sits is the screen's business - one hangs it under the panels, another pins
+    /// it to the bottom - so placement stays with the caller and only its appearance and wiring are
+    /// here. They were two copies that had to be kept looking alike by hand.
+    /// </para>
+    /// </summary>
+    private static MenuDescriptionDriver CreateDescriptionFooter(
+        GameObject footer,
+        TextAnchor alignment,
+        List<KeyValuePair<MenuSelectable, string>> descriptions)
+    {
+        var footerText = footer.AddComponent<Text>();
+        ApplyTextStyle(footerText, toggleLabelStyle, alignment, DescriptionColor);
+        footerText.text = string.Empty;
+        footerText.raycastTarget = false;
+        footerText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        footerText.verticalOverflow = VerticalWrapMode.Truncate;
+        footerText.fontSize = Mathf.Max(12, Mathf.RoundToInt(footerText.fontSize * 0.78f));
+
+        var footerDriver = footer.AddComponent<MenuDescriptionDriver>();
+        footerDriver.target = footerText;
+
+        if (descriptions != null)
+        {
+            foreach (var entry in descriptions)
+            {
+                footerDriver.Register(entry.Key, entry.Value);
+            }
+        }
+
+        return footerDriver;
     }
 
 }

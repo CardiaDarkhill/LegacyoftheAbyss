@@ -762,15 +762,6 @@ public partial class LegacyHelper
             {
             }
         }
-
-        internal readonly struct MenuTransferSaveScope : IDisposable
-        {
-            public void Dispose()
-            {
-            }
-        }
-
-        internal static MenuTransferSaveScope CreateSaveScope() => default;
     }
 
     [HarmonyPatch(typeof(PlayerAction), nameof(PlayerAction.Update))]

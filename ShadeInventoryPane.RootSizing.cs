@@ -186,7 +186,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
 
                         if (!bodyTextAssigned)
                         {
-                            bodyTextStyle = CaptureTextStyle(bodySample);
+                            bodyTextStyle = UiTextStyles.Capture(bodySample);
                             bodyTextAssigned = true;
                         }
 
@@ -220,7 +220,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
 
                         if (!headerTextAssigned)
                         {
-                            headerTextStyle = CaptureTextStyle(headerSample);
+                            headerTextStyle = UiTextStyles.Capture(headerSample);
                             headerTextAssigned = true;
                         }
 

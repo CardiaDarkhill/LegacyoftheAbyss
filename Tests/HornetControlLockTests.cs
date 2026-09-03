@@ -1,7 +1,4 @@
-using System;
 using System.Reflection;
-using System.Runtime.Serialization;
-using GlobalEnums;
 using InControl;
 using Xunit;
 
@@ -426,60 +423,14 @@ public class HornetControlLockTests
         return binding is DeviceBindingSource device && device.Control == control;
     }
 
-    private sealed class HeroStateEnvironment : IDisposable
+    private sealed class HeroStateEnvironment : GameStaticsScope
     {
-        private readonly object originalGameManager;
-        private readonly object originalPlayerData;
-        private readonly GameManager gm;
-        private readonly PlayerData playerData;
-
         internal HeroStateEnvironment()
         {
-            originalGameManager = GetStaticField(typeof(GameManager), "_instance");
-            originalPlayerData = GetStaticField(typeof(PlayerData), "_instance");
-
-            gm = (GameManager)FormatterServices.GetUninitializedObject(typeof(GameManager));
-            playerData = (PlayerData)FormatterServices.GetUninitializedObject(typeof(PlayerData));
-
-            SetProperty(gm, "GameState", GameState.PLAYING);
-            gm.playerData = playerData;
-            playerData.atBench = false;
-
-            SetStaticField(typeof(GameManager), "_instance", gm);
-            SetStaticField(typeof(PlayerData), "_instance", playerData);
+            Gm.playerData = Data;
+            Data.atBench = false;
         }
 
-        internal void SetAtBench(bool value) => playerData.atBench = value;
-
-        internal void ClearGameManager() => SetStaticField(typeof(GameManager), "_instance", null);
-
-        public void Dispose()
-        {
-            SetStaticField(typeof(GameManager), "_instance", originalGameManager);
-            SetStaticField(typeof(PlayerData), "_instance", originalPlayerData);
-        }
-
-        private static object GetStaticField(Type type, string name)
-        {
-            var field = type.GetField(name, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            return field?.GetValue(null);
-        }
-
-        private static void SetStaticField(Type type, string name, object value)
-        {
-            var field = type.GetField(name, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            field?.SetValue(null, value);
-        }
-
-        private static void SetProperty(object target, string name, object value)
-        {
-            if (target == null)
-            {
-                return;
-            }
-
-            var property = target.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            property?.SetValue(target, value, null);
-        }
+        internal void SetAtBench(bool value) => Data.atBench = value;
     }
 }

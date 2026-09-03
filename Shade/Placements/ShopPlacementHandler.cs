@@ -82,29 +82,7 @@ namespace LegacyoftheAbyss.Shade
                 return;
             }
 
-            var matches = new List<ShadeCharmPlacementDefinition>();
-            foreach (var placement in _activePlacements)
-            {
-                if (!MatchesOwner(placement, owner, out var failureReason))
-                {
-                    LogPlacementSkip(owner, placement, failureReason);
-                    continue;
-                }
-
-                if (!MeetsShopConditions(placement, out var conditionFailure))
-                {
-                    LogPlacementSkip(owner, placement, conditionFailure);
-                    continue;
-                }
-
-                if (ShadeCharmPlacementService.IsCharmAlreadyCollected(placement.CharmId))
-                {
-                    LogPlacementSkip(owner, placement, "charm already collected");
-                    continue;
-                }
-
-                matches.Add(placement);
-            }
+            var matches = CollectMatchingPlacements(owner, existingStock: null);
 
             if (matches.Count == 0)
             {
@@ -289,29 +267,7 @@ namespace LegacyoftheAbyss.Shade
                 return;
             }
 
-            var matches = new List<ShadeCharmPlacementDefinition>();
-            foreach (var placement in _activePlacements)
-            {
-                if (!MatchesOwner(placement, owner, stock, out var failureReason))
-                {
-                    LogPlacementSkip(owner, placement, failureReason);
-                    continue;
-                }
-
-                if (!MeetsShopConditions(placement, out var conditionFailure))
-                {
-                    LogPlacementSkip(owner, placement, conditionFailure);
-                    continue;
-                }
-
-                if (ShadeCharmPlacementService.IsCharmAlreadyCollected(placement.CharmId))
-                {
-                    LogPlacementSkip(owner, placement, "charm already collected");
-                    continue;
-                }
-
-                matches.Add(placement);
-            }
+            var matches = CollectMatchingPlacements(owner, stock);
 
             if (matches.Count == 0)
             {
@@ -361,8 +317,41 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
-        private static bool MatchesOwner(ShadeCharmPlacementDefinition placement, Component owner, out string? failureReason)
-            => MatchesOwner(placement, owner, null, out failureReason);
+        /// <summary>
+        /// Every placement this shop owner should be selling: the right owner, its conditions met,
+        /// and the charm not already collected. Each skip is logged with its reason, because a
+        /// charm that quietly fails to appear in a shop is indistinguishable from one that was
+        /// never placed there.
+        /// </summary>
+        private List<ShadeCharmPlacementDefinition> CollectMatchingPlacements(Component owner, ShopItem[]? existingStock)
+        {
+            var matches = new List<ShadeCharmPlacementDefinition>();
+
+            foreach (var placement in _activePlacements)
+            {
+                if (!MatchesOwner(placement, owner, existingStock, out var failureReason))
+                {
+                    LogPlacementSkip(owner, placement, failureReason);
+                    continue;
+                }
+
+                if (!MeetsShopConditions(placement, out var conditionFailure))
+                {
+                    LogPlacementSkip(owner, placement, conditionFailure);
+                    continue;
+                }
+
+                if (ShadeCharmPlacementService.IsCharmAlreadyCollected(placement.CharmId))
+                {
+                    LogPlacementSkip(owner, placement, "charm already collected");
+                    continue;
+                }
+
+                matches.Add(placement);
+            }
+
+            return matches;
+        }
 
         private static bool MatchesOwner(ShadeCharmPlacementDefinition placement, Component owner, ShopItem[]? existingStock, out string? failureReason)
         {

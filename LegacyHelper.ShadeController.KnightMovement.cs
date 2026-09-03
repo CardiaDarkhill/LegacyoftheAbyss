@@ -1,5 +1,4 @@
 #nullable disable
-using GlobalEnums;
 using UnityEngine;
 using LegacyoftheAbyss.Shade;
 using LegacyoftheAbyss.Shade.Knight;
@@ -57,8 +56,6 @@ public partial class LegacyHelper
         private const float KnightWallSlideSpeed = 6f;
         private const float KnightWallJumpSpeed = 13f;
         private const float KnightWallJumpLockSeconds = 0.18f;
-        private const float KnightPogoSpeed = 16f;
-        private const float KnightGroundProbe = 0.12f;
         private const float KnightCoyoteSeconds = 0.09f;
         private const float KnightJumpBufferSeconds = 0.12f;
 
@@ -133,6 +130,7 @@ public partial class LegacyHelper
             }
 
             knightHazardLockTimer = KnightHazardRespawnLockSeconds;
+            knightBalloonRiseTimer = 0f;
             knightVerticalVelocity = 0f;
             knightJumpHoldTimer = 0f;
             knightDashTimer = 0f;
@@ -179,6 +177,7 @@ public partial class LegacyHelper
             TeleportToPosition(hornetTransform.position);
             knightVerticalVelocity = 0f;
             knightDashTimer = 0f;
+            knightBalloonRiseTimer = 0f;
             knightAirJumpSpent = false;
             knightDashSpentInAir = false;
         }
@@ -344,10 +343,26 @@ public partial class LegacyHelper
                 return;
             }
 
-            // The balloon launch owns the Knight outright while it runs, gravity included.
+            // The launch owns the Knight outright while it runs, gravity included - so it has to
+            // stand down for anything that owns it more: a hazard putting it back, a cutscene, a
+            // bench, or the room-entry placement. Each of those puts the Knight somewhere
+            // deliberate, and a rise still running would carry it straight back off.
+            if (knightBalloonRiseTimer > 0f
+                && (hornetControlsLocked || isInactive || knightBenchActive || knightHazardLockTimer > 0f))
+            {
+                knightBalloonRiseTimer = 0f;
+            }
+
             if (UpdateKnightBalloonLaunch(dt))
             {
                 ApplyKnightMotion(0f, dt, facingSpeed: 0f);
+
+                // Still held on screen. Half a second at this speed is a nine unit rise, which can
+                // clear the frame outright - and a Knight that leaves it only to be snapped back
+                // when the launch ends reads as the launch having been cut off. The leash stays
+                // out of it: that one measures distance to Hornet and would fight a rise she is
+                // not making.
+                ClampKnightToCameraView();
                 UpdateKnightAnimation(0f);
                 return;
             }
@@ -404,9 +419,9 @@ public partial class LegacyHelper
             float horizontal = capturedHorizontalInput;
             UpdateKnightTimers(dt, horizontal);
 
-            // Channelling roots the Knight the way it roots Hornet: no dash, and no jump. Shape of
-            // Unn buys back walking - see the speed scale below - and nothing else. Both were
-            // reachable mid-channel, which let the Knight heal while jumping around.
+            // Channelling roots the Knight the way it roots Hornet: no jump, no dash, and no walk.
+            // Shape of Unn buys back the walk alone, at half speed. Nothing held the Knight before,
+            // so it healed while jumping around at full speed.
             if (isFocusing)
             {
                 knightJumpBufferTimer = 0f;
@@ -418,9 +433,6 @@ public partial class LegacyHelper
             float runSpeed = KnightGroundSpeed;
             float facingDriver = float.NaN;
 
-            // Channelling roots a platformer body the way it roots Hornet, and nothing held the
-            // Knight before - it walked at full speed through a focus with or without the charm.
-            // Shape of Unn buys the movement back, at half speed rather than in full.
             if (isFocusing)
             {
                 runSpeed *= allowFocusMovement ? KnightFocusMoveScale : 0f;
@@ -458,127 +470,6 @@ public partial class LegacyHelper
             UpdateKnightAnimation(speed);
         }
 
-        /// <summary>
-        /// Lifts the body clear when it is already inside terrain. The swept collision below only
-        /// stops motion *into* geometry; a Knight spawned or teleported into the floor starts
-        /// overlapping and would otherwise stay buried, because every sweep out of it begins in
-        /// contact. Uses <c>Collider2D.Distance</c>, which is pure geometry rather than filtered by
-        /// the layer collision matrix the Knight and terrain do not share.
-        /// </summary>
-        private void PushKnightOutOfTerrain()
-        {
-            if (bodyCol == null)
-            {
-                return;
-            }
-
-            var bounds = bodyCol.bounds;
-            var overlaps = Physics2D.OverlapBoxAll(bounds.center, bounds.size, 0f, KnightTerrainMask());
-
-            for (int i = 0; i < overlaps.Length; i++)
-            {
-                var other = overlaps[i];
-                if (other == null || other == bodyCol || other.transform.IsChildOf(transform))
-                {
-                    continue;
-                }
-
-                var distance = bodyCol.Distance(other);
-                if (!distance.isValid || !distance.isOverlapped)
-                {
-                    continue;
-                }
-
-                // The normal runs from this collider toward the other, so separating means moving
-                // back along it by the penetration depth.
-                float depth = Mathf.Abs(distance.distance);
-                transform.position -= (Vector3)(distance.normal * depth);
-
-                if (knightVerticalVelocity < 0f)
-                {
-                    knightVerticalVelocity = 0f;
-                }
-            }
-        }
-
-        private void ProbeKnightSurroundings()
-        {
-            knightWasGrounded = knightGrounded;
-
-            var bounds = bodyCol != null ? bodyCol.bounds : new Bounds(transform.position, Vector3.one);
-            int mask = KnightTerrainMask();
-
-            Vector2 footCentre = new Vector2(bounds.center.x, bounds.min.y);
-            knightGrounded = knightVerticalVelocity <= 0.01f
-                && Physics2D.OverlapBox(footCentre, new Vector2(bounds.size.x * 0.85f, KnightGroundProbe), 0f, mask) != null;
-
-            knightWallDirection = 0;
-            if (!knightGrounded && knightAbilities.MantisClaw)
-            {
-                Vector2 side = new Vector2(bounds.size.x * 0.5f + 0.06f, 0f);
-                Vector2 centre = bounds.center;
-                var probe = new Vector2(0.08f, bounds.size.y * 0.7f);
-
-                if (Physics2D.OverlapBox(centre + side, probe, 0f, mask) != null)
-                    knightWallDirection = 1;
-                else if (Physics2D.OverlapBox(centre - side, probe, 0f, mask) != null)
-                    knightWallDirection = -1;
-            }
-
-            if (knightGrounded)
-            {
-                knightAirJumpSpent = false;
-                knightDashSpentInAir = false;
-                if (!knightWasGrounded)
-                {
-                    knightLandTimer = 0.12f;
-                }
-            }
-            else if (knightWallDirection != 0)
-            {
-                // A wall refunds what the ground refunds. UpdateKnightDash has always said "until
-                // the ground or a wall gives it back" and only the ground ever did, so a Knight
-                // climbing a shaft had one dash and one air jump for the whole climb. The double
-                // jump was refunded by *jumping off* a wall but not by holding one, which is the
-                // same omission a step earlier.
-                knightAirJumpSpent = false;
-                knightDashSpentInAir = false;
-            }
-
-            // Momentum is killed the instant the wall is caught, not once the rise has decayed on
-            // its own. Jumping into a wall used to carry on upward for several frames before the
-            // cling took hold, which is the delay before a wall jump would answer.
-            bool clinging = !knightGrounded && knightWallDirection != 0 && knightAbilities.MantisClaw;
-            if (clinging && !knightWasClinging && knightVerticalVelocity > 0f)
-            {
-                knightVerticalVelocity = 0f;
-                knightJumpHoldTimer = 0f;
-            }
-
-            knightWasClinging = clinging;
-        }
-
-        /// <summary>
-        /// Terrain the Knight stands on. Hornet's own collision mask is the authority; falling back
-        /// to a named layer keeps the Knight solid if the hero is momentarily absent.
-        /// </summary>
-        /// <summary>Terrain and soft terrain, for anything of ours that must not pass through walls.</summary>
-        internal static int TerrainMask() => KnightTerrainMask();
-
-        private static int KnightTerrainMask()
-        {
-            int terrain = LayerMask.NameToLayer("Terrain");
-            int mask = terrain >= 0 ? 1 << terrain : 0;
-
-            int soft = LayerMask.NameToLayer("Soft Terrain");
-            if (soft >= 0)
-            {
-                mask |= 1 << soft;
-            }
-
-            return mask != 0 ? mask : Physics2D.AllLayers;
-        }
-
         private void UpdateKnightTimers(float dt, float horizontal)
         {
             knightCoyoteTimer = knightGrounded ? KnightCoyoteSeconds : Mathf.Max(0f, knightCoyoteTimer - dt);
@@ -599,11 +490,14 @@ public partial class LegacyHelper
 
         private void IntegrateKnightVertical(float dt, bool allowInput)
         {
-            // No upward-velocity condition: the probe zeroes the rise on the frame the wall is
-            // caught, so requiring a downward velocity here only delayed the cling - and with it the
-            // wall jump - by however long the Knight had left to climb.
+            // ProbeKnightSurroundings zeroes the rise on the frame a wall is caught, so this
+            // engages immediately on contact and does not have to wait out a climb - which is what
+            // the condition originally cost. It is still needed: without it a deliberate upward
+            // impulse beside a wall, a pogo above all, was turned into a wall slide on the very
+            // next frame, so a bounce off an enemy taken next to a wall gave no height at all.
             bool clingingToWall = knightWallDirection != 0
-                && knightAbilities.MantisClaw;
+                && knightAbilities.MantisClaw
+                && knightVerticalVelocity <= 0f;
 
             if (allowInput && TryKnightJump(clingingToWall))
             {
@@ -710,11 +604,6 @@ public partial class LegacyHelper
             if (knightDashTimer > 0f)
             {
                 knightDashTimer -= dt;
-                if (knightDashTimer <= 0f && knightDashIsShadeCloak)
-                {
-                    SetKnightIntangible(false);
-                }
-
                 return;
             }
 
@@ -757,7 +646,7 @@ public partial class LegacyHelper
 
             if (knightDashIsShadeCloak)
             {
-                SetKnightIntangible(true);
+                BeginKnightDashIntangibility();
                 BeginShadeCloakCooldown();
                 knightView?.Play(KnightView.ClipShadeCloak, restart: true);
                 KnightAudio.PlayShadeCloak(EnsureKnightSfx(), GetEffectiveSfxVolume());
@@ -771,15 +660,10 @@ public partial class LegacyHelper
 
         /// <summary>
         /// Shade Cloak's intangibility. Reuses the same damage gate spawn protection uses, so a
-        /// dash through an attack is refused for the same reason and by the same code.
+        /// dash through an attack is refused for the same reason and by the same code - and expires
+        /// on its own, which is why there is nothing to switch back off at the end of the dash.
         /// </summary>
-        private void SetKnightIntangible(bool intangible)
-        {
-            if (intangible)
-            {
-                SuppressHazardDamage(KnightDashSeconds);
-            }
-        }
+        private void BeginKnightDashIntangibility() => SuppressHazardDamage(KnightDashSeconds);
 
         /// <summary>
         /// Moves the Knight and turns it to face where it is going.
@@ -805,7 +689,10 @@ public partial class LegacyHelper
             }
             else
             {
-                transform.position = target;
+                // Depth carried through explicitly: assigning a Vector2 here fills z with zero
+                // rather than leaving it alone, which walks the Knight off the playable plane and
+                // in front of everything drawn on it.
+                transform.position = new Vector3(target.x, target.y, transform.position.z);
             }
 
             lastMoveDelta = target - current;
@@ -819,179 +706,6 @@ public partial class LegacyHelper
             {
                 facing = knightDashDirection;
             }
-        }
-
-        /// <summary>How far a sweep stops short of what it hits, so the body never rests inside it.</summary>
-        private const float KnightSweepSkin = 0.01f;
-
-        /// <summary>
-        /// Sweeps the shape the body actually is.
-        /// <para>
-        /// The body is a capsule and this used to cast a box over it, which threw away the rounded
-        /// bottom corners - and those corners are the whole reason a capsule rides over a small lip
-        /// instead of catching on its edge. Sized off the collider's own bounds, as the box was, so
-        /// the reach is unchanged.
-        /// </para>
-        /// </summary>
-        private RaycastHit2D KnightSweep(Vector2 origin, Vector2 direction, float distance, int mask)
-        {
-            Vector2 size = (Vector2)bodyCol.bounds.size * 0.9f;
-
-            if (bodyCol is CapsuleCollider2D capsule)
-            {
-                return Physics2D.CapsuleCast(origin, size, capsule.direction, 0f, direction, distance, mask);
-            }
-
-            return Physics2D.BoxCast(origin, size, 0f, direction, distance, mask);
-        }
-
-        /// <summary>
-        /// Stops the body at terrain rather than letting MovePosition push it through. Each axis is
-        /// swept separately so sliding along a wall or a ceiling still works.
-        /// <para>
-        /// Hornet is moved by Unity's physics, which rides her up over small irregularities without
-        /// anyone asking it to. The Knight is moved by a swept cast, which has no such generosity:
-        /// it stops at whatever the sweep touches, and much of Silksong's ground is a few
-        /// centimetres uneven or seamed between two colliders. So the step is tried again from
-        /// slightly higher up before it is called a wall, and the body is settled back down after -
-        /// which is the same thing physics does for her, done deliberately.
-        /// </para>
-        /// </summary>
-        private Vector2 ResolveKnightCollision(Vector2 current, Vector2 target)
-        {
-            if (bodyCol == null)
-            {
-                return target;
-            }
-
-            int mask = KnightTerrainMask();
-            float stepHeight = KnightStepHeight;
-
-            Vector2 resolved = current;
-
-            float dx = target.x - current.x;
-            if (Mathf.Abs(dx) > 0.0001f)
-            {
-                Vector2 direction = new Vector2(Mathf.Sign(dx), 0f);
-                float distance = Mathf.Abs(dx);
-                var hit = KnightSweep(resolved, direction, distance, mask);
-
-                if (hit.collider == null)
-                {
-                    resolved.x = target.x;
-                }
-                else if (!TryStepOver(ref resolved, direction, distance, stepHeight, mask))
-                {
-                    resolved.x += direction.x * Mathf.Max(0f, hit.distance - KnightSweepSkin);
-                }
-            }
-
-            float dy = target.y - current.y;
-            if (Mathf.Abs(dy) > 0.0001f)
-            {
-                Vector2 direction = new Vector2(0f, Mathf.Sign(dy));
-                var hit = KnightSweep(resolved, direction, Mathf.Abs(dy), mask);
-                if (hit.collider != null)
-                {
-                    resolved.y += direction.y * Mathf.Max(0f, hit.distance - KnightSweepSkin);
-                    // Landing or hitting a ceiling both kill vertical speed.
-                    knightVerticalVelocity = 0f;
-                }
-                else
-                {
-                    resolved.y = target.y;
-                }
-            }
-
-            SettleKnightOntoGround(ref resolved, current, stepHeight, mask);
-            return resolved;
-        }
-
-        /// <summary>How high a lip the Knight steps over, in world units, or zero when switched off.</summary>
-        private float KnightStepHeight
-        {
-            get
-            {
-                if (bodyCol == null)
-                {
-                    return 0f;
-                }
-
-                float share = Mathf.Clamp(ModConfig.Instance.knightStepHeight, 0f, 0.9f);
-                return share <= 0f ? 0f : bodyCol.bounds.size.y * share;
-            }
-        }
-
-        /// <summary>
-        /// Retries a blocked horizontal step from <paramref name="stepHeight"/> higher up, and
-        /// settles the body back down onto whatever it lands on. Returns false when the obstruction
-        /// is a real wall rather than a lip, in which case nothing has been moved.
-        /// </summary>
-        private bool TryStepOver(ref Vector2 resolved, Vector2 direction, float distance, float stepHeight, int mask)
-        {
-            // Only from the ground, and only when not already on the way up: stepping mid-jump would
-            // let the Knight climb a wall a step at a time.
-            if (stepHeight <= 0f || !knightGrounded || knightVerticalVelocity > 0.01f)
-            {
-                return false;
-            }
-
-            // However much headroom there is, up to a step. A low ceiling makes this a wall again.
-            var above = KnightSweep(resolved, Vector2.up, stepHeight, mask);
-            float lift = above.collider != null ? Mathf.Max(0f, above.distance - KnightSweepSkin) : stepHeight;
-            if (lift <= KnightSweepSkin)
-            {
-                return false;
-            }
-
-            Vector2 raised = new Vector2(resolved.x, resolved.y + lift);
-            if (KnightSweep(raised, direction, distance, mask).collider != null)
-            {
-                return false;
-            }
-
-            Vector2 crossed = new Vector2(raised.x + direction.x * distance, raised.y);
-
-            // Back down onto the surface that was stepped onto. Falling the whole lift again means
-            // there was nothing there after all, which is fine - the vertical pass takes it from
-            // here.
-            var below = KnightSweep(crossed, Vector2.down, lift, mask);
-            float drop = below.collider != null ? Mathf.Max(0f, below.distance - KnightSweepSkin) : lift;
-
-            resolved = new Vector2(crossed.x, crossed.y - drop);
-            return true;
-        }
-
-        /// <summary>
-        /// Keeps a walking Knight on the ground over a small drop.
-        /// <para>
-        /// Without this the ground falling away by a centimetre leaves the Knight airborne for a
-        /// frame, which costs it its grounded state, its coyote time and its walk animation - a
-        /// stutter every few steps on ground that looks flat. Only ever pulls the body down onto
-        /// something within a step, so walking off an actual ledge still falls.
-        /// </para>
-        /// </summary>
-        private void SettleKnightOntoGround(ref Vector2 resolved, Vector2 current, float stepHeight, int mask)
-        {
-            if (stepHeight <= 0f || !knightGrounded || knightVerticalVelocity > 0.01f)
-            {
-                return;
-            }
-
-            // Only when the move was a walk. A dash or a knockback should carry the Knight off a
-            // lip rather than being pinned to it.
-            if (Mathf.Abs(resolved.x - current.x) <= 0.0001f || knightDashTimer > 0f)
-            {
-                return;
-            }
-
-            var ground = KnightSweep(resolved, Vector2.down, stepHeight, mask);
-            if (ground.collider == null || ground.distance <= KnightSweepSkin)
-            {
-                return;
-            }
-
-            resolved.y -= Mathf.Max(0f, ground.distance - KnightSweepSkin);
         }
 
         /// <summary>
@@ -1088,6 +802,7 @@ public partial class LegacyHelper
             knightVerticalVelocity = 0f;
             knightDashTimer = 0f;
             knightAirJumpSpent = false;
+            knightDashSpentInAir = false;
         }
 
         /// <summary>
@@ -1148,77 +863,6 @@ public partial class LegacyHelper
         }
 
         /// <summary>
-        /// Bounces the Knight upward off whatever it just down-slashed, and gives back the air jump
-        /// and air dash exactly as landing would.
-        /// </summary>
-        internal void ApplyKnightPogoBounce()
-        {
-            knightVerticalVelocity = KnightPogoSpeed;
-            knightJumpHoldTimer = 0f;
-            knightAirJumpSpent = false;
-            knightDashSpentInAir = false;
-        }
-
-        /// <summary>
-        /// The balloon's own launch, read off <c>BounceBalloon</c>: 18 units a second for half a
-        /// second, gravity held off throughout - a nine unit rise, where an ordinary jump is about
-        /// two. Hornet gets this from the balloon itself; the Knight cannot, because every line of
-        /// that routine drives <c>HeroController</c> directly, which is why a balloon did nothing
-        /// for it at all.
-        /// </summary>
-        private const float KnightBalloonRiseSpeed = 18f;
-
-        private const float KnightBalloonRiseSeconds = 0.5f;
-
-        private float knightBalloonRiseTimer;
-
-        /// <summary>
-        /// Starts the balloon launch. Controls are held for its duration, as they are for Hornet,
-        /// and the air moves come back at the top, so the rise can be carried on from with a jump
-        /// or a dash exactly as hers can.
-        /// </summary>
-        internal void BeginKnightBalloonLaunch()
-        {
-            if (!UsesGroundedMovement)
-            {
-                return;
-            }
-
-            knightBalloonRiseTimer = KnightBalloonRiseSeconds;
-            knightDashTimer = 0f;
-            knockbackVelocity = Vector2.zero;
-            knockbackTimer = 0f;
-            EndKnightCastFreeze();
-        }
-
-        /// <summary>
-        /// Drives the launch. Returns true while it owns the Knight, in which case nothing else
-        /// this frame may move it.
-        /// </summary>
-        private bool UpdateKnightBalloonLaunch(float dt)
-        {
-            if (knightBalloonRiseTimer <= 0f)
-            {
-                return false;
-            }
-
-            knightBalloonRiseTimer -= dt;
-            knightVerticalVelocity = KnightBalloonRiseSpeed;
-            knightJumpHoldTimer = 0f;
-            knightJumpBufferTimer = 0f;
-            knightDashPressLatched = false;
-
-            if (knightBalloonRiseTimer <= 0f)
-            {
-                knightBalloonRiseTimer = 0f;
-                knightAirJumpSpent = false;
-                knightDashSpentInAir = false;
-            }
-
-            return true;
-        }
-
-        /// <summary>
         /// Puts the Knight's rig on the Shade's sorting layer, but at <em>Hornet's</em> own order
         /// rather than the Shade's.
         /// <para>
@@ -1249,263 +893,6 @@ public partial class LegacyHelper
             }
 
             knightView.ApplySorting(sr.sortingLayerID, order);
-        }
-
-        /// <summary>How far below the Knight a down slash looks for something to bounce off.</summary>
-        private const float KnightPogoProbeDepth = 0.9f;
-
-        /// <summary>
-        /// How far it looks for Hornet, which is a good deal further.
-        /// <para>
-        /// Her collider is nothing like her silhouette - most of her head carries none of it - so a
-        /// probe sized for the drawing missed her repeatedly from heights that plainly looked like a
-        /// hit. She is the one pogo target the player aims at deliberately and the one the Knight's
-        /// verticality depends on, so she gets a reach that forgives the difference.
-        /// </para>
-        /// </summary>
-        private const float KnightHornetPogoProbeDepth = 2.6f;
-
-        /// <summary>
-        /// A down slash looking for a surface to bounce off. Hornet counts, which is the point:
-        /// without her as a platform most of the game's verticality is closed to the Knight.
-        /// Called after the slash is thrown, so the bounce and the swing stay in step.
-        /// </summary>
-        private bool TryKnightPogo(GameObject slash = null)
-        {
-            if (!UsesGroundedMovement || knightGrounded)
-            {
-                return false;
-            }
-
-            var bounds = bodyCol != null ? bodyCol.bounds : new Bounds(transform.position, Vector3.one);
-            var probeCentre = new Vector2(bounds.center.x, bounds.min.y - KnightPogoProbeDepth * 0.5f);
-            var probeSize = new Vector2(bounds.size.x * 1.1f, KnightPogoProbeDepth);
-
-            // Widened to whatever the swing itself covers below the Knight. The nail's hitbox and
-            // this probe were sized independently and the nail was the larger of the two, which is
-            // the worst way round it could be: the object flashes, registers the hit and gives no
-            // height back, which reads as the pogo being broken rather than as two numbers
-            // disagreeing.
-            ExpandProbeToSlashReach(ref probeCentre, ref probeSize, bounds, slash);
-
-            // An explicit mask keeps this a geometry query rather than one filtered by the layer
-            // collision matrix, which the Knight and Hornet do not share.
-            if (TryKnightPogoIn(probeCentre, probeSize, hornetOnly: false))
-            {
-                return true;
-            }
-
-            // A second, deeper pass that will only accept Hornet. Kept separate rather than simply
-            // probing deeper, so the extra reach cannot pick up an enemy or a ledge the player was
-            // nowhere near aiming at.
-            var deepCentre = new Vector2(bounds.center.x, bounds.min.y - KnightHornetPogoProbeDepth * 0.5f);
-            var deepSize = new Vector2(bounds.size.x * 1.1f, KnightHornetPogoProbeDepth);
-            return TryKnightPogoIn(deepCentre, deepSize, hornetOnly: true);
-        }
-
-        private bool TryKnightPogoIn(Vector2 probeCentre, Vector2 probeSize, bool hornetOnly)
-        {
-            // An explicit mask keeps this a geometry query rather than one filtered by the layer
-            // collision matrix, which the Knight and Hornet do not share.
-            var hits = Physics2D.OverlapBoxAll(probeCentre, probeSize, 0f, Physics2D.AllLayers);
-            for (int i = 0; i < hits.Length; i++)
-            {
-                var hit = hits[i];
-                if (hit == null || hit.transform.IsChildOf(transform))
-                {
-                    continue;
-                }
-
-                if (hornetOnly && !IsHornetCollider(hit))
-                {
-                    continue;
-                }
-
-                switch (ClassifyKnightPogoSurface(hit))
-                {
-                    case KnightPogoKind.Launch:
-                        BeginKnightBalloonLaunch();
-                        return true;
-                    case KnightPogoKind.Bounce:
-                        ApplyKnightPogoBounce();
-                        return true;
-                }
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Grows the pogo probe to cover the part of the swing that is below the Knight.
-        /// <para>
-        /// Only downward: a down slash's collider reaches out to the sides as well, and a pogo is
-        /// about what is underneath. Only when the colliders measure as something - a slash caught
-        /// before its damager is switched on reports empty bounds, and in that case the probe is
-        /// left at its own size rather than being collapsed to nothing.
-        /// </para>
-        /// </summary>
-        private static void ExpandProbeToSlashReach(
-            ref Vector2 probeCentre, ref Vector2 probeSize, Bounds body, GameObject slash)
-        {
-            if (slash == null)
-            {
-                return;
-            }
-
-            bool measured = false;
-            Bounds swing = default;
-
-            foreach (var collider in slash.GetComponentsInChildren<Collider2D>(true))
-            {
-                if (collider == null)
-                {
-                    continue;
-                }
-
-                var colliderBounds = collider.bounds;
-                if (colliderBounds.size.x <= 0.0001f || colliderBounds.size.y <= 0.0001f)
-                {
-                    continue;
-                }
-
-                if (!measured)
-                {
-                    swing = colliderBounds;
-                    measured = true;
-                }
-                else
-                {
-                    swing.Encapsulate(colliderBounds);
-                }
-            }
-
-            if (!measured)
-            {
-                return;
-            }
-
-            float top = Mathf.Min(swing.max.y, body.min.y);
-            float bottom = Mathf.Min(swing.min.y, top);
-            if (top - bottom <= 0.0001f)
-            {
-                return;
-            }
-
-            var probe = new Bounds(
-                new Vector3(probeCentre.x, probeCentre.y, 0f),
-                new Vector3(probeSize.x, probeSize.y, 1f));
-
-            probe.Encapsulate(new Vector3(swing.min.x, bottom, 0f));
-            probe.Encapsulate(new Vector3(swing.max.x, top, 0f));
-
-            probeCentre = new Vector2(probe.center.x, probe.center.y);
-            probeSize = new Vector2(probe.size.x, probe.size.y);
-        }
-
-        private static bool IsHornetCollider(Collider2D collider)
-        {
-            var hero = HeroController.UnsafeInstance;
-            return hero != null
-                && hero.transform != null
-                && collider.transform != null
-                && collider.transform.IsChildOf(hero.transform);
-        }
-
-        /// <summary>What a down slash gets from a surface, if anything.</summary>
-        private enum KnightPogoKind
-        {
-            None,
-            Bounce,
-            Launch
-        }
-
-        /// <summary>
-        /// Whether a down slash bounces off this, read off Hornet's own rule in
-        /// <c>HeroDownAttack</c> rather than invented.
-        /// <para>
-        /// This used to be "an enemy, or Hornet". That is most of what a pogo is aimed at and none
-        /// of what the game's verticality is built from: the bouncers, tinkable fixtures, levers and
-        /// breakables Hornet chains together carry no <c>HealthManager</c> and sit on the interactive
-        /// and bouncer layers, so environment pogoing did not exist for the Knight at all.
-        /// </para>
-        /// <para>
-        /// The hero plane test is the other half, and it is what a report about pogoing "this
-        /// specific background object" turned out to be. Silksong's background scenery is the same
-        /// prop as the foreground one, pushed back in z with its colliders intact - the game tells
-        /// the two apart with <c>Extensions.IsOnHeroPlane</c>, and <c>Breakable</c> uses exactly that
-        /// to decide whether to switch itself off. A geometry probe sees straight through the
-        /// distinction unless it asks.
-        /// </para>
-        /// </summary>
-        private static KnightPogoKind ClassifyKnightPogoSurface(Collider2D collider)
-        {
-            if (IsHornetCollider(collider))
-            {
-                return KnightPogoKind.Bounce;
-            }
-
-            var transform = collider.transform;
-            if (transform == null || !transform.IsOnHeroPlane())
-            {
-                return KnightPogoKind.None;
-            }
-
-            var go = collider.gameObject;
-            var layer = (PhysLayers)go.layer;
-
-            // The bouncer family is asked about before NonBouncer, because they carry one - a
-            // BouncePod adds one to itself in Awake, and HeroDownAttack names BounceBalloon
-            // alongside NonBouncer in its own refusal. That is not "do not bounce off this", it is
-            // "the object will handle the bounce", and every line of the handling drives
-            // HeroController directly. So the Knight has to do it here or get nothing at all, which
-            // is what a balloon and a hanging pod were both giving it.
-            if (go.GetComponentInParent<BounceBalloon>() != null)
-            {
-                return KnightPogoKind.Launch;
-            }
-
-            if (go.GetComponentInParent<BouncePod>() != null)
-            {
-                // A pod is an ordinary bounce even for Hornet: DoBounceOff calls DownspikeBounce,
-                // where the balloon runs a scripted updraft instead.
-                return KnightPogoKind.Bounce;
-            }
-
-            // Terrain is what a pogo happens above, never off, and it is the layer most of the
-            // world is on - so it is refused before anything else is asked.
-            if (layer == PhysLayers.TERRAIN || layer == PhysLayers.SOFT_TERRAIN)
-            {
-                return KnightPogoKind.None;
-            }
-
-            // The game's own opt-out, honoured wherever it is set. A breakable adds one to itself
-            // when it is made inert, which is part of why background props must not be bounced off.
-            var nonBouncer = go.GetComponentInParent<NonBouncer>();
-            if (nonBouncer != null && nonBouncer.active)
-            {
-                return KnightPogoKind.None;
-            }
-
-            if (collider.GetComponentInParent<HealthManager>() != null)
-            {
-                return KnightPogoKind.Bounce;
-            }
-
-            switch (layer)
-            {
-                case PhysLayers.ENEMIES:
-                case PhysLayers.INTERACTIVE_OBJECT:
-                case PhysLayers.HERO_ATTACK:
-                case PhysLayers.BOUNCER:
-                    return KnightPogoKind.Bounce;
-            }
-
-            // A tink or a spike-slash reaction is the game saying the nail stops here, which is
-            // exactly the surface a pogo wants.
-            bool nailStopsHere = go.GetComponentInParent<TinkEffect>() != null
-                || go.GetComponentInParent<SpikeSlashReaction>() != null;
-
-            return nailStopsHere ? KnightPogoKind.Bounce : KnightPogoKind.None;
         }
 
         /// <summary>The scripted spell pose currently overriding the movement clips, and its expiry.</summary>
@@ -1606,7 +993,7 @@ public partial class LegacyHelper
         /// </summary>
         internal void BeginKnightUpSlashFreeze()
         {
-            if (!UsesGroundedMovement)
+            if (!UsesGroundedMovement || knightBalloonRiseTimer > 0f)
             {
                 return;
             }
@@ -1622,7 +1009,10 @@ public partial class LegacyHelper
 
         private void BeginKnightCastFreeze()
         {
-            if (!UsesGroundedMovement)
+            // Not during a balloon launch. The freeze returns before the launch is ticked, so it
+            // would hold the Knight mid-rise and then hand the whole rise back when it lifted -
+            // and the launch is meant to own the Knight outright for its half second.
+            if (!UsesGroundedMovement || knightBalloonRiseTimer > 0f)
             {
                 return;
             }

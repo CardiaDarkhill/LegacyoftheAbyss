@@ -98,14 +98,6 @@ public partial class LegacyHelper
             charmSoulGainBonus = Mathf.Clamp(charmSoulGainBonus + amount, -99, 99);
         }
 
-        internal void AdjustLeash(float maxDelta, float softDelta, float hardDelta, float snapDelta)
-        {
-            maxDistance += maxDelta;
-            softLeashRadius += softDelta;
-            hardLeashRadius += hardDelta;
-            snapLeashRadius += snapDelta;
-        }
-
         internal void ResetCharmDerivedStats()
         {
             charmNailDamageMultiplier = 1f;
@@ -220,15 +212,6 @@ public partial class LegacyHelper
             UpdateFocusDerivedValues();
         }
 
-        internal void MultiplyTeleportChannelTime(float factor)
-        {
-            if (factor <= 0f)
-                return;
-
-            charmTeleportChannelMultiplier = Mathf.Clamp(charmTeleportChannelMultiplier * factor, 0.25f, 4f);
-            UpdateTeleportChannelTime();
-        }
-
         internal void MultiplyHurtInvulnerability(float factor)
         {
             if (factor <= 0f)
@@ -251,16 +234,6 @@ public partial class LegacyHelper
         internal void ModifyKnockbackSuppression(int delta)
         {
             knockbackSuppressionCount = Mathf.Clamp(knockbackSuppressionCount + delta, 0, 10);
-        }
-
-        internal void MultiplyKnockbackForce(float factor)
-        {
-            if (factor <= 0f)
-            {
-                return;
-            }
-
-            hitKnockbackForce = Mathf.Clamp(hitKnockbackForce * factor, 0.1f, Mathf.Max(0.1f, baseHitKnockbackForce * 5f));
         }
 
         /// <summary>Scratch for <see cref="PushBuffsToHud"/>, so a per-frame push allocates nothing.</summary>
@@ -503,13 +476,69 @@ public partial class LegacyHelper
             ApplyCharmHealthModifiers(fillAmount: ResolveResizeRefill(GetTotalCurrentHealth(), pausedHealthBaseline));
         }
 
+        /// <summary>
+        /// The health state as it stood before a charm changed it.
+        /// <para>
+        /// <c>ApplyCharmHealthModifiers</c> works out what moved by comparing against these, so it
+        /// cannot read the live fields itself - by the time it runs they are the new state, and it
+        /// would be comparing that with itself. Three callers were each taking the same five
+        /// readings and passing them through by hand.
+        /// </para>
+        /// </summary>
+        private readonly struct CharmHealthSnapshot
+        {
+            internal CharmHealthSnapshot(int normalHp, int normalMax, int lifeblood, int lifebloodMax, bool jonis)
+            {
+                NormalHp = normalHp;
+                NormalMax = normalMax;
+                Lifeblood = lifeblood;
+                LifebloodMax = lifebloodMax;
+                Jonis = jonis;
+            }
+
+            internal int NormalHp { get; }
+
+            internal int NormalMax { get; }
+
+            internal int Lifeblood { get; }
+
+            internal int LifebloodMax { get; }
+
+            internal bool Jonis { get; }
+
+            public override string ToString() =>
+                $"prevNormal={NormalHp}/{NormalMax} prevLifeblood={Lifeblood}/{LifebloodMax} wasJonis={Jonis}";
+        }
+
+        private CharmHealthSnapshot CaptureCharmHealth()
+        {
+            int normalMax = Mathf.Max(0, shadeMaxHP);
+            int lifebloodMax = Mathf.Max(0, shadeLifebloodMax);
+
+            return new CharmHealthSnapshot(
+                Mathf.Clamp(shadeHP, 0, normalMax),
+                normalMax,
+                Mathf.Clamp(shadeLifeblood, 0, lifebloodMax),
+                lifebloodMax,
+                jonisBlessingEquipped);
+        }
+
+        private void ApplyCharmHealthModifiers(CharmHealthSnapshot before, int fillAmount, bool refillLifeblood)
+        {
+            ApplyCharmHealthModifiers(
+                fillAmount: fillAmount,
+                refillLifeblood: refillLifeblood,
+                deferHudAndPersistence: persistenceSuppressionDepth > 0,
+                previousNormalHpOverride: before.NormalHp,
+                previousNormalMaxOverride: before.NormalMax,
+                previousLifebloodOverride: before.Lifeblood,
+                previousLifebloodMaxOverride: before.LifebloodMax,
+                previousJonisOverride: before.Jonis);
+        }
+
         internal void AddMaxHpBonus(int amount, bool fillNew)
         {
-            int prevNormalMax = Mathf.Max(0, shadeMaxHP);
-            int prevNormalHp = Mathf.Clamp(shadeHP, 0, prevNormalMax);
-            int prevLifebloodMax = Mathf.Max(0, shadeLifebloodMax);
-            int prevLifeblood = Mathf.Clamp(shadeLifeblood, 0, prevLifebloodMax);
-            bool wasJonis = jonisBlessingEquipped;
+            var before = CaptureCharmHealth();
 
             int previousLoadoutMax = Mathf.Max(0, baseShadeMaxHP + charmMaxHpBonus);
             charmMaxHpBonus = Mathf.Clamp(charmMaxHpBonus + amount, -20, 40);
@@ -523,55 +552,31 @@ public partial class LegacyHelper
                     int lifebloodCapacity = Mathf.Clamp(charmLifebloodBonus, 0, 99);
                     int jonisBase = Mathf.Max(1, newLoadoutMax);
                     lifebloodCapacity += Mathf.CeilToInt(jonisBase * 1.4f);
-                    fill = Mathf.Max(0, lifebloodCapacity - prevLifeblood);
+                    fill = Mathf.Max(0, lifebloodCapacity - before.Lifeblood);
                 }
                 else
                 {
-                    fill = Mathf.Max(0, newLoadoutMax - prevNormalHp);
+                    fill = Mathf.Max(0, newLoadoutMax - before.NormalHp);
                 }
             }
 
-            LogCharmHealthEvent($"AddMaxHpBonus amount={amount} fillNew={fillNew} previousLoadoutMax={previousLoadoutMax} newLoadoutMax={newLoadoutMax} prevNormal={prevNormalHp}/{prevNormalMax} prevLifeblood={prevLifeblood}/{prevLifebloodMax} wasJonis={wasJonis}");
-            ApplyCharmHealthModifiers(
-                fillAmount: fill,
-                refillLifeblood: false,
-                deferHudAndPersistence: persistenceSuppressionDepth > 0,
-                previousNormalHpOverride: prevNormalHp,
-                previousNormalMaxOverride: prevNormalMax,
-                previousLifebloodOverride: prevLifeblood,
-                previousLifebloodMaxOverride: prevLifebloodMax,
-                previousJonisOverride: wasJonis);
+            LogCharmHealthEvent($"AddMaxHpBonus amount={amount} fillNew={fillNew} previousLoadoutMax={previousLoadoutMax} newLoadoutMax={newLoadoutMax} {before}");
+            ApplyCharmHealthModifiers(before, fillAmount: fill, refillLifeblood: false);
         }
 
         internal void AddLifebloodBonus(int amount)
         {
-            int prevNormalMax = Mathf.Max(0, shadeMaxHP);
-            int prevNormalHp = Mathf.Clamp(shadeHP, 0, prevNormalMax);
-            int prevLifebloodMax = Mathf.Max(0, shadeLifebloodMax);
-            int prevLifeblood = Mathf.Clamp(shadeLifeblood, 0, prevLifebloodMax);
-            bool wasJonis = jonisBlessingEquipped;
+            var before = CaptureCharmHealth();
 
             charmLifebloodBonus = Mathf.Clamp(charmLifebloodBonus + amount, 0, 99);
             bool refill = amount > 0 && ShouldRefillLifebloodImmediately();
-            LogCharmHealthEvent($"AddLifebloodBonus amount={amount} refill={refill} prevNormal={prevNormalHp}/{prevNormalMax} prevLifeblood={prevLifeblood}/{prevLifebloodMax} wasJonis={wasJonis}");
-            ApplyCharmHealthModifiers(
-                fillAmount: 0,
-                refillLifeblood: refill,
-                deferHudAndPersistence: persistenceSuppressionDepth > 0,
-                previousNormalHpOverride: prevNormalHp,
-                previousNormalMaxOverride: prevNormalMax,
-                previousLifebloodOverride: prevLifeblood,
-                previousLifebloodMaxOverride: prevLifebloodMax,
-                previousJonisOverride: wasJonis);
+            LogCharmHealthEvent($"AddLifebloodBonus amount={amount} refill={refill} {before}");
+            ApplyCharmHealthModifiers(before, fillAmount: 0, refillLifeblood: refill);
         }
 
         internal void SetJonisBlessingActive(bool active)
         {
-            bool wasJonis = jonisBlessingEquipped;
-            int prevNormalMax = Mathf.Max(0, shadeMaxHP);
-            int prevNormalHp = Mathf.Clamp(shadeHP, 0, prevNormalMax);
-            int prevLifebloodMax = Mathf.Max(0, shadeLifebloodMax);
-            int prevLifeblood = Mathf.Clamp(shadeLifeblood, 0, prevLifebloodMax);
+            var before = CaptureCharmHealth();
 
             if (jonisBlessingEquipped == active)
             {
@@ -585,19 +590,9 @@ public partial class LegacyHelper
             }
 
             bool refill = jonisBlessingEquipped && ShouldRefillLifebloodImmediately();
-            LogCharmHealthEvent($"SetJonisBlessingActive active={active} refill={refill} prevNormal={prevNormalHp}/{prevNormalMax} prevLifeblood={prevLifeblood}/{prevLifebloodMax} wasJonis={wasJonis}");
-            ApplyCharmHealthModifiers(
-                fillAmount: 0,
-                refillLifeblood: refill,
-                deferHudAndPersistence: persistenceSuppressionDepth > 0,
-                previousNormalHpOverride: prevNormalHp,
-                previousNormalMaxOverride: prevNormalMax,
-                previousLifebloodOverride: prevLifeblood,
-                previousLifebloodMaxOverride: prevLifebloodMax,
-                previousJonisOverride: wasJonis);
+            LogCharmHealthEvent($"SetJonisBlessingActive active={active} refill={refill} {before}");
+            ApplyCharmHealthModifiers(before, fillAmount: 0, refillLifeblood: refill);
         }
-
-        internal bool IsJonisBlessingActive() => jonisBlessingEquipped;
 
         internal bool ShouldHivebloodRestoreLifeblood()
         {

@@ -374,8 +374,19 @@ public static partial class ShadeSettingsMenu
             }
         }
 
-        public void HandleEquipPressed()
+        public void HandleEquipPressed() => HandleEquipChange(equip: true);
+
+        public void HandleUnequipPressed() => HandleEquipChange(equip: false);
+
+        /// <summary>
+        /// The three things that stop a charm change, and then the change. Equipping and unequipping
+        /// differed only in which inventory call was made and one word of the message, and were two
+        /// copies of the same four guards.
+        /// </summary>
+        private void HandleEquipChange(bool equip)
         {
+            string verb = equip ? "equip" : "unequip";
+
             var inventory = ShadeRuntime.Charms;
             if (inventory == null)
             {
@@ -393,57 +404,25 @@ public static partial class ShadeSettingsMenu
 
             if (!selectedCharm.HasValue)
             {
-                pendingStatusMessage = "Select a charm to equip.";
+                pendingStatusMessage = $"Select a charm to {verb}.";
                 RefreshAll();
                 return;
             }
 
-            if (inventory.TryEquip(selectedCharm.Value, out var message))
+            string message;
+            bool changed = equip
+                ? inventory.TryEquip(selectedCharm.Value, out message)
+                : inventory.TryUnequip(selectedCharm.Value, out message);
+
+            if (changed)
             {
                 pendingStatusMessage = message;
                 LegacyHelper.RequestShadeLoadoutRecompute();
-            }
-            else
-            {
-                pendingStatusMessage = string.IsNullOrEmpty(message) ? "Unable to equip charm." : message;
-                RefreshAll();
-            }
-        }
-
-        public void HandleUnequipPressed()
-        {
-            var inventory = ShadeRuntime.Charms;
-            if (inventory == null)
-            {
-                pendingStatusMessage = "Charm inventory not ready.";
-                RefreshAll();
                 return;
             }
 
-            if (!ShadeRuntime.IsHornetRestingAtBench())
-            {
-                pendingStatusMessage = ShadeRuntime.BenchLockedMessage;
-                RefreshAll();
-                return;
-            }
-
-            if (!selectedCharm.HasValue)
-            {
-                pendingStatusMessage = "Select a charm to unequip.";
-                RefreshAll();
-                return;
-            }
-
-            if (inventory.TryUnequip(selectedCharm.Value, out var message))
-            {
-                pendingStatusMessage = message;
-                LegacyHelper.RequestShadeLoadoutRecompute();
-            }
-            else
-            {
-                pendingStatusMessage = string.IsNullOrEmpty(message) ? "Unable to unequip charm." : message;
-                RefreshAll();
-            }
+            pendingStatusMessage = string.IsNullOrEmpty(message) ? $"Unable to {verb} charm." : message;
+            RefreshAll();
         }
 
         private void UpdateNotchMeter()
@@ -584,9 +563,6 @@ public static partial class ShadeSettingsMenu
         private ShadeAction action;
         private bool secondary;
         private string labelPrefix;
-        private Text uiText;
-        private Component tmpTextComponent;
-        private PropertyInfo tmpTextProperty;
         private bool capturing;
 
         public void Initialize(MenuButton menuButton, ShadeAction targetAction, bool isSecondary, string label)
@@ -595,13 +571,6 @@ public static partial class ShadeSettingsMenu
             action = targetAction;
             secondary = isSecondary;
             labelPrefix = label;
-            uiText = button.GetComponentInChildren<Text>(true);
-            var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
-            if (tmpType != null)
-            {
-                tmpTextComponent = button.GetComponentInChildren(tmpType, true);
-                tmpTextProperty = tmpType.GetProperty("text");
-            }
 
             button.OnSubmitPressed.RemoveAllListeners();
             button.OnSubmitPressed.AddListener(BeginCapture);
@@ -615,18 +584,7 @@ public static partial class ShadeSettingsMenu
             SetButtonText($"{labelPrefix}: {bindingText}");
         }
 
-        private void SetButtonText(string value)
-        {
-            if (uiText != null)
-            {
-                uiText.text = value;
-                return;
-            }
-            if (tmpTextComponent != null && tmpTextProperty != null)
-            {
-                tmpTextProperty.SetValue(tmpTextComponent, value);
-            }
-        }
+        private void SetButtonText(string value) => SetSelectableLabelText(button.gameObject, value);
 
         private void BeginCapture()
         {
@@ -695,40 +653,17 @@ public static partial class ShadeSettingsMenu
     internal class ControllerAssignmentDriver : MonoBehaviour
     {
         private MenuButton button;
-        private Text uiText;
-        private Component tmpTextComponent;
-        private PropertyInfo tmpTextProperty;
         private bool capturing;
 
         public void Initialize(MenuButton menuButton)
         {
             button = menuButton;
-            uiText = button.GetComponentInChildren<Text>(true);
-            var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
-            if (tmpType != null)
-            {
-                tmpTextComponent = button.GetComponentInChildren(tmpType, true);
-                tmpTextProperty = tmpType.GetProperty("text");
-            }
-
             button.OnSubmitPressed.RemoveAllListeners();
             button.OnSubmitPressed.AddListener(BeginCapture);
             UpdateLabel();
         }
 
-        private void SetButtonText(string value)
-        {
-            if (uiText != null)
-            {
-                uiText.text = value;
-                return;
-            }
-
-            if (tmpTextComponent != null && tmpTextProperty != null)
-            {
-                tmpTextProperty.SetValue(tmpTextComponent, value);
-            }
-        }
+        private void SetButtonText(string value) => SetSelectableLabelText(button.gameObject, value);
 
         public void UpdateLabel()
         {
@@ -844,12 +779,29 @@ public static partial class ShadeSettingsMenu
                     continue;
                 }
 
-                ShadeInput.EnsureControllerIndex(companionIndex);
+                // The whole assignment, not just the config index: a control rebound on a pad
+                // remembers that pad itself, and those remembered devices outrank the index.
+                var shadeConfig = ModConfig.Instance.shadeInput;
+                int moved = shadeConfig != null
+                    ? shadeConfig.ApplyControllerAssignment(hornetIndex, companionIndex)
+                    : 0;
 
                 // Hornet needs her controller switched back on, or the pad she just pressed is
                 // reserved from her by a setting she did not touch.
                 ModConfig.Instance.hornetControllerEnabled = true;
                 ModConfig.Save();
+
+                if (moved > 0 && ModConfig.Instance.logMenu)
+                {
+                    try
+                    {
+                        LegacyHelper.LogInfo(FormattableString.Invariant(
+                            $"Controller assignment moved {moved} binding(s) onto the newly named devices."));
+                    }
+                    catch
+                    {
+                    }
+                }
 
                 try { HornetInput.RefreshHornetDeviceBindings(); }
                 catch { }
@@ -879,17 +831,11 @@ public static partial class ShadeSettingsMenu
                     yield break;
                 }
 
+                // WasPressed rather than held, so one press cannot answer for both players: the
+                // edge is gone by the frame the next prompt starts listening.
                 if (ShadeInput.TryCaptureControl(out _, out int deviceIndex) && deviceIndex >= 0)
                 {
                     report(deviceIndex);
-
-                    // Let the button go before listening for the next one, or one long press is read
-                    // as both players' answers.
-                    while (ShadeInput.TryCaptureControl(out _, out _))
-                    {
-                        yield return null;
-                    }
-
                     yield break;
                 }
             }

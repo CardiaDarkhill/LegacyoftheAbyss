@@ -26,7 +26,14 @@ public partial class LegacyHelper
 
         private void EnsureFocusSfx()
         {
-            focusSfx ??= CreateSfxSource("ShadeFocusSFX");
+            // Unity's own null, not ??=. A destroyed AudioSource is not null as far as ??= is
+            // concerned, so a source whose object had gone would be kept for the rest of the
+            // session - and every later PlayOneShot would be skipped by the != null below it,
+            // leaving the companion silent with nothing to say why.
+            if (!focusSfx)
+            {
+                focusSfx = CreateSfxSource("ShadeFocusSFX");
+            }
 
             // Clip resolution runs at most once per session: it probes the filesystem and then walks
             // every loaded object, neither of which should repeat per cast.
@@ -283,7 +290,16 @@ public partial class LegacyHelper
         // Knight is rather than from Hornet - the two are routinely a screen apart.
         private AudioSource knightSfx;
 
-        private AudioSource EnsureKnightSfx() => knightSfx ??= CreateSfxSource("KnightSFX");
+        private AudioSource EnsureKnightSfx()
+        {
+            // See EnsureFocusSfx for why this is not ??=.
+            if (!knightSfx)
+            {
+                knightSfx = CreateSfxSource("KnightSFX");
+            }
+
+            return knightSfx;
+        }
 
         // ========== Spell SFX (Projectile, Shriek, Quake) ==========
         private AudioSource spellSfx;
@@ -296,7 +312,11 @@ public partial class LegacyHelper
 
         private void EnsureSpellSfx()
         {
-            spellSfx ??= CreateSfxSource("ShadeSpellSFX");
+            // See EnsureFocusSfx for why this is not ??=.
+            if (!spellSfx)
+            {
+                spellSfx = CreateSfxSource("ShadeSpellSFX");
+            }
 
             if (searchedSpellSfx) return;
             searchedSpellSfx = true;

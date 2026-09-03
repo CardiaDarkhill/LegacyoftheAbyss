@@ -178,19 +178,6 @@ namespace LegacyoftheAbyss.Diagnostics
             return value.ToString(CultureInfo.InvariantCulture);
         }
 
-        private static string Escape(string? value)
-        {
-            if (string.IsNullOrEmpty(value))
-            {
-                return string.Empty;
-            }
-
-            if (value!.IndexOf(',') < 0 && value.IndexOf('"') < 0 && value.IndexOf('\n') < 0)
-            {
-                return value;
-            }
-
-            return "\"" + value.Replace("\"", "\"\"").Replace("\n", " ").Replace("\r", string.Empty) + "\"";
-        }
+        private static string Escape(string? value) => CsvText.Escape(value);
     }
 }

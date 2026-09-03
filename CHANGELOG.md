@@ -7,16 +7,40 @@ controls it; the reasoning belongs in the commit and the code.
 
 ### Fixed
 
-- The Knight draws where Hornet draws, instead of one step in front of her. It was appearing over
-  scenery she is behind.
+- The Knight draws where Hornet draws, instead of one step in front of her, and is held at her own
+  depth. It was appearing over scenery she is behind.
+- Hornet no longer stands still for a second after a room transition. Her keyboard bindings are put
+  back on the frame they go missing rather than a second later.
+- Desolate Dive's shockwave is visible. Its burst was being drawn about four units across against
+  Descending Dark's ten, for a tenth of a second - the damage was always there, the effect was not.
+- Spells deal Hollow Knight's own damage, flat: Vengeful Spirit 15, Shade Soul 30, Howling Wraiths
+  13 x 3, Abyss Shriek 20 x 4, Desolate Dive 15 + 20, Descending Dark 15 + 48. They no longer scale
+  with Hornet's needle - the Knight's spells upgrade in their own right and its spell charms are far
+  stronger than her equivalents, so scaling on top of both was worth several times the spell.
+- Howling Wraiths and Abyss Shriek land all their hits. They were one hit where Hollow Knight has
+  three and four.
+- The damage log states a spell's maximum rather than one hit of it, which is what made Howling
+  Wraiths look like it was dealing twice what it said.
+- A pogo taken beside a wall gives its height back. The wall cling was catching the bounce and
+  turning it into a wall slide on the next frame.
+- Balloon launches stand down for a hazard respawn, a cutscene, a bench or a room change, and stay
+  on screen rather than leaving the frame and being snapped back.
+- Assign Controllers moves controls that were rebound on a pad. A rebound control remembers its own
+  pad, and that outranks the assignment - so it appeared not to work for anyone who had rebound
+  anything.
+- Defender's Crest's cloud is drawn at the size it damages. It was being shrunk twice and came out
+  at a fifth of it.
+- The Knight's pogo reaches as far as its nail does. The two were sized separately and the nail was
+  larger, so a swing could register a hit and give no height.
 - Balloons and hanging pods can be pogoed at all. Both carry the marker that says "do not bounce off
   this", which in their case means "this object does the bouncing itself" - and it only does it for
   Hornet.
 - The Knight's pogo reaches further down for Hornet specifically. Her collider is nothing like her
   silhouette, so hits that plainly looked like hits were missing her.
 - The Knight is put back beside Hornet a quarter second after a room load rather than three quarters.
-- Spore Shroom's cloud is drawn the size it damages. It was a 3.4 unit circle under a particle
-  effect covering most of the room, so an enemy plainly inside the cloud took nothing.
+- Spore Shroom is Hollow Knight's own size - 8.18 units, read from the prefab - and the cloud is
+  drawn at exactly what it damages. It was a 3.4 unit circle under an effect covering most of the
+  room, so an enemy plainly inside the cloud took nothing.
 - The companion is hidden while a pre-rendered cutscene plays.
 - Every Shade spell was landing twice. The damage log said 14 for Howling Wraiths and the enemy took
   28; the numbers in the log are now the numbers dealt.
@@ -90,6 +114,7 @@ controls it; the reasoning belongs in the commit and the code.
   its air moves back at the top - instead of doing nothing for it.
 - The debug keys have defaults: = and - for soul, [ and ] to hurt and heal the companion, \ to empty
   its soul. A key already bound to something else is left alone.
+- Bug reports record both characters' sorting layers, draw orders and depths.
 - Bug reports record who owns which controller: every pad and whether it is attached, which one the
   game has as active, and what Hornet own action set is holding.
 - Soul Vessels. The companion earns one for every two increases to Hornet's silk maximum, up to

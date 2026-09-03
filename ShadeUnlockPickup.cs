@@ -161,13 +161,5 @@ public sealed class ShadeUnlockPickup : MonoBehaviour
             }
         }
     }
-
-    /// <summary>
-    /// Allows re-arming the pickup in editor/testing scenarios.
-    /// </summary>
-    public void ResetPickup()
-    {
-        consumed = false;
-    }
 }
 

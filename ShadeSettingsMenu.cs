@@ -121,35 +121,9 @@ public static partial class ShadeSettingsMenu
 
     private static string GetShadeToggleLabel() => $"Shade Enabled: {(ModConfig.Instance.shadeEnabled ? "On" : "Off")}";
 
-    private struct ShadowStyle
-    {
-        public Type Type;
-        public Color EffectColor;
-        public Vector2 EffectDistance;
-        public bool UseGraphicAlpha;
-    }
-
-    private struct TextStyle
-    {
-        public Font Font;
-        public int FontSize;
-        public FontStyle FontStyle;
-        public TextAnchor Alignment;
-        public Color Color;
-        public bool RichText;
-        public bool BestFit;
-        public int BestFitMin;
-        public int BestFitMax;
-        public float LineSpacing;
-        public bool AlignByGeometry;
-        public HorizontalWrapMode HorizontalOverflow;
-        public VerticalWrapMode VerticalOverflow;
-        public List<ShadowStyle> Shadows;
-    }
-
-    private static TextStyle? sliderLabelStyle;
-    private static TextStyle? sliderValueStyle;
-    private static TextStyle? toggleLabelStyle;
+    private static UiTextStyle? sliderLabelStyle;
+    private static UiTextStyle? sliderValueStyle;
+    private static UiTextStyle? toggleLabelStyle;
     private static Font fallbackFont;
     private static Sprite fallbackSlicedSprite;
     private static Sprite fallbackKnobSprite;

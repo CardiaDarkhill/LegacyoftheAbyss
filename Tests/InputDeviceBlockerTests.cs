@@ -1,6 +1,3 @@
-using System;
-using System.Reflection;
-using System.Runtime.Serialization;
 using GlobalEnums;
 using Xunit;
 
@@ -218,61 +215,17 @@ public class InputDeviceBlockerTests
         Assert.DoesNotContain(actionName, LegacyHelper.InputDeviceBlocker.AllowedHeroActionNames);
     }
 
-    private sealed class InputBlockerEnvironment : IDisposable
+    private sealed class InputBlockerEnvironment : GameStaticsScope
     {
-        private readonly object originalGameManager;
-        private readonly object originalPlayerData;
-        private readonly GameManager gm;
-        private readonly PlayerData playerData;
-
         internal InputBlockerEnvironment()
         {
-            originalGameManager = GetStaticField(typeof(GameManager), "_instance");
-            originalPlayerData = GetStaticField(typeof(PlayerData), "_instance");
-
-            gm = (GameManager)FormatterServices.GetUninitializedObject(typeof(GameManager));
-            playerData = (PlayerData)FormatterServices.GetUninitializedObject(typeof(PlayerData));
-
-            SetProperty(gm, "GameState", GameState.PLAYING);
-            playerData.isInventoryOpen = false;
-
-            SetStaticField(typeof(GameManager), "_instance", gm);
-            SetStaticField(typeof(PlayerData), "_instance", playerData);
+            Data.isInventoryOpen = false;
         }
 
-        internal void SetGameState(GameState state) => SetProperty(gm, "GameState", state);
+        internal void SetGameState(GameState state) => SetProperty(Gm, "GameState", state);
 
-        internal void SetPaused(bool value) => gm.isPaused = value;
+        internal void SetPaused(bool value) => Gm.isPaused = value;
 
-        internal void SetInventoryOpen(bool value) => playerData.isInventoryOpen = value;
-
-        public void Dispose()
-        {
-            SetStaticField(typeof(GameManager), "_instance", originalGameManager);
-            SetStaticField(typeof(PlayerData), "_instance", originalPlayerData);
-        }
-
-        private static object GetStaticField(Type type, string name)
-        {
-            var field = type.GetField(name, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            return field?.GetValue(null);
-        }
-
-        private static void SetStaticField(Type type, string name, object value)
-        {
-            var field = type.GetField(name, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            field?.SetValue(null, value);
-        }
-
-        private static void SetProperty(object target, string name, object value)
-        {
-            if (target == null)
-            {
-                return;
-            }
-
-            var property = target.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            property?.SetValue(target, value, null);
-        }
+        internal void SetInventoryOpen(bool value) => Data.isInventoryOpen = value;
     }
 }

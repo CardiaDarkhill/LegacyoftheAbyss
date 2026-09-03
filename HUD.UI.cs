@@ -621,19 +621,11 @@ public partial class SimpleHUD
             r.anchoredPosition = new Vector2(-x, 0f);
             x += maskSize.x + spacing;
 
-            // The art is a centred child rather than the box itself. The box is laid out from its
-            // top-right corner, and rotating about that corner would swing the mask out of its own
-            // slot; a centred child turns on the spot.
-            var art = new GameObject("Art");
-            art.transform.SetParent(m.transform, false);
-            var ar = art.AddComponent<RectTransform>();
-            ar.anchorMin = ar.anchorMax = new Vector2(0.5f, 0.5f);
-            ar.pivot = new Vector2(0.5f, 0.5f);
+            var img = CreateSlotArt(m);
+            var ar = img.rectTransform;
             ar.sizeDelta = maskSpriteRotated ? new Vector2(maskSize.y, maskSize.x) : maskSize;
             ar.localEulerAngles = maskSpriteRotated ? new Vector3(0f, 0f, 90f) : Vector3.zero;
 
-            var img = art.AddComponent<Image>();
-            img.preserveAspect = true;
             img.sprite = maskSprite != null ? maskSprite : BuildMaskSprite();
             img.color = Color.white;
             maskImages[i] = img;
@@ -724,20 +716,7 @@ public partial class SimpleHUD
             overcharmBackdrop.preserveAspect = true;
         }
 
-        if (overcharmBackdropSprite != null)
-        {
-            overcharmBackdrop.sprite = overcharmBackdropSprite;
-            overcharmBackdrop.color = overcharmBackdropSpriteColor;
-        }
-        else if (overcharmBackdrop.sprite == null)
-        {
-            overcharmBackdrop.sprite = BuildMaskSprite();
-            overcharmBackdrop.color = overcharmBackdropColor;
-        }
-        else
-        {
-            overcharmBackdrop.color = overcharmBackdropColor;
-        }
+        ApplyOvercharmBackdropArt();
 
         var rect = overcharmBackdrop.rectTransform;
         rect.localScale = new Vector3(OvercharmBackdropScale, OvercharmBackdropScale, 1f);
@@ -839,24 +818,35 @@ public partial class SimpleHUD
         }
 
         rect.anchoredPosition = new Vector2(rightEdge - horizontalOffset, topEdge - verticalOffset);
-        if (overcharmBackdropSprite != null)
-        {
-            overcharmBackdrop.sprite = overcharmBackdropSprite;
-            overcharmBackdrop.color = overcharmBackdropSpriteColor;
-        }
-        else if (overcharmBackdrop.sprite == null)
-        {
-            overcharmBackdrop.sprite = BuildMaskSprite();
-            overcharmBackdrop.color = overcharmBackdropColor;
-        }
-        else
-        {
-            overcharmBackdrop.color = overcharmBackdropColor;
-        }
+        ApplyOvercharmBackdropArt();
 
         overcharmBackdrop.enabled = shadeOvercharmed;
         overcharmBackdrop.gameObject.SetActive(shadeOvercharmed);
         overcharmBackdrop.transform.SetAsFirstSibling();
+    }
+
+    /// <summary>
+    /// Points the overcharm backdrop at its art, or at a plain box tinted to stand in for it.
+    /// <para>
+    /// The stand-in is only ever built once: a backdrop that already has a sprite keeps it, so a
+    /// second call cannot replace real art with the placeholder or leak another texture.
+    /// </para>
+    /// </summary>
+    private void ApplyOvercharmBackdropArt()
+    {
+        if (overcharmBackdropSprite != null)
+        {
+            overcharmBackdrop.sprite = overcharmBackdropSprite;
+            overcharmBackdrop.color = overcharmBackdropSpriteColor;
+            return;
+        }
+
+        if (overcharmBackdrop.sprite == null)
+        {
+            overcharmBackdrop.sprite = BuildMaskSprite();
+        }
+
+        overcharmBackdrop.color = overcharmBackdropColor;
     }
 
     private bool TryCalculateMaskBounds(out Vector2 min, out Vector2 max)

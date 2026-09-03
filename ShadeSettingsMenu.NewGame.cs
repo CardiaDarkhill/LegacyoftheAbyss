@@ -528,23 +528,8 @@ public static partial class ShadeSettingsMenu
         footerRect.pivot = new Vector2(0.5f, 0f);
         footerRect.anchoredPosition = Vector2.zero;
         footerRect.sizeDelta = new Vector2(0f, DescriptionRowHeight * 1.6f);
-        var footerText = footer.AddComponent<Text>();
-        ApplyTextStyle(footerText, toggleLabelStyle, TextAnchor.UpperCenter, DescriptionColor);
-        footerText.text = string.Empty;
-        footerText.raycastTarget = false;
-        footerText.horizontalOverflow = HorizontalWrapMode.Wrap;
-        footerText.verticalOverflow = VerticalWrapMode.Truncate;
-        footerText.fontSize = Mathf.Max(12, Mathf.RoundToInt(footerText.fontSize * 0.78f));
+        CreateDescriptionFooter(footer, TextAnchor.UpperCenter, descriptions);
 
-        var footerDriver = footer.AddComponent<MenuDescriptionDriver>();
-        footerDriver.target = footerText;
-        foreach (var entry in descriptions)
-        {
-            footerDriver.Register(entry.Key, entry.Value);
-        }
-
-        // The difficulty row's own explanation is the preset it is currently on, on top of the
-        // fixed line about what the four of them mean.
         SetupButtonList(newGameScreen, selectables);
 
         MenuSelectable first = selectables.Count > 0 ? selectables[0] : null;
@@ -605,7 +590,7 @@ public static partial class ShadeSettingsMenu
         return ((current + step) % count + count) % count;
     }
 
-    private static Text CreateNewGameLabel(RectTransform parent, string label, float cursorY, float height, TextAnchor alignment, Color color, TextStyle? style)
+    private static Text CreateNewGameLabel(RectTransform parent, string label, float cursorY, float height, TextAnchor alignment, Color color, UiTextStyle? style)
     {
         var go = new GameObject("Heading");
         var rect = go.AddComponent<RectTransform>();

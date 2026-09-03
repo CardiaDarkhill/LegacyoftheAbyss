@@ -216,25 +216,35 @@ public partial class LegacyHelper
             {
                 loadedSpriteTextures.Clear();
                 loadedSkinId = null;
-                idleAnimFrames = System.Array.Empty<Sprite>();
-                floatAnimFrames = System.Array.Empty<Sprite>();
-                vengefulAnimFrames = System.Array.Empty<Sprite>();
-                shadeSoulAnimFrames = System.Array.Empty<Sprite>();
-                fireballCastAnimFrames = System.Array.Empty<Sprite>();
-                quakeCastAnimFrames = System.Array.Empty<Sprite>();
-                shriekCastAnimFrames = System.Array.Empty<Sprite>();
-                abyssShriekAnimFrames = System.Array.Empty<Sprite>();
-                howlingWraithsAnimFrames = System.Array.Empty<Sprite>();
-                deathAnimFrames = System.Array.Empty<Sprite>();
-                descendAnimFrames = System.Array.Empty<Sprite>();
-                descendAuraAnimFrames = System.Array.Empty<Sprite>();
-                dDiveSlamAnimFrames = System.Array.Empty<Sprite>();
-                dDarkSlamAnimFrames = System.Array.Empty<Sprite>();
-                dDarkBurstAnimFrames = System.Array.Empty<Sprite>();
-                baldurShellFocusAnimFrames = System.Array.Empty<Sprite>();
-                inactiveSprite = null;
+                ClearShadeSpriteFrames();
                 currentAnimFrames = null;
             }
+        }
+
+        /// <summary>
+        /// Drops every animation strip back to empty. Two paths need exactly this - unloading a skin
+        /// and failing to load one - and a strip missed by one of them would be drawn from the skin
+        /// that was supposed to have been replaced.
+        /// </summary>
+        private void ClearShadeSpriteFrames()
+        {
+            idleAnimFrames = System.Array.Empty<Sprite>();
+            floatAnimFrames = System.Array.Empty<Sprite>();
+            vengefulAnimFrames = System.Array.Empty<Sprite>();
+            shadeSoulAnimFrames = System.Array.Empty<Sprite>();
+            fireballCastAnimFrames = System.Array.Empty<Sprite>();
+            quakeCastAnimFrames = System.Array.Empty<Sprite>();
+            shriekCastAnimFrames = System.Array.Empty<Sprite>();
+            abyssShriekAnimFrames = System.Array.Empty<Sprite>();
+            howlingWraithsAnimFrames = System.Array.Empty<Sprite>();
+            deathAnimFrames = System.Array.Empty<Sprite>();
+            descendAnimFrames = System.Array.Empty<Sprite>();
+            descendAuraAnimFrames = System.Array.Empty<Sprite>();
+            dDiveSlamAnimFrames = System.Array.Empty<Sprite>();
+            dDarkSlamAnimFrames = System.Array.Empty<Sprite>();
+            dDarkBurstAnimFrames = System.Array.Empty<Sprite>();
+            baldurShellFocusAnimFrames = System.Array.Empty<Sprite>();
+            inactiveSprite = null;
         }
 
         private void EnsureAggroProxyCollider()
@@ -532,23 +542,7 @@ public partial class LegacyHelper
             }
             catch
             {
-                idleAnimFrames = System.Array.Empty<Sprite>();
-                floatAnimFrames = System.Array.Empty<Sprite>();
-                vengefulAnimFrames = System.Array.Empty<Sprite>();
-                shadeSoulAnimFrames = System.Array.Empty<Sprite>();
-                fireballCastAnimFrames = System.Array.Empty<Sprite>();
-                quakeCastAnimFrames = System.Array.Empty<Sprite>();
-                shriekCastAnimFrames = System.Array.Empty<Sprite>();
-                abyssShriekAnimFrames = System.Array.Empty<Sprite>();
-                howlingWraithsAnimFrames = System.Array.Empty<Sprite>();
-                deathAnimFrames = System.Array.Empty<Sprite>();
-                descendAnimFrames = System.Array.Empty<Sprite>();
-                descendAuraAnimFrames = System.Array.Empty<Sprite>();
-                dDiveSlamAnimFrames = System.Array.Empty<Sprite>();
-                dDarkSlamAnimFrames = System.Array.Empty<Sprite>();
-                dDarkBurstAnimFrames = System.Array.Empty<Sprite>();
-                baldurShellFocusAnimFrames = System.Array.Empty<Sprite>();
-                inactiveSprite = null;
+                ClearShadeSpriteFrames();
             }
         }
 

@@ -35,13 +35,6 @@ namespace LegacyoftheAbyss.Shade
         private static VideoPlayer[]? s_players;
         private static float s_nextScan = -1f;
 
-        /// <summary>Drops the cache, so the next question re-sweeps. Called on a scene load.</summary>
-        internal static void Invalidate()
-        {
-            s_players = null;
-            s_nextScan = -1f;
-        }
-
         internal static bool IsPlaying
         {
             get

@@ -308,8 +308,20 @@ namespace LegacyoftheAbyss.Shade.Knight
         /// </summary>
         private static readonly HashSet<string> s_rotatedSprites = new();
 
+        /// <summary>
+        /// Whether the atlas stored this frame turned, so whoever draws it can turn it back.
+        /// <para>
+        /// Resolves the frame first. The packing is recorded while the sprite is being cut, so
+        /// asking before building answers "not turned" for everything - which is exactly what
+        /// happened to the HUD frame, drawn flat and mis-sized for as long as the two calls were
+        /// the wrong way round. Building is cached, so asking twice costs one build.
+        /// </para>
+        /// </summary>
         internal static bool IsSpriteRotated(string clipName, int frameIndex)
-            => s_rotatedSprites.Contains(SpriteKey(clipName, frameIndex));
+        {
+            TryBuildSprite(clipName, frameIndex);
+            return s_rotatedSprites.Contains(SpriteKey(clipName, frameIndex));
+        }
 
         private static string SpriteKey(string clipName, int frameIndex)
             => clipName + "#" + frameIndex.ToString(System.Globalization.CultureInfo.InvariantCulture);

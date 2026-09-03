@@ -401,6 +401,18 @@ public static class HornetInput
     /// <summary>How many times her keyboard has had to be put back this session, for the report.</summary>
     internal static int KeyboardRepairs { get; private set; }
 
+    /// <summary>
+    /// How long to wait before trying again after a repair that did not take.
+    /// <para>
+    /// The first attempt of an outage is immediate - that is the whole point of the check - but a
+    /// remap can legitimately produce nothing (an empty saved layout parses to no bindings at all),
+    /// and without this the check would then call the game's mapper on every frame for the rest of
+    /// the session.
+    /// </para>
+    /// </summary>
+    private const float KeyboardRepairRetrySeconds = 1f;
+
+    private static float nextKeyboardRepairAttempt;
     private static bool loggedKeyboardRepair;
 
     /// <summary>
@@ -416,10 +428,10 @@ public static class HornetInput
     /// </para>
     /// <para>
     /// So the invariant is checked rather than reasoned about: if she is meant to answer to the
-    /// keyboard and none of her movement actions hold a key, the layout is mapped again. Cheap
-    /// enough to run once a second - it walks the bindings of two actions - and it fixes a live
-    /// session rather than only the next one. Ours are <c>BindingSource</c> subclasses and the
-    /// game's are <c>KeyBindingSource</c>, so the Shade's own additions cannot be mistaken for hers.
+    /// keyboard and none of her movement actions hold a key, the layout is mapped again. Checked
+    /// every frame, because it costs two indexed walks of a binding list and a second of waiting is
+    /// a second of Hornet standing still. Ours are <c>BindingSource</c> subclasses and the game's
+    /// are <c>KeyBindingSource</c>, so the Shade's own additions cannot be mistaken for hers.
     /// </para>
     /// </summary>
     internal static void EnsureHornetKeyboardBindings()
@@ -441,15 +453,24 @@ public static class HornetInput
             if (HasKeyBinding(actions.Left) || HasKeyBinding(actions.Right))
             {
                 loggedKeyboardRepair = false;
+                nextKeyboardRepairAttempt = 0f;
                 return;
             }
 
-            // On the frame it is noticed, and checked every frame. An earlier version waited a
-            // second first, on the theory that the game clears these bindings before remapping them
-            // and a repair might land in the middle of that - but the clear and the remap are two
-            // statements of one synchronous method, so no Update can ever observe the gap between
-            // them. All the wait achieved was a second of Hornet standing still, which is the "her
-            // controls are locked after a room transition" report.
+            // On the frame it is noticed. An earlier version waited a second first, on the theory
+            // that the game clears these bindings before remapping them and a repair might land in
+            // the middle of that - but the clear and the remap are two statements of one synchronous
+            // method, so no Update can ever observe the gap between them. All the wait achieved was
+            // a second of Hornet standing still, which is the "her controls are locked after a room
+            // transition" report. The retry below is the only wait left, and it only applies to an
+            // attempt that has already failed once.
+            float now = Time.unscaledTime;
+            if (now < nextKeyboardRepairAttempt)
+            {
+                return;
+            }
+
+            nextKeyboardRepairAttempt = now + KeyboardRepairRetrySeconds;
             KeyboardRepairs++;
 
             if (!loggedKeyboardRepair)
@@ -481,9 +502,17 @@ public static class HornetInput
 
         try
         {
-            foreach (var binding in action.Bindings)
+            // Indexed rather than foreach: this runs every frame, and enumerating the collection
+            // allocates where reading it by index does not.
+            var bindings = action.Bindings;
+            if (bindings == null)
             {
-                if (binding is KeyBindingSource)
+                return false;
+            }
+
+            for (int i = 0; i < bindings.Count; i++)
+            {
+                if (bindings[i] is KeyBindingSource)
                 {
                     return true;
                 }

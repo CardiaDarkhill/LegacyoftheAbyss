@@ -764,12 +764,6 @@ public partial class LegacyHelper
             ClearShadowParticles();
         }
 
-        /// <summary>
-        /// How long a hazard respawn leaves the Knight unhurtable. The same second its controls are
-        /// held for, so the pause cannot be spent being hit by the thing it was put down next to.
-        /// </summary>
-        private const float KnightHazardRespawnInvulnerabilitySeconds = 1f;
-
         public void SuppressHazardDamage(float duration)
         {
             if (duration <= 0f)
@@ -1076,14 +1070,16 @@ public partial class LegacyHelper
             if (hazardCooldown > 0f) return;
             TeleportToHornet();
 
-            // A second of stillness and invulnerability for the Knight, which is what the report
-            // asked for: it is put back mid-input and often within reach of whatever killed it, so
-            // without the pause it walked straight back in on the input still being held.
+            // A second of stillness and invulnerability for the Knight: it is put back mid-input
+            // and often within reach of whatever killed it, so without the pause it walked straight
+            // back in on the input still being held.
             if (UsesGroundedMovement)
             {
+                // The same second the controls are held for, so the pause cannot be spent being
+                // hit by whatever the Knight was put down next to.
                 BeginKnightHazardRespawnLock();
-                hazardCooldown = KnightHazardRespawnInvulnerabilitySeconds;
-                hurtCooldown = Mathf.Max(hurtCooldown, KnightHazardRespawnInvulnerabilitySeconds);
+                hazardCooldown = KnightHazardRespawnLockSeconds;
+                hurtCooldown = Mathf.Max(hurtCooldown, KnightHazardRespawnLockSeconds);
             }
             else
             {

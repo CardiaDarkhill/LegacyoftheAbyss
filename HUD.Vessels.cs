@@ -44,25 +44,16 @@ public partial class SimpleHUD
             return;
         }
 
-        var clips = LegacyoftheAbyss.Shade.Knight.KnightHud.SoulVesselStageClips;
-        var sprites = new Sprite[clips.Length];
-        var rotated = new bool[clips.Length];
-        bool any = false;
-
-        for (int i = 0; i < clips.Length; i++)
-        {
-            // int.MaxValue is "the last frame". These are fill animations, and the frame they come
-            // to rest on is the level they leave behind - see KnightHud.SoulVesselStageClips for
-            // why the clips named after the levels cannot be used instead.
-            sprites[i] = LegacyoftheAbyss.Shade.Knight.KnightAssets.TryBuildSprite(clips[i], int.MaxValue);
-            rotated[i] = LegacyoftheAbyss.Shade.Knight.KnightAssets.IsSpriteRotated(clips[i], int.MaxValue);
-            any |= sprites[i] != null;
-        }
+        // See KnightHud.SoulVesselStageClips for why the clips named after the fill levels cannot
+        // be used, and the resting frame of each fill animation is taken instead.
+        bool any = TryResolveStageSprites(
+            LegacyoftheAbyss.Shade.Knight.KnightHud.SoulVesselStageClips,
+            out var sprites,
+            out var rotated);
 
         vesselStageRotated = rotated;
         if (!any)
         {
-            // The bundle is read in the background, so "nothing resolved" is usually "not yet".
             return;
         }
 
@@ -109,16 +100,7 @@ public partial class SimpleHUD
             slotRect.anchorMin = slotRect.anchorMax = new Vector2(0.5f, 0.5f);
             slotRect.pivot = new Vector2(0.5f, 0.5f);
 
-            // The art is a centred child of its slot, as the masks' and the buff icons' are: a
-            // frame the atlas packed turned has to rotate about its own middle to land square.
-            var art = new GameObject("Art");
-            art.transform.SetParent(slot.transform, false);
-            var artRect = art.AddComponent<RectTransform>();
-            artRect.anchorMin = artRect.anchorMax = new Vector2(0.5f, 0.5f);
-            artRect.pivot = new Vector2(0.5f, 0.5f);
-
-            var image = art.AddComponent<Image>();
-            image.preserveAspect = true;
+            var image = CreateSlotArt(slot);
             image.raycastTarget = false;
             image.enabled = false;
 

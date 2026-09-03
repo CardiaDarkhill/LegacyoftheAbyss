@@ -470,8 +470,6 @@ public partial class SimpleHUD : MonoBehaviour
         RefreshHealth();
     }
 
-    public void ClearShadeSoulOverride() => shadeSoulOverride = false;
-
     public void SetVisible(bool visible)
     {
         if (canvas != null) canvas.enabled = visible; else gameObject.SetActive(visible);

@@ -1,5 +1,6 @@
 #nullable disable
 using System.Collections.Generic;
+using LegacyoftheAbyss.Shade;
 using UnityEngine;
 
 public partial class LegacyHelper
@@ -307,30 +308,7 @@ public partial class LegacyHelper
         /// runs along a wall instead of sticking to it.
         /// </summary>
         private static Vector2 ResolveTerrain(Vector2 current, Vector2 target)
-        {
-            int mask = ShadeController.TerrainMask();
-            Vector2 resolved = current;
-
-            float dx = target.x - current.x;
-            if (Mathf.Abs(dx) > 0.0001f)
-            {
-                var hit = Physics2D.CircleCast(resolved, BodyRadius, new Vector2(Mathf.Sign(dx), 0f), Mathf.Abs(dx), mask);
-                resolved.x = hit.collider != null
-                    ? resolved.x + Mathf.Sign(dx) * Mathf.Max(0f, hit.distance - 0.01f)
-                    : target.x;
-            }
-
-            float dy = target.y - current.y;
-            if (Mathf.Abs(dy) > 0.0001f)
-            {
-                var hit = Physics2D.CircleCast(resolved, BodyRadius, new Vector2(0f, Mathf.Sign(dy)), Mathf.Abs(dy), mask);
-                resolved.y = hit.collider != null
-                    ? resolved.y + Mathf.Sign(dy) * Mathf.Max(0f, hit.distance - 0.01f)
-                    : target.y;
-            }
-
-            return resolved;
-        }
+            => ShadeCharmSummons.ResolveTerrain(current, target, BodyRadius);
 
         /// <summary>
         /// Whether the minion is close enough to the target to be touching it. Measured against

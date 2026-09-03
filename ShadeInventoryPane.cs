@@ -270,8 +270,8 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
     private Color highlightColor = DefaultHighlightColor;
     private Sprite? cellFrameSprite;
     private Color cellFrameColor = DefaultCellColor;
-    private TextStyle? bodyTextStyle;
-    private TextStyle? headerTextStyle;
+    private UiTextStyle? bodyTextStyle;
+    private UiTextStyle? headerTextStyle;
     private TmpTextStyle? bodyTmpTextStyle;
     private TmpTextStyle? headerTmpTextStyle;
     private Sprite? generatedHighlightSprite;
@@ -362,32 +362,6 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         public ShadeCharmId? CharmId;
     }
 
-    private struct ShadowStyle
-    {
-        public Type Type;
-        public Color EffectColor;
-        public Vector2 EffectDistance;
-        public bool UseGraphicAlpha;
-    }
-
-    private struct TextStyle
-    {
-        public Font? Font;
-        public int FontSize;
-        public FontStyle FontStyle;
-        public TextAnchor Alignment;
-        public Color Color;
-        public bool RichText;
-        public bool BestFit;
-        public int BestFitMin;
-        public int BestFitMax;
-        public float LineSpacing;
-        public bool AlignByGeometry;
-        public HorizontalWrapMode HorizontalOverflow;
-        public VerticalWrapMode VerticalOverflow;
-        public List<ShadowStyle>? Shadows;
-    }
-
     private struct TmpTextStyle
     {
         public TMP_FontAsset? Font;
@@ -406,7 +380,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         public TextWrappingModes WrappingMode;
         public Vector4 Margin;
         public bool RichText;
-        public List<ShadowStyle>? Shadows;
+        public List<UiShadowStyle>? Shadows;
     }
 
     private enum OverlayAnimationEase
@@ -619,40 +593,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         }
     }
 
-    private static List<ShadowStyle> CaptureShadowStyles(Graphic graphic)
-    {
-        var list = new List<ShadowStyle>();
-        if (graphic == null)
-        {
-            return list;
-        }
-
-        try
-        {
-            foreach (var shadow in graphic.GetComponents<Shadow>())
-            {
-                if (shadow == null)
-                {
-                    continue;
-                }
-
-                list.Add(new ShadowStyle
-                {
-                    Type = shadow.GetType(),
-                    EffectColor = shadow.effectColor,
-                    EffectDistance = shadow.effectDistance,
-                    UseGraphicAlpha = shadow.useGraphicAlpha
-                });
-            }
-        }
-        catch
-        {
-        }
-
-        return list;
-    }
-
-    private static void ClearAndApplyShadows(Graphic graphic, List<ShadowStyle>? styles)
+    private static void ClearAndApplyShadows(Graphic graphic, List<UiShadowStyle>? styles)
     {
         if (graphic == null)
         {
@@ -698,27 +639,6 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         }
     }
 
-    private static TextStyle CaptureTextStyle(Text text)
-    {
-        return new TextStyle
-        {
-            Font = text.font,
-            FontSize = text.fontSize,
-            FontStyle = text.fontStyle,
-            Alignment = text.alignment,
-            Color = text.color,
-            RichText = text.supportRichText,
-            BestFit = text.resizeTextForBestFit,
-            BestFitMin = text.resizeTextMinSize,
-            BestFitMax = text.resizeTextMaxSize,
-            LineSpacing = text.lineSpacing,
-            AlignByGeometry = text.alignByGeometry,
-            HorizontalOverflow = text.horizontalOverflow,
-            VerticalOverflow = text.verticalOverflow,
-            Shadows = CaptureShadowStyles(text)
-        };
-    }
-
     private static TmpTextStyle CaptureTmpTextStyle(TMP_Text text)
     {
         return new TmpTextStyle
@@ -739,11 +659,11 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             WrappingMode = text.textWrappingMode,
             Margin = text.margin,
             RichText = text.richText,
-            Shadows = CaptureShadowStyles(text)
+            Shadows = UiTextStyles.CaptureShadows(text)
         };
     }
 
-    private void ApplyTextStyle(Text text, TextStyle? style, Font? fallbackFont, Color fallbackColor, FontStyle fallbackStyle, int fallbackSize, TextAnchor fallbackAlignment)
+    private void ApplyTextStyle(Text text, UiTextStyle? style, Font? fallbackFont, Color fallbackColor, FontStyle fallbackStyle, int fallbackSize, TextAnchor fallbackAlignment)
     {
         if (text == null)
         {
@@ -934,14 +854,14 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         _ => TextAnchor.MiddleCenter
     };
 
-    private static TextStyle? ConvertTmpToTextStyle(TMP_Text text)
+    private static UiTextStyle? ConvertTmpToTextStyle(TMP_Text text)
     {
         if (text == null)
         {
             return null;
         }
 
-        var style = new TextStyle
+        var style = new UiTextStyle
         {
             Font = text.font != null ? text.font.sourceFontFile : null,
             FontSize = Mathf.RoundToInt(text.fontSize),
@@ -956,7 +876,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             AlignByGeometry = false,
             HorizontalOverflow = text.textWrappingMode == TextWrappingModes.NoWrap ? HorizontalWrapMode.Overflow : HorizontalWrapMode.Wrap,
             VerticalOverflow = VerticalWrapMode.Overflow,
-            Shadows = CaptureShadowStyles(text)
+            Shadows = UiTextStyles.CaptureShadows(text)
         };
 
         return style;
