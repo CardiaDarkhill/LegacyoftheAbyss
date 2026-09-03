@@ -67,7 +67,7 @@ public class InputDeviceBlockerTests
     public void TheDualControllerPresetReservesOnlyTheShadePad()
     {
         var config = new ShadeInputConfig();
-        config.ApplyDualControllerPreset();
+        config.ApplyControllerLayout(deviceIndex: 1);
 
         Assert.True(config.ReservesControllerIndex(1), "Pad 1 is the Shade player's and must be reserved.");
         Assert.False(config.ReservesControllerIndex(0), "Pad 0 is Hornet's and must never be reserved.");
@@ -85,7 +85,7 @@ public class InputDeviceBlockerTests
     public void TwoPadsAreNotAllClaimedByTheShade()
     {
         var config = new ShadeInputConfig();
-        config.ApplyDualControllerPreset();
+        config.ApplyControllerLayout(deviceIndex: 1);
 
         Assert.False(
             LegacyHelper.InputDeviceBlocker.ShadeUsesAllControllers(config, targetIndex: 1, deviceCount: 2),
@@ -100,7 +100,7 @@ public class InputDeviceBlockerTests
     public void AShadeOnEveryPadStillLeavesHornetOne()
     {
         var config = new ShadeInputConfig();
-        config.ApplyDualControllerPreset();
+        config.ApplyControllerLayout(deviceIndex: 1);
 
         // Move the Shade's own controls onto pad 0 as well, so it really does claim both.
         config.moveLeft.primary.controllerDevice = 0;

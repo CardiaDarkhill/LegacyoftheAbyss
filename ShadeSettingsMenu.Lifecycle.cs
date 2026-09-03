@@ -717,6 +717,9 @@ public static partial class ShadeSettingsMenu
     internal static void HideImmediate(UIManager ui, bool consumeToggle = true)
     {
         consumeNextToggle = consumeToggle;
+
+        // Nothing on screen can still be waiting for a keypress once the screens are off.
+        captureDepth = 0;
         if (allScreens.Count == 0)
             return;
         LogMenuInfo("Hiding Shade settings page");

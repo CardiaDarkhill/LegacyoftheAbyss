@@ -24,6 +24,12 @@ public enum ShadeAction
     /// Shade's own inputs - see LegacyHelper.ShadeController.AiCommand.cs.
     /// </summary>
     CommandShade,
+    /// <summary>
+    /// Swaps the companion between the Knight and the Shade on the spot, so a player can pick a
+    /// body for the room they are in rather than for the session. Kept out of the debug block
+    /// below deliberately: it is an ordinary control and takes part in device reservation.
+    /// </summary>
+    SwapCharacter,
     // Developer-only utility actions. Only ever surfaced in the Controls menu when
     // ModConfig.Instance.debugKeysEnabled is on (see BuildControlsMenu), and only ever
     // read when the same flag is on (see SimpleHUD.HandleDebugKeys), so an ordinary
@@ -112,6 +118,7 @@ public class ShadeInputConfig
     public ShadeBinding focus = new();
     public ShadeBinding sprint = new();
     public ShadeBinding commandShade = new();
+    public ShadeBinding swapCharacter = new();
     public ShadeBinding debugDamageShade = new();
     public ShadeBinding debugHealShade = new();
     public ShadeBinding debugSoulIncrease = new();
@@ -147,6 +154,13 @@ public class ShadeInputConfig
             ShadeBindingOption.FromKey(KeyCode.Mouse2),
             ShadeBindingOption.FromControl(InputControlType.LeftStickButton, 0));
 
+        // Right stick click, which Silksong itself leaves free, and R on the keyboard. Both are
+        // only a starting point: DropCollidingDefaults takes either of them back off a config
+        // where the player has already spent that control on something else.
+        swapCharacter = new ShadeBinding(
+            ShadeBindingOption.FromKey(KeyCode.R),
+            ShadeBindingOption.FromControl(InputControlType.RightStickButton));
+
         // Matches the defaults these carried as hardcoded, unrebindable KeyCode constants
         // in SimpleHUD before they moved into the normal binding system -- unbound except
         // for soul reset, so existing behaviour doesn't change until someone rebinds them.
@@ -161,11 +175,11 @@ public class ShadeInputConfig
     }
 
     /// <summary>
-    /// The Shade's controller layout, on whichever pad is its own. Shared by the two presets that
-    /// put it on a controller: they differ in which pad that is and in what Command Shade ends up
-    /// bound to, and in nothing else.
+    /// The companion's whole layout on a pad. Applied when it moves onto one from the keyboard,
+    /// where there is nothing to carry across: the two device kinds share no controls, so a move
+    /// between them has to start from a layout rather than re-point the one that is there.
     /// </summary>
-    private void ApplyControllerLayout(int deviceIndex)
+    public void ApplyControllerLayout(int deviceIndex)
     {
         controllerDeviceIndex = deviceIndex;
         NormaliseDeadzone();
@@ -181,6 +195,7 @@ public class ShadeInputConfig
         teleport = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.LeftStickButton), ShadeBindingOption.None());
         focus = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.Action2), ShadeBindingOption.None());
         sprint = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightTrigger), ShadeBindingOption.None());
+        swapCharacter = new ShadeBinding(ShadeBindingOption.FromControl(InputControlType.RightStickButton), ShadeBindingOption.None());
     }
 
     /// <summary>Keeps the deadzone usable when the stored value is zero or out of range.</summary>
@@ -189,19 +204,11 @@ public class ShadeInputConfig
         controllerDeadzone = Mathf.Clamp(controllerDeadzone <= 0f ? 0.25f : controllerDeadzone, 0.01f, 1f);
     }
 
-    public void ApplyDualControllerPreset()
-    {
-        ApplyControllerLayout(deviceIndex: 1);
-
-        // Every pad button worth having is spoken for, so the AI toggle keeps its keyboard binding
-        // rather than displacing one. A preset that left this holding the previous preset's value
-        // would be worse than leaving it plainly on the keyboard.
-        commandShade = new ShadeBinding(
-            ShadeBindingOption.FromKey(KeyCode.Mouse2),
-            ShadeBindingOption.FromControl(InputControlType.LeftStickButton, 0));
-    }
-
-    public void ApplyKeyboardOnlyPreset()
+    /// <summary>
+    /// The companion's whole layout on the keyboard, on the keypad and the keys around it so that
+    /// it does not collide with Hornet's side of the board.
+    /// </summary>
+    public void ApplyKeyboardLayout()
     {
         controllerDeviceIndex = -1;
         NormaliseDeadzone();
@@ -217,15 +224,7 @@ public class ShadeInputConfig
         teleport = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad3), ShadeBindingOption.None());
         focus = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.KeypadEnter), ShadeBindingOption.None());
         sprint = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad0), ShadeBindingOption.None());
-        commandShade = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Mouse2), ShadeBindingOption.None());
-    }
-
-    public void ApplyShadeControllerPreset()
-    {
-        ApplyControllerLayout(deviceIndex: 0);
-
-        // The Shade owns pad 0 under this preset, so its left stick click is already Teleport.
-        // Hornet is on the keyboard here, which leaves middle mouse as the whole binding.
+        swapCharacter = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.KeypadPeriod), ShadeBindingOption.None());
         commandShade = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Mouse2), ShadeBindingOption.None());
     }
 
@@ -402,21 +401,27 @@ public class ShadeInputConfig
 
     /// <summary>Whether any action - debug or not - already answers to this key.</summary>
     private bool IsKeyInUse(KeyCode key)
+        => IsOptionInUse(ShadeBindingOption.FromKey(key), except: null);
+
+    /// <summary>
+    /// Whether any action other than <paramref name="except"/> already answers to this control.
+    /// </summary>
+    private bool IsOptionInUse(ShadeBindingOption option, ShadeAction? except)
     {
         foreach (var action in AllActions)
         {
+            if (except.HasValue && action == except.Value)
+            {
+                continue;
+            }
+
             var binding = GetBinding(action);
             if (binding == null)
             {
                 continue;
             }
 
-            if (binding.primary.type == ShadeBindingOptionType.Key && binding.primary.key == key)
-            {
-                return true;
-            }
-
-            if (binding.secondary.type == ShadeBindingOptionType.Key && binding.secondary.key == key)
+            if (OptionsMatch(binding.primary, option) || OptionsMatch(binding.secondary, option))
             {
                 return true;
             }
@@ -424,6 +429,84 @@ public class ShadeInputConfig
 
         return false;
     }
+
+    /// <summary>
+    /// Whether two options name the same physical control. A controller option carries the device
+    /// it was captured on, and -1 means "whichever pad is the companion's", so an option that names
+    /// a device matches an option that does not.
+    /// </summary>
+    private static bool OptionsMatch(ShadeBindingOption a, ShadeBindingOption b)
+    {
+        if (a.type != b.type)
+        {
+            return false;
+        }
+
+        return a.type switch
+        {
+            ShadeBindingOptionType.Key => a.key == b.key,
+            ShadeBindingOptionType.Controller => a.control == b.control
+                && (a.controllerDevice < 0 || b.controllerDevice < 0 || a.controllerDevice == b.controllerDevice),
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Actions added after this mod started shipping. Their defaults arrive on every config,
+    /// including one saved before the action existed, because an absent field keeps whatever
+    /// <see cref="ResetToDefaults"/> gave it - so nobody ever chose them.
+    /// </summary>
+    private static readonly ShadeAction[] YieldingDefaults = { ShadeAction.SwapCharacter };
+
+    /// <summary>
+    /// Takes a default back off any control the player has already spent on something else, and
+    /// reports how many it dropped.
+    /// <para>
+    /// The same rule the debug keys follow, from the other side. There a default was withheld
+    /// because it would have collided; here it has already been handed out by the constructor, so
+    /// the collision has to be undone instead. Either way an existing binding wins and the new
+    /// action is left plainly unbound for the player to place themselves.
+    /// </para>
+    /// </summary>
+    public int DropCollidingDefaults()
+    {
+        var pristine = CreateDefault();
+        int dropped = 0;
+
+        foreach (var action in YieldingDefaults)
+        {
+            var binding = GetBinding(action);
+            var fallback = pristine.GetBinding(action);
+            if (binding == null || fallback == null)
+            {
+                continue;
+            }
+
+            if (ShouldDrop(binding.primary, fallback.primary, action))
+            {
+                binding.primary = ShadeBindingOption.None();
+                dropped++;
+            }
+
+            if (ShouldDrop(binding.secondary, fallback.secondary, action))
+            {
+                binding.secondary = ShadeBindingOption.None();
+                dropped++;
+            }
+        }
+
+        return dropped;
+    }
+
+    /// <summary>
+    /// A binding is only dropped while it is still sitting on the value nobody chose. Once it has
+    /// been rebound - even onto a control something else uses - it is the player's own doing and is
+    /// left alone.
+    /// </summary>
+    private bool ShouldDrop(ShadeBindingOption current, ShadeBindingOption fallback, ShadeAction action)
+        => current.type != ShadeBindingOptionType.None
+            && OptionsMatch(current, fallback)
+            && IsOptionInUse(current, except: action);
 
     /// <summary>
     /// Records which pad each player is holding.
@@ -456,6 +539,15 @@ public class ShadeInputConfig
                 continue;
             }
 
+            if (action == ShadeAction.CommandShade && hornetIndex < 0)
+            {
+                // Hornet is on the keyboard, so there is no pad for her control to move to.
+                // Pointing it at "whichever the config says" would put it on the companion's.
+                moved += ClearControllerOption(ref binding.primary);
+                moved += ClearControllerOption(ref binding.secondary);
+                continue;
+            }
+
             int wanted = action == ShadeAction.CommandShade ? hornetIndex : companionIndex;
             moved += RepointControllerOption(ref binding.primary, wanted);
             moved += RepointControllerOption(ref binding.secondary, wanted);
@@ -472,6 +564,17 @@ public class ShadeInputConfig
         }
 
         option.controllerDevice = deviceIndex;
+        return 1;
+    }
+
+    private static int ClearControllerOption(ref ShadeBindingOption option)
+    {
+        if (option.type != ShadeBindingOptionType.Controller)
+        {
+            return 0;
+        }
+
+        option = ShadeBindingOption.None();
         return 1;
     }
 
@@ -515,6 +618,7 @@ public class ShadeInputConfig
         ShadeAction.Focus => focus,
         ShadeAction.Sprint => sprint,
         ShadeAction.CommandShade => commandShade,
+        ShadeAction.SwapCharacter => swapCharacter,
         ShadeAction.DebugDamageShade => debugDamageShade,
         ShadeAction.DebugHealShade => debugHealShade,
         ShadeAction.DebugSoulIncrease => debugSoulIncrease,
@@ -562,6 +666,9 @@ public class ShadeInputConfig
                 break;
             case ShadeAction.CommandShade:
                 commandShade = binding;
+                break;
+            case ShadeAction.SwapCharacter:
+                swapCharacter = binding;
                 break;
             case ShadeAction.DebugDamageShade:
                 debugDamageShade = binding;

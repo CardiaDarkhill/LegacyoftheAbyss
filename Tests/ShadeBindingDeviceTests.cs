@@ -52,7 +52,7 @@ public class ShadeBindingDeviceTests
     public void ABindingCapturedFromAPadIsClearedOnLoad()
     {
         var config = new ShadeInputConfig();
-        config.ApplyDualControllerPreset();
+        config.ApplyControllerLayout(deviceIndex: 1);
 
         // Exactly what was found in the wild: focus and sprint stored as joystick keys.
         config.focus.primary = ShadeBindingOption.FromKey(KeyCode.JoystickButton1);
@@ -70,11 +70,11 @@ public class ShadeBindingDeviceTests
     public void AGoodConfigIsLeftAlone()
     {
         var controllers = new ShadeInputConfig();
-        controllers.ApplyDualControllerPreset();
+        controllers.ApplyControllerLayout(deviceIndex: 1);
         Assert.Equal(0, controllers.ClearControllerKeyBindings());
 
         var keyboard = new ShadeInputConfig();
-        keyboard.ApplyKeyboardOnlyPreset();
+        keyboard.ApplyKeyboardLayout();
         Assert.Equal(0, keyboard.ClearControllerKeyBindings());
 
         // The keyboard preset's mouse binds are the ones most at risk from a sloppy range check.

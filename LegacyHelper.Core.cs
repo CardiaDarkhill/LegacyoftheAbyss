@@ -178,6 +178,7 @@ public partial class LegacyHelper : BaseUnityPlugin
         {
             LoggingManager.Update();
             HandleDebugInput();
+            HandleCharacterSwapInput();
         }
 
         // Cheap, throttled to once a second, and the only thing standing between a mis-timed
@@ -601,6 +602,54 @@ public partial class LegacyHelper : BaseUnityPlugin
         var position = companion.Body.transform.position;
         DestroyShadeInstance(companion);
         SpawnShadeAtPosition(companion, position);
+    }
+
+    /// <summary>
+    /// The swap button: puts the companion into the other body where it is standing.
+    /// <para>
+    /// Polled here rather than on the companion because the swap destroys the object that would
+    /// have been polling. Held to the primary companion, whose controls these are, and refused
+    /// while a menu is open so that pressing it on the Controls screen rebinds it instead of
+    /// firing it.
+    /// </para>
+    /// </summary>
+    private static void HandleCharacterSwapInput()
+    {
+        if (!ShadeInput.WasActionPressed(ShadeAction.SwapCharacter))
+        {
+            return;
+        }
+
+        // Every decline says so and why. A swap button that appears to do nothing is otherwise
+        // ambiguous between an unbound control, a menu holding the press, and a companion that is
+        // not on the field - and only the last of those is the player's to fix.
+        if (MenuStateUtility.IsMenuActive())
+        {
+            LegacyoftheAbyss.Diagnostics.BugReportSystem.RecordEvent(
+                "shade-swap", "Swap declined", "a menu is open");
+            return;
+        }
+
+        int companionId = ShadeCompanionRegistry.PrimaryId;
+        if (!ShadeCompanionRegistry.TryGet(companionId, out var companion) || companion.Body == null)
+        {
+            LegacyoftheAbyss.Diagnostics.BugReportSystem.RecordEvent(
+                "shade-swap", "Swap declined", "the companion has no body on the field");
+            return;
+        }
+
+        var next = companion.Character == ShadeCharacterId.Knight
+            ? ShadeCharacterId.Shade
+            : ShadeCharacterId.Knight;
+
+        LegacyoftheAbyss.Diagnostics.BugReportSystem.RecordEvent(
+            "shade-swap",
+            "Swapping character",
+            FormattableString.Invariant($"{companion.Character} -> {next} slot={companionId}"));
+
+        // Nothing is passed about which skin to wear: the Shade's skin choice is stored separately
+        // from the character, so coming back to it restores whatever was last picked.
+        SetShadeCharacter(companionId, next);
     }
 
     /// <summary>Recomputes every spawned companion's charm loadout.</summary>

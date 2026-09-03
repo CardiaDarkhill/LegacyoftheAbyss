@@ -764,6 +764,13 @@ public static partial class ShadeSettingsMenu
         if (!IsShowing)
             return false;
 
+        // Swallowed rather than acted on: a row is asking for a keypress and Escape is how it is
+        // cancelled, or this frame's back press has already been taken by the Cancel event.
+        if (IsCapturingBinding || !ClaimBackNavigation())
+        {
+            return true;
+        }
+
         if (activeScreen != null && mainScreen != null && activeScreen != mainScreen)
         {
             ShowMainMenu();

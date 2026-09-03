@@ -44,19 +44,11 @@ public partial class SimpleHUD : MonoBehaviour
     /// </summary>
     private bool hivebloodMaskIsBundleArt;
 
+    /// <summary>Whether the atlas stored the plate turned on its side, as tk2d often does.</summary>
     private bool frameSpriteRotated;
 
     /// <summary>The HUD plate behind the orb, or null when there is no frame art to draw.</summary>
     private Image hudFrameImage;
-
-    /// <summary>
-    /// Where the plate's socket sits within it, as a fraction of its drawn size, y measured down.
-    /// Taken off the art rather than guessed: the dark disc's centroid in the turned 239x144 frame
-    /// is (168, 82). Tools/HudPreview.py re-derives it if the art ever changes.
-    /// </summary>
-    private const float FrameSocketX = 0.704f;
-
-    private const float FrameSocketY = 0.568f;
     private RectTransform soulOrbRoot;
     private RectTransform soulRevealMask;
     private Image soulImage;

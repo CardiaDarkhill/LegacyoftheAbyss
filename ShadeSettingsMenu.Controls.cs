@@ -81,13 +81,13 @@ public static partial class ShadeSettingsMenu
         sectionCursorY += InfoHeight + SectionSpacing;
 
         var selectables = new List<MenuSelectable>();
-        var presetButtons = new List<MenuButton>();
 
-        // A full-width row of its own rather than a fifth preset card: the preset row's four cards
-        // already claim more than the screen's width at their minimum, and this is not a preset -
-        // it rewrites nobody's bindings, it only says which hand each pad is in.
+        // The row above the two binding columns, and the one the columns navigate up into.
+        var topRowButtons = new List<MenuButton>();
+        var rowDescriptions = new List<KeyValuePair<MenuSelectable, string>>();
+
         var assignSelectable = CreateMenuButton(
-            content, buttonTemplate, "Assign Controllers", null, CancelTarget.ShadeMain);
+            content, buttonTemplate, "Assign Devices", null, CancelTarget.ShadeMain);
         if (assignSelectable is MenuButton assignButton)
         {
             var assignRect = assignButton.GetComponent<RectTransform>();
@@ -110,107 +110,21 @@ public static partial class ShadeSettingsMenu
 
             assignButton.gameObject.AddComponent<ControllerAssignmentDriver>().Initialize(assignButton);
             selectables.Add(assignButton);
+            topRowButtons.Add(assignButton);
+            rowDescriptions.Add(new KeyValuePair<MenuSelectable, string>(
+                assignButton,
+                "Say which device each player is holding by pressing a button on it. "
+                + "A player moving between the keyboard and a controller is given that device's layout; "
+                + "moving between two controllers keeps the buttons they have already chosen."));
             sectionCursorY += ButtonRowHeight + SectionSpacing;
         }
 
-        var presetRow = new GameObject("PresetOptions");
-        var presetRect = presetRow.AddComponent<RectTransform>();
-        presetRect.SetParent(content, false);
-        presetRect.anchorMin = new Vector2(0f, 1f);
-        presetRect.anchorMax = new Vector2(1f, 1f);
-        presetRect.pivot = new Vector2(0.5f, 1f);
-        // Height (sizeDelta.y) is filled in further down once every card's actual
-        // (wrapped-text-dependent) height is measured -- see AddPresetOption. Position can
-        // be set now: it only depends on what's already been stacked above it.
-        presetRect.anchoredPosition = new Vector2(0f, -sectionCursorY);
-        presetRect.sizeDelta = Vector2.zero;
-        var presetLayout = presetRow.AddComponent<HorizontalLayoutGroup>();
-        float presetSpacing = Mathf.Clamp(canvasWidth * 0.035f, 32f, 90f);
-        // Keep the max above the min: an inverted Mathf.Clamp returns the max for every width, and a
-        // negative one hangs the preset row past both edges of the content it sits in.
-        int sidePadding = Mathf.RoundToInt(Mathf.Clamp(canvasWidth * 0.04f, 36f, 120f));
-        float presetCardPreferredWidth = Mathf.Clamp(canvasWidth * 0.22f, 260f, 430f);
-        float presetCardMinWidth = Mathf.Clamp(canvasWidth * 0.16f, 200f, presetCardPreferredWidth);
-        presetLayout.spacing = presetSpacing;
-        presetLayout.padding = new RectOffset(sidePadding, sidePadding, 0, 0);
-        presetLayout.childControlWidth = true;
-        presetLayout.childControlHeight = false;
-        presetLayout.childForceExpandWidth = true;
-        presetLayout.childForceExpandHeight = false;
-        presetLayout.childAlignment = TextAnchor.UpperCenter;
-        var presetLayoutElement = presetRow.AddComponent<LayoutElement>();
-        // Real height is computed below, once every card's wrapped-text height is known - see
-        // AddPresetOption for why Unity's own layout computation cannot be left to do it. Must stay
-        // at zero flexible height as well: content's VerticalLayoutGroup splits leftover height
-        // between every child claiming a share, so a share here leaves the binding scroll view below
-        // showing about two rows instead of filling the space.
-        presetLayoutElement.flexibleHeight = 0f;
-        var presetCardHeights = new List<float>();
-
-        // One button per preset, with its description in the shared footer for whichever row is
-        // highlighted - the way every other screen here explains itself. Keep it there rather than
-        // under each card: an inline description has to be measured at an assumed width and stamped
-        // as an explicit height, and wrapped lines pile up as soon as the cards are wider than the
-        // guess.
-
-        var presetDescriptions = new List<KeyValuePair<MenuSelectable, string>>();
-
-        void AddPresetOption(string label, string description, System.Action onSubmit)
-        {
-            var selectable = CreateMenuButton(presetRow.transform, buttonTemplate, label, onSubmit, CancelTarget.ShadeMain);
-            if (selectable == null)
-            {
-                return;
-            }
-
-            var layout = selectable.GetComponent<LayoutElement>();
-            if (layout != null)
-            {
-                layout.minWidth = presetCardMinWidth;
-                layout.preferredWidth = presetCardPreferredWidth;
-                layout.flexibleWidth = 1f;
-                layout.minHeight = ButtonRowHeight;
-                layout.preferredHeight = ButtonRowHeight;
-                layout.flexibleHeight = 0f;
-            }
-
-            var optionRect = selectable.GetComponent<RectTransform>();
-            if (optionRect != null)
-            {
-                optionRect.sizeDelta = new Vector2(optionRect.sizeDelta.x, ButtonRowHeight);
-            }
-
-            selectables.Add(selectable);
-            if (selectable is MenuButton button)
-            {
-                presetButtons.Add(button);
-            }
-
-            presetDescriptions.Add(new KeyValuePair<MenuSelectable, string>(selectable, description));
-            presetCardHeights.Add(ButtonRowHeight);
-        }
-
-        AddPresetOption("Default", "Shade keeps the original keyboard layout. Hornet stays on controller and keyboard hotkeys stay disabled.", ApplyDefaultPreset);
-        AddPresetOption("Two Controllers", "Shade uses the second controller with dedicated buttons while Hornet remains on the first controller.", ApplyDualControllerPresetOption);
-        AddPresetOption("Keyboard Only", "Shade moves to the keypad while Hornet's controls jump to the left side of the keyboard. Controllers are disabled.", ApplyKeyboardOnlyPresetOption);
-        AddPresetOption("Shade Controller", "Shade uses the first controller layout and Hornet swaps to left-side keyboard hotkeys with the controller disabled.", ApplyShadeControllerPresetOption);
-
-        // content's VerticalLayoutGroup (unlike the two levels below presetRow) does have
-        // childControlHeight=true, so it *will* correctly apply whatever height
-        // presetLayoutElement reports here -- no need to also set presetRect.sizeDelta
-        // directly the way the card and description RectTransforms needed above.
-        float maxPresetCardHeight = presetCardHeights.Count > 0 ? Mathf.Max(presetCardHeights.ToArray()) : ButtonRowHeight;
-        presetLayoutElement.minHeight = maxPresetCardHeight;
-        presetLayoutElement.preferredHeight = maxPresetCardHeight;
-        // presetLayout (HorizontalLayoutGroup, on this same row) has childControlHeight=
-        // false, and contentLayout above is now disabled entirely -- neither pushes a
-        // computed height onto this RectTransform, so it's set directly, same as every
-        // card's optionRect already was.
-        presetRect.sizeDelta = new Vector2(0f, maxPresetCardHeight);
-        // A little more breathing room here specifically than elsewhere -- requested after
-        // seeing the presets sit right on top of the binding list with no visual break.
-        const float PresetToBindingsSpacing = 40f;
-        sectionCursorY += maxPresetCardHeight + PresetToBindingsSpacing;
+        // The preset cards that used to sit here are gone. They wrote a whole layout for both
+        // players at once - which pad, which buttons, and whether Hornet kept her keyboard - back
+        // when there was no way to say who was holding what. Assign Devices asks that directly, so
+        // a preset could only disagree with it.
+        const float TopRowToBindingsSpacing = 40f;
+        sectionCursorY += TopRowToBindingsSpacing;
 
         // The binding list can be taller than the screen (worse once the debug rows are
         // added), so it lives in its own scroll view rather than as a direct child of
@@ -346,39 +260,30 @@ public static partial class ShadeSettingsMenu
             return null;
         }
 
-        // The rows follow the equipped character, because the two do not share a control scheme.
-        // The Shade needs a button per slash direction: it flies, so it is always holding a
-        // movement direction and could never aim a slash with the stick. The Knight walks, aims
-        // with the stick as it does in Hollow Knight, and spends the freed down-slash button on
-        // Jump instead.
-        bool knightScheme = ShadeCharacterManager
-            .GetSelected(ShadeCompanionRegistry.PrimaryId).Moveset == ShadeMoveset.Knight;
-
+        // Every row, whichever character is equipped. The two do not share a control scheme - the
+        // Shade needs a button per slash direction because it flies and is always holding a
+        // movement direction, while the Knight aims with the stick as it does in Hollow Knight and
+        // spends the freed down-slash button on Jump - but Swap Character means either scheme can
+        // be the live one a keypress later, so a row that only appears for the body currently worn
+        // is a control the player cannot set before they need it.
+        //
+        // Where one binding means different things to the two, the label names both.
         var bindingRowList = new List<(ShadeAction action, string label)>
         {
             (ShadeAction.MoveLeft, "Move Left"),
             (ShadeAction.MoveRight, "Move Right"),
             (ShadeAction.MoveUp, "Move Up"),
             (ShadeAction.MoveDown, "Move Down"),
+            (ShadeAction.Nail, "Attack"),
+            (ShadeAction.NailUp, "Up Slash (Shade)"),
+            (ShadeAction.NailDown, "Jump / Down Slash"),
+            (ShadeAction.Fire, "Spellcast"),
+            (ShadeAction.Teleport, "Teleport"),
+            (ShadeAction.Focus, "Focus"),
+            (ShadeAction.Sprint, "Dash / Sprint"),
+            (ShadeAction.SwapCharacter, "Swap Character"),
+            (ShadeAction.CommandShade, "Command Shade"),
         };
-
-        if (knightScheme)
-        {
-            bindingRowList.Add((ShadeAction.Nail, "Attack"));
-            bindingRowList.Add((ShadeAction.NailDown, "Jump"));
-        }
-        else
-        {
-            bindingRowList.Add((ShadeAction.Nail, "Side Slash"));
-            bindingRowList.Add((ShadeAction.NailUp, "Up Slash"));
-            bindingRowList.Add((ShadeAction.NailDown, "Down Slash"));
-        }
-
-        bindingRowList.Add((ShadeAction.Fire, "Spellcast"));
-        bindingRowList.Add((ShadeAction.Teleport, "Teleport"));
-        bindingRowList.Add((ShadeAction.Focus, "Focus"));
-        bindingRowList.Add((ShadeAction.Sprint, knightScheme ? "Dash" : "Sprint"));
-        bindingRowList.Add((ShadeAction.CommandShade, "Command Shade"));
 
         // Only surfaced while the "Debug Keys" toggle in Debug Options is on -- these bind
         // the developer HP/soul cheats in SimpleHUD.HandleDebugKeys, otherwise invisible.
@@ -463,19 +368,19 @@ public static partial class ShadeSettingsMenu
         controlsFooterText.fontSize = Mathf.Max(12, Mathf.RoundToInt(controlsFooterText.fontSize * 0.78f));
         var controlsFooterDriver = controlsFooter.AddComponent<MenuDescriptionDriver>();
         controlsFooterDriver.target = controlsFooterText;
-        foreach (var entry in presetDescriptions)
+        foreach (var entry in rowDescriptions)
         {
             controlsFooterDriver.Register(entry.Key, entry.Value);
         }
 
         SetupButtonList(ms, selectables);
-        ConfigureControlsMenuNavigation(presetButtons, leftColumnButtons, rightColumnButtons);
+        ConfigureControlsMenuNavigation(topRowButtons, leftColumnButtons, rightColumnButtons);
         // MenuButtonList.Start() -- fired later by Unity, not by the SetupButtonList call
         // above -- unconditionally reasserts flat-list Up/Down for every Explicit-mode
         // selectable, clobbering the 2D grid just configured. Reapply once after that has
         // had its chance to run. See DeferredNavigationReapplyDriver for why.
         var navigationReapply = ms.gameObject.AddComponent<DeferredNavigationReapplyDriver>();
-        navigationReapply.Reapply = () => ConfigureControlsMenuNavigation(presetButtons, leftColumnButtons, rightColumnButtons);
+        navigationReapply.Reapply = () => ConfigureControlsMenuNavigation(topRowButtons, leftColumnButtons, rightColumnButtons);
         SetScreenFirstSelectable(ms, selectables);
         ConfigureBackButton(ms, CancelTarget.ShadeMain, ui);
         LayoutRebuilder.ForceRebuildLayoutImmediate(content);
@@ -494,7 +399,6 @@ public static partial class ShadeSettingsMenu
                 $"content={content.rect.width:0}x{content.rect.height:0} " +
                 $"topMargin={topMargin:0} bottomMargin={bottomMargin:0} horizontalMargin={horizontalMargin:0} " +
                 $"info={infoRect.rect.width:0}x{infoRect.rect.height:0} " +
-                $"presetRow={presetRect.rect.width:0}x{presetRect.rect.height:0} maxPresetCardHeight={maxPresetCardHeight:0} " +
                 $"scrollWrapper={scrollWrapperRect.rect.width:0}x{scrollWrapperRect.rect.height:0} " +
                 $"viewport={viewportRect.rect.width:0}x{viewportRect.rect.height:0} " +
                 $"bindingsContent={bindingsRect.rect.width:0}x{bindingsRect.rect.height:0} " +
@@ -504,7 +408,7 @@ public static partial class ShadeSettingsMenu
     }
 
     /// <summary>
-    /// Builds explicit 2D navigation for the Controls screen: the preset row moves with
+    /// Builds explicit 2D navigation for the Controls screen: the top row moves with
     /// Left/Right across itself and Down into whichever column is nearest; each binding
     /// column moves Up/Down within itself and Left/Right across to the same row index in
     /// the other column (clamped to that column's last row if it's shorter); the top row of
@@ -518,37 +422,37 @@ public static partial class ShadeSettingsMenu
     /// what produced the "everything just goes up/down" behaviour this replaces.
     /// </summary>
     private static void ConfigureControlsMenuNavigation(
-        List<MenuButton> presetButtons,
+        List<MenuButton> topRowButtons,
         List<MenuButton> leftColumnButtons,
         List<MenuButton> rightColumnButtons)
     {
-        ConfigureHorizontalNavigation(presetButtons);
+        ConfigureHorizontalNavigation(topRowButtons);
 
-        // Presets: keep the left/right chain ConfigureHorizontalNavigation just set (and
-        // leave Up alone -- nothing above the top row). Left half of the row drops Down into
+        // The top row: keep the left/right chain ConfigureHorizontalNavigation just set (and
+        // leave Up alone -- nothing above it). Left half of the row drops Down into
         // the left column's first row, right half into the right column's.
-        if (presetButtons.Count > 0)
+        if (topRowButtons.Count > 0)
         {
             MenuButton leftTarget = leftColumnButtons.Count > 0 ? leftColumnButtons[0]
                 : (rightColumnButtons.Count > 0 ? rightColumnButtons[0] : null);
             MenuButton rightTarget = rightColumnButtons.Count > 0 ? rightColumnButtons[0]
                 : (leftColumnButtons.Count > 0 ? leftColumnButtons[0] : null);
 
-            int half = (presetButtons.Count + 1) / 2;
-            for (int i = 0; i < presetButtons.Count; i++)
+            int half = (topRowButtons.Count + 1) / 2;
+            for (int i = 0; i < topRowButtons.Count; i++)
             {
-                var preset = presetButtons[i];
-                if (preset == null)
+                var row = topRowButtons[i];
+                if (row == null)
                     continue;
-                var nav = preset.navigation;
+                var nav = row.navigation;
                 nav.mode = Navigation.Mode.Explicit;
                 nav.selectOnDown = i < half ? leftTarget : rightTarget;
-                preset.navigation = nav;
+                row.navigation = nav;
             }
         }
 
-        var leftTopFallback = presetButtons.Count > 0 ? presetButtons[0] : null;
-        var rightTopFallback = presetButtons.Count > 0 ? presetButtons[presetButtons.Count - 1] : null;
+        var leftTopFallback = topRowButtons.Count > 0 ? topRowButtons[0] : null;
+        var rightTopFallback = topRowButtons.Count > 0 ? topRowButtons[topRowButtons.Count - 1] : null;
 
         WireBindingColumn(leftColumnButtons, rightColumnButtons, leftTopFallback, isLeftColumn: true);
         WireBindingColumn(rightColumnButtons, leftColumnButtons, rightTopFallback, isLeftColumn: false);

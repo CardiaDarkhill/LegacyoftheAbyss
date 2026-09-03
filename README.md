@@ -15,7 +15,7 @@ playable character with its own flight-based moveset, spells, charms and HUD.
 
 The text shipped with the released package is
 [`BuildTemplates/Thunderstore/README.md`](BuildTemplates/Thunderstore/README.md).
-[`AGENTS.md`](AGENTS.md) is the working brief for coding agents.
+[`CLAUDE.md`](CLAUDE.md) is the working brief for coding agents.
 
 ## Downloads
 

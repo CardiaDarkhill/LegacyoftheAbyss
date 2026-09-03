@@ -659,39 +659,21 @@ public partial class SimpleHUD
         image.raycastTarget = false;
         image.color = Color.white;
 
-        // Displayed size, which is the atlas region turned on its side when tk2d packed it that way.
-        Vector2 pixels = new Vector2(frameSprite.rect.width, frameSprite.rect.height);
-        if (frameSpriteRotated)
-        {
-            pixels = new Vector2(pixels.y, pixels.x);
-        }
-
-        tuningFramePixels = pixels;
+        // Two sizes, and they are not the same one. The rect is the sprite as the atlas stores
+        // it, because that is what the untuned rect measures; tuningFramePixels is the plate as it
+        // is *drawn*, turned, because that is the picture hudFrameSocketX/Y were measured off.
+        var stored = new Vector2(frameSprite.rect.width, frameSprite.rect.height);
+        tuningFramePixels = frameSpriteRotated ? new Vector2(stored.y, stored.x) : stored;
 
         var rect = image.rectTransform;
         rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
         rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.sizeDelta = frameSpriteRotated
-            ? new Vector2(pixels.y, pixels.x)
-            : pixels;
+        rect.sizeDelta = stored;
 
-        // Turned, and deliberately not mirrored. The plate is asymmetric - a socket with a horn
-        // sweeping off one side - and turning it this way already points the horn the way this HUD
-        // needs, which is the opposite of Hollow Knight's. Mirroring as well would put it back.
-        rect.localEulerAngles = frameSpriteRotated ? new Vector3(0f, 0f, 90f) : Vector3.zero;
-        rect.localScale = new Vector3(uiScale, uiScale, 1f);
-
-        Vector2 orbCentre = soulOrbRoot.anchoredPosition + new Vector2(
-            -soulOrbRoot.sizeDelta.x * 0.5f,
-            -soulOrbRoot.sizeDelta.y * 0.5f);
-
-        // Placed by its socket rather than by its middle. The socket is off-centre in the plate, so
-        // aligning the two centres would leave the orb sitting on the horn.
-        var socketFromCentre = new Vector2(
-            (FrameSocketX - 0.5f) * pixels.x,
-            -(FrameSocketY - 0.5f) * pixels.y);
-        rect.anchoredPosition = orbCentre - (socketFromCentre * uiScale);
-
+        // Rotation, scale and placement are ApplyFrameTuning's, re-applied every frame from
+        // config.json so the plate can be dialled in live. Setting them a second time here only
+        // meant a second set of numbers to keep in step, and they had already drifted: this held a
+        // copy of the socket fractions as constants.
         hudFrameImage = image;
 
         // The plate carries its own dark socket, which is the orb's background. Leaving the flat

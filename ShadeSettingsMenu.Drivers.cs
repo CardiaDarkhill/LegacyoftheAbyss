@@ -31,6 +31,14 @@ public static partial class ShadeSettingsMenu
         public void OnCancel(BaseEventData eventData)
         {
             eventData?.Use();
+
+            // Used, then dropped. A row waiting for a binding said Escape would cancel it, and the
+            // pause toggle may already have stepped back for this same press.
+            if (IsCapturingBinding || !ClaimBackNavigation())
+            {
+                return;
+            }
+
             if (target == CancelTarget.ShadeNewGame)
             {
                 var manager = newGameBuiltFor ?? UIManager.instance;
@@ -595,12 +603,18 @@ public static partial class ShadeSettingsMenu
         private System.Collections.IEnumerator CaptureRoutine()
         {
             capturing = true;
+            captureDepth++;
             SetButtonText($"{labelPrefix}: Press a binding... (Esc cancels, Backspace clears)");
             while (true)
             {
                 yield return null;
                 if (Input.GetKeyDown(KeyCode.Escape))
+                {
+                    // Claimed on the way out: this coroutine can run before the frame's Cancel is
+                    // dispatched, and by then captureDepth is back to zero.
+                    ClaimBackNavigation();
                     break;
+                }
                 if (Input.GetKeyDown(KeyCode.Backspace) || Input.GetKeyDown(KeyCode.Delete))
                 {
                     ShadeInput.SetBindingOption(action, secondary, ShadeBindingOption.None());
@@ -625,11 +639,18 @@ public static partial class ShadeSettingsMenu
                 }
             }
             capturing = false;
+            ReleaseCapture();
             UpdateLabel();
         }
 
         private void OnDestroy()
         {
+            if (capturing)
+            {
+                capturing = false;
+                ReleaseCapture();
+            }
+
             UnregisterBindingDriver(this);
         }
     }
@@ -675,32 +696,34 @@ public static partial class ShadeSettingsMenu
         {
             try
             {
+                var config = ModConfig.Instance;
                 var devices = InControl.InputManager.Devices;
                 int count = devices?.Count ?? 0;
+
+                int companion = config.shadeInput != null ? config.shadeInput.controllerDeviceIndex : -1;
+                bool companionOnPad = companion >= 0 && companion < count;
+                string companionName = companionOnPad
+                    ? DeviceName(devices[companion], companion)
+                    : "the keyboard";
+
+                if (config.hornetKeyboardEnabled)
+                {
+                    return $"Hornet the keyboard, companion {companionName}";
+                }
+
                 if (count == 0)
                 {
                     return "no controllers attached";
                 }
 
-                int companion = ModConfig.Instance.shadeInput != null
-                    ? ModConfig.Instance.shadeInput.controllerDeviceIndex
-                    : -1;
-
-                if (companion < 0 || companion >= count)
-                {
-                    return "companion is not on a controller";
-                }
-
-                string companionName = DeviceName(devices[companion], companion);
-
-                // Hornet's is whichever else is attached. Named rather than numbered for the same
-                // reason the companion's is, and left vague when there is more than one candidate -
-                // the mod reserves one pad and leaves her the rest, so there may be no single answer.
-                string hornetName = "the keyboard";
+                // Hornet's is whichever pad the companion has not claimed. Named rather than
+                // numbered for the same reason the companion's is, and left vague when there is
+                // more than one candidate - the mod reserves one pad and leaves her the rest.
+                string hornetName = "a controller";
                 int others = 0;
                 for (int i = 0; i < count; i++)
                 {
-                    if (i == companion)
+                    if (companionOnPad && i == companion)
                     {
                         continue;
                     }
@@ -712,7 +735,11 @@ public static partial class ShadeSettingsMenu
                     }
                 }
 
-                if (others > 1)
+                if (others == 0)
+                {
+                    hornetName = "no controller of her own";
+                }
+                else if (others > 1)
                 {
                     hornetName = "any other controller";
                 }
@@ -744,82 +771,155 @@ public static partial class ShadeSettingsMenu
             }
         }
 
+        /// <summary>A device a player claimed: a pad's index, or <see cref="Keyboard"/>.</summary>
+        private const int Keyboard = -1;
+
         private IEnumerator CaptureRoutine()
         {
             capturing = true;
-
-            int hornetIndex = -1;
-            int companionIndex = -1;
+            captureDepth++;
 
             while (true)
             {
-                SetButtonText("Press a button on HORNET's controller... (Esc cancels)");
-                yield return WaitForPad(result => hornetIndex = result);
-                if (hornetIndex < 0)
+                int? hornet = null;
+                int? companion = null;
+
+                SetButtonText("Press a key or a controller button for HORNET... (Esc cancels)");
+                yield return WaitForDevice(result => hornet = result);
+                if (!hornet.HasValue)
                 {
                     break;
                 }
 
-                SetButtonText("Now press a button on the COMPANION's controller... (Esc cancels)");
-                yield return WaitForPad(result => companionIndex = result);
-                if (companionIndex < 0)
+                SetButtonText("Now one for the COMPANION... (Esc cancels)");
+                yield return WaitForDevice(result => companion = result);
+                if (!companion.HasValue)
                 {
                     break;
                 }
 
-                if (companionIndex == hornetIndex)
+                if (companion.Value == hornet.Value)
                 {
                     // The whole point of asking twice. Say so and start again rather than storing a
-                    // split that would leave one pad driving both characters - which is the state
-                    // this screen exists to get out of.
-                    SetButtonText("That is the same controller - try again");
+                    // split that would leave one device driving both characters - which is the
+                    // state this screen exists to get out of.
+                    SetButtonText(hornet.Value == Keyboard
+                        ? "Both players cannot share the keyboard - try again"
+                        : "That is the same controller - try again");
                     yield return new WaitForSecondsRealtime(1.5f);
-                    hornetIndex = -1;
-                    companionIndex = -1;
                     continue;
                 }
 
-                // The whole assignment, not just the config index: a control rebound on a pad
-                // remembers that pad itself, and those remembered devices outrank the index.
-                var shadeConfig = ModConfig.Instance.shadeInput;
-                int moved = shadeConfig != null
-                    ? shadeConfig.ApplyControllerAssignment(hornetIndex, companionIndex)
-                    : 0;
-
-                // Hornet needs her controller switched back on, or the pad she just pressed is
-                // reserved from her by a setting she did not touch.
-                ModConfig.Instance.hornetControllerEnabled = true;
-                ModConfig.Save();
-
-                if (moved > 0 && ModConfig.Instance.logMenu)
-                {
-                    try
-                    {
-                        LegacyHelper.LogInfo(FormattableString.Invariant(
-                            $"Controller assignment moved {moved} binding(s) onto the newly named devices."));
-                    }
-                    catch
-                    {
-                    }
-                }
-
-                try { HornetInput.RefreshHornetDeviceBindings(); }
-                catch { }
-
-                NotifyBindingChanged();
+                Apply(hornet.Value, companion.Value);
                 break;
             }
 
             capturing = false;
+            ReleaseCapture();
             UpdateLabel();
         }
 
+        private void OnDestroy()
+        {
+            if (capturing)
+            {
+                capturing = false;
+                ReleaseCapture();
+            }
+        }
+
         /// <summary>
-        /// Waits for a button on any pad and reports which device it came from, or -1 if the player
-        /// backed out. Uses the same capture the rebinding rows use, so a press is attributed to the
-        /// device it was made on rather than to whichever pad was last active.
+        /// Puts each player on the device they pressed.
+        /// <para>
+        /// A player who stays on the same kind of device keeps every button they have chosen; only
+        /// the pad each binding names is moved. A player who crosses between the keyboard and a
+        /// controller is given that device's layout instead, because the two share no controls -
+        /// there is no button on a pad that a rebound key could be carried across to.
+        /// </para>
         /// </summary>
-        private static IEnumerator WaitForPad(Action<int> report)
+        private static void Apply(int hornetDevice, int companionDevice)
+        {
+            var config = ModConfig.Instance;
+            bool hornetOnPad = hornetDevice != Keyboard;
+            bool companionOnPad = companionDevice != Keyboard;
+
+            if (hornetOnPad == config.hornetKeyboardEnabled)
+            {
+                // Her side of the board changes kind, so it is laid out afresh.
+                if (hornetOnPad)
+                {
+                    HornetInput.ApplyControllerDefaults();
+                }
+                else
+                {
+                    HornetInput.ApplyKeyboardDefaults(disableController: true);
+                }
+            }
+            else
+            {
+                config.hornetKeyboardEnabled = !hornetOnPad;
+                config.hornetControllerEnabled = hornetOnPad;
+            }
+
+            var shadeConfig = config.shadeInput;
+            int moved = 0;
+            if (shadeConfig != null)
+            {
+                // CommandShade is excluded from this question deliberately - it is Hornet's button,
+                // and it living on her pad is not the companion being on one.
+                bool companionWasOnPad = shadeConfig.ReservesAnyController();
+
+                if (companionOnPad && companionWasOnPad)
+                {
+                    // The whole assignment, not just the config index: a control rebound on a pad
+                    // remembers that pad itself, and those remembered devices outrank the index.
+                    moved = shadeConfig.ApplyControllerAssignment(hornetDevice, companionDevice);
+                }
+                else if (companionOnPad)
+                {
+                    shadeConfig.ApplyControllerLayout(companionDevice);
+                }
+                else if (companionWasOnPad)
+                {
+                    shadeConfig.ApplyKeyboardLayout();
+                }
+                else
+                {
+                    shadeConfig.controllerDeviceIndex = Keyboard;
+                }
+            }
+
+            ModConfig.Save();
+
+            if (moved > 0 && config.logMenu)
+            {
+                try
+                {
+                    LegacyHelper.LogInfo(FormattableString.Invariant(
+                        $"Device assignment moved {moved} binding(s) onto the newly named devices."));
+                }
+                catch
+                {
+                }
+            }
+
+            try { HornetInput.RefreshHornetDeviceBindings(); }
+            catch { }
+
+            NotifyBindingChanged();
+        }
+
+        /// <summary>
+        /// Waits for a press on any device and reports which one it was: a pad's index, or
+        /// <see cref="Keyboard"/> for a key. Null means the player backed out.
+        /// <para>
+        /// Uses the same capture the rebinding rows use, so a press is attributed to the device it
+        /// was made on rather than to whichever pad was last active. Controllers are asked first: a
+        /// pad button also arrives as a joystick <c>KeyCode</c>, and answering "the keyboard" to one
+        /// is how this screen could not be told that a player was holding a pad.
+        /// </para>
+        /// </summary>
+        private static IEnumerator WaitForDevice(Action<int?> report)
         {
             while (true)
             {
@@ -827,7 +927,8 @@ public static partial class ShadeSettingsMenu
 
                 if (Input.GetKeyDown(KeyCode.Escape))
                 {
-                    report(-1);
+                    ClaimBackNavigation();
+                    report(null);
                     yield break;
                 }
 
@@ -836,6 +937,12 @@ public static partial class ShadeSettingsMenu
                 if (ShadeInput.TryCaptureControl(out _, out int deviceIndex) && deviceIndex >= 0)
                 {
                     report(deviceIndex);
+                    yield break;
+                }
+
+                if (ShadeInput.TryCaptureKey(out _))
+                {
+                    report(Keyboard);
                     yield break;
                 }
             }
@@ -1600,38 +1707,6 @@ public static partial class ShadeSettingsMenu
     internal static void NotifyCharmLoadoutChanged()
     {
         charmsController?.RefreshAll();
-    }
-
-    private static void ApplyDefaultPreset()
-    {
-        ShadeInput.Config.ResetToDefaults();
-        HornetInput.ApplyControllerDefaults();
-        ModConfig.Save();
-        NotifyBindingChanged();
-    }
-
-    private static void ApplyDualControllerPresetOption()
-    {
-        ShadeInput.Config.ApplyDualControllerPreset();
-        HornetInput.ApplyControllerDefaults();
-        ModConfig.Save();
-        NotifyBindingChanged();
-    }
-
-    private static void ApplyKeyboardOnlyPresetOption()
-    {
-        ShadeInput.Config.ApplyKeyboardOnlyPreset();
-        HornetInput.ApplyKeyboardDefaults(true);
-        ModConfig.Save();
-        NotifyBindingChanged();
-    }
-
-    private static void ApplyShadeControllerPresetOption()
-    {
-        ShadeInput.Config.ApplyShadeControllerPreset();
-        HornetInput.ApplyKeyboardDefaults(true);
-        ModConfig.Save();
-        NotifyBindingChanged();
     }
 
     private sealed class RowHighlightDriver : MonoBehaviour, ISelectHandler, IDeselectHandler, IPointerEnterHandler, IPointerExitHandler

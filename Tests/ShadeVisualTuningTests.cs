@@ -47,10 +47,26 @@ public class ShadeVisualTuningTests
     }
 
     [Fact]
-    public void FallsBackToTheConfiguredDefaultWhenHornetIsUnavailable()
+    public void FallsBackToACharacterLayerWhenHornetIsUnavailable()
     {
+        // Mid scene load, before her renderer can be read. Better over the scenery than under it.
         string resolved = ShadeVisualTuning.ResolveSortingLayerName(null, Layers(SilksongLayers), null);
-        Assert.Equal(ModConfig.DefaultShadeSortingLayer, resolved);
+        Assert.Equal(ShadeVisualTuning.HeroFallbackSortingLayer, resolved);
+    }
+
+    [Fact]
+    public void TheShippedDefaultIsToMatchHornetRatherThanToNameALayer()
+    {
+        // The regression this file gained a case for. "Player" was shipped here, and it sorts above
+        // everything on the layer Silksong actually draws Hornet on - so the companion was ordered
+        // against the scenery by a different rule than she was, and stood in front of grass she
+        // stood behind. Blank is the only value that has the world treat the two alike.
+        Assert.Equal(
+            "Default",
+            ShadeVisualTuning.ResolveSortingLayerName(
+                ModConfig.DefaultShadeSortingLayer,
+                Layers(SilksongLayers),
+                heroLayerName: "Default"));
     }
 
     [Fact]

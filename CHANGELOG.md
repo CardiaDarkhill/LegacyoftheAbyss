@@ -5,10 +5,28 @@ controls it; the reasoning belongs in the commit and the code.
 
 ## Unreleased
 
+### Added
+
+- A Swap Character button puts the companion into the other body where it is standing - R, or the
+  right stick click. Rebind it under Controls; coming back to the Shade restores its last skin.
+- Every control is listed under Controls whichever character is equipped, so the Knight's and the
+  Shade's can both be set before the swap button needs them.
+- Assign Devices is offered on the new-game screen as well as under Controls.
+
 ### Fixed
 
-- The Knight draws where Hornet draws, instead of one step in front of her, and is held at her own
-  depth. It was appearing over scenery she is behind.
+- The companion draws on Hornet's own sorting layer at her own order and depth, so the world sorts
+  the two of them alike. It was appearing over scenery she is behind (`shadeSortingLayer`, now blank
+  for "match Hornet").
+- Escape steps back one screen in the mod's menus instead of leaving the pause menu outright, and
+  cancels a binding prompt without closing the screen behind it.
+- Assign Devices accepts a keyboard press, so either player can be put on the keyboard. It replaces
+  the four control presets, which are gone.
+- The Knight's spell effects keep their own art instead of taking whichever Shade skin was picked
+  last.
+- The HUD plate sits where its socket says it should. It was being placed against the plate's stored
+  size while it is drawn turned, and `hudFrameOffsetX` existed to cancel the difference - it now
+  defaults to 0.
 - Hornet no longer stands still for a second after a room transition. Her keyboard bindings are put
   back on the frame they go missing rather than a second later.
 - Vengeful Spirit rides over uneven ground instead of bursting on it. It holds its line and shifts

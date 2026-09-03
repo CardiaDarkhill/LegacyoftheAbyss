@@ -510,13 +510,30 @@ public partial class LegacyHelper
             PersistIfChanged();
         }
 
+        /// <summary>
+        /// The skin these sheets are loaded through, or null for the built-in set.
+        /// <para>
+        /// A character that does not wear skins does not borrow one for its spells either. The
+        /// Knight draws its body from the bundle, so the only sheets it ever reaches are the spell
+        /// effects - and those were arriving in whichever skin the Shade had been wearing last,
+        /// which reads as the Knight's spells changing colour with a body it is not in.
+        /// </para>
+        /// </summary>
+        private ShadeSkinDefinition EffectiveSkin => Companion != null && !Companion.CharacterDefinition.SupportsSkins
+            ? null
+            : ShadeSkinManager.SelectedSkin;
+
+        /// <summary>The id of <see cref="EffectiveSkin"/>, for spotting a change worth reloading.</summary>
+        private string EffectiveSkinId => EffectiveSkin?.Id ?? ShadeSkinManager.DefaultSkinId;
+
         private void LoadShadeSprites()
         {
             loadedSpriteTextures.Clear();
-            loadedSkinId = ShadeSkinManager.SelectedSkinId;
+            loadedSkinId = EffectiveSkinId;
             try
             {
-                string SpritePath(string fileName) => ShadeSkinManager.ResolveSpritePath(fileName);
+                var skin = EffectiveSkin;
+                string SpritePath(string fileName) => ShadeSkinManager.ResolveSpritePath(skin, fileName);
                 idleAnimFrames = LoadSpriteStrip(SpritePath("Shade_Idle_Sheet.png"), 9);
                 floatAnimFrames = LoadSpriteStrip(SpritePath("Shade_Float_Sheet.png"), 6);
                 vengefulAnimFrames = LoadSpriteStrip(SpritePath("Vengeful_Spirit_Sheet.png"), 2);
@@ -553,7 +570,7 @@ public partial class LegacyHelper
         /// </summary>
         internal void ReloadSkinSprites()
         {
-            if (string.Equals(loadedSkinId, ShadeSkinManager.SelectedSkinId, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(loadedSkinId, EffectiveSkinId, StringComparison.OrdinalIgnoreCase))
                 return;
 
             var previousTextures = new List<Texture2D>(loadedSpriteTextures);

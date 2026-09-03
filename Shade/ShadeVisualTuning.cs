@@ -17,6 +17,13 @@ namespace LegacyoftheAbyss.Shade
         internal const string UnityDefaultSortingLayer = "Default";
 
         /// <summary>
+        /// The layer to use when Hornet's own cannot be read at all - during a scene load, say.
+        /// A character layer rather than "Default", because a companion that has to guess is better
+        /// off drawn over the scenery than under it.
+        /// </summary>
+        internal const string HeroFallbackSortingLayer = "Player";
+
+        /// <summary>
         /// Particles emitted per second at 0% SOUL, before the player's intensity multiplier.
         /// Deliberately non-trivial: the brief is that the wisps are already noticeable on an
         /// empty soul meter rather than fading out to nothing. Sized against the emitter's spawn
@@ -40,9 +47,14 @@ namespace LegacyoftheAbyss.Shade
         /// <summary>
         /// Picks the sorting layer the Shade's sprite renderer should use.
         /// <para>
-        /// <paramref name="configured"/> is <see cref="ModConfig.shadeSortingLayer"/>. A blank value
-        /// (or a layer name this game build does not define, e.g. after a Unity upgrade reshuffles
-        /// them) falls through to Hornet's own layer, then to Unity's "Default".
+        /// <paramref name="configured"/> is <see cref="ModConfig.shadeSortingLayer"/>, and blank -
+        /// the default - means Hornet's own layer. Naming one overrides that; a name this game
+        /// build does not define is ignored the same way a blank one is.
+        /// </para>
+        /// <para>
+        /// Matching her is the point rather than a fallback. Silksong draws her on a layer it then
+        /// lets depth sort within, so a companion anywhere else is sorted against the scenery by a
+        /// different rule than she is.
         /// </para>
         /// </summary>
         internal static string ResolveSortingLayerName(string? configured, Func<string, bool> layerExists, string? heroLayerName)
@@ -62,9 +74,9 @@ namespace LegacyoftheAbyss.Shade
                 return heroLayerName!;
             }
 
-            if (SafeExists(layerExists, ModConfig.DefaultShadeSortingLayer))
+            if (SafeExists(layerExists, HeroFallbackSortingLayer))
             {
-                return ModConfig.DefaultShadeSortingLayer;
+                return HeroFallbackSortingLayer;
             }
 
             return UnityDefaultSortingLayer;

@@ -110,6 +110,60 @@ public static partial class ShadeSettingsMenu
     private static readonly Color ButtonDisabledColor = new Color(1f, 1f, 1f, 0.15f);
     private static readonly bool IncludeLegacyCharmMenu = false;
     private static bool consumeNextToggle;
+
+    /// <summary>
+    /// The frame this menu last acted on a press of Back.
+    /// <para>
+    /// One press of Escape reaches these screens twice: once as the EventSystem's Cancel, delivered
+    /// to whichever row is selected, and once as the game's own pause toggle. Either can arrive
+    /// first, and whichever does takes the step back - so the other then finds itself on the screen
+    /// the first one just opened and steps back again from there, which walks out of the pause menu
+    /// from anywhere in two levels of this menu in a single keypress.
+    /// </para>
+    /// <para>
+    /// So a back press is claimed rather than handled twice. The first arrival claims the frame and
+    /// acts; the second finds it taken and does nothing at all.
+    /// </para>
+    /// </summary>
+    private static int backNavigationFrame = -1;
+
+    /// <summary>
+    /// How many rows are waiting for the player to press the control they want bound. While any is,
+    /// Escape belongs to that row - it is how the prompt says to cancel - and neither the pause
+    /// toggle nor a Cancel may act on it.
+    /// </summary>
+    private static int captureDepth;
+
+    /// <summary>Whether a row is asking for a keypress, and so owns Escape.</summary>
+    internal static bool IsCapturingBinding => captureDepth > 0;
+
+    /// <summary>
+    /// Gives up a capture. Clamped at zero and re-zeroed whenever the screens go away, because a
+    /// row destroyed mid-prompt - a rebuild, or the screen closing - takes its coroutine with it
+    /// and never reaches the release. A count stuck above zero would leave Escape doing nothing at
+    /// all for the rest of the session.
+    /// </summary>
+    private static void ReleaseCapture()
+    {
+        captureDepth = captureDepth > 0 ? captureDepth - 1 : 0;
+    }
+
+    /// <summary>
+    /// Takes this frame's back press, or reports that something else already has. Also claimed - and
+    /// never released - by a capture that cancels itself on Escape, so the same press cannot then
+    /// close the screen the row lives on.
+    /// </summary>
+    private static bool ClaimBackNavigation()
+    {
+        int frame = Time.frameCount;
+        if (backNavigationFrame == frame)
+        {
+            return false;
+        }
+
+        backNavigationFrame = frame;
+        return true;
+    }
     private static readonly List<BindingMenuDriver> bindingDrivers = new();
     private static ShadeToggleDriver shadeToggleDriver;
 

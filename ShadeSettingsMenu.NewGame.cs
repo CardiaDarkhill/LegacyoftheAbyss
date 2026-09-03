@@ -77,6 +77,9 @@ public static partial class ShadeSettingsMenu
     private const string CharacterHelp =
         "Would you like to play as the Shade or the Knight? (Special thanks to Shownyoung for their work on the Knight in Silksong mod and their help with this feature!) WARNING: The Knight may struggle with some platforming sections.";
 
+    private const string AssignDevicesHelp =
+        "Say which device each player is holding by pressing a button on it. Two players cannot share one device, and either may use the keyboard.";
+
     /// <summary>
     /// Called by the <c>UIManager.StartNewGame</c> patch. Returns true when the questions still
     /// need asking, in which case the original call is skipped and picked up again on Begin.
@@ -490,6 +493,25 @@ public static partial class ShadeSettingsMenu
         AddRow("Character", CharacterHelp,
             () => newGameCharacter == ShadeCharacterId.Knight ? "Knight" : "Shade",
             _ => newGameCharacter = newGameCharacter == ShadeCharacterId.Knight ? ShadeCharacterId.Shade : ShadeCharacterId.Knight);
+
+        // The Controls screen's row, offered here as well: which player is holding what is a
+        // question worth answering before the first room rather than after it, and a second player
+        // who cannot move is not obviously a device problem from inside the game.
+        var assign = CreateMenuButton(content, buttonTemplate, "Assign Devices", null, CancelTarget.ShadeNewGame);
+        if (assign is MenuButton assignButton)
+        {
+            var assignRect = assignButton.GetComponent<RectTransform>();
+            assignRect.anchorMin = new Vector2(0f, 1f);
+            assignRect.anchorMax = new Vector2(1f, 1f);
+            assignRect.pivot = new Vector2(0.5f, 1f);
+            assignRect.anchoredPosition = new Vector2(0f, -cursorY);
+            assignRect.sizeDelta = new Vector2(0f, ButtonRowHeight);
+            cursorY += ButtonRowHeight + RowSpacing;
+
+            assignButton.gameObject.AddComponent<ControllerAssignmentDriver>().Initialize(assignButton);
+            selectables.Add(assignButton);
+            descriptions.Add(new KeyValuePair<MenuSelectable, string>(assignButton, AssignDevicesHelp));
+        }
 
         cursorY += RowSpacing;
 

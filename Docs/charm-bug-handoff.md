@@ -1,7 +1,7 @@
 # Handoff: the charm bug backlog
 
 Written 2026-08-30. 24 open reports, almost all from one charm-testing session on the
-`Knight-in-silksong` branch. This is orientation plus a triaged worklist — read `AGENTS.md` first,
+`Knight-in-silksong` branch. This is orientation plus a triaged worklist — read `CLAUDE.md` first,
 it holds the rules; this holds the leads.
 
 ## Getting oriented

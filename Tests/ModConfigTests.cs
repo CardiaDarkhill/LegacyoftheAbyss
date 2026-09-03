@@ -259,6 +259,89 @@ public class ModConfigTests
         ModConfig.Save();
     }
 
+    /// <summary>
+    /// The one-shot correction of a shipped default that turned out to be wrong.
+    /// <para>
+    /// It has to reach a config that already exists, because nothing on disk tells a value that was
+    /// chosen apart from one that was never touched - and it has to stop reaching it afterwards, or
+    /// a player who sets the old value back on purpose loses it on every launch.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ADefaultThatWasWrongIsCorrectedOnceAndThenLeftAlone()
+    {
+        var cfg = ModConfig.Instance;
+        int originalVersion = cfg.configVersion;
+        string originalLayer = cfg.shadeSortingLayer;
+        int originalOffset = cfg.shadeSortingOrderOffset;
+        float originalFrameOffset = cfg.hudFrameOffsetX;
+
+        try
+        {
+            cfg.configVersion = 0;
+            cfg.shadeSortingLayer = "Player";
+            cfg.shadeSortingOrderOffset = 1;
+            cfg.hudFrameOffsetX = -26f;
+            ModConfig.Save();
+
+            var loaded = ModConfig.Load();
+            Assert.Equal(ModConfig.DefaultShadeSortingLayer, loaded.shadeSortingLayer);
+            Assert.Equal(0, loaded.shadeSortingOrderOffset);
+            Assert.Equal(0f, loaded.hudFrameOffsetX, 3);
+            Assert.Equal(ModConfig.CurrentConfigVersion, loaded.configVersion);
+
+            // Chosen this time, at the current version, so it has to survive.
+            loaded.shadeSortingLayer = "Player";
+            loaded.hudFrameOffsetX = -26f;
+            ModConfig.Save();
+
+            var again = ModConfig.Load();
+            Assert.Equal("Player", again.shadeSortingLayer);
+            Assert.Equal(-26f, again.hudFrameOffsetX, 3);
+        }
+        finally
+        {
+            var restored = ModConfig.Instance;
+            restored.configVersion = originalVersion;
+            restored.shadeSortingLayer = originalLayer;
+            restored.shadeSortingOrderOffset = originalOffset;
+            restored.hudFrameOffsetX = originalFrameOffset;
+            ModConfig.Save();
+        }
+    }
+
+    [Fact]
+    public void ACorrectionOnlyTouchesTheValueThatWasShipped()
+    {
+        var cfg = ModConfig.Instance;
+        int originalVersion = cfg.configVersion;
+        string originalLayer = cfg.shadeSortingLayer;
+        int originalOffset = cfg.shadeSortingOrderOffset;
+
+        try
+        {
+            // A layer the player picked themselves is not the default that was wrong, so the
+            // correction has nothing to say about it - or about the order that goes with it.
+            cfg.configVersion = 0;
+            cfg.shadeSortingLayer = "Actors";
+            cfg.shadeSortingOrderOffset = 3;
+            ModConfig.Save();
+
+            var loaded = ModConfig.Load();
+            Assert.Equal("Actors", loaded.shadeSortingLayer);
+            Assert.Equal(3, loaded.shadeSortingOrderOffset);
+            Assert.Equal(ModConfig.CurrentConfigVersion, loaded.configVersion);
+        }
+        finally
+        {
+            var restored = ModConfig.Instance;
+            restored.configVersion = originalVersion;
+            restored.shadeSortingLayer = originalLayer;
+            restored.shadeSortingOrderOffset = originalOffset;
+            ModConfig.Save();
+        }
+    }
+
     [Fact]
     public void LoadRepairsOutOfRangeVisualSettings()
     {

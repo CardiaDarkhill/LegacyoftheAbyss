@@ -222,6 +222,18 @@ public class ModConfig
     public bool logGeneral = true;
     public bool logMenu = true;
     public bool logShade = true;
+    /// <summary>
+    /// Which round of shipped defaults this file was written against. Compared against
+    /// <see cref="CurrentConfigVersion"/> on load and then brought up to it.
+    /// <para>
+    /// Only ever used to correct a default that turned out to be wrong. A value the player chose
+    /// looks exactly like a default they never touched, so a correction is applied once, only to
+    /// the value that was shipped, and only to a file that predates the fix - which is what this
+    /// number is for. It is not a schema version: fields are added and removed without touching it.
+    /// </para>
+    /// </summary>
+    public int configVersion;
+
     public bool logHud = true;
     // Enables the developer HP/soul cheat keys polled by SimpleHUD.Update. Off by default
     // so shipped builds do not poll six keys every frame or expose the cheats.
@@ -234,10 +246,17 @@ public class ModConfig
     public bool hudFrameMirror = false;
     public float hudFrameRotation = 90f;
     public float hudFrameScale = 1f;
-    public float hudFrameOffsetX = -26f;
+    // Zero because the placement derives correctly now. This was -26 to cancel out a socket
+    // offset measured against the plate's stored size while the plate is drawn turned; the two
+    // sizes are told apart at the point of use, so there is nothing left to cancel.
+    public float hudFrameOffsetX = 0f;
     public float hudFrameOffsetY = 0f;
 
-    /// <summary>Where the plate's socket sits within it, as a fraction of its drawn size, y down.</summary>
+    /// <summary>
+    /// Where the plate's socket sits within it, as a fraction of the plate <em>as drawn</em>, y
+    /// measured down. Taken off the art rather than guessed: the dark disc's centroid in the turned
+    /// 239x144 frame is (168, 82). Tools/HudPreview.py re-derives it if the art ever changes.
+    /// </summary>
     public float hudFrameSocketX = 0.704f;
 
     public float hudFrameSocketY = 0.568f;
@@ -392,10 +411,13 @@ public class ModConfig
     // Inventory - weather, fog and vignette all live above "Player", so the Shade has to sit
     // on a character layer to be occluded by them. Blank falls back to whatever layer
     // Hornet's own renderer is using. See LegacyHelper.ShadeRendering.cs.
-    public string shadeSortingLayer = "Player";
+    public string shadeSortingLayer = "";
     // Draw order within shadeSortingLayer. When the Shade shares Hornet's layer this is an
     // offset from her order (1 = just in front of her); on any other layer it is absolute.
-    public int shadeSortingOrderOffset = 1;
+    // Zero, because anything else takes the companion out of the depth sorting Hornet is in:
+    // an order of 1 draws it over every prop at order 0 on that layer whatever its depth, which
+    // is the companion standing in front of grass she is standing behind.
+    public int shadeSortingOrderOffset = 0;
     // Draw the Shade with a copy of Hornet's own sprite material rather than Unity's default
     // one, so scene darkness, character tinting and appearance regions treat it as a
     // character instead of an unlit overlay. Toggleable because it is the one visual change
@@ -542,8 +564,24 @@ public class ModConfig
     public bool bugReportAutoCaptureExceptions = true;
     public int bugReportAutoCaptureLimit = 5;
 
-    /// <summary>Layer <see cref="shadeSortingLayer"/> falls back to when the saved value is blank.</summary>
-    public const string DefaultShadeSortingLayer = "Player";
+    /// <summary>
+    /// Blank: match whatever layer Hornet's own renderer is on.
+    /// <para>
+    /// Not a character layer of its own, which is what this was. Silksong draws Hornet on
+    /// "Default" and lets depth decide what occludes her, so a companion on any other layer sorts
+    /// against the scenery by a different rule than she does - and every "the companion is in
+    /// front of something Hornet is behind" report has been that difference. Naming a layer here
+    /// still works and still overrides.
+    /// </para>
+    /// </summary>
+    public const string DefaultShadeSortingLayer = "";
+
+    /// <summary>
+    /// The current round of shipped defaults. 1 corrected two of them: the companion's sorting
+    /// layer, which put it outside the depth sorting Hornet is in, and the HUD plate's x offset,
+    /// which existed to cancel a placement error that has since been fixed at its source.
+    /// </summary>
+    internal const int CurrentConfigVersion = 1;
 
     /// <summary>Hotkey <see cref="bugReportHotkey"/> falls back to when the saved value is blank or unparseable.</summary>
     public const string DefaultBugReportHotkey = "F8";
@@ -607,6 +645,42 @@ public class ModConfig
         _ = Instance;
     }
 
+    /// <summary>
+    /// Brings a file written against an older round of defaults up to the current one, correcting
+    /// only values that are still sitting on the default that was wrong.
+    /// <para>
+    /// A player who deliberately set one of these to the old default keeps their choice for exactly
+    /// one launch and then loses it. That is the price of the correction reaching anyone at all:
+    /// nothing on disk distinguishes a value that was chosen from one that was never touched.
+    /// </para>
+    /// </summary>
+    private static bool ApplyDefaultCorrections(ModConfig config)
+    {
+        if (config.configVersion >= CurrentConfigVersion)
+        {
+            return false;
+        }
+
+        if (config.configVersion < 1)
+        {
+            // "Player" was the shipped layer, and it sorts above everything on Hornet's. Blank now
+            // means "match hers", which is the only setting that has the world treat the two alike.
+            if (string.Equals(config.shadeSortingLayer, "Player", StringComparison.Ordinal))
+            {
+                config.shadeSortingLayer = DefaultShadeSortingLayer;
+                config.shadeSortingOrderOffset = 0;
+            }
+
+            if (Mathf.Approximately(config.hudFrameOffsetX, -26f))
+            {
+                config.hudFrameOffsetX = 0f;
+            }
+        }
+
+        config.configVersion = CurrentConfigVersion;
+        return true;
+    }
+
     public static ModConfig Load()
     {
         try
@@ -647,6 +721,18 @@ public class ModConfig
                     + "with Debug Keys switched on.");
             }
 
+            // The other half of the same rule, for an action whose default has already been handed
+            // out by the constructor rather than withheld - see DropCollidingDefaults.
+            int droppedDefaults = instance.shadeInput.DropCollidingDefaults();
+            if (droppedDefaults > 0)
+            {
+                Debug.Log(
+                    $"[LegacyoftheAbyss] Left {droppedDefaults} new default binding(s) unbound because "
+                    + "the control was already in use. Bind them from the Controls menu.");
+            }
+
+            bool corrected = ApplyDefaultCorrections(instance);
+
             if (string.IsNullOrWhiteSpace(instance.shadeSkin))
             {
                 instance.shadeSkin = "Default";
@@ -677,6 +763,15 @@ public class ModConfig
             // Snap to the menu's tenths as well as clamping: a hand-edited 0.55 would otherwise
             // survive here and then jump the first time the slider is nudged.
             instance.shadeMaskFraction = Mathf.Clamp(Mathf.Round(instance.shadeMaskFraction * 10f) / 10f, MinShadeMaskFraction, 1f);
+
+            // After the rest of the normalisation, not in the middle of it, so the file on disk is
+            // the one that was actually loaded. Written now rather than left to the next change,
+            // because an unwritten correction is one that runs again on every launch - and would
+            // then keep overwriting a player who had set the old value back on purpose.
+            if (corrected)
+            {
+                Save();
+            }
         }
         catch
         {
