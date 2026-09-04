@@ -178,7 +178,17 @@ public static partial class ShadeSettingsMenu
     private static bool ClaimBackNavigation()
     {
         int frame = Time.frameCount;
-        if (backNavigationFrame == frame)
+
+        // One frame wider than the press, because a single Escape does not arrive on a single
+        // frame. A report caught the two doors acting on frames 3977 and 3978: the pause toggle
+        // stepped back to the main screen, and the Cancel arrived the next frame, found a claim that
+        // had already expired, and - now that the main screen really was showing - correctly read
+        // its target as "leave the menu". One press, two screens. The stale-target rewrite in
+        // CancelRouter cannot catch that one, because by then the target is not stale, it is right.
+        //
+        // Nothing a player can do produces two deliberate back presses 16ms apart, so the window
+        // costs nothing and closes the gap for whichever pair of doors happens to fire.
+        if (frame - backNavigationFrame <= 1)
         {
             return false;
         }

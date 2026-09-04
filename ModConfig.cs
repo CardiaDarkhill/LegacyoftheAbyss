@@ -486,9 +486,11 @@ public class ModConfig
     // Peak alpha multiplier on the cloned light. 1 matches Hornet; above that saturates it.
     public float shadeLightIntensity = 2.5f;
     // Ceiling on shadeLightIntensity for the *visible* glow only, leaving the full value to the
-    // darkness cutout that actually lifts darkness. 1 means the companion's glow is never brighter
-    // than Hornet's own; above that it saturates into a white disc drawn over the companion, which
-    // reads as it fading out as it walks away from her.
+    // darkness cutout that actually lifts darkness. 1 means the companion's halo is never brighter
+    // than Hornet's own; above that it saturates into a white disc.
+    //
+    // The halo is drawn behind the companion rather than level with it - see SyncGlowSorting - so
+    // raising this brightens what is around the companion instead of washing the companion out.
     public float shadeLightGlowIntensityCap = 1f;
     // Peak radius multiplier, reached at the edge of Hornet's own light. 1 matches her radius.
     public float shadeLightRadiusScale = 0.5f;

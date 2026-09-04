@@ -14,13 +14,13 @@ using Xunit;
 public class ShadeSwapCharacterBindingTests
 {
     [Fact]
-    public void TheDefaultIsRAndTheRightStickClick()
+    public void TheDefaultIsVAndTheRightStickClick()
     {
         var config = ShadeInputConfig.CreateDefault();
         var binding = config.GetBinding(ShadeAction.SwapCharacter);
 
         Assert.Equal(ShadeBindingOptionType.Key, binding.primary.type);
-        Assert.Equal(KeyCode.R, binding.primary.key);
+        Assert.Equal(KeyCode.V, binding.primary.key);
         Assert.Equal(ShadeBindingOptionType.Controller, binding.secondary.type);
         Assert.Equal(InputControlType.RightStickButton, binding.secondary.control);
     }
@@ -37,7 +37,7 @@ public class ShadeSwapCharacterBindingTests
     public void AKeyTheresAlreadyASlashOnIsLeftToTheSlash()
     {
         var config = ShadeInputConfig.CreateDefault();
-        config.SetBindingOption(ShadeAction.Nail, secondary: false, ShadeBindingOption.FromKey(KeyCode.R));
+        config.SetBindingOption(ShadeAction.Nail, secondary: false, ShadeBindingOption.FromKey(KeyCode.V));
 
         Assert.Equal(1, config.DropCollidingDefaults());
 
@@ -46,7 +46,7 @@ public class ShadeSwapCharacterBindingTests
 
         // Only the half that collided. The pad half is still free, so it stays.
         Assert.Equal(ShadeBindingOptionType.Controller, swap.secondary.type);
-        Assert.Equal(KeyCode.R, config.GetBinding(ShadeAction.Nail).primary.key);
+        Assert.Equal(KeyCode.V, config.GetBinding(ShadeAction.Nail).primary.key);
     }
 
     [Fact]

@@ -26,8 +26,22 @@ public partial class LegacyHelper
     /// </summary>
     private static Material shadeDefaultSpriteMaterial;
 
+    /// <summary>
+    /// The shader keyword Silksong uses to mean "this renderer is a character". Scene darkness, the
+    /// light cutout and appearance-region tinting all key off it - <see cref="CharacterTint.CanAdd"/>
+    /// refuses any renderer whose material has it switched off. Asserted against the shipped
+    /// assembly in <c>Tests/GameApiContract.cs</c>, because a renamed keyword would silently put the
+    /// companion back to being lit as scenery.
+    /// </summary>
+    internal const string CharacterShaderKeyword = "IS_CHARACTER";
+
+    /// <summary>The tint <see cref="CharacterTint"/> drives, seeded to white so enabling the keyword
+    /// cannot leave the companion drawing through an unset colour.</summary>
+    internal const string CharacterTintColorProperty = "_CharacterTintColor";
+
     private static bool loggedShadeMaterialUnavailable;
     private static bool loggedHeroLightUnavailable;
+    private static bool loggedHeroNotACharacter;
 
     /// <summary>Set when the clone itself came out unusable. Unlike a missing hero light, that is
     /// not a timing problem, so it stops the per-frame retry rather than repeating forever.</summary>
@@ -271,9 +285,86 @@ public partial class LegacyHelper
             // built - so a re-resolve here left the two of them a step apart for the rest of the
             // session.
             RefreshKnightSorting();
+            ApplyKnightCharacterShading();
 
             SyncChildRendererSorting();
             EnsureShadeLight();
+        }
+
+        /// <summary>
+        /// What the light ramp last decided, for the bug report. The ramp runs on separation from
+        /// Hornet and both of the things it produces - a glow drawn over the companion, and a cutout
+        /// that lifts darkness around it - can be mistaken for the companion's own opacity changing
+        /// with distance, which is exactly the complaint being diagnosed. The numbers say which.
+        /// </summary>
+        private float lastLightSeparation;
+        private float lastLightIntensity;
+        private float lastLightGlowIntensity;
+        private float lastLightRadius;
+
+        /// <summary>
+        /// Marks the Knight's rig as a character to Silksong's shader, which is what the Shade gets
+        /// for free by drawing through a clone of Hornet's own material.
+        /// <para>
+        /// The rig cannot take that clone: it draws Hollow Knight's atlas through tk2d, so the
+        /// material has to stay its own. What it ships with is the Hollow Knight material, and that
+        /// material carries <b>no shader keywords at all</b> - so on Silksong's shader the Knight is
+        /// lit as scenery rather than as a character. In a dark room that is not a subtle difference:
+        /// scenery fades into the dark, and the reports of a "see-through" Knight are the background
+        /// showing through a companion the shader is fading out, while Hornet beside it stays solid.
+        /// </para>
+        /// <para>
+        /// Hornet's own material is asked first rather than the keyword being enabled on faith. If
+        /// hers does not carry it then the guess about what the keyword means is wrong, and turning
+        /// on a keyword nothing else uses is more likely to break the Knight's shading than fix it -
+        /// so that case logs and changes nothing.
+        /// </para>
+        /// <para>
+        /// The rig body draws every one of its 891 frames from a single material, so this is a
+        /// one-time edit to a shared asset rather than something tk2d can swap out from under it;
+        /// re-running it per scene is idempotent.
+        /// </para>
+        /// </summary>
+        private void ApplyKnightCharacterShading()
+        {
+            if (knightView == null || !ModConfig.Instance.shadeUseHornetMaterial)
+            {
+                return;
+            }
+
+            var rigRenderer = knightView.FirstRenderer;
+            var material = rigRenderer != null ? rigRenderer.sharedMaterial : null;
+            if (!material)
+            {
+                return;
+            }
+
+            var heroMaterial = LegacyHelper.ResolveHornetBodyRenderer(ResolveHeroController())?.sharedMaterial;
+            if (!heroMaterial || !heroMaterial.IsKeywordEnabled(LegacyHelper.CharacterShaderKeyword))
+            {
+                if (!loggedHeroNotACharacter)
+                {
+                    loggedHeroNotACharacter = true;
+                    LogWarning(
+                        $"Hornet's material does not carry '{LegacyHelper.CharacterShaderKeyword}', so the Knight is left on the shading it shipped with. "
+                        + "Scene darkness will treat it as scenery.");
+                }
+
+                return;
+            }
+
+            if (!material.IsKeywordEnabled(LegacyHelper.CharacterShaderKeyword))
+            {
+                material.EnableKeyword(LegacyHelper.CharacterShaderKeyword);
+            }
+
+            // Only seeded, never re-asserted against a live value: once the keyword is on, the game's
+            // own CharacterTint drives this through a property block, and a property block wins over
+            // the material anyway.
+            if (material.HasProperty(LegacyHelper.CharacterTintColorProperty))
+            {
+                material.SetColor(LegacyHelper.CharacterTintColorProperty, Color.white);
+            }
         }
 
         /// <summary>
@@ -336,6 +427,235 @@ public partial class LegacyHelper
             }
         }
 
+        /// <summary>
+        /// The opacity the companion is actually drawn at, and where it comes from.
+        /// <para>
+        /// Written because "the Knight looks see-through" cannot be answered from a screenshot. A
+        /// washed-out companion is either our own alpha - the Shade sits at 0.9 by design, and the
+        /// focus and teleport channels drop it further - or a mist prop the room draws in front of
+        /// it, and those look identical in a frame. Reading the alpha back settles it in one line:
+        /// at 1.00 the wash is the scene's and nothing here caused it.
+        /// </para>
+        /// <para>
+        /// Both halves of the Knight are reported because they are separate values that both scale
+        /// what reaches the screen - the material's own <c>_Color</c>, and the vertex colour tk2d
+        /// multiplies into it - and the rig keeps Hollow Knight's materials rather than the clone of
+        /// Hornet's that the Shade's body gets, so its shader is named too.
+        /// </para>
+        /// </summary>
+        internal string DescribeRendering()
+        {
+            try
+            {
+                var parts = new System.Collections.Generic.List<string>();
+
+                var heroRenderer = LegacyHelper.ResolveHornetBodyRenderer(ResolveHeroController());
+                parts.Add(heroRenderer != null
+                    ? "hornet: " + DescribeMaterial(heroRenderer.sharedMaterial) + DescribeRendererOverrides(heroRenderer)
+                    : "hornet: unresolved");
+
+                if (sr != null)
+                {
+                    parts.Add(FormattableString.Invariant(
+                        $"body: drawn {sr.enabled} colour a={sr.color.a:0.00} {DescribeMaterial(sr.sharedMaterial)}{DescribeRendererOverrides(sr)}"));
+                }
+
+                if (knightView != null)
+                {
+                    var rigRenderer = knightView.FirstRenderer;
+                    if (rigRenderer != null)
+                    {
+                        var sprite = rigRenderer.GetComponent<tk2dBaseSprite>();
+                        string vertex = sprite != null
+                            ? FormattableString.Invariant($"sprite a={sprite.color.a:0.00}")
+                            : "sprite absent";
+
+                        parts.Add(FormattableString.Invariant(
+                            $"knight rig: drawn {rigRenderer.enabled} {vertex} {DescribeMaterial(rigRenderer.sharedMaterial)}{DescribeRendererOverrides(rigRenderer)}"));
+                    }
+                    else
+                    {
+                        parts.Add("knight rig: no renderer");
+                    }
+                }
+
+                parts.Add(DescribeLightParts());
+
+                parts.Add(shadeLightRenderers.Length == 0
+                    ? (ModConfig.Instance.shadeLightEnabled
+                        ? (shadeLightCloneFailed ? "light: clone failed" : "light: none yet")
+                        : "light: switched off")
+                    : FormattableString.Invariant(
+                        $"light: {shadeLightRenderers.Length} renderer(s) at {lastLightSeparation:0.0}u from Hornet, cutout {lastLightIntensity:0.00} glow {lastLightGlowIntensity:0.00} radius {lastLightRadius:0.00}"));
+
+                return string.Join(" | ", parts.ToArray());
+            }
+            catch (Exception e)
+            {
+                return "unreadable: " + e.Message;
+            }
+        }
+
+        /// <summary>
+        /// Puts the decorative half of the cloned light behind the companion instead of level with it.
+        /// <para>
+        /// Four of the five glow parts - <c>HeroLight</c>, <c>Imbued Hero Light</c>, <c>Dust</c> and
+        /// <c>Dust BG</c> - are soft 18-to-24 unit discs that clone onto sorting layer "Default" at
+        /// order 0, which is <em>exactly</em> the companion's own layer and order. Unity has no
+        /// defined winner for that tie, and for the companion it broke the wrong way: the discs
+        /// landed on the body rather than around it and the companion read as see-through, worse
+        /// with distance because the ramp brightens and grows them with separation. Three bug
+        /// reports went to it, and two guesses at the cause before the report was made to say which.
+        /// </para>
+        /// <para>
+        /// Explicitly ordering them behind the companion removes the tie rather than resolving it in
+        /// our favour by luck. Only within the companion's own layer: <c>white_light_donut</c> sits
+        /// on "Over", above the darkness vignette, which is the only place it can be seen from - and
+        /// a donut has a hole where the body is, so it was never the half doing this. The cutout
+        /// parts are untouched for the same reason as the shadow particles: their cloned membership
+        /// is what puts them in the darkness camera's pass, and that pass is what lights the room.
+        /// </para>
+        /// </summary>
+        private void SyncGlowSorting(int layer, int order)
+        {
+            for (int i = 0; i < shadeLightRenderers.Length; i++)
+            {
+                if (i >= shadeLightIsGlow.Length || !shadeLightIsGlow[i])
+                {
+                    continue;
+                }
+
+                var renderer = shadeLightRenderers[i];
+                if (!renderer || renderer.sortingLayerID != layer)
+                {
+                    continue;
+                }
+
+                renderer.sortingOrder = order + GlowSortingOffset;
+            }
+        }
+
+        /// <summary>
+        /// How far behind the companion its glow sits. Below the focus aura at -2, so the aura still
+        /// reads in front of the glow it is drawn against.
+        /// </summary>
+        private const int GlowSortingOffset = -3;
+
+        /// <summary>
+        /// Hornet's light arrangement, part by part, beside the copy of it the companion carries.
+        /// <para>
+        /// The halo draws over the companion where hers does not draw over her, and nothing in the
+        /// game's code says why: there is no <c>SpriteMask</c> anywhere in <c>HeroLight</c>, so
+        /// whatever spares her is a scene arrangement that can only be read at runtime. Three
+        /// candidates, and they want opposite fixes - a mask the clone drops
+        /// (<see cref="CloneLightPart"/> sets <c>maskInteraction</c> to None so the copy renders at
+        /// all), a sorting order that puts her body above her glow, or a donut sprite whose hole
+        /// sits over her and which the radius ramp closes on the companion.
+        /// </para>
+        /// <para>
+        /// So each part reports the three together, source against clone. Guessing between them
+        /// costs a build, a restart and a repro; this costs one line in a report.
+        /// </para>
+        /// </summary>
+        private string DescribeLightParts()
+        {
+            if (shadeLightRenderers.Length == 0)
+            {
+                return "light parts: none";
+            }
+
+            var parts = new System.Collections.Generic.List<string>();
+            for (int i = 0; i < shadeLightRenderers.Length; i++)
+            {
+                var clone = shadeLightRenderers[i];
+                var origin = i < shadeLightSourceRenderers.Length ? shadeLightSourceRenderers[i] : null;
+                if (!clone || !origin)
+                {
+                    continue;
+                }
+
+                string sprite = origin.sprite != null ? origin.sprite.name : "no sprite";
+                string kind = i < shadeLightIsGlow.Length && shadeLightIsGlow[i] ? "glow" : "cutout";
+
+                string mask = FormattableString.Invariant(
+                    $"mask {origin.maskInteraction}->{clone.maskInteraction}");
+                string sorting = FormattableString.Invariant(
+                    $"layer '{SortingLayer.IDToName(origin.sortingLayerID)}'{origin.sortingOrder}->'{SortingLayer.IDToName(clone.sortingLayerID)}'{clone.sortingOrder}");
+                string size = FormattableString.Invariant(
+                    $"size {origin.bounds.size.x:0.00}->{clone.bounds.size.x:0.00}");
+
+                parts.Add(FormattableString.Invariant($"{kind} '{origin.name}'<{sprite}> {mask} {sorting} {size}"));
+            }
+
+            // The masks themselves, which is the half a renderer cannot report: whether one exists
+            // at all decides whether the clone can be masked the way she is.
+            var hero = LegacyHelper.ResolveHeroController();
+            if (hero != null)
+            {
+                var masks = hero.GetComponentsInChildren<SpriteMask>(true);
+                parts.Add(masks.Length == 0
+                    ? "hornet masks: none"
+                    : "hornet masks: " + string.Join(", ", System.Array.ConvertAll(masks, m => FormattableString.Invariant(
+                        $"'{m.name}' enabled={m.enabled} range={(m.isCustomRangeActive ? SortingLayer.IDToName(m.backSortingLayerID) + m.backSortingOrder + ".." + SortingLayer.IDToName(m.frontSortingLayerID) + m.frontSortingOrder : "all")}"))));
+            }
+
+            return "light parts: " + string.Join(" | ", parts.ToArray());
+        }
+
+        /// <summary>
+        /// Anything the renderer is overriding its material with.
+        /// <para>
+        /// Reading the material alone is not reading what is drawn. A
+        /// <see cref="MaterialPropertyBlock"/> set on the renderer wins over every value in the
+        /// material and cannot be seen from it, so a companion faded through a block reports
+        /// <c>a=1.00</c> and looks like nothing is fading it - which is the dead end two rounds of
+        /// this were spent in. <see cref="CharacterTint"/> drives its tint through one, so there is
+        /// certainly at least one block in play on anything the game treats as a character.
+        /// </para>
+        /// </summary>
+        private static string DescribeRendererOverrides(Renderer renderer)
+        {
+            if (!renderer || !renderer.HasPropertyBlock())
+            {
+                return " no block";
+            }
+
+            var block = new MaterialPropertyBlock();
+            renderer.GetPropertyBlock(block);
+
+            var parts = new System.Collections.Generic.List<string>();
+            foreach (var property in new[] { "_Color", LegacyHelper.CharacterTintColorProperty })
+            {
+                // An unset colour reads (0,0,0,0), which is not distinguishable from one set to
+                // nothing on purpose - so the whole colour is reported rather than just its alpha.
+                var value = block.GetColor(property);
+                parts.Add(FormattableString.Invariant(
+                    $"{property}=({value.r:0.00},{value.g:0.00},{value.b:0.00},a={value.a:0.00})"));
+            }
+
+            return " block[" + string.Join(" ", parts.ToArray()) + "]";
+        }
+
+        /// <summary>A material by name, shader and tint, or why there is nothing to read.</summary>
+        private static string DescribeMaterial(Material material)
+        {
+            if (!material)
+            {
+                return "no material";
+            }
+
+            string shader = material.shader != null ? material.shader.name : "no shader";
+            string tint = material.HasProperty("_Color")
+                ? FormattableString.Invariant($" _Color a={material.GetColor("_Color").a:0.00}")
+                : string.Empty;
+
+            string character = material.IsKeywordEnabled(LegacyHelper.CharacterShaderKeyword)
+                ? " character"
+                : " NOT a character";
+
+            return FormattableString.Invariant($"mat '{material.name}' shader '{shader}'{tint}{character}");
+        }
+
         private void SyncChildRendererSorting()
         {
             if (!sr)
@@ -374,8 +694,10 @@ public partial class LegacyHelper
                 focusAuraRenderer.sortingOrder = order - 2;
             }
 
-            // Deliberately not the shade light: its layer and sorting are Hornet's, cloned, and
-            // that membership is what puts it in the darkness camera's pass.
+            SyncGlowSorting(layer, order);
+
+            // Deliberately not the *cutout* half of the shade light: its layer and sorting are
+            // Hornet's, cloned, and that membership is what puts it in the darkness camera's pass.
             SyncShadowParticleSorting();
         }
 
@@ -521,8 +843,10 @@ public partial class LegacyHelper
                 return;
             }
 
-            // Hornet's light is masked to Hornet. A copy of it at the Shade sits outside that mask
-            // and would be culled entirely, which looks exactly like a light that does nothing.
+            // Hornet carries no SpriteMask and none of her light renderers interact with one - both
+            // read out of a live game into the bug report's "light parts" row. So this is a no-op
+            // held only because a clone that ever did inherit a mask would be culled outside it,
+            // which looks exactly like a light that does nothing.
             foreach (var copy in copies)
             {
                 copy.maskInteraction = SpriteMaskInteraction.None;
@@ -605,11 +929,18 @@ public partial class LegacyHelper
             // The glow is held to its own ceiling, because the two halves of this clone want
             // different things from the same number. The cutout is a mask fed to the darkness
             // shader, and driving it hard is how a companion lights a dark room away from Hornet.
-            // The glow is a soft sprite drawn on "Over", above everything including the companion -
-            // so the same multiplier saturates it into a white disc laid over the body, growing
-            // with separation exactly as the light does. That is a companion appearing to fade out
-            // the further it walks from her.
+            // The glow is a soft sprite drawn on "Over", above everything including the companion,
+            // so it lands on the body rather than around it and the companion reads as see-through
+            // - blended with what is behind it, and worse with separation, because the halo grows
+            // and brightens with exactly that. Hornet is spared it by a SpriteMask the clone cannot
+            // keep (see CloneLightPart), so the ceiling now defaults to zero and the halo is off
+            // until the clone can be masked the way hers is.
             float glowIntensity = Mathf.Min(intensity, Mathf.Max(0f, config.shadeLightGlowIntensityCap));
+
+            lastLightSeparation = separation;
+            lastLightIntensity = intensity;
+            lastLightGlowIntensity = glowIntensity;
+            lastLightRadius = radius;
 
             // Follows whatever actually draws this companion, which is what
             // ApplyScriptedHoldVisibility turns off, so a scripted hold takes the light with it.

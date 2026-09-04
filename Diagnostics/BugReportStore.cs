@@ -377,6 +377,11 @@ namespace LegacyoftheAbyss.Diagnostics
                 Row(builder, "Knight audio", state.KnightAudio);
             }
 
+            if (!string.IsNullOrEmpty(state.Rendering))
+            {
+                Row(builder, "Companion rendering", state.Rendering);
+            }
+
             if (!string.IsNullOrEmpty(state.ShadePaneLayoutFailure))
             {
                 Row(builder, "Shade pane layout failure", state.ShadePaneLayoutFailure);

@@ -753,24 +753,68 @@ public static partial class ShadeSettingsMenu
         if (!IsShowing)
             return false;
 
+        // The one difference from the other two doors: leaving the mod menu outright returns false,
+        // letting the toggle that arrived carry on and close the pause menu as the player expects.
+        return StepBack("pause-toggle", ui) ?? false;
+    }
+
+    /// <summary>
+    /// The game's own back navigation, which is the door Escape actually uses while a mod screen is
+    /// up.
+    /// <para>
+    /// <c>MenuSelectable.OnCancel</c> calls <see cref="UIManager.UIGoBack"/>, and that switches on
+    /// <c>UIManager.menuState</c> - which is still <c>PAUSE_MENU</c> while our screen is showing,
+    /// because a mod screen is not one of the states it knows. So it ran
+    /// <c>pauseMenuScreen.GoBack()</c> and threw the player out of the mod menu entirely on one
+    /// press, and no <c>menu-back</c> event was recorded because neither of the two doors that had
+    /// been covered - the row's own Cancel, and the pause toggle - was the one being used.
+    /// </para>
+    /// <para>
+    /// Covering it here rather than at the row is deliberate: this catches the press whatever is
+    /// selected, and what was selected is exactly what could not be established from a report.
+    /// </para>
+    /// </summary>
+    internal static bool HandleUiGoBack()
+    {
+        if (!IsShowing)
+            return false;
+
+        // Always swallowed once the mod menu is up, even when the step itself is declined: letting
+        // it through is what walks out of the whole menu.
+        return StepBack("ui-go-back", builtFor ?? UIManager.instance) ?? true;
+    }
+
+    /// <summary>
+    /// One step back, for whichever of the three doors the press arrived through.
+    /// <para>
+    /// Null means "the mod menu is being left" - the two callers want opposite things from that,
+    /// and it is the only case they differ on.
+    /// </para>
+    /// </summary>
+    private static bool? StepBack(string source, UIManager ui)
+    {
         // Swallowed rather than acted on: a row is asking for a keypress and Escape is how it is
-        // cancelled, or this frame's back press has already been taken by the Cancel event.
+        // cancelled, or this frame's back press has already been taken by another door.
         if (IsCapturingBinding || !ClaimBackNavigation())
         {
-            RecordBackNavigation("pause-toggle", null, "declined", IsCapturingBinding ? "a row is capturing" : "already stepped back this frame");
+            RecordBackNavigation(source, null, "declined", IsCapturingBinding ? "a row is capturing" : "already stepped back this frame");
             return true;
         }
 
         if (activeScreen != null && mainScreen != null && activeScreen != mainScreen)
         {
-            RecordBackNavigation("pause-toggle", CancelTarget.ShadeMain, "acted", activeScreen.name);
+            RecordBackNavigation(source, CancelTarget.ShadeMain, "acted", activeScreen.name);
             ShowMainMenu();
             return true;
         }
 
-        RecordBackNavigation("pause-toggle", CancelTarget.PauseMenu, "acted", "leaving the mod menu");
-        HideImmediate(ui, consumeToggle: false);
-        return false;
+        RecordBackNavigation(source, CancelTarget.PauseMenu, "acted", "leaving the mod menu");
+        if (ui != null)
+        {
+            HideImmediate(ui, consumeToggle: false);
+        }
+
+        return null;
     }
 }
 #nullable restore

@@ -53,6 +53,44 @@ public static class GameApiContract
         }
     }
 
+    /// <summary>
+    /// Whether a game method names this string literal.
+    /// <para>
+    /// For contracts that are neither a type nor a member but a bare string the game passes to the
+    /// engine - a shader keyword, a shader property. Nothing about those is checked by the compiler,
+    /// and a rename leaves our own copy of the name enabling something no shader reads. Reading the
+    /// literal back out of the method that uses it is the only place the real name lives.
+    /// </para>
+    /// </summary>
+    public static bool MethodNamesString(MethodBase method, string literal)
+        => StringsIn(method).Contains(literal);
+
+    /// <summary>Every string literal a method loads, for the failure message.</summary>
+    public static IReadOnlyCollection<string> StringsIn(MethodBase method)
+    {
+        var found = new List<string>();
+        var il = method?.GetMethodBody()?.GetILAsByteArray();
+        if (il == null)
+        {
+            return found;
+        }
+
+        // ldstr is a single-byte opcode followed by a metadata token for the string.
+        const byte Ldstr = 0x72;
+        for (int i = 0; i + 4 < il.Length; i++)
+        {
+            if (il[i] != Ldstr)
+            {
+                continue;
+            }
+
+            try { found.Add(method.Module.ResolveString(BitConverter.ToInt32(il, i + 1))); }
+            catch { /* Not every 0x72 byte is an opcode; a token that will not resolve was operand data. */ }
+        }
+
+        return found;
+    }
+
     /// <summary>A game type the mod resolves by name at runtime.</summary>
     public static Type RequireType(string name)
     {
@@ -1113,5 +1151,73 @@ public class GameApiContractTests
 
         Assert.True(field != null, "InventoryPaneInput.paneControl is gone; the cancel trace cannot say which pane it was on.");
         Assert.True(field!.FieldType.IsEnum, $"InventoryPaneInput.paneControl is {field.FieldType.Name}, not the pane-type enum.");
+    }
+
+    /// <summary>
+    /// The game's own back navigation, patched so Escape steps back through the mod's screens
+    /// instead of out of them.
+    /// <para>
+    /// Named in a <c>[HarmonyPatch]</c> attribute, so an overload appearing here would throw
+    /// <c>AmbiguousMatchException</c> out of the patch and take the whole class with it - and a
+    /// menu patch that did not apply is indistinguishable from one that did nothing.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheGamesBackNavigationIsStillOneUnambiguousMethod()
+    {
+        var goBack = GameApiContract.RequireMethod(
+            typeof(UIManager), "UIGoBack",
+            "Patched by UIManager_UIGoBack_Patch so Escape steps back inside the mod's menu.");
+
+        Assert.True(
+            goBack.ReturnType == typeof(bool),
+            $"UIManager.UIGoBack returns {goBack.ReturnType.Name}, not bool; the patch sets a bool __result.");
+        Assert.Empty(goBack.GetParameters());
+    }
+
+    /// <summary>
+    /// The shader keyword that makes a renderer a character rather than scenery, which the Knight's
+    /// rig has to be given because it draws through Hollow Knight's own material.
+    /// <para>
+    /// It is a bare string in the shader, so nothing about it is checked by the compiler and a
+    /// rename would leave <c>ApplyKnightCharacterShading</c> enabling a keyword no shader reads -
+    /// the Knight quietly back to fading into dark rooms, with a fix in the diff that looks applied.
+    /// The game's own gate names it, so the literal is read straight out of that method.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheCharacterShaderKeywordIsStillWhatTheGameGatesOn()
+    {
+        var canAdd = GameApiContract.RequireMethod(
+            typeof(CharacterTint), "CanAdd",
+            "Names the keyword scene darkness and appearance-region tinting treat as \"this is a character\".",
+            "gameObject");
+
+        Assert.True(
+            GameApiContract.MethodNamesString(canAdd, LegacyHelper.CharacterShaderKeyword),
+            $"CharacterTint.CanAdd no longer mentions '{LegacyHelper.CharacterShaderKeyword}'. "
+            + "The Knight's rig is being marked with a keyword the shader does not read, so it is "
+            + "still lit as scenery.\nStrings it does name: "
+            + string.Join(", ", GameApiContract.StringsIn(canAdd)));
+    }
+
+    /// <summary>
+    /// The tint <c>CharacterTint</c> drives, seeded on the Knight's material so enabling the keyword
+    /// cannot leave it drawing through an unset colour.
+    /// </summary>
+    [Fact]
+    public void TheCharacterTintPropertyIsStillNamedThat()
+    {
+        var awake = typeof(CharacterTint).GetMethod(
+            "Awake",
+            BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+
+        Assert.True(awake != null, "CharacterTint.Awake is gone; the tint is no longer set from this type.");
+
+        var cctor = typeof(CharacterTint).TypeInitializer;
+        Assert.True(
+            cctor != null && GameApiContract.MethodNamesString(cctor, LegacyHelper.CharacterTintColorProperty),
+            $"CharacterTint no longer names the shader property '{LegacyHelper.CharacterTintColorProperty}'."
+            + (cctor != null ? "\nStrings it does name: " + string.Join(", ", GameApiContract.StringsIn(cctor)) : string.Empty));
     }
 }

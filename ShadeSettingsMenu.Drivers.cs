@@ -961,6 +961,11 @@ public static partial class ShadeSettingsMenu
 
                 if (Input.GetKeyDown(KeyCode.Escape))
                 {
+                    // Recorded because the two doors both decline while a capture is running, and
+                    // "declined - a row is capturing" with nothing after it cannot say whether this
+                    // prompt then saw the same press or missed its edge entirely. Those want
+                    // opposite fixes and look identical from outside.
+                    RecordBackNavigation("assign-devices", null, "cancelled", "prompt backed out");
                     ClaimBackNavigation();
                     report(null);
                     yield break;

@@ -186,6 +186,13 @@ namespace LegacyoftheAbyss.Diagnostics
         /// them draws in front of a piece of scenery. See <c>ShadeController.DescribeSorting</c>.
         /// </summary>
         public string? Sorting;
+
+        /// <summary>
+        /// The opacity the companion is drawn at, and the material it comes from, so that "it looks
+        /// see-through" can be told apart from a room drawing mist in front of it. See
+        /// <c>ShadeController.DescribeRendering</c>.
+        /// </summary>
+        public string? Rendering;
     }
 
     /// <summary>
@@ -237,6 +244,7 @@ namespace LegacyoftheAbyss.Diagnostics
             {
                 var shade = LegacyHelper.ShadeController.PrimaryInstance;
                 state.Sorting = shade != null ? shade.DescribeSorting() : "no companion";
+                state.Rendering = shade != null ? shade.DescribeRendering() : "no companion";
             });
 
             var gameManager = MenuStateUtility.TryGetGameManager();

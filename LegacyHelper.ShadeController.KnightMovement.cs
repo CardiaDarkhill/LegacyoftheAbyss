@@ -233,6 +233,13 @@ public partial class LegacyHelper
                 sr.enabled = false;
             }
 
+            // Both of these belong to ApplyRenderingSettings, and both have to be repeated here,
+            // because that runs before the rig exists - it is what resolves the sheets the rig is
+            // built from. Anything it does to the Knight on the spawn path is done to a null view
+            // and simply does not happen, which is how the character-shader fix shipped reading
+            // "NOT a character" in the very report meant to confirm it.
+            ApplyKnightCharacterShading();
+
             if (rb != null)
             {
                 // Velocity is integrated here rather than by the engine, so the body stays kinematic

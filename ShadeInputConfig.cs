@@ -137,29 +137,19 @@ public class ShadeInputConfig
         controllerDeviceIndex = 1;
         NormaliseDeadzone();
 
-        moveLeft = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.A), ShadeBindingOption.None());
-        moveRight = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.D), ShadeBindingOption.None());
-        moveUp = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.W), ShadeBindingOption.None());
-        moveDown = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.S), ShadeBindingOption.None());
-        fire = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Space), ShadeBindingOption.None());
-        nail = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.J), ShadeBindingOption.FromKey(KeyCode.Mouse0));
-        nailUp = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.E), ShadeBindingOption.None());
-        nailDown = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Q), ShadeBindingOption.None());
-        teleport = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.K), ShadeBindingOption.None());
-        focus = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.H), ShadeBindingOption.None());
-        sprint = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.LeftShift), ShadeBindingOption.None());
+        ApplyKeyboardBindings();
+
         // Middle mouse and the left stick of the *first* pad: this is Hornet's control, not the
         // Shade player's, so it is pinned to device 0 rather than following controllerDeviceIndex.
         commandShade = new ShadeBinding(
             ShadeBindingOption.FromKey(KeyCode.Mouse2),
             ShadeBindingOption.FromControl(InputControlType.LeftStickButton, 0));
 
-        // Right stick click, which Silksong itself leaves free, and R on the keyboard. Both are
-        // only a starting point: DropCollidingDefaults takes either of them back off a config
-        // where the player has already spent that control on something else.
-        swapCharacter = new ShadeBinding(
-            ShadeBindingOption.FromKey(KeyCode.R),
-            ShadeBindingOption.FromControl(InputControlType.RightStickButton));
+        // Right stick click, which Silksong itself leaves free, alongside the keyboard key
+        // ApplyKeyboardBindings just gave the same action. Both are only a starting point:
+        // DropCollidingDefaults takes either of them back off a config where the player has already
+        // spent that control on something else.
+        swapCharacter.secondary = ShadeBindingOption.FromControl(InputControlType.RightStickButton);
 
         // Matches the defaults these carried as hardcoded, unrebindable KeyCode constants
         // in SimpleHUD before they moved into the normal binding system -- unbound except
@@ -205,27 +195,52 @@ public class ShadeInputConfig
     }
 
     /// <summary>
-    /// The companion's whole layout on the keyboard, on the keypad and the keys around it so that
-    /// it does not collide with Hornet's side of the board.
+    /// The companion's whole layout on the keyboard. Applied when it moves onto one from a pad, and
+    /// the keyboard half of <see cref="ResetToDefaults"/>, so there is one keyboard layout rather
+    /// than two that can drift.
     /// </summary>
     public void ApplyKeyboardLayout()
     {
         controllerDeviceIndex = -1;
         NormaliseDeadzone();
 
+        ApplyKeyboardBindings();
+        commandShade = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Mouse2), ShadeBindingOption.None());
+    }
+
+    /// <summary>
+    /// Hollow Knight's own keyboard defaults, row for row, so a player arriving from that game
+    /// already knows the companion: arrows to move, Z jump, X attack, A focus, F quick cast, C dash.
+    /// <para>
+    /// The two actions Hollow Knight has no row for take the keys its rows we do not implement
+    /// leave free under the same resting hand - <see cref="ShadeAction.Teleport"/> on Dream Nail's
+    /// D, <see cref="ShadeAction.NailUp"/> on Super Dash's S - and the character swap sits on V,
+    /// beside the dash key.
+    /// </para>
+    /// <para>
+    /// This is deliberately the side of the board Hornet's own keyboard controls use, which the
+    /// keypad layout it replaces was written to avoid. The companion only holds the keyboard while
+    /// Hornet is on a pad, and that preset clears her keyboard bindings outright
+    /// (<c>HornetInput.ApplyControllerDefaults</c>), so there is nothing left on these keys to
+    /// collide with.
+    /// </para>
+    /// </summary>
+    private void ApplyKeyboardBindings()
+    {
         moveLeft = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.LeftArrow), ShadeBindingOption.None());
         moveRight = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.RightArrow), ShadeBindingOption.None());
         moveUp = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.UpArrow), ShadeBindingOption.None());
         moveDown = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.DownArrow), ShadeBindingOption.None());
-        fire = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad1), ShadeBindingOption.None());
-        nail = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad2), ShadeBindingOption.FromKey(KeyCode.RightShift));
-        nailUp = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad8), ShadeBindingOption.None());
-        nailDown = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad5), ShadeBindingOption.None());
-        teleport = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad3), ShadeBindingOption.None());
-        focus = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.KeypadEnter), ShadeBindingOption.None());
-        sprint = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Keypad0), ShadeBindingOption.None());
-        swapCharacter = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.KeypadPeriod), ShadeBindingOption.None());
-        commandShade = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Mouse2), ShadeBindingOption.None());
+        nail = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.X), ShadeBindingOption.None());
+        // Jump. The Knight has no down-slash of its own - it aims with the movement keys - so the
+        // two share this slot; see ShadeController.KnightJumpAction.
+        nailDown = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.Z), ShadeBindingOption.None());
+        nailUp = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.S), ShadeBindingOption.None());
+        focus = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.A), ShadeBindingOption.None());
+        fire = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.F), ShadeBindingOption.None());
+        sprint = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.C), ShadeBindingOption.None());
+        teleport = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.D), ShadeBindingOption.None());
+        swapCharacter = new ShadeBinding(ShadeBindingOption.FromKey(KeyCode.V), ShadeBindingOption.None());
     }
 
     private static bool BindingUsesController(ShadeBinding binding)

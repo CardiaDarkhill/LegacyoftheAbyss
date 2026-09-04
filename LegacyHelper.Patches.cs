@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -830,6 +830,29 @@ public partial class LegacyHelper
                 LogWarning($"New game options threw; starting the game as normal: {e}");
             }
 
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// The door Escape actually uses while a mod screen is up. See
+    /// <c>ShadeSettingsMenu.HandleUiGoBack</c>: without this, one press left the mod menu entirely
+    /// because <c>UIGoBack</c> reads <c>menuState</c>, which no mod screen appears in.
+    /// </summary>
+    [HarmonyPatch(typeof(UIManager), nameof(UIManager.UIGoBack))]
+    private class UIManager_UIGoBack_Patch
+    {
+        private static bool Prefix(ref bool __result)
+        {
+            try
+            {
+                if (ShadeSettingsMenu.HandleUiGoBack())
+                {
+                    __result = true;
+                    return false;
+                }
+            }
+            catch { }
             return true;
         }
     }
