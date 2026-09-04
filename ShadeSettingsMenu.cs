@@ -14,7 +14,6 @@ using LegacyoftheAbyss.Shade;
 
 public static partial class ShadeSettingsMenu
 {
-    private static GameObject screen;
     private static bool built;
     private static UIManager builtFor;
     // Tracks the debugKeysEnabled value the Controls menu was last built with, so toggling
@@ -69,7 +68,6 @@ public static partial class ShadeSettingsMenu
     private static bool loggedNullEntries;
     private const float FractionalSliderStep = 0.1f;
     private const float SliderRowHeight = 96f;
-    private const float ToggleRowHeight = 84f;
     private const float ButtonRowHeight = 88f;
     private const float ContentSpacing = 64f;
     private const float LabelColumnWidth = 420f;
@@ -146,6 +144,30 @@ public static partial class ShadeSettingsMenu
     private static void ReleaseCapture()
     {
         captureDepth = captureDepth > 0 ? captureDepth - 1 : 0;
+    }
+
+    /// <summary>
+    /// Names which of the two halves of a back press acted and which stood down, and what it was
+    /// looking at when it decided.
+    /// <para>
+    /// Written because a screenshot of the wrong screen cannot tell the two apart, and the three
+    /// ways this has now gone wrong - both halves acting, neither acting, and the second acting on
+    /// a target the first had already made stale - all look identical from outside.
+    /// </para>
+    /// </summary>
+    private static void RecordBackNavigation(string source, CancelTarget? target, string outcome, string detail)
+    {
+        try
+        {
+            LegacyoftheAbyss.Diagnostics.BugReportSystem.RecordEvent(
+                "menu-back",
+                source + " " + outcome,
+                FormattableString.Invariant(
+                    $"target={(target.HasValue ? target.Value.ToString() : "n/a")} frame={Time.frameCount} {detail}"));
+        }
+        catch
+        {
+        }
     }
 
     /// <summary>

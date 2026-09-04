@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using HarmonyLib;
+using UnityEngine;
 using UnityEngine.UI;
 using Xunit;
 
@@ -234,15 +237,6 @@ public class GameApiContractTests
     }
 
     /// <summary>
-    /// What the pause-menu injection reaches into to put "Legacy of the Abyss" in the list, and to
-    /// put it directly above Quit rather than below it.
-    /// <para>
-    /// All three are private and reached by reflection, and the failure is quiet in an unhelpful
-    /// way: a missing <c>entries</c> or <c>selectable</c> leaves the button drawn on the screen but
-    /// absent from the list the stick and keyboard walk, so it can be clicked and not selected.
-    /// </para>
-    /// </summary>
-    /// <summary>
     /// How the Shade AI decides a spell is worth casting at an enemy.
     /// <para>
     /// The important half is what this is <em>not</em>. <c>HealthManager.IsInvincible</c> is the
@@ -270,6 +264,15 @@ public class GameApiContractTests
             + "worth check needs rereading before it silently writes off armoured enemies.");
     }
 
+    /// <summary>
+    /// What the pause-menu injection reaches into to put "Legacy of the Abyss" in the list, and to
+    /// put it directly above Quit rather than below it.
+    /// <para>
+    /// All three are private and reached by reflection, and the failure is quiet in an unhelpful
+    /// way: a missing <c>entries</c> or <c>selectable</c> leaves the button drawn on the screen but
+    /// absent from the list the stick and keyboard walk, so it can be clicked and not selected.
+    /// </para>
+    /// </summary>
     [Fact]
     public void ThePauseMenuListCanBeExtended()
     {
@@ -712,5 +715,403 @@ public class GameApiContractTests
                 Assert.Contains("go", names);
             }
         }
+    }
+
+
+    /// <summary>
+    /// Every <c>[HarmonyPatch]</c> that names a method by name alone resolves to exactly one of
+    /// them.
+    /// <para>
+    /// <c>AccessTools</c> resolves such a patch with <c>Type.GetMethod(name, flags)</c>, which
+    /// throws <c>AmbiguousMatchException</c> when the game has more than one overload - and the
+    /// shipped assembly carries overloads the decompiles do not. That throw took out every other
+    /// patch in the mod once already, which is why patch classes are now applied one at a time. A
+    /// name that resolves to nothing is the quieter half of the same problem: the patch binds
+    /// nothing and the feature simply never runs.
+    /// </para>
+    /// <para>
+    /// The rule this enforces is the one in AGENTS.md: an overloaded method is patched through a
+    /// <c>TargetMethods()</c> that filters by parameter shape, or by naming
+    /// <c>argumentTypes</c> - never by name alone.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void NoPatchNamesAMethodThatCannotBeResolved()
+    {
+        const BindingFlags anyMethod =
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
+
+        var problems = new List<string>();
+        int checkedNames = 0;
+
+        Type[] types;
+        try
+        {
+            types = typeof(LegacyHelper).Assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            // The test host has no TextMeshPro beside it, so a handful of menu types will not load.
+            // None of them carries a patch attribute; the count assertion below is what keeps that
+            // from quietly becoming "checked nothing".
+            types = ex.Types.Where(t => t != null).ToArray()!;
+        }
+
+        foreach (var type in types)
+        {
+            var attributes = new List<HarmonyPatch>(type.GetCustomAttributes<HarmonyPatch>(inherit: false));
+            try
+            {
+                foreach (var method in type.GetMethods(anyMethod | BindingFlags.DeclaredOnly))
+                {
+                    attributes.AddRange(method.GetCustomAttributes<HarmonyPatch>(inherit: false));
+                }
+            }
+            catch (FileNotFoundException)
+            {
+                // A signature naming a Unity module this host does not have. The class attribute
+                // above is still readable, which is where every patch in this mod declares itself.
+            }
+
+            foreach (var attribute in attributes)
+            {
+                var info = attribute.info;
+                if (info?.declaringType == null || string.IsNullOrEmpty(info.methodName))
+                {
+                    continue;
+                }
+
+                // A property accessor is named unambiguously, and an explicit argument list is
+                // exactly the disambiguation this is asking for.
+                if (info.methodType == MethodType.Getter || info.methodType == MethodType.Setter)
+                {
+                    continue;
+                }
+
+                if (info.argumentTypes != null && info.argumentTypes.Length > 0)
+                {
+                    continue;
+                }
+
+                checkedNames++;
+                string where = $"{type.FullName} -> {info.declaringType.Name}.{info.methodName}";
+                try
+                {
+                    if (info.declaringType.GetMethod(info.methodName, anyMethod) == null)
+                    {
+                        problems.Add($"{where} resolves to nothing, so the patch binds nothing.");
+                    }
+                }
+                catch (AmbiguousMatchException)
+                {
+                    problems.Add(
+                        $"{where} is overloaded, so resolving it throws and takes this patch class down. "
+                        + "Use a TargetMethods() that filters by parameter shape, or name argumentTypes.");
+                }
+            }
+        }
+
+        Assert.True(problems.Count == 0, string.Join("\n", problems));
+
+        // A guard on the guard: if the scan above ever stops finding the patch classes, this test
+        // would pass by checking nothing.
+        Assert.True(
+            checkedNames > 30,
+            $"Only {checkedNames} patch target names were checked; the scan has stopped seeing them.");
+    }
+
+    /// <summary>
+    /// The Shade's slash keeps its own travel state. A clone that inherits Hornet's mid-swing
+    /// bookkeeping either never starts or never stops.
+    /// </summary>
+    [Theory]
+    [InlineData("hasStarted")]
+    [InlineData("isSlashActive")]
+    public void TheClonedSlashTravelCanBeResetToItsStartingState(string field)
+    {
+        GameApiContract.RequireField(
+            typeof(NailSlashTravel), field, typeof(bool),
+            "ConfigureSpawnedSlash clears it so the clone begins its own travel rather than resuming Hornet's.");
+    }
+
+    /// <summary>
+    /// The companion's slash must damage enemies without generating silk for Hornet or reading as
+    /// one of her nail strikes. All three are set on the clone; a lookup that stops resolving takes
+    /// its half of that away silently.
+    /// </summary>
+    [Fact]
+    public void TheClonedDamagerCanBeStoppedFromFeedingHornetsSilk()
+    {
+        GameApiContract.RequireField(
+            typeof(DamageEnemies), "onlyDamageEnemies", typeof(bool),
+            "Read back to tell whether the clone still needs the setter run on it.");
+
+        GameApiContract.RequireMethod(
+            typeof(DamageEnemies), "setOnlyDamageEnemies",
+            "The field has side effects the setter applies; writing it directly does half the job.",
+            "onlyDamage");
+
+        var silk = typeof(DamageEnemies).GetField(
+            "silkGeneration",
+            BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+
+        Assert.True(silk != null, "DamageEnemies.silkGeneration is gone; the companion's hits would refill Hornet's silk.");
+        Assert.True(silk!.FieldType.IsEnum, $"DamageEnemies.silkGeneration is {silk.FieldType.Name}, which is not the enum the clone writes.");
+    }
+
+    /// <summary>
+    /// Terrain hazards are told from enemy contact by this one field, and the two are handled
+    /// completely differently - one teleports the companion to Hornet, the other knocks it back.
+    /// </summary>
+    [Fact]
+    public void AHazardCanBeToldFromAnEnemy()
+    {
+        var field = typeof(DamageHero).GetField(
+            "hazardType",
+            BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+
+        Assert.True(field != null, "DamageHero.hazardType is gone; every hazard would be handled as ordinary enemy contact.");
+        Assert.True(field!.FieldType.IsEnum, $"DamageHero.hazardType is {field.FieldType.Name}, which is not the enum ClassifyDamage reads.");
+    }
+
+    /// <summary>
+    /// Both halves of the remask trigger are patched. Patching only one leaves the companion
+    /// counted as having entered a region it never leaves.
+    /// </summary>
+    [Theory]
+    [InlineData("OnTriggerEnter2D")]
+    [InlineData("OnTriggerExit2D")]
+    public void TheRemaskTriggerCanBeInterceptedBothWays(string name)
+    {
+        GameApiContract.RequireMethod(
+            typeof(Remasker), name,
+            "Remasker_ShadeProxy_Patch suppresses it for the companion's aggro proxy.",
+            "collision");
+    }
+
+    /// <summary>
+    /// The scene-entry audio trace patches these two overloads by shape. Naming an overloaded
+    /// method in a HarmonyPatch attribute throws, so both are resolved by parameter list - and a
+    /// resolution that fails disables the trace with only a log line to say so.
+    /// </summary>
+    [Fact]
+    public void TheAudioCallsTheSceneEntryTraceWatchesStillExist()
+    {
+        Assert.True(
+            AccessTools.Method(typeof(AudioSource), "PlayOneShot", new[] { typeof(AudioClip), typeof(float) }) != null,
+            "AudioSource.PlayOneShot(AudioClip, float) is gone; the scene-entry audio trace records nothing.");
+
+        Assert.True(
+            AccessTools.Method(typeof(AudioSource), "Play", Type.EmptyTypes) != null,
+            "AudioSource.Play() is gone; the scene-entry audio trace records nothing.");
+    }
+
+    /// <summary>
+    /// Companion-aware trigger counting. <c>IsCounted</c> is virtual and the line-of-sight subclass
+    /// overrides it, so both declarations are patched - patching the base alone leaves every
+    /// line-of-sight range counting the companion as Hornet.
+    /// </summary>
+    [Theory]
+    [InlineData(typeof(TrackTriggerObjects))]
+    [InlineData(typeof(TrackTriggerObjectsLineOfSight))]
+    public void TriggerCountingCanBeTaughtAboutTheCompanion(Type owner)
+    {
+        Assert.True(
+            AccessTools.DeclaredMethod(owner, "IsCounted", new[] { typeof(GameObject) }) != null,
+            $"{owner.Name} declares no IsCounted(GameObject); the companion would be counted as Hornet in its ranges.\n"
+            + GameApiContract.DescribeMembers(owner));
+    }
+
+    /// <summary>
+    /// The shade charm pane borrows the game's own pane input rather than reimplementing it, and
+    /// switches these off while it owns the controls. A lookup that stops resolving hands the pane
+    /// back to the game's navigation without saying so.
+    /// </summary>
+    [Theory]
+    [InlineData("allowHorizontalSelection", typeof(bool))]
+    [InlineData("allowVerticalSelection", typeof(bool))]
+    [InlineData("allowRepeat", typeof(bool))]
+    [InlineData("allowRepeatSubmit", typeof(bool))]
+    [InlineData("allowRightStickSpeed", typeof(bool))]
+    [InlineData("pane", typeof(InventoryPaneBase))]
+    [InlineData("paneList", typeof(InventoryPaneList))]
+    public void TheInventoryPaneInputCanBeTakenOverAndGivenBack(string field, Type fieldType)
+    {
+        GameApiContract.RequireField(
+            typeof(InventoryPaneInput), field, fieldType,
+            "ShadeInventoryPaneIntegration reads and restores it around the shade charm pane.");
+    }
+
+    /// <summary>
+    /// The charm pane has to sit in the game's own pane list: name its tab, know how many panes are
+    /// unlocked, and find its own index in the list.
+    /// </summary>
+    [Fact]
+    public void TheInventoryPaneListCanBeJoined()
+    {
+        // Only that it is there: resolving its type loads Unity.TextMeshPro, which the test host
+        // has no copy of.
+        Assert.True(
+            typeof(InventoryPaneList).GetField("currentPaneText", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance) != null,
+            "InventoryPaneList.currentPaneText is gone; the pane cannot write its own name into the list's header.");
+
+        var unlocked = typeof(InventoryPaneList).GetProperty(
+            "UnlockedPaneCount",
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.True(unlocked != null && unlocked.CanRead, "InventoryPaneList.UnlockedPaneCount is gone; the pane cannot tell whether it is reachable.");
+        Assert.Equal(typeof(int), unlocked!.PropertyType);
+
+        GameApiContract.RequireMethod(
+            typeof(InventoryPaneList), "GetPaneIndex",
+            "Resolves the shade pane's position so navigation can land on it.",
+            "paneName");
+
+        GameApiContract.RequireField(
+            typeof(InventoryPaneList), "nextPaneOpen", typeof(string),
+            "Names the pane the inventory will open on, which is how the shade pane is opened directly.");
+    }
+
+    /// <summary>
+    /// A cloned menu row is inserted into the screen's own button list, which has to be told the
+    /// list changed and which row was last on. Left unset, the highlight throws itself back to the
+    /// screen's default row on every submit.
+    /// </summary>
+    [Theory]
+    [InlineData("isTopLevelMenu", typeof(bool))]
+    [InlineData("skipDisabled", typeof(bool))]
+    [InlineData("isDirty", typeof(bool))]
+    [InlineData("lastSelected", typeof(MenuSelectable))]
+    public void ABorrowedMenuListCanBeReconfigured(string field, Type fieldType)
+    {
+        GameApiContract.RequireField(
+            typeof(MenuButtonList), field, fieldType,
+            "The shade screens rebuild the borrowed list around their own rows.");
+    }
+
+    /// <summary>
+    /// A charm sold in a shop is a <c>ShopItem</c> built by hand, because nothing public constructs
+    /// one. Every field here is written on the way out; one that stops resolving throws inside the
+    /// build and the charm simply is not in the shop.
+    /// </summary>
+    [Theory]
+    [InlineData("displayName", typeof(TeamCherry.Localization.LocalisedString))]
+    [InlineData("description", typeof(TeamCherry.Localization.LocalisedString))]
+    [InlineData("descriptionMultiple", typeof(TeamCherry.Localization.LocalisedString))]
+    [InlineData("itemSprite", typeof(Sprite))]
+    [InlineData("itemSpriteScale", typeof(float))]
+    [InlineData("cost", typeof(int))]
+    [InlineData("savedItem", typeof(SavedItem))]
+    [InlineData("playerDataBoolName", typeof(string))]
+    [InlineData("setExtraPlayerDataBools", typeof(string[]))]
+    public void ACharmCanBePutOnAShopShelf(string field, Type fieldType)
+    {
+        GameApiContract.RequireField(
+            typeof(ShopItem), field, fieldType,
+            "ShopPlacementHandler builds the shop entry for a shade charm out of these.");
+    }
+
+    /// <summary>The currency a shop charges in, and the two display members around the item.</summary>
+    [Fact]
+    public void AShopChargesInACurrencyAndDrawsAnIcon()
+    {
+        var currency = typeof(ShopItem).GetField(
+            "currencyType",
+            BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+        Assert.True(currency != null, "ShopItem.currencyType is gone; a shade charm would be sold for the wrong currency.");
+        Assert.True(currency!.FieldType.IsEnum, $"ShopItem.currencyType is {currency.FieldType.Name}, not the enum the handler writes.");
+
+        GameApiContract.RequireField(
+            typeof(ShopOwnerBase), "shopTitle", typeof(TeamCherry.Localization.LocalisedString),
+            "Read to tell one shop owner from another when placing a charm.");
+
+        GameApiContract.RequireField(
+            typeof(SimpleShopItemDisplay), "itemIcon", typeof(SpriteRenderer),
+            "The charm's own sprite is swapped onto it, and swapped back when the row is reused.");
+    }
+
+    /// <summary>
+    /// A charm dropped by a boss is added to that enemy's own drop table, which is a private list of
+    /// two private nested types. Nothing here is public, and a lookup that fails leaves the drop
+    /// silently absent - which is the whole reason this file exists.
+    /// </summary>
+    [Fact]
+    public void ACharmCanBeAddedToABossDropTable()
+    {
+        var groups = AccessTools.Field(typeof(HealthManager), "itemDropGroups");
+        Assert.True(groups != null, "HealthManager.itemDropGroups is gone; boss-drop charms are never placed.");
+
+        var groupType = AccessTools.Inner(typeof(HealthManager), "ItemDropGroup");
+        var probabilityType = AccessTools.Inner(typeof(HealthManager), "ItemDropProbability");
+        Assert.True(groupType != null, "HealthManager.ItemDropGroup is gone; boss-drop charms are never placed.");
+        Assert.True(probabilityType != null, "HealthManager.ItemDropProbability is gone; boss-drop charms are never placed.");
+
+        Assert.True(AccessTools.Field(groupType, "Drops") != null, $"ItemDropGroup has no Drops.\n{GameApiContract.DescribeMembers(groupType)}");
+        Assert.True(AccessTools.Field(groupType, "TotalProbability") != null, $"ItemDropGroup has no TotalProbability.\n{GameApiContract.DescribeMembers(groupType)}");
+        Assert.True(AccessTools.Field(probabilityType, "item") != null, $"ItemDropProbability has no item.\n{GameApiContract.DescribeMembers(probabilityType)}");
+
+        // Inherited from Probability.ProbabilityBase<T>, which is why this is asked of AccessTools
+        // rather than of the type directly.
+        Assert.True(AccessTools.Field(probabilityType, "Probability") != null, $"ItemDropProbability has no Probability.\n{GameApiContract.DescribeMembers(probabilityType)}");
+    }
+
+    /// <summary>
+    /// The shade charm pane is inserted into the game's own pane array and dressed like the panes
+    /// beside it. These are all reached with <c>FieldRefAccess</c>, which throws out of a static
+    /// initialiser rather than returning null - so a rename takes the whole integration with it at
+    /// the first touch rather than at a point that names the field.
+    /// </summary>
+    [Theory]
+    [InlineData(typeof(InventoryPaneList), "panes", typeof(InventoryPane[]))]
+    [InlineData(typeof(InventoryPaneList), "paneListDisplay", typeof(InventoryPaneListDisplay))]
+    [InlineData(typeof(InventoryPane), "listIcon", typeof(Sprite))]
+    [InlineData(typeof(InventoryPane), "playerDataTest", typeof(PlayerDataTest))]
+    [InlineData(typeof(InventoryPane), "hasNewPDBool", typeof(string))]
+    public void TheShadePaneCanBeDressedLikeTheGamesOwn(Type owner, string field, Type fieldType)
+    {
+        GameApiContract.RequireField(
+            owner, field, fieldType,
+            "ShadeInventoryPaneIntegration writes it so the charm pane appears in the inventory like any other.");
+    }
+
+    /// <summary>
+    /// Alert ranges are re-answered for the companion. The patch reads the range's own verdict and
+    /// its line-of-sight mode, and needs the parent it was spawned under to tell whose range it is.
+    /// </summary>
+    [Theory]
+    [InlineData("haveLineOfSight", typeof(bool))]
+    [InlineData("isHeroInRange", typeof(bool))]
+    [InlineData("initialParent", typeof(Transform))]
+    public void AnAlertRangeCanBeReAnsweredForTheCompanion(string field, Type fieldType)
+    {
+        GameApiContract.RequireField(
+            typeof(AlertRange), field, fieldType,
+            "AlertRange_FixedUpdate_Patch rewrites the range's answer so the companion can be seen.");
+    }
+
+    /// <summary>The mode decides whether the range even asks about sight, so it is read before answering.</summary>
+    [Fact]
+    public void AnAlertRangesLineOfSightModeCanBeRead()
+    {
+        var field = typeof(AlertRange).GetField(
+            "lineOfSight",
+            BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+
+        Assert.True(field != null, "AlertRange.lineOfSight is gone; the companion would be seen through walls or not at all.");
+        Assert.True(field!.FieldType.IsEnum, $"AlertRange.lineOfSight is {field.FieldType.Name}, not the enum the patch switches on.");
+    }
+
+    /// <summary>
+    /// Which pane the inventory input is driving, read by the cancel trace so a menu bug report says
+    /// which pane refused to close.
+    /// </summary>
+    [Fact]
+    public void ThePaneTheInventoryInputIsDrivingCanBeNamed()
+    {
+        var field = typeof(InventoryPaneInput).GetField(
+            "paneControl",
+            BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+
+        Assert.True(field != null, "InventoryPaneInput.paneControl is gone; the cancel trace cannot say which pane it was on.");
+        Assert.True(field!.FieldType.IsEnum, $"InventoryPaneInput.paneControl is {field.FieldType.Name}, not the pane-type enum.");
     }
 }

@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
@@ -674,26 +675,6 @@ public static partial class ShadeSettingsMenu
         return highlight;
     }
 
-    private static void ClearAndApplyShadows(Graphic graphic, List<UiShadowStyle> styles)
-    {
-        foreach (var shadow in graphic.GetComponents<Shadow>())
-            Object.DestroyImmediate(shadow);
-
-        if (styles == null)
-            return;
-
-        foreach (var style in styles)
-        {
-            if (style.Type == null)
-                continue;
-            if (!(graphic.gameObject.AddComponent(style.Type) is Shadow newShadow))
-                continue;
-            newShadow.effectColor = style.EffectColor;
-            newShadow.effectDistance = style.EffectDistance;
-            newShadow.useGraphicAlpha = style.UseGraphicAlpha;
-        }
-    }
-
     private static void ApplyTextStyle(Text text, UiTextStyle? style, TextAnchor defaultAlignment, Color defaultColor)
     {
         var resolved = style.GetValueOrDefault();
@@ -741,7 +722,7 @@ public static partial class ShadeSettingsMenu
             text.color = new Color(text.color.r, text.color.g, text.color.b, 1f);
         }
 
-        ClearAndApplyShadows(text, hasStyle ? resolved.Shadows : null);
+        UiTextStyles.ApplyShadows(text, hasStyle ? resolved.Shadows : null);
     }
 
     private static void ScaleUnityText(Text text, float scale)
@@ -761,6 +742,34 @@ public static partial class ShadeSettingsMenu
         }
     }
 
+    /// <summary>
+    /// Writes a label into whichever TextMeshPro component a cloned row carries, and says whether
+    /// it found one.
+    /// <para>
+    /// Direct, not reflected. Four places used to resolve <c>TMPro.TextMeshProUGUI</c> by
+    /// assembly-qualified name at runtime and then fetch <c>text</c> and <c>color</c> by string -
+    /// none of which needs reflection, because the charm pane has referenced TMPro directly all
+    /// along. Every one of those lookups failed silently into a blank row.
+    /// </para>
+    /// </summary>
+    private static TMP_Text TrySetTmpLabel(GameObject root, string value, Color color)
+    {
+        if (root == null)
+        {
+            return null;
+        }
+
+        var tmp = root.GetComponentInChildren<TMP_Text>(true);
+        if (tmp == null)
+        {
+            return null;
+        }
+
+        tmp.text = value;
+        tmp.color = color;
+        return tmp;
+    }
+
     private static void ScaleTextElements(GameObject root, float scale)
     {
         if (root == null || scale <= 0f || Mathf.Approximately(scale, 1f))
@@ -771,40 +780,13 @@ public static partial class ShadeSettingsMenu
             ScaleUnityText(text, scale);
         }
 
-        var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
-        if (tmpType == null)
-            return;
-
-        foreach (var tmp in root.GetComponentsInChildren(tmpType, true))
+        foreach (var tmp in root.GetComponentsInChildren<TMP_Text>(true))
         {
-            try
+            tmp.fontSize *= scale;
+            if (tmp.enableAutoSizing)
             {
-                var fontSizeProp = tmpType.GetProperty("fontSize");
-                if (fontSizeProp != null)
-                {
-                    float currentSize = Convert.ToSingle(fontSizeProp.GetValue(tmp, null));
-                    fontSizeProp.SetValue(tmp, currentSize * scale, null);
-                }
-
-                var autoSizeProp = tmpType.GetProperty("enableAutoSizing");
-                if (autoSizeProp != null && autoSizeProp.GetValue(tmp, null) is bool autoSize && autoSize)
-                {
-                    var minProp = tmpType.GetProperty("fontSizeMin");
-                    var maxProp = tmpType.GetProperty("fontSizeMax");
-                    if (minProp != null)
-                    {
-                        float min = Convert.ToSingle(minProp.GetValue(tmp, null));
-                        minProp.SetValue(tmp, min * scale, null);
-                    }
-                    if (maxProp != null)
-                    {
-                        float max = Convert.ToSingle(maxProp.GetValue(tmp, null));
-                        maxProp.SetValue(tmp, max * scale, null);
-                    }
-                }
-            }
-            catch
-            {
+                tmp.fontSizeMin *= scale;
+                tmp.fontSizeMax *= scale;
             }
         }
     }
@@ -1111,9 +1093,6 @@ public static partial class ShadeSettingsMenu
 
     private static MenuSelectable CreateSlider(Transform parent, GameObject template, MenuButton buttonTemplate, string label, float min, float max, float value, System.Action<float> onChange, CancelTarget cancelTarget, bool whole = false)
         => CreateSlider(parent, template, buttonTemplate, label, min, max, value, onChange, cancelTarget, SliderRowMetrics.Default, out _, whole);
-
-    private static MenuSelectable CreateSlider(Transform parent, GameObject template, MenuButton buttonTemplate, string label, float min, float max, float value, System.Action<float> onChange, CancelTarget cancelTarget, SliderRowMetrics metrics, bool whole = false)
-        => CreateSlider(parent, template, buttonTemplate, label, min, max, value, onChange, cancelTarget, metrics, out _, whole);
 
     /// <param name="rowTransform">
     /// The row this built, for callers that position rows themselves. Handed back rather than left

@@ -153,7 +153,10 @@ public partial class LegacyHelper
                         }
                     }
 
-                    if (dataPos == 0 || dataSize <= 0) return null;
+                    // channels and bitsPerSample come straight off the file and are divided by
+                    // below, so a malformed header would otherwise be reported as a divide-by-zero
+                    // swallowed by the catch - which reads as "no such sound".
+                    if (dataPos == 0 || dataSize <= 0 || channels <= 0 || bitsPerSample <= 0) return null;
 
                     // Read samples
                     fs.Position = dataPos;

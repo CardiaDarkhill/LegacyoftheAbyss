@@ -341,17 +341,6 @@ public class ShadeInputConfig
         (ShadeAction[])Enum.GetValues(typeof(ShadeAction));
 
     /// <summary>
-    /// Clears any binding that was captured as a device-agnostic joystick key, and reports how many
-    /// it cleared.
-    /// <para>
-    /// Rebinding on a pad used to store <c>KeyCode.JoystickButtonN</c>, which fires on every
-    /// attached controller regardless of the device the binding names. Those are now ignored when
-    /// read, but an ignored binding is an invisible one - the Controls screen would still show the
-    /// button while nothing happened. Clearing them instead leaves the row plainly unbound, and
-    /// rebinding it now records the device properly.
-    /// </para>
-    /// </summary>
-    /// <summary>
     /// The debug keys' defaults, for a config saved before they had any.
     /// </summary>
     private static readonly (ShadeAction Action, KeyCode Key)[] DebugKeyDefaults =
@@ -578,6 +567,17 @@ public class ShadeInputConfig
         return 1;
     }
 
+    /// <summary>
+    /// Clears any binding that was captured as a device-agnostic joystick key, and reports how many
+    /// it cleared.
+    /// <para>
+    /// Rebinding on a pad used to store <c>KeyCode.JoystickButtonN</c>, which fires on every
+    /// attached controller regardless of the device the binding names. Those are now ignored when
+    /// read, but an ignored binding is an invisible one - the Controls screen would still show the
+    /// button while nothing happened. Clearing them instead leaves the row plainly unbound, and
+    /// rebinding it now records the device properly.
+    /// </para>
+    /// </summary>
     public int ClearControllerKeyBindings()
     {
         int cleared = 0;
@@ -951,31 +951,20 @@ public static class ShadeInput
         ConfigInstance.controllerDeviceIndex = index;
     }
 
-    private static bool ShouldSuppressOption(ShadeBindingOption option)
-    {
-        // Every Shade input read funnels through here, which makes it the one place that can keep
-        // the Shade from acting on a bug report being typed into the overlay. Blocking at the
-        // binding level rather than per-action means a new action is covered for free.
-        if (LegacyoftheAbyss.Diagnostics.BugReportSystem.IsCapturingText)
-        {
-            return true;
-        }
-
-        try
-        {
-            return LegacyHelper.InputDeviceBlocker.ShouldSuppressShadeOption(option);
-        }
-        catch
-        {
-            return false;
-        }
-    }
+    /// <summary>
+    /// Whether this binding is to be ignored this frame. Every Shade input read funnels through
+    /// here, which makes it the one place that can keep the Shade from acting on a bug report being
+    /// typed into the overlay - blocking at the binding level rather than per-action means a new
+    /// action is covered for free.
+    /// </summary>
+    private static bool ShouldSuppressOption()
+        => LegacyoftheAbyss.Diagnostics.BugReportSystem.IsCapturingText;
 
     private static bool IsOptionHeld(ShadeBindingOption option, ShadeBindingOptionType? requiredType = null)
     {
         if (requiredType.HasValue && option.type != requiredType.Value)
             return false;
-        if (ShouldSuppressOption(option))
+        if (ShouldSuppressOption())
             return false;
 
         return option.type switch
@@ -990,7 +979,7 @@ public static class ShadeInput
     {
         if (requiredType.HasValue && option.type != requiredType.Value)
             return false;
-        if (ShouldSuppressOption(option))
+        if (ShouldSuppressOption())
             return false;
 
         return option.type switch
@@ -1001,14 +990,11 @@ public static class ShadeInput
         };
     }
 
-    private static float GetOptionValue(ShadeBindingOption option)
-        => GetOptionValue(option, null);
-
     private static float GetOptionValue(ShadeBindingOption option, ShadeBindingOptionType? requiredType)
     {
         if (requiredType.HasValue && option.type != requiredType.Value)
             return 0f;
-        if (ShouldSuppressOption(option))
+        if (ShouldSuppressOption())
             return 0f;
 
         return option.type switch

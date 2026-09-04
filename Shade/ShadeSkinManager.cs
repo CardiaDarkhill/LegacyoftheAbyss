@@ -177,7 +177,7 @@ namespace LegacyoftheAbyss.Shade
                 }
 
                 sheet = new Texture2D(2, 2, TextureFormat.ARGB32, false);
-                if (!TryLoadImage(sheet, File.ReadAllBytes(path)))
+                if (!LegacyHelper.TryLoadImage(sheet, File.ReadAllBytes(path), markNonReadable: false))
                 {
                     return null;
                 }
@@ -329,30 +329,6 @@ namespace LegacyoftheAbyss.Shade
 
             return manifest?.Skins?.Where(s => s != null && !string.IsNullOrWhiteSpace(s.Id))
                 ?? Enumerable.Empty<ManifestEntry>();
-        }
-
-        private static bool TryLoadImage(Texture2D texture, byte[] bytes)
-        {
-            try
-            {
-                var type = Type.GetType("UnityEngine.ImageConversion, UnityEngine.ImageConversionModule");
-                var method = type?.GetMethod(
-                    "LoadImage",
-                    BindingFlags.Public | BindingFlags.Static,
-                    null,
-                    new[] { typeof(Texture2D), typeof(byte[]), typeof(bool) },
-                    null);
-                if (method != null)
-                {
-                    method.Invoke(null, new object[] { texture, bytes, false });
-                    return true;
-                }
-            }
-            catch
-            {
-            }
-
-            return false;
         }
 
         private sealed class ManifestFile

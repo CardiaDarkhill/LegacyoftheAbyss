@@ -360,6 +360,43 @@ public class ShadeSaveSlotRepositoryTests
         });
     }
 
+    /// <summary>
+    /// A loadout naming a charm the state says was never found is a state nothing else can
+    /// represent, so replacing the discovered set must not be able to produce one - however the
+    /// caller trims the list it passes.
+    /// </summary>
+    [Fact]
+    public void ReplacingTheDiscoveredSetKeepsWhatIsEquipped()
+    {
+        var state = new ShadePersistentState();
+        state.UnlockCharm(4);
+        state.UnlockCharm(9);
+        Assert.True(state.EquipCharm(0, 4));
+
+        state.SetDiscoveredCharms(new[] { 9 });
+
+        Assert.True(state.HasDiscoveredCharm(4));
+        Assert.True(state.HasDiscoveredCharm(9));
+        Assert.Equal(new[] { 4 }, state.GetEquippedCharms(0));
+    }
+
+    /// <summary>
+    /// Nothing equipped means nothing to keep, so the replacement really does replace - which is
+    /// what wiping a slot depends on.
+    /// </summary>
+    [Fact]
+    public void ReplacingTheDiscoveredSetDropsWhatIsNotEquipped()
+    {
+        var state = new ShadePersistentState();
+        state.UnlockCharm(4);
+        state.UnlockCharm(9);
+
+        state.SetDiscoveredCharms(new[] { 9 });
+
+        Assert.False(state.HasDiscoveredCharm(4));
+        Assert.True(state.HasDiscoveredCharm(9));
+    }
+
     [Fact]
     public void SetCollectedCharmsReplacesState()
     {
@@ -435,6 +472,53 @@ public class ShadeSaveSlotRepositoryTests
             finally
             {
                 second.ResetAll();
+            }
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    /// <summary>
+    /// Every scene transition re-asserts the active slot, which flushes the whole inventory - so the
+    /// save file was serialised and replaced on disk on every room change, almost always with
+    /// byte-identical content.
+    /// <para>
+    /// Observed by writing over the file behind the repository's back: a flush that would have
+    /// rewritten it puts the real content back, and one that recognises nothing has changed leaves
+    /// the marker alone. Rewriting a file edited underneath us is the accepted cost - nothing else
+    /// writes these, and a fresh repository reads from disk and so starts with a cold cache.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void FlushingAnUnchangedSlotDoesNotRewriteTheFile()
+    {
+        string root = CreateTempStorageRoot();
+        try
+        {
+            var repository = new ShadeSaveSlotRepository(storageRoot: root);
+            try
+            {
+                repository.SetNotchCapacity(0, 7);
+
+                string path = Directory.GetFiles(root, "shade_slot_*.json").Single();
+                File.WriteAllText(path, "{}");
+
+                // WriteBatch, not a setter: the setters already decline to persist a value that has
+                // not moved, and it is WriteBatch that a scene transition reaches through - it
+                // flushes the slot unconditionally once the batch closes, whether or not the batch
+                // changed anything. An empty one is exactly the unchanged room change.
+                repository.WriteBatch(0, () => { });
+                Assert.Equal("{}", File.ReadAllText(path));
+
+                // A real change still has to get through.
+                repository.WriteBatch(0, () => repository.SetNotchCapacity(0, 9));
+                Assert.Contains("\"NotchCapacity\": 9", File.ReadAllText(path));
+            }
+            finally
+            {
+                repository.ResetAll();
             }
         }
         finally

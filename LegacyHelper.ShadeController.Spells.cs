@@ -84,19 +84,21 @@ public partial class LegacyHelper
                     renderer.renderMode = ParticleSystemRenderMode.Billboard;
                     if (s_furyAuraMat == null)
                     {
-                        var shader = Shader.Find("Particles/Additive");
+                        var shader = Shader.Find("Particles/Additive") ?? Shader.Find("Sprites/Default");
                         if (!shader)
                         {
-                            shader = Shader.Find("Sprites/Default");
+                            // Neither shader in this build. new Material(null) throws, so there is
+                            // nothing to draw the aura with and saying so beats an aura that is
+                            // silently missing.
+                            LegacyHelper.LogWarning("Fury of the Fallen aura: no particle shader in this build, so it will not be drawn.");
+                            return;
                         }
 
-                        s_furyAuraMat = shader != null
-                            ? new Material(shader)
-                            : new Material(Shader.Find("Sprites/Default"));
-                        s_furyAuraMat.color = Color.white;
+                        s_furyAuraMat = new Material(shader) { color = Color.white };
+                        s_furyAuraMat.mainTexture = MakeDotSprite().texture;
                     }
+
                     renderer.sharedMaterial = s_furyAuraMat;
-                    renderer.sharedMaterial.mainTexture = MakeDotSprite().texture;
                     if (sr)
                     {
                         renderer.sortingLayerID = sr.sortingLayerID;

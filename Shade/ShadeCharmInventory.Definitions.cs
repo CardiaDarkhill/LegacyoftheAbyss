@@ -12,6 +12,14 @@ namespace LegacyoftheAbyss.Shade
     /// </summary>
     internal sealed partial class ShadeCharmInventory
     {
+        /// <summary>
+        /// Every charm the companion can wear.
+        /// <para>
+        /// Notch costs start from Hollow Knight's, as a balance point that is already known to work
+        /// rather than as a rule - the first game makes some questionable choices here, and these
+        /// are expected to move on feedback. Deliberately not pinned by a test for that reason.
+        /// </para>
+        /// </summary>
         private List<ShadeCharmDefinition> BuildDefinitions()
         {
             var definitions = new List<ShadeCharmDefinition>();
@@ -338,7 +346,7 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.NailmastersGlory),
                 displayName: "Nailmaster's Glory",
                 description: "Contains the passion of Nailmasters past. Increases the power of Nail Arts, allowing them to be unleashed much quicker.\n\nThis charm will be implemented at a later date, when the mechanics related to it are added to the mod.",
-                notchCost: 3,
+                notchCost: 1,
                 fallbackTint: new Color(0.83f, 0.68f, 0.41f),
                 enumId: ShadeCharmId.NailmastersGlory,
                 iconName: "shade_charm_nailmasters_glory"));
@@ -368,8 +376,8 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.FragileHeart),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx => ctx.Controller?.AddMaxHpBonus(2, true),
-                    OnRemoved = ctx => ctx.Controller?.AddMaxHpBonus(-2, false)
+                    OnApplied = ctx => ctx.Controller?.AddMaxHpBonus(2),
+                    OnRemoved = ctx => ctx.Controller?.AddMaxHpBonus(-2)
                 },
                 displayName: "Fragile Heart",
                 description: "Increases the health of the bearer, allowing them to take more damage. If its bearer is killed, this charm will break.",
@@ -496,7 +504,7 @@ namespace LegacyoftheAbyss.Shade
                 },
                 displayName: "Lifeblood Core",
                 description: "A massive core of lifeblood that courses through the shade, dramatically increasing temporary vitality.",
-                notchCost: 4,
+                notchCost: 3,
                 fallbackTint: new Color(0.26f, 0.62f, 0.84f),
                 enumId: ShadeCharmId.LifebloodCore,
                 iconName: "shade_charm_lifeblood_core"));
@@ -527,11 +535,14 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.Hiveblood),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx =>
-                    {
-                        _hivebloodTimer = 0f;
-                        _hivebloodPendingMaskRestore = false;
-                    },
+                    // Deliberately no OnApplied. Both fields live on this inventory, which belongs
+                    // to the companion and survives the respawn that every scene change performs -
+                    // whereas OnApplied runs on every one of those rebuilds. Clearing them here
+                    // reset the ten-second timer at every door, and worse, cleared the "a mask is
+                    // owed" flag outright: taking damage and then leaving the room cancelled the
+                    // regeneration rather than delaying it, so Hiveblood only ever paid out for a
+                    // player who stood still. OnRemoved already clears both, and both default to
+                    // empty, so a genuine equip starts clean without this.
                     OnRemoved = ctx =>
                     {
                         _hivebloodTimer = 0f;
@@ -614,7 +625,10 @@ namespace LegacyoftheAbyss.Shade
                 nameof(ShadeCharmId.Kingsoul),
                 hooks: new ShadeCharmHooks
                 {
-                    OnApplied = ctx => kingsoulTimer = 0f,
+                    // No OnApplied, for the reason Hiveblood above gives: it runs on every scene
+                    // change, and restarting the accrual there costs the companion up to a full
+                    // period of SOUL at every door. OnRemoved is what makes taking the charm off
+                    // start the next wearing from zero.
                     OnRemoved = ctx => kingsoulTimer = 0f,
                     OnUpdate = (ctx, delta) =>
                     {

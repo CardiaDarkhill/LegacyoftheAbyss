@@ -520,12 +520,6 @@ namespace LegacyoftheAbyss.Shade.Knight
         }
 
         /// <summary>
-        /// Plays a clip, ignoring a repeat of the one already running so a per-frame caller does
-        /// not restart it. A clip name the bundle does not carry costs one animation rather than
-        /// the companion, but is reported once - the clip names are a contract with an asset bundle
-        /// we do not build, and a silent miss here looks exactly like a movement bug.
-        /// </summary>
-        /// <summary>
         /// Whether the bundle actually carries a clip. <see cref="Play"/> leaves the current
         /// animation running when asked for one it cannot find, so a caller with a fallback has to
         /// ask first or an optional clip freezes the Knight on whatever it was doing.
@@ -540,6 +534,12 @@ namespace LegacyoftheAbyss.Shade.Knight
             return animator.Library.GetClipByName(clipName) != null;
         }
 
+        /// <summary>
+        /// Plays a clip, ignoring a repeat of the one already running so a per-frame caller does
+        /// not restart it. A clip name the bundle does not carry costs one animation rather than
+        /// the companion, but is reported once - the clip names are a contract with an asset bundle
+        /// we do not build, and a silent miss here looks exactly like a movement bug.
+        /// </summary>
         internal void Play(string clipName, bool restart = false)
         {
             if (animator == null || string.IsNullOrEmpty(clipName))

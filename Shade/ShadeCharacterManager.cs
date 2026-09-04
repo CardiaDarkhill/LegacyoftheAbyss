@@ -27,8 +27,18 @@ namespace LegacyoftheAbyss.Shade
                 return null;
             }
 
-            if (s_previewCache.TryGetValue(character.Id, out var cached))
+            if (s_previewCache.TryGetValue(character.Id, out var cached)
+                && (ReferenceEquals(cached, null) || cached))
             {
+                // ReferenceEquals rather than ==, because the two nulls need opposite treatment and
+                // Unity's operator reports both. A real null is a cached *absence* and must stay
+                // cached, or a character with no art re-reads the file and re-warns every time its
+                // row is focused. A destroyed sprite is a cache that has gone stale - the Knight's
+                // preview is built from knight.bundle, and KnightAssets.Unload tears that down with
+                // unloadAllLoadedObjects, which destroys the texture behind this sprite while
+                // leaving this dictionary (in another class) holding it. A plain hit would then
+                // hand back a dead sprite for the rest of the session and the row would simply
+                // draw nothing.
                 return cached;
             }
 
@@ -38,7 +48,12 @@ namespace LegacyoftheAbyss.Shade
                 ? Knight.KnightAssets.TryBuildIdlePreview()
                 : null;
 
-            sprite ??= LoadPreview(character.PreviewImagePath);
+            // Unity's null, not ??=, for the same reason.
+            if (!sprite)
+            {
+                sprite = LoadPreview(character.PreviewImagePath);
+            }
+
             s_previewCache[character.Id] = sprite;
             return sprite;
         }
@@ -88,6 +103,7 @@ namespace LegacyoftheAbyss.Shade
             }
 
             WriteConfigId(companionId, definition.ConfigId);
+            DisableAiForCharactersItCannotDrive(definition);
             ModConfig.Save();
 
             if (ShadeCompanionRegistry.TryGet(companionId, out var companion))
@@ -96,6 +112,44 @@ namespace LegacyoftheAbyss.Shade
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Switches the Shade AI off when a character it cannot drive is chosen, rather than leaving
+        /// it set and unused.
+        /// <para>
+        /// The AI steers by synthesising the inputs a second player would give, which works for a
+        /// body that flies anywhere in a straight line and not for one that has to plan a jump - so
+        /// it has always stood down for the Knight. Standing down is not the same as being off,
+        /// though: the setting stayed on, and the instant the player swapped back to the Shade the
+        /// AI took it out of the second player's hands. It also took Hornet's keyboard with it,
+        /// because an AI-held Shade means there is no two-player device split left to serve.
+        /// </para>
+        /// <para>
+        /// Turning it back on is a deliberate act on the Shade AI screen, whose row already refuses
+        /// while the Knight is worn.
+        /// </para>
+        /// </summary>
+        private static void DisableAiForCharactersItCannotDrive(ShadeCharacterDefinition definition)
+        {
+            if (definition.Moveset != ShadeMoveset.Knight)
+            {
+                return;
+            }
+
+            var config = ModConfig.Instance;
+            if (config == null || !config.shadeAiEnabled)
+            {
+                return;
+            }
+
+            config.shadeAiEnabled = false;
+
+            foreach (var shade in LegacyHelper.ShadeController.ActiveInstances)
+            {
+                // persist:false - the caller saves once, straight after this.
+                shade?.SetShadeAiEnabled(false, persist: false);
+            }
         }
 
         /// <summary>Pushes every persisted choice onto the registry. Call after config load.</summary>

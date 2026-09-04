@@ -137,6 +137,43 @@ public partial class LegacyHelper : BaseUnityPlugin
         }
     }
 
+    /// <summary>
+    /// Patches a list of methods one at a time, returning how many took and how many did not.
+    /// <para>
+    /// The two callers resolve their targets by shape rather than by name - deliberately, so an
+    /// assembly we do not recognise switches the feature off instead of throwing - which means the
+    /// list can hold something this Harmony cannot bind. One failure must cost only itself.
+    /// </para>
+    /// <para>
+    /// The counts come back rather than being logged here because they are the only evidence in a
+    /// log that the redirect installed at all, and each caller words that line for its own feature.
+    /// </para>
+    /// </summary>
+    internal static (int Patched, int Failed) PatchEachTolerantly(
+        Harmony harmony,
+        IEnumerable<MethodBase> methods,
+        HarmonyMethod prefix,
+        HarmonyMethod postfix = null)
+    {
+        int patched = 0;
+        int failed = 0;
+
+        foreach (var method in methods)
+        {
+            try
+            {
+                harmony.Patch(method, prefix, postfix);
+                patched++;
+            }
+            catch
+            {
+                failed++;
+            }
+        }
+
+        return (patched, failed);
+    }
+
     private void Awake()
     {
         Instance = this;
@@ -181,8 +218,9 @@ public partial class LegacyHelper : BaseUnityPlugin
             HandleCharacterSwapInput();
         }
 
-        // Cheap, throttled to once a second, and the only thing standing between a mis-timed
-        // "does Hornet have the keyboard" answer and a session she cannot play. See there.
+        // Every frame, and cheap: two indexed walks of a binding list. It is the only thing
+        // standing between a mis-timed "does Hornet have the keyboard" answer and a session she
+        // cannot play, and a second of waiting is a second of her standing still. See there.
         HornetInput.EnsureHornetKeyboardBindings();
 
         var ui = cachedUI;
@@ -704,7 +742,7 @@ public partial class LegacyHelper : BaseUnityPlugin
         {
             if (f.FieldType != typeof(bool) || f.IsInitOnly) continue;
 
-            var name = f.Name.ToLower();
+            var name = f.Name.ToLowerInvariant();
             if (name.Contains("logo") || (name.Contains("save") && name.Contains("reminder")))
             {
                 f.SetValue(gm, false);

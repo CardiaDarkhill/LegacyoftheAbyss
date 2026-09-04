@@ -393,22 +393,15 @@ public static partial class ShadeSettingsMenu
         var footer = new GameObject("Description");
         var footerRect = footer.AddComponent<RectTransform>();
         footerRect.SetParent(content, false);
-        var text = footer.AddComponent<Text>();
-        ApplyTextStyle(text, toggleLabelStyle, TextAnchor.UpperLeft, DescriptionColor);
-        text.text = string.Empty;
-        text.raycastTarget = false;
-        text.horizontalOverflow = HorizontalWrapMode.Wrap;
-        text.verticalOverflow = VerticalWrapMode.Truncate;
-        text.fontSize = Mathf.Max(12, Mathf.RoundToInt(text.fontSize * 0.78f));
 
         var footerLayout = footer.AddComponent<LayoutElement>();
         footerLayout.minHeight = DescriptionRowHeight;
         footerLayout.preferredHeight = DescriptionRowHeight;
         footerLayout.flexibleHeight = 0f;
 
-        var driver = footer.AddComponent<MenuDescriptionDriver>();
-        driver.target = text;
-        return driver;
+        // Appearance and wiring belong to the overload; only where the box goes is this screen's
+        // business. Rows are registered by the caller once they exist.
+        return CreateDescriptionFooter(footer, TextAnchor.UpperLeft, descriptions: null);
     }
 
     /// <summary>

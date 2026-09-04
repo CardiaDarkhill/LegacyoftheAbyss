@@ -22,25 +22,18 @@ namespace LegacyoftheAbyss.Shade.Ai
     {
         private static ContactFilter2D filter;
         private static bool resolved;
+
+        /// <summary>
+        /// False when this build has no <c>Terrain</c> layer, in which case every query answers
+        /// "clear". Said out loud once in <see cref="Ensure"/> rather than silently disabling both
+        /// features - a Shade that cannot see walls and a Shade in a scene with no walls look
+        /// identical.
+        /// </summary>
         private static bool available;
 
         // Shared buffers: these are called from Update on one Shade, never nested.
         private static readonly RaycastHit2D[] Hits = new RaycastHit2D[1];
         private static readonly Collider2D[] OverlapHits = new Collider2D[1];
-
-        /// <summary>
-        /// False when this build has no <c>Terrain</c> layer, in which case every query answers
-        /// "clear". Said out loud once at startup rather than silently disabling both features - a
-        /// Shade that cannot see walls and a Shade in a scene with no walls look identical.
-        /// </summary>
-        internal static bool Available
-        {
-            get
-            {
-                Ensure();
-                return available;
-            }
-        }
 
         private static void Ensure()
         {

@@ -529,10 +529,33 @@ public static partial class ShadeSettingsMenu
         }
     }
 
+    /// <summary>
+    /// Guards <see cref="RefreshDifficultyHeader"/> against its own refresh. Pushing a preset's values into the sliders fires each
+    /// one's <c>onValueChanged</c>, and every one of those asks for a refresh so the preset row can
+    /// fall to Custom if the value was hand-edited - so one preset change was writing config.json
+    /// and the save slot once per row it moved. <c>RefreshAll</c> already guards itself; the save
+    /// below sat outside that.
+    /// </summary>
+    private static bool refreshingDifficultyHeader;
+
     /// <summary>Re-reads the Difficulty screen's rows after something changed one of them.</summary>
     private static void RefreshDifficultyHeader()
     {
-        difficultyController?.RefreshAll();
+        if (refreshingDifficultyHeader)
+        {
+            return;
+        }
+
+        refreshingDifficultyHeader = true;
+        try
+        {
+            difficultyController?.RefreshAll();
+        }
+        finally
+        {
+            refreshingDifficultyHeader = false;
+        }
+
         PersistDifficultyChange();
     }
 

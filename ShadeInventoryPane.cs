@@ -28,7 +28,6 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
     private const float CharmCellMinHeight = 60f;
     private const float CharmSpacingScale = 0.4f;
     private const float CharmSpacingMin = 4f;
-    private const float BackgroundAlpha = 0.82f;
     /// <summary>Left inset of the "Equipped"/"Notches" labels, which the grid lines up with.</summary>
     private const float SectionLabelInset = 16f;
 
@@ -56,7 +55,6 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
 
     private static readonly Color DefaultPanelColor = new Color(0.05f, 0.05f, 0.08f, 0.92f);
     private static readonly Color DefaultHighlightColor = new Color(0.9f, 0.97f, 1f, 0.78f);
-    private static readonly Color DefaultCellColor = new Color(0.18f, 0.2f, 0.26f, BackgroundAlpha);
     private static readonly Vector2 DefaultStandaloneRootSize = new Vector2(1920f, 1080f);
     private const string LockedCharmSpriteName = "shade_charm_charmui0001charmcost02unlit";
     private const string NotchLitSpriteName = "shade_charm_charmui0000charmcost02lit";
@@ -269,7 +267,6 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
     private Sprite? highlightSpriteTemplate;
     private Color highlightColor = DefaultHighlightColor;
     private Sprite? cellFrameSprite;
-    private Color cellFrameColor = DefaultCellColor;
     private UiTextStyle? bodyTextStyle;
     private UiTextStyle? headerTextStyle;
     private TmpTextStyle? bodyTmpTextStyle;
@@ -316,7 +313,6 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
     private RectTransform? detailCostIconContainer;
     private RectTransform? equippedIconsRoot;
     private Image? equippedOvercharmBackdrop;
-    private HorizontalLayoutGroup? equippedIconsLayout;
     private readonly List<Image> notchMeterIcons = new List<Image>(MaxNotchIcons);
     private readonly List<Image> detailCostIcons = new List<Image>(MaxNotchIcons);
     private readonly List<Image> equippedIcons = new List<Image>(MaxEquippedIcons);
@@ -593,52 +589,6 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         }
     }
 
-    private static void ClearAndApplyShadows(Graphic graphic, List<UiShadowStyle>? styles)
-    {
-        if (graphic == null)
-        {
-            return;
-        }
-
-        try
-        {
-            foreach (var shadow in graphic.GetComponents<Shadow>())
-            {
-                if (shadow == null)
-                {
-                    continue;
-                }
-
-                UnityEngine.Object.DestroyImmediate(shadow);
-            }
-        }
-        catch
-        {
-        }
-
-        if (styles == null)
-        {
-            return;
-        }
-
-        foreach (var style in styles)
-        {
-            if (style.Type == null)
-            {
-                continue;
-            }
-
-            if (!(graphic.gameObject.AddComponent(style.Type) is Shadow newShadow))
-            {
-                continue;
-            }
-
-            newShadow.effectColor = style.EffectColor;
-            newShadow.effectDistance = style.EffectDistance;
-            newShadow.useGraphicAlpha = style.UseGraphicAlpha;
-        }
-    }
-
     private static TmpTextStyle CaptureTmpTextStyle(TMP_Text text)
     {
         return new TmpTextStyle
@@ -689,7 +639,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             text.alignByGeometry = data.AlignByGeometry;
             text.horizontalOverflow = data.HorizontalOverflow;
             text.verticalOverflow = data.VerticalOverflow;
-            ClearAndApplyShadows(text, data.Shadows);
+            UiTextStyles.ApplyShadows(text, data.Shadows);
             if (fallbackFont != null && text.font != null &&
                 text.font.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) < 0)
             {
@@ -709,7 +659,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         text.alignByGeometry = false;
         text.horizontalOverflow = HorizontalWrapMode.Wrap;
         text.verticalOverflow = VerticalWrapMode.Overflow;
-        ClearAndApplyShadows(text, null);
+        UiTextStyles.ApplyShadows(text, null);
     }
 
     private void ApplyTmpTextStyle(TMP_Text text, TmpTextStyle? style, TMP_FontAsset? fallbackFont, Color fallbackColor, FontStyles fallbackStyle, float fallbackSize, TextAlignmentOptions fallbackAlignment)
@@ -754,7 +704,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             text.textWrappingMode = data.WrappingMode;
             text.margin = data.Margin;
             text.richText = data.RichText;
-            ClearAndApplyShadows(text, data.Shadows);
+            UiTextStyles.ApplyShadows(text, data.Shadows);
             if (fallbackFont != null && text.font != null &&
                 text.font.name.IndexOf("Trajan", StringComparison.OrdinalIgnoreCase) < 0)
             {
@@ -779,7 +729,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         text.paragraphSpacing = 0f;
         text.margin = Vector4.zero;
         text.richText = true;
-        ClearAndApplyShadows(text, null);
+        UiTextStyles.ApplyShadows(text, null);
     }
 
     /// <summary>

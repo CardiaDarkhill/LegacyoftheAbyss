@@ -81,8 +81,6 @@ namespace LegacyoftheAbyss.Shade
         /// <summary>The live controller driving this companion, or null while it is despawned.</summary>
         internal LegacyHelper.ShadeController? Controller { get; set; }
 
-        internal bool IsSpawned => Body != null;
-
         internal void Reset()
         {
             State.Reset();

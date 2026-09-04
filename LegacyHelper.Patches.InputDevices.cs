@@ -259,7 +259,7 @@ public partial class LegacyHelper
             }
         }
 
-        private static void ReleaseTrackedDevices(InputHandler handler)
+        private static void ReleaseTrackedDevices()
         {
             shadeOwnedDevices.Clear();
 
@@ -275,7 +275,7 @@ public partial class LegacyHelper
             cleanupList.Clear();
         }
 
-        private static void CleanupDetachedDevices(InputHandler handler, IList<InputDevice> devices)
+        private static void CleanupDetachedDevices(IList<InputDevice> devices)
         {
             if (restrictedShadeDevices.Count == 0)
                 return;
@@ -547,11 +547,11 @@ public partial class LegacyHelper
             return true;
         }
 
-        internal static void RefreshShadeDevices(InputHandler handler)
+        internal static void RefreshShadeDevices()
         {
             if (!InputManager.IsSetup)
             {
-                ReleaseTrackedDevices(handler);
+                ReleaseTrackedDevices();
                 return;
             }
 
@@ -560,7 +560,7 @@ public partial class LegacyHelper
                 var cfg = ModConfig.Instance;
                 if (cfg == null)
                 {
-                    ReleaseTrackedDevices(handler);
+                    ReleaseTrackedDevices();
                     return;
                 }
 
@@ -570,37 +570,37 @@ public partial class LegacyHelper
                 // the AI came on stays restricted until something lets it go.
                 if (HornetInput.ShadeAiHoldsTheShade())
                 {
-                    ReleaseTrackedDevices(handler);
+                    ReleaseTrackedDevices();
                     return;
                 }
 
                 var shadeConfig = cfg.shadeInput;
                 if (shadeConfig == null || !shadeConfig.ReservesAnyController())
                 {
-                    ReleaseTrackedDevices(handler);
+                    ReleaseTrackedDevices();
                     return;
                 }
 
                 var devices = InputManager.Devices;
                 if (devices == null || devices.Count == 0)
                 {
-                    ReleaseTrackedDevices(handler);
+                    ReleaseTrackedDevices();
                     return;
                 }
 
                 for (int i = 0; i < devices.Count; i++)
                 {
-                    ShouldIgnoreDevice(handler, devices[i]);
+                    ShouldIgnoreDevice(devices[i]);
                 }
 
-                CleanupDetachedDevices(handler, devices);
+                CleanupDetachedDevices(devices);
             }
             catch
             {
             }
         }
 
-        internal static bool ShouldIgnoreDevice(InputHandler handler, InputDevice device)
+        internal static bool ShouldIgnoreDevice(InputDevice device)
         {
             EnsureIgnoreDeviceCache();
 
@@ -674,7 +674,7 @@ public partial class LegacyHelper
             return block;
         }
 
-        internal static void ReleaseDevice(InputHandler handler, InputDevice device)
+        internal static void ReleaseDevice(InputDevice device)
         {
             SetDeviceRestricted(device, false);
         }
@@ -740,8 +740,6 @@ public partial class LegacyHelper
                 return false;
             }
         }
-
-        internal static bool ShouldSuppressShadeOption(ShadeBindingOption option) => false;
 
         internal static void EnsureLastActiveController(InputHandler handler)
         {
@@ -873,7 +871,7 @@ public partial class LegacyHelper
         {
             try
             {
-                InputDeviceBlocker.RefreshShadeDevices(InputHandler.UnsafeInstance);
+                InputDeviceBlocker.RefreshShadeDevices();
 
                 var active = InputManager.ActiveDevice ?? InputDevice.Null;
                 previousActiveDevice = active;
@@ -962,7 +960,7 @@ public partial class LegacyHelper
                 if (MenuInputBridge.ShouldBypassActiveControllerUpdate(__instance))
                     return false;
 
-                if (!InputDeviceBlocker.ShouldIgnoreDevice(__instance, InputManager.ActiveDevice))
+                if (!InputDeviceBlocker.ShouldIgnoreDevice(InputManager.ActiveDevice))
                     return true;
                 InputDeviceBlocker.EnsureLastActiveController(__instance);
                 return false;
@@ -977,11 +975,11 @@ public partial class LegacyHelper
     [HarmonyPatch(typeof(InputHandler), "ControllerActivated")]
     private class InputHandler_ControllerActivated_BlockShadeDevice
     {
-        private static bool Prefix(InputHandler __instance, InputDevice inputDevice)
+        private static bool Prefix(InputDevice inputDevice)
         {
             try
             {
-                if (InputDeviceBlocker.ShouldIgnoreDevice(__instance, inputDevice))
+                if (InputDeviceBlocker.ShouldIgnoreDevice(inputDevice))
                     return false;
             }
             catch
@@ -994,11 +992,11 @@ public partial class LegacyHelper
     [HarmonyPatch(typeof(InputHandler), "ControllerDetached")]
     private class InputHandler_ControllerDetached_ReleaseShadeDevice
     {
-        private static void Postfix(InputHandler __instance, InputDevice inputDevice)
+        private static void Postfix(InputDevice inputDevice)
         {
             try
             {
-                InputDeviceBlocker.ReleaseDevice(__instance, inputDevice);
+                InputDeviceBlocker.ReleaseDevice(inputDevice);
             }
             catch
             {

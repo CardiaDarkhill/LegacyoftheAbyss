@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using LegacyoftheAbyss.Diagnostics;
+using LegacyoftheAbyss.Shade;
 using Newtonsoft.Json;
 using UnityEngine;
 
@@ -141,6 +142,28 @@ internal static class ModPaths
         }
     }
 
+    /// <summary>
+    /// Writes a file the player would miss, staging it beside the target and swapping it in.
+    /// <para>
+    /// Both callers - the config and the shade save slots - rewrite on ordinary play events, so a
+    /// crash or a kill during a write would otherwise leave a truncated file. A truncated file does
+    /// not read as an error; it reads as no progress and no bindings.
+    /// </para>
+    /// </summary>
+    internal static void WriteFileAtomically(string path, string contents)
+    {
+        string staging = path + ".tmp";
+        File.WriteAllText(staging, contents);
+        if (File.Exists(path))
+        {
+            File.Replace(staging, path, null);
+        }
+        else
+        {
+            File.Move(staging, path);
+        }
+    }
+
     private static IEnumerable<string> GetAssetSearchRoots()
     {
         var order = new[]
@@ -254,15 +277,20 @@ public class ModConfig
 
     /// <summary>
     /// Where the plate's socket sits within it, as a fraction of the plate <em>as drawn</em>, y
-    /// measured down. Taken off the art rather than guessed: the dark disc's centroid in the turned
-    /// 239x144 frame is (168, 82). Tools/HudPreview.py re-derives it if the art ever changes.
+    /// measured down.
+    /// <para>
+    /// Started from the art - the dark disc's centroid in the turned 239x144 frame is (168, 82),
+    /// which is (0.704, 0.568), and Tools/HudPreview.py re-derives that if the art ever changes -
+    /// then dialled in against the running game, which is what these are. The centroid of the
+    /// socket is not quite where the orb wants to sit in it.
+    /// </para>
     /// </summary>
-    public float hudFrameSocketX = 0.704f;
+    public float hudFrameSocketX = 0.73f;
 
-    public float hudFrameSocketY = 0.568f;
+    public float hudFrameSocketY = 0.585f;
 
     public float hudOrbScale = 1f;
-    public float hudOrbOffsetX = 120f;
+    public float hudOrbOffsetX = 122f;
     public float hudOrbOffsetY = 0f;
 
     public float hudMaskScale = 1f;
@@ -457,6 +485,11 @@ public class ModConfig
     // the Shade lights what she is not lighting rather than doubling up on what she is.
     // Peak alpha multiplier on the cloned light. 1 matches Hornet; above that saturates it.
     public float shadeLightIntensity = 2.5f;
+    // Ceiling on shadeLightIntensity for the *visible* glow only, leaving the full value to the
+    // darkness cutout that actually lifts darkness. 1 means the companion's glow is never brighter
+    // than Hornet's own; above that it saturates into a white disc drawn over the companion, which
+    // reads as it fading out as it walks away from her.
+    public float shadeLightGlowIntensityCap = 1f;
     // Peak radius multiplier, reached at the edge of Hornet's own light. 1 matches her radius.
     public float shadeLightRadiusScale = 0.5f;
     // World-unit distance from Hornet over which the fade above happens. 0 measures it from her
@@ -792,10 +825,19 @@ public class ModConfig
             }
 
             string json = Serialize(Instance);
-            File.WriteAllText(ModPaths.Config, json);
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                // Both serialisers refused. Writing the empty string here is what would actually
+                // lose the settings, so the old file is left standing.
+                Debug.LogWarning("[LegacyoftheAbyss] Config could not be serialised; the file on disk was left unchanged.");
+                return;
+            }
+
+            ModPaths.WriteFileAtomically(ModPaths.Config, json);
         }
-        catch
+        catch (Exception ex)
         {
+            Debug.LogWarning($"[LegacyoftheAbyss] Config could not be saved: {ex.GetType().Name}: {ex.Message}");
         }
     }
 
@@ -905,16 +947,26 @@ public sealed class DifficultyPreset
 
     public string Name { get; private set; } = Custom;
     public string Description { get; private set; } = string.Empty;
-    public float HornetNeedleDamage { get; private set; } = 1f;
-    public float HornetSilkSkillDamage { get; private set; } = 1f;
-    public float ShadeNailDamage { get; private set; } = 1f;
-    public float ShadeSpellDamage { get; private set; } = 1f;
-    public int BindHornetHeal { get; private set; } = 3;
-    public int BindShadeHeal { get; private set; } = 2;
-    public int FocusHornetHeal { get; private set; } = 1;
-    public int FocusShadeHeal { get; private set; } = 1;
-    public float ShadeMaskFraction { get; private set; } = ModConfig.DefaultShadeMaskFraction;
-    public bool ShadeFocusAtFullMasks { get; private set; }
+
+    /// <summary>
+    /// What this preset sets, held as the same type a save slot stores rather than as a second copy
+    /// of the same ten fields. The two used to be parallel property lists kept in step by a test;
+    /// an eleventh difficulty setting added to one and not the other stayed global, behaving right
+    /// on the profile it was set on and wrong on every other.
+    /// </summary>
+    private ShadeDifficultySettings values = new ShadeDifficultySettings();
+
+    /// <summary>
+    /// A copy of what this preset sets, for reading. Copied because the presets are shared static
+    /// instances and their properties are settable: handing out the instance would let one caller
+    /// change what a preset means for the rest of the session, which the old per-value
+    /// <c>private set</c> properties made impossible.
+    /// </summary>
+    internal ShadeDifficultySettings Values
+    {
+        get => values.Clone();
+        private set => values = value;
+    }
 
     public static readonly DifficultyPreset EasyPreset = new DifficultyPreset
     {
@@ -926,12 +978,15 @@ public sealed class DifficultyPreset
     {
         Name = Normal,
         Description = "Hornet and the Shade both deal 20% less damage and Hornet's Bind heals one mask less on each of them, aiming to keep the vanilla difficulty curve with a second fighter on the field.",
-        HornetNeedleDamage = 0.8f,
-        HornetSilkSkillDamage = 0.8f,
-        ShadeNailDamage = 0.8f,
-        ShadeSpellDamage = 0.8f,
-        BindHornetHeal = 2,
-        BindShadeHeal = 1
+        Values = new ShadeDifficultySettings
+        {
+            HornetNeedleDamage = 0.8f,
+            HornetSilkSkillDamage = 0.8f,
+            ShadeNailDamage = 0.8f,
+            ShadeSpellDamage = 0.8f,
+            BindHornetHeal = 2,
+            BindShadeHeal = 1
+        }
     };
 
     /// <summary>
@@ -943,14 +998,17 @@ public sealed class DifficultyPreset
     {
         Name = Hard,
         Description = "Needle and nail fall to 60%, the Shade carries fewer masks and its Focus no longer reaches Hornet. Demands sharper combat than vanilla Silksong, not just a longer fight.",
-        HornetNeedleDamage = 0.6f,
-        HornetSilkSkillDamage = 0.8f,
-        ShadeNailDamage = 0.6f,
-        ShadeSpellDamage = 0.8f,
-        BindHornetHeal = 2,
-        BindShadeHeal = 1,
-        FocusHornetHeal = 0,
-        ShadeMaskFraction = 0.4f
+        Values = new ShadeDifficultySettings
+        {
+            HornetNeedleDamage = 0.6f,
+            HornetSilkSkillDamage = 0.8f,
+            ShadeNailDamage = 0.6f,
+            ShadeSpellDamage = 0.8f,
+            BindHornetHeal = 2,
+            BindShadeHeal = 1,
+            FocusHornetHeal = 0,
+            ShadeMaskFraction = 0.4f
+        }
     };
 
     /// <summary>
@@ -968,20 +1026,23 @@ public sealed class DifficultyPreset
     {
         Name = Abyss,
         Description = "Entirely unfair, and meant to be. Half damage from needle and nail, a Shade on a single mask, and a Bind that returns Hornet one. The Shade can still heal you both, and can still be revived - the second player should be tested, not benched.",
-        HornetNeedleDamage = 0.5f,
-        HornetSilkSkillDamage = 0.6f,
-        ShadeNailDamage = 0.5f,
-        ShadeSpellDamage = 0.6f,
-        BindHornetHeal = 1,
-        BindShadeHeal = 1,
-        FocusHornetHeal = 1,
-        FocusShadeHeal = 1,
-        // The lowest step, which ComputeShadeMaskCount reads as "always 1" rather than as a tenth.
-        ShadeMaskFraction = ModConfig.MinShadeMaskFraction,
-        // On, so the companion can channel Focus while undamaged and act as Hornet's healer. On a
-        // single mask it has almost no self-healing to do, which would otherwise leave the SOUL it
-        // earns with nowhere to go.
-        ShadeFocusAtFullMasks = true
+        Values = new ShadeDifficultySettings
+        {
+            HornetNeedleDamage = 0.5f,
+            HornetSilkSkillDamage = 0.6f,
+            ShadeNailDamage = 0.5f,
+            ShadeSpellDamage = 0.6f,
+            BindHornetHeal = 1,
+            BindShadeHeal = 1,
+            FocusHornetHeal = 1,
+            FocusShadeHeal = 1,
+            // The lowest step, which ComputeShadeMaskCount reads as "always 1" rather than as a tenth.
+            ShadeMaskFraction = ModConfig.MinShadeMaskFraction,
+            // On, so the companion can channel Focus while undamaged and act as Hornet's healer. On
+            // a single mask it has almost no self-healing to do, which would otherwise leave the
+            // SOUL it earns with nowhere to go.
+            ShadeFocusAtFullMasks = true
+        }
     };
 
     /// <summary>Every preset, in the order the menu cycles through them.</summary>
@@ -990,42 +1051,13 @@ public sealed class DifficultyPreset
     /// <summary>Explanation shown for a set of values that matches no preset.</summary>
     public const string CustomDescription = "Values tuned by hand. Selecting a preset replaces every difficulty setting on this screen.";
 
-    public void ApplyTo(ModConfig config)
-    {
-        if (config == null)
-        {
-            return;
-        }
-
-        config.hornetDamageMultiplier = HornetNeedleDamage;
-        config.hornetSilkSkillDamageMultiplier = HornetSilkSkillDamage;
-        config.shadeDamageMultiplier = ShadeNailDamage;
-        config.shadeSpellDamageMultiplier = ShadeSpellDamage;
-        config.bindHornetHeal = BindHornetHeal;
-        config.bindShadeHeal = BindShadeHeal;
-        config.focusHornetHeal = FocusHornetHeal;
-        config.focusShadeHeal = FocusShadeHeal;
-        config.shadeMaskFraction = ShadeMaskFraction;
-        config.shadeFocusAtFullMasks = ShadeFocusAtFullMasks;
-    }
+    public void ApplyTo(ModConfig config) => values.ApplyTo(config);
 
     public bool Matches(ModConfig config)
     {
-        if (config == null)
-        {
-            return false;
-        }
-
-        return Mathf.Approximately(config.hornetDamageMultiplier, HornetNeedleDamage)
-            && Mathf.Approximately(config.hornetSilkSkillDamageMultiplier, HornetSilkSkillDamage)
-            && Mathf.Approximately(config.shadeDamageMultiplier, ShadeNailDamage)
-            && Mathf.Approximately(config.shadeSpellDamageMultiplier, ShadeSpellDamage)
-            && config.bindHornetHeal == BindHornetHeal
-            && config.bindShadeHeal == BindShadeHeal
-            && config.focusHornetHeal == FocusHornetHeal
-            && config.focusShadeHeal == FocusShadeHeal
-            && Mathf.Approximately(config.shadeMaskFraction, ShadeMaskFraction)
-            && config.shadeFocusAtFullMasks == ShadeFocusAtFullMasks;
+        // The field, not the copying property: Identify walks every preset, and the Difficulty
+        // screen's description row asks it once a frame while it is highlighted.
+        return config != null && values.Matches(ShadeDifficultySettings.CaptureFrom(config));
     }
 
     /// <summary>The preset <paramref name="config"/> currently matches, or null for a custom set.</summary>

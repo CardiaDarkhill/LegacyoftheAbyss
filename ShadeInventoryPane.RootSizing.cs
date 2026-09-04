@@ -264,10 +264,6 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
                     if (cellFrameSprite == null && (lower.Contains("frame") || lower.Contains("slot") || lower.Contains("charm")))
                     {
                         cellFrameSprite = sprite;
-                        if (img.color.a > 0f)
-                        {
-                            cellFrameColor = img.color;
-                        }
                         continue;
                     }
 
@@ -361,9 +357,6 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         detailCostIconContainer = null;
         equippedIconsRoot = null;
         equippedOvercharmBackdrop = null;
-        equippedIconsLayout = null;
-        equippedOvercharmBackdrop = null;
-        equippedIconsLayout = null;
         entries.Clear();
         entryGridPositions.Clear();
         entryCenterXs.Clear();
@@ -1122,8 +1115,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             }
         }
 
-        string fallbackSource;
-        Vector2 fallback = DetermineStandaloneFallbackSize(root, out fallbackSource);
+        Vector2 fallback = DetermineStandaloneFallbackSize(root, out _);
         if (fallback.x >= MinRootSizeThreshold && fallback.y >= MinRootSizeThreshold)
         {
             return fallback;

@@ -734,20 +734,18 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             rootRect = EnsureOverlayCanvas();
         }
 
-        RectTransform? resolvedRootRect = rootRect;
-        if (!IsUnityObjectAlive(resolvedRootRect))
+        if (!IsUnityObjectAlive(rootRect))
         {
-            resolvedRootRect = transform as RectTransform;
+            rootRect = transform as RectTransform;
         }
 
-        if (!IsUnityObjectAlive(resolvedRootRect))
+        if (!IsUnityObjectAlive(rootRect))
         {
             LogMenuEvent("ForceLayoutRebuild skipped: no root RectTransform available");
             return;
         }
 
-        rootRect = resolvedRootRect;
-        var rootRectNonNull = resolvedRootRect!;
+        var rootRectNonNull = rootRect!;
 
         if (panelRoot != null)
         {
@@ -990,8 +988,6 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         equippedLayout.childForceExpandWidth = false;
         equippedLayout.childForceExpandHeight = false;
         equippedLayout.padding = new RectOffset();
-        equippedIconsLayout = equippedLayout;
-
         notchText = CreateText("Notches", leftContentRoot, FontStyle.Normal, 32, TextAnchor.UpperLeft, out notchTextTMP);
         var notchLabelRect = ResolveRectTransform(notchText, notchTextTMP);
         if (notchLabelRect != null)
@@ -1285,17 +1281,9 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         var rect = go.GetComponent<RectTransform>();
         rect.SetParent(parent, false);
         var tmpStyle = useHeaderFont ? headerTmpTextStyle : bodyTmpTextStyle;
-        TMP_FontAsset? fallbackTmpFont = null;
-        if (tmpStyle.HasValue && tmpStyle.Value.Font != null)
-        {
-            fallbackTmpFont = tmpStyle.Value.Font;
-        }
-        else
-        {
-            fallbackTmpFont = ResolveTrajanFontAsset();
-        }
-
-        fallbackTmpFont ??= ResolveTrajanFontAsset();
+        TMP_FontAsset? fallbackTmpFont = tmpStyle.HasValue && tmpStyle.Value.Font != null
+            ? tmpStyle.Value.Font
+            : ResolveTrajanFontAsset();
 
         if (tmpStyle.HasValue || fallbackTmpFont != null)
         {
@@ -1478,28 +1466,21 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
 
         image.color = sprite != null ? new Color(1f, 1f, 1f, 0.7f) : OvercharmedBackdropFallbackColor;
 
-        Vector2 boundsCenter;
-        Vector2 boundsSize;
-        Vector2 boundsMin;
-        Vector2 boundsMax;
-        bool hasBounds = TryCalculateEquippedIconBounds(out boundsCenter, out boundsSize, out boundsMin, out boundsMax);
-        if (!hasBounds)
+        if (!TryCalculateEquippedIconBounds(out var bounds))
         {
-            float estimatedWidth = 96f * Mathf.Max(1, equippedCount);
-            boundsSize = new Vector2(estimatedWidth, 96f);
-            boundsCenter = new Vector2(boundsSize.x * 0.5f, 0f);
-            boundsMin = new Vector2(boundsCenter.x - boundsSize.x * 0.5f, boundsCenter.y - boundsSize.y * 0.5f);
-            boundsMax = new Vector2(boundsCenter.x + boundsSize.x * 0.5f, boundsCenter.y + boundsSize.y * 0.5f);
+            // One nominal cell per equipped charm, centred on the row, for the frame before the
+            // layout has run.
+            bounds = new Rect(0f, -48f, 96f * Mathf.Max(1, equippedCount), 96f);
         }
 
         const float paddingRight = 24f;
         const float paddingY = 24f;
 
-        float leftEdge = boundsMin.x;
-        float rightEdge = boundsMax.x + paddingRight;
+        float leftEdge = bounds.xMin;
+        float rightEdge = bounds.xMax + paddingRight;
         float width = Mathf.Max(0f, rightEdge - leftEdge);
-        float centerY = (boundsMin.y + boundsMax.y) * 0.5f;
-        float height = Mathf.Max(0f, boundsMax.y - boundsMin.y);
+        float centerY = bounds.center.y;
+        float height = bounds.height;
 
         var rect = image.rectTransform;
         rect.anchorMin = new Vector2(0f, 0.5f);
@@ -1513,12 +1494,13 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         image.transform.SetAsFirstSibling();
     }
 
-    private bool TryCalculateEquippedIconBounds(out Vector2 center, out Vector2 size, out Vector2 min, out Vector2 max)
+    /// <summary>
+    /// The box the equipped-charm icons currently occupy, in <c>equippedIconsRoot</c>'s local space.
+    /// False when the row is empty or not built yet, in which case the caller supplies its own.
+    /// </summary>
+    private bool TryCalculateEquippedIconBounds(out Rect bounds)
     {
-        center = Vector2.zero;
-        size = Vector2.zero;
-        min = Vector2.zero;
-        max = Vector2.zero;
+        bounds = default;
 
         if (equippedIconsRoot == null)
         {
@@ -1542,17 +1524,17 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
                 continue;
             }
 
-            var bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(equippedIconsRoot, rect);
+            var iconBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(equippedIconsRoot, rect);
             if (!hasIcon)
             {
-                minBounds = bounds.min;
-                maxBounds = bounds.max;
+                minBounds = iconBounds.min;
+                maxBounds = iconBounds.max;
                 hasIcon = true;
             }
             else
             {
-                minBounds = Vector3.Min(minBounds, bounds.min);
-                maxBounds = Vector3.Max(maxBounds, bounds.max);
+                minBounds = Vector3.Min(minBounds, iconBounds.min);
+                maxBounds = Vector3.Max(maxBounds, iconBounds.max);
             }
         }
 
@@ -1561,10 +1543,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             return false;
         }
 
-        size = new Vector2(Mathf.Max(0f, maxBounds.x - minBounds.x), Mathf.Max(0f, maxBounds.y - minBounds.y));
-        center = new Vector2((minBounds.x + maxBounds.x) * 0.5f, (minBounds.y + maxBounds.y) * 0.5f);
-        min = new Vector2(minBounds.x, minBounds.y);
-        max = new Vector2(maxBounds.x, maxBounds.y);
+        bounds = Rect.MinMaxRect(minBounds.x, minBounds.y, maxBounds.x, maxBounds.y);
         return true;
     }
 

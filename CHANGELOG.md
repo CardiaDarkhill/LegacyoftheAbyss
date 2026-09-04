@@ -12,9 +12,33 @@ controls it; the reasoning belongs in the commit and the code.
 - Every control is listed under Controls whichever character is equipped, so the Knight's and the
   Shade's can both be set before the swap button needs them.
 - Assign Devices is offered on the new-game screen as well as under Controls.
+- The charm menu's Equipped row can be reached by pressing up from the top of the grid, so a charm
+  can be taken off without finding it among everything owned, as in Hollow Knight.
 
 ### Fixed
 
+- Fragile Heart no longer heals the companion in full on every room transition, which made it
+  effectively unkillable. Putting it on still fills the two masks it adds.
+- Hiveblood now regenerates a mask across room transitions. Taking damage and then leaving the room
+  cancelled the regeneration outright, so it only ever paid out if the companion stood still.
+- Taking a charm off no longer leaves the companion worse than wearing nothing. Unequipping Mark of
+  Pride shortened its nail below bare length, Fragile Heart cost it two masks of maximum and Soul
+  Catcher left it earning less SOUL, until the next charm change or room load cleared it.
+- The companion no longer gets yanked back to Hornet over and over after a room load. Standing near
+  a defeated enemy's leftover collider held its entry invulnerability open and teleported it every
+  tenth of a second.
+- Nailmaster's Glory now costs 1 notch and Lifeblood Core 3, as in Hollow Knight. They were
+  charging 3 and 4.
+- A charm's "new" marker stays cleared once it has been looked at, instead of coming back on the
+  next launch.
+- The Knight no longer bounces off an enemy that is already dead.
+- `config.json` and the shade save slots are written in one piece, so a crash or a kill mid-write
+  cannot leave a truncated file that reads as no settings and no progress.
+- Choosing the Knight switches the Shade AI off instead of parking it. It was coming straight back
+  on when the player swapped to the Shade, taking the Shade out of the second player's hands.
+- The companion no longer fades out the further it gets from Hornet. Its glow was allowed to reach
+  several times her own brightness and was drawn over it (`shadeLightGlowIntensityCap`).
+- One press of A no longer answers the Assign Devices prompt and re-opens it.
 - The companion draws on Hornet's own sorting layer at her own order and depth, so the world sorts
   the two of them alike. It was appearing over scenery she is behind (`shadeSortingLayer`, now blank
   for "match Hornet").

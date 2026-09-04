@@ -1,6 +1,5 @@
 #nullable disable
 using System;
-using System.Globalization;
 using LegacyoftheAbyss.Shade;
 using UnityEngine;
 using GlobalEnums;
@@ -22,28 +21,13 @@ public partial class LegacyHelper
             {
                 pendingCharmLoadoutRecompute = false;
 
-                maxDistance = baseMaxDistance;
-                softLeashRadius = baseSoftLeashRadius;
-                hardLeashRadius = baseHardLeashRadius;
-                snapLeashRadius = baseSnapLeashRadius;
-                sprintMultiplier = baseSprintMultiplier;
-                fireCooldown = baseFireCooldown;
-                nailCooldown = baseNailCooldown;
-                focusSoulCost = baseFocusSoulCost;
-                projectileSoulCost = baseProjectileSoulCost;
-                shriekSoulCost = baseShriekSoulCost;
-                quakeSoulCost = baseQuakeSoulCost;
-                soulGainPerHit = baseSoulGainPerHit;
-                focusChannelTime = baseFocusChannelTime;
-                focusHealRange = baseFocusHealRange;
-                teleportChannelTime = baseTeleportChannelTime;
-                hitKnockbackForce = baseHitKnockbackForce;
-                shadeMaxHP = baseShadeMaxHP;
-                ResetCharmDerivedStats();
-
                 var inventory = OwnCharms;
                 // Active, not equipped: a broken fragile charm keeps its slot but not its effect.
                 var loadout = inventory?.GetActiveDefinitions();
+
+                // The reset to baseline happens inside, between the two halves of the hook
+                // dispatch, and has to: an OnRemoved that undoes its own arithmetic must run while
+                // that arithmetic is still standing. See ApplyCharmLoadout.
                 ApplyCharmLoadout(loadout);
 
                 maxDistance = Mathf.Max(6f, maxDistance);
@@ -90,6 +74,41 @@ public partial class LegacyHelper
             charmSoulGainBonus = Mathf.Clamp(charmSoulGainBonus + amount, -99, 99);
         }
 
+        /// <summary>
+        /// Puts every stat a charm can touch back to what the companion has with none equipped.
+        /// <para>
+        /// The whole loadout is rebuilt from this each time rather than adjusted in place, so this
+        /// is what "no charms" means and nothing else needs to agree with it.
+        /// </para>
+        /// </summary>
+        private void ResetStatsToBaseline()
+        {
+            maxDistance = baseMaxDistance;
+            softLeashRadius = baseSoftLeashRadius;
+            hardLeashRadius = baseHardLeashRadius;
+            snapLeashRadius = baseSnapLeashRadius;
+            sprintMultiplier = baseSprintMultiplier;
+            fireCooldown = baseFireCooldown;
+            nailCooldown = baseNailCooldown;
+            focusSoulCost = baseFocusSoulCost;
+            projectileSoulCost = baseProjectileSoulCost;
+            shriekSoulCost = baseShriekSoulCost;
+            quakeSoulCost = baseQuakeSoulCost;
+            soulGainPerHit = baseSoulGainPerHit;
+            focusChannelTime = baseFocusChannelTime;
+            focusHealRange = baseFocusHealRange;
+            teleportChannelTime = baseTeleportChannelTime;
+            hitKnockbackForce = baseHitKnockbackForce;
+
+            // shadeMaxHP is deliberately absent. It is derived output owned by
+            // ApplyCharmHealthModifiers, which recomputes it from baseShadeMaxHP + charmMaxHpBonus -
+            // and charmMaxHpBonus *is* reset, just below. Dropping the ceiling here as well lowered
+            // it mid-rebuild, and CaptureCharmHealth (which runs after this, inside the charm hooks)
+            // clamps current health against it: a companion above the base maximum read back short
+            // by exactly the charm's bonus on every recompute.
+            ResetCharmDerivedStats();
+        }
+
         internal void ResetCharmDerivedStats()
         {
             charmNailDamageMultiplier = 1f;
@@ -119,6 +138,12 @@ public partial class LegacyHelper
             DisableCarefreeMelodyEffect();
             LegacyHelper.SetFragileGreedActive(false);
             sharpShadowEquipped = false;
+            // Cleared here as well as by their own OnRemoved, so that this method alone is a
+            // complete statement of "no charms equipped" and nothing depends on a hook having run.
+            flukenestEquipped = false;
+            sporeShroomEquipped = false;
+            sporeShroomCooldown = 0f;
+            gatheringSwarmEquipped = false;
             sprintmasterEquipped = false;
             grubberflyElegyEquipped = false;
             shamanStoneEquipped = false;
@@ -527,7 +552,41 @@ public partial class LegacyHelper
                 previousJonisOverride: before.Jonis);
         }
 
-        internal void AddMaxHpBonus(int amount, bool fillNew)
+        /// <summary>
+        /// Lifeblood capacity under Joni's Blessing for a given normal maximum, which it converts
+        /// wholesale at 1.4x on top of whatever the lifeblood charms grant.
+        /// </summary>
+        private int JonisLifebloodCapacityFor(int normalMax)
+        {
+            return Mathf.Clamp(charmLifebloodBonus, 0, 99)
+                + Mathf.CeilToInt(Mathf.Max(1, normalMax) * 1.4f);
+        }
+
+        /// <summary>
+        /// How much health a charm that raises the maximum hands back: only the headroom the
+        /// companion's <em>existing</em> maximum does not already account for.
+        /// <para>
+        /// The obvious answers are both wrong. Filling to the new maximum is a full heal, and
+        /// filling the difference between the old and new loadout maximum is a heal of the charm's
+        /// own size - and either one repeats, because the loadout is rebuilt from baseline on every
+        /// charm change <em>and</em> every scene change, and the companion is respawned on every
+        /// scene change too, so nothing on the controller can tell a fresh equip from a rebuild.
+        /// Fragile Heart healed the companion in full on every room transition on the strength of
+        /// exactly that.
+        /// </para>
+        /// <para>
+        /// <paramref name="currentMax"/> is what breaks the tie, because it is restored from the
+        /// save with the charm's masks already counted. Putting the charm on mid-run, it is the
+        /// maximum without them and the new masks arrive filled; on a respawn or a reload it
+        /// already includes them and there is nothing left to hand back.
+        /// </para>
+        /// </summary>
+        internal static int ResolveMaxHpFill(int previousMax, int newMax, int currentMax)
+        {
+            return Mathf.Max(0, newMax - Mathf.Max(previousMax, currentMax));
+        }
+
+        internal void AddMaxHpBonus(int amount)
         {
             var before = CaptureCharmHealth();
 
@@ -535,23 +594,17 @@ public partial class LegacyHelper
             charmMaxHpBonus = Mathf.Clamp(charmMaxHpBonus + amount, -20, 40);
             int newLoadoutMax = Mathf.Max(0, baseShadeMaxHP + charmMaxHpBonus);
 
-            int fill = 0;
-            if (fillNew)
-            {
-                if (jonisBlessingEquipped)
-                {
-                    int lifebloodCapacity = Mathf.Clamp(charmLifebloodBonus, 0, 99);
-                    int jonisBase = Mathf.Max(1, newLoadoutMax);
-                    lifebloodCapacity += Mathf.CeilToInt(jonisBase * 1.4f);
-                    fill = Mathf.Max(0, lifebloodCapacity - before.Lifeblood);
-                }
-                else
-                {
-                    fill = Mathf.Max(0, newLoadoutMax - before.NormalHp);
-                }
-            }
+            // Joni's converts the normal maximum to lifeblood, so under it the masks this charm
+            // added arrive as the lifeblood capacity they are worth rather than as masks - and the
+            // maximum already standing is the lifeblood one.
+            int fill = jonisBlessingEquipped
+                ? ResolveMaxHpFill(
+                    JonisLifebloodCapacityFor(previousLoadoutMax),
+                    JonisLifebloodCapacityFor(newLoadoutMax),
+                    before.LifebloodMax)
+                : ResolveMaxHpFill(previousLoadoutMax, newLoadoutMax, before.NormalMax);
 
-            LogCharmHealthEvent($"AddMaxHpBonus amount={amount} fillNew={fillNew} previousLoadoutMax={previousLoadoutMax} newLoadoutMax={newLoadoutMax} {before}");
+            LogCharmHealthEvent(FormattableString.Invariant($"AddMaxHpBonus amount={amount} fill={fill} previousLoadoutMax={previousLoadoutMax} newLoadoutMax={newLoadoutMax} {before}"));
             ApplyCharmHealthModifiers(before, fillAmount: fill, refillLifeblood: false);
         }
 
@@ -561,7 +614,7 @@ public partial class LegacyHelper
 
             charmLifebloodBonus = Mathf.Clamp(charmLifebloodBonus + amount, 0, 99);
             bool refill = amount > 0 && ShouldRefillLifebloodImmediately();
-            LogCharmHealthEvent($"AddLifebloodBonus amount={amount} refill={refill} {before}");
+            LogCharmHealthEvent(FormattableString.Invariant($"AddLifebloodBonus amount={amount} refill={refill} {before}"));
             ApplyCharmHealthModifiers(before, fillAmount: 0, refillLifeblood: refill);
         }
 
@@ -581,7 +634,7 @@ public partial class LegacyHelper
             }
 
             bool refill = jonisBlessingEquipped && ShouldRefillLifebloodImmediately();
-            LogCharmHealthEvent($"SetJonisBlessingActive active={active} refill={refill} {before}");
+            LogCharmHealthEvent(FormattableString.Invariant($"SetJonisBlessingActive active={active} refill={refill} {before}"));
             ApplyCharmHealthModifiers(before, fillAmount: 0, refillLifeblood: refill);
         }
 
@@ -725,7 +778,7 @@ public partial class LegacyHelper
             int lifebloodCapacity = Mathf.Clamp(charmLifebloodBonus, 0, 99);
             bool jonisActive = jonisBlessingEquipped;
 
-            LogCharmHealthEvent($"ApplyCharmHealthModifiers start fill={fillAmount} refillLifeblood={refillLifeblood} defer={deferHudAndPersistence} prevNormal={prevNormalHp}/{prevNormalMax} prevLifeblood={prevLifeblood}/{prevLifebloodMax} wasJonis={wasJonis} combinedPrevious={combinedPrevious} baseNormalMax={baseNormalMax} lifebloodCapacity={lifebloodCapacity} jonisActive={jonisActive}");
+            LogCharmHealthEvent(FormattableString.Invariant($"ApplyCharmHealthModifiers start fill={fillAmount} refillLifeblood={refillLifeblood} defer={deferHudAndPersistence} prevNormal={prevNormalHp}/{prevNormalMax} prevLifeblood={prevLifeblood}/{prevLifebloodMax} wasJonis={wasJonis} combinedPrevious={combinedPrevious} baseNormalMax={baseNormalMax} lifebloodCapacity={lifebloodCapacity} jonisActive={jonisActive}"));
 
             if (jonisActive)
             {
@@ -782,7 +835,7 @@ public partial class LegacyHelper
 
             if (statsChanged)
             {
-                LogCharmHealthEvent($"ApplyCharmHealthModifiers result statsChanged=True normal={shadeHP}/{shadeMaxHP} lifeblood={shadeLifeblood}/{shadeLifebloodMax} jonisActive={jonisActive} adjustedCombined={adjustedCombined} defer={deferHudAndPersistence}");
+                LogCharmHealthEvent(FormattableString.Invariant($"ApplyCharmHealthModifiers result statsChanged=True normal={shadeHP}/{shadeMaxHP} lifeblood={shadeLifeblood}/{shadeLifebloodMax} jonisActive={jonisActive} adjustedCombined={adjustedCombined} defer={deferHudAndPersistence}"));
                 if (deferHudAndPersistence)
                 {
                     pendingDeferredHealthSync = true;
@@ -797,18 +850,8 @@ public partial class LegacyHelper
             }
             else
             {
-                LogCharmHealthEvent($"ApplyCharmHealthModifiers result statsChanged=False normal={shadeHP}/{shadeMaxHP} lifeblood={shadeLifeblood}/{shadeLifebloodMax} jonisActive={jonisActive} adjustedCombined={adjustedCombined}");
+                LogCharmHealthEvent(FormattableString.Invariant($"ApplyCharmHealthModifiers result statsChanged=False normal={shadeHP}/{shadeMaxHP} lifeblood={shadeLifeblood}/{shadeLifebloodMax} jonisActive={jonisActive} adjustedCombined={adjustedCombined}"));
             }
-        }
-
-        private static void LogCharmHealthEvent(FormattableString message)
-        {
-            if (!ModConfig.Instance.logShade)
-            {
-                return;
-            }
-
-            LogCharmHealthEvent(message.ToString(CultureInfo.InvariantCulture));
         }
 
         private static void LogCharmHealthEvent(string message)

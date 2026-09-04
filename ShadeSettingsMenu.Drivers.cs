@@ -4,6 +4,7 @@ using System.Collections;
 using System.Reflection;
 using System.Collections.Generic;
 using System.Globalization;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
@@ -24,6 +25,20 @@ public static partial class ShadeSettingsMenu
         ShadeNewGame
     }
 
+    /// <summary>
+    /// Keeps a row's capture flag up for one frame past the press that ended it.
+    /// <para>
+    /// The press that answers the last prompt is also on its way to the EventSystem as a submit,
+    /// and on a pad it is the same button that opened the prompt in the first place - A both
+    /// answers and re-presses. Clearing the flag in the frame of the press let that submit through
+    /// and re-opened the row the moment it closed, which reads as one press counting twice.
+    /// </para>
+    /// </summary>
+    private static IEnumerator HoldCaptureOneMoreFrame()
+    {
+        yield return null;
+    }
+
     private class CancelRouter : MonoBehaviour, ICancelHandler
     {
         public CancelTarget target;
@@ -36,10 +51,25 @@ public static partial class ShadeSettingsMenu
             // pause toggle may already have stepped back for this same press.
             if (IsCapturingBinding || !ClaimBackNavigation())
             {
+                RecordBackNavigation("cancel", target, "declined", IsCapturingBinding ? "a row is capturing" : "already stepped back this frame");
                 return;
             }
 
-            if (target == CancelTarget.ShadeNewGame)
+            // Not the row's own target when the screen on show disagrees with it. Escape reaches
+            // this menu as both a Cancel and the game's pause toggle, and whichever runs first moves
+            // the selection with it - so the second one arrives at a row whose target answers for
+            // the screen the player has already left. A row saying "leave the menu" while a
+            // sub-screen is up is that stale answer, and taking it walks out of two screens on one
+            // keypress.
+            var effective = target;
+            if (effective == CancelTarget.PauseMenu && activeScreen != null && mainScreen != null && activeScreen != mainScreen)
+            {
+                effective = CancelTarget.ShadeMain;
+            }
+
+            RecordBackNavigation("cancel", effective, "acted", activeScreen != null ? activeScreen.name : "no screen");
+
+            if (effective == CancelTarget.ShadeNewGame)
             {
                 var manager = newGameBuiltFor ?? UIManager.instance;
                 if (manager != null)
@@ -47,11 +77,11 @@ public static partial class ShadeSettingsMenu
                     manager.StartCoroutine(CancelNewGame(manager));
                 }
             }
-            else if (target == CancelTarget.ShadeAi)
+            else if (effective == CancelTarget.ShadeAi)
             {
                 ShowShadeAiMenu();
             }
-            else if (target == CancelTarget.ShadeMain)
+            else if (effective == CancelTarget.ShadeMain)
             {
                 ShowMainMenu();
             }
@@ -531,7 +561,6 @@ public static partial class ShadeSettingsMenu
 
             if (inventory != null && selectedCharm.HasValue)
             {
-                var def = inventory.GetDefinition(selectedCharm.Value);
                 bool owned = inventory.IsOwned(selectedCharm.Value);
                 bool equipped = inventory.IsEquipped(selectedCharm.Value);
                 bool broken = inventory.IsBroken(selectedCharm.Value);
@@ -638,6 +667,9 @@ public static partial class ShadeSettingsMenu
                     break;
                 }
             }
+
+            yield return HoldCaptureOneMoreFrame();
+
             capturing = false;
             ReleaseCapture();
             UpdateLabel();
@@ -814,6 +846,8 @@ public static partial class ShadeSettingsMenu
                 break;
             }
 
+            yield return HoldCaptureOneMoreFrame();
+
             capturing = false;
             ReleaseCapture();
             UpdateLabel();
@@ -967,16 +1001,10 @@ public static partial class ShadeSettingsMenu
             return;
         }
 
-        var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
-        if (tmpType == null)
-        {
-            return;
-        }
-
-        var tmp = root.GetComponentInChildren(tmpType, true);
+        var tmp = root.GetComponentInChildren<TMP_Text>(true);
         if (tmp != null)
         {
-            tmpType.GetProperty("text")?.SetValue(tmp, value);
+            tmp.text = value;
         }
     }
 

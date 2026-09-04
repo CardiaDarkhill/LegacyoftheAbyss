@@ -83,6 +83,60 @@ namespace LegacyoftheAbyss.Shade
             return list;
         }
 
+        /// <summary>
+        /// Puts a captured set of shadows back on a label, replacing whatever it has.
+        /// <para>
+        /// The other half of <see cref="CaptureShadows"/>, and guarded for the same reason. Both the
+        /// settings menu and the inventory pane clone a game prefab and rewrite its label, so both
+        /// have to restore this; they had grown a copy each, and only one of them checked anything.
+        /// </para>
+        /// </summary>
+        internal static void ApplyShadows(Graphic graphic, List<UiShadowStyle>? styles)
+        {
+            if (graphic == null)
+            {
+                return;
+            }
+
+            try
+            {
+                foreach (var shadow in graphic.GetComponents<Shadow>())
+                {
+                    if (shadow == null)
+                    {
+                        continue;
+                    }
+
+                    UnityEngine.Object.DestroyImmediate(shadow);
+                }
+            }
+            catch
+            {
+            }
+
+            if (styles == null)
+            {
+                return;
+            }
+
+            foreach (var style in styles)
+            {
+                if (style.Type == null)
+                {
+                    continue;
+                }
+
+                if (!(graphic.gameObject.AddComponent(style.Type) is Shadow newShadow))
+                {
+                    continue;
+                }
+
+                newShadow.effectColor = style.EffectColor;
+                newShadow.effectDistance = style.EffectDistance;
+                newShadow.useGraphicAlpha = style.UseGraphicAlpha;
+            }
+        }
+
         /// <summary>Reads a label's typography, shadows included.</summary>
         internal static UiTextStyle Capture(Text text)
         {

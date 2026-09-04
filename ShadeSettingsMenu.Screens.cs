@@ -33,7 +33,6 @@ public static partial class ShadeSettingsMenu
         skinsScreen = null;
         skinsController = null;
         activeScreen = null;
-        screen = null;
         templateSource = null;
         templateSourceWasActive = false;
         pauseMenuWasActive = false;
@@ -526,22 +525,12 @@ public static partial class ShadeSettingsMenu
         }
         else
         {
-            var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
-            if (tmpType != null)
+            var tmp = TrySetTmpLabel(go, label, Color.white);
+            if (tmp != null)
             {
-                var tmp = go.GetComponentInChildren(tmpType, true);
-                if (tmp != null)
-                {
-                    tmpType.GetProperty("text")?.SetValue(tmp, label);
-                    tmpType.GetProperty("color")?.SetValue(tmp, Color.white);
-                    if (tmp is Component tmpComp)
-                    {
-                        tmpComp.gameObject.SetActive(true);
-                        var enabledProp = tmpType.GetProperty("enabled");
-                        enabledProp?.SetValue(tmp, true);
-                    }
-                    hasLabel = true;
-                }
+                tmp.gameObject.SetActive(true);
+                tmp.enabled = true;
+                hasLabel = true;
             }
         }
         if (!hasLabel)
@@ -768,15 +757,18 @@ public static partial class ShadeSettingsMenu
         // cancelled, or this frame's back press has already been taken by the Cancel event.
         if (IsCapturingBinding || !ClaimBackNavigation())
         {
+            RecordBackNavigation("pause-toggle", null, "declined", IsCapturingBinding ? "a row is capturing" : "already stepped back this frame");
             return true;
         }
 
         if (activeScreen != null && mainScreen != null && activeScreen != mainScreen)
         {
+            RecordBackNavigation("pause-toggle", CancelTarget.ShadeMain, "acted", activeScreen.name);
             ShowMainMenu();
             return true;
         }
 
+        RecordBackNavigation("pause-toggle", CancelTarget.PauseMenu, "acted", "leaving the mod menu");
         HideImmediate(ui, consumeToggle: false);
         return false;
     }

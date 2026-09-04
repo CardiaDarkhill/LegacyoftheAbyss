@@ -246,20 +246,7 @@ public partial class LegacyHelper
                 var prefix = new HarmonyMethod(AccessTools.DeclaredMethod(typeof(EnemyAiRetargeting), nameof(Prefix)));
                 var postfix = new HarmonyMethod(AccessTools.DeclaredMethod(typeof(EnemyAiRetargeting), nameof(Postfix)));
 
-                int patched = 0;
-                int failed = 0;
-                foreach (var method in TargetMethods())
-                {
-                    try
-                    {
-                        harmony.Patch(method, prefix, postfix);
-                        patched++;
-                    }
-                    catch
-                    {
-                        failed++;
-                    }
-                }
+                var (patched, failed) = PatchEachTolerantly(harmony, TargetMethods(), prefix, postfix);
 
                 LogInfo(FormattableString.Invariant(
                     $"Enemy AI retargeting: patched {patched} method(s) across {TargetFields.Count} action type(s), {failed} failed"));

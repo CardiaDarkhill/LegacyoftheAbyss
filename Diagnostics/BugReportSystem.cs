@@ -243,6 +243,7 @@ namespace LegacyoftheAbyss.Diagnostics
                 try
                 {
                     BepInEx.Logging.Logger.Listeners.Remove(_logCollector);
+                    _logCollector.Dispose();
                 }
                 catch
                 {

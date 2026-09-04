@@ -91,38 +91,14 @@ public partial class LegacyHelper
 
             if (GameIsPaused())
             {
-                capturedMoveInput = Vector2.zero;
-                capturedHorizontalInput = 0f;
-                capturedSprintHeld = false;
-                if (rb)
-                    rb.linearVelocity = Vector2.zero;
-                lastMoveDelta = Vector2.zero;
-                isSprinting = false;
-                sprintDashTimer = 0f;
-                inHardLeash = false;
-                hardLeashTimer = 0f;
+                ClearMovementState(clearKnockback: false);
                 return;
             }
 
             if (HornetIsDowned())
             {
-                CancelFocus();
-                DestroyOtherSlashes(null);
-                isCastingSpell = false;
-                EndKnightCastFreeze();
-                isChannelingTeleport = false;
-                teleportChannelTimer = 0f;
-                capturedMoveInput = Vector2.zero;
-                capturedHorizontalInput = 0f;
-                capturedSprintHeld = false;
-                if (rb) rb.linearVelocity = Vector2.zero;
-                lastMoveDelta = Vector2.zero;
-                knockbackVelocity = Vector2.zero;
-                knockbackTimer = 0f;
-                isSprinting = false;
-                sprintDashTimer = 0f;
-                inHardLeash = false;
-                hardLeashTimer = 0f;
+                AbandonActionsInFlight(destroySlashes: true);
+                ClearMovementState(clearKnockback: true);
                 return;
             }
 
@@ -132,49 +108,8 @@ public partial class LegacyHelper
             // Assist mode and the AI switch are pause-menu settings, not hotkeys: nothing to poll
             // every frame, and no binding to mis-hit mid-fight.
 
-            if (sceneProtectionActive)
-            {
-                if (sceneProtectionTimer > 0f)
-                {
-                    sceneProtectionTimer = Mathf.Max(0f, sceneProtectionTimer - Time.deltaTime);
-                }
+            UpdateSceneProtection();
 
-                if (canTakeDamage)
-                {
-                    canTakeDamage = false;
-                    PushShadeStatsToHud(suppressDamageAudio: true);
-                    PersistIfChanged();
-                }
-
-                if (sceneProtectionTimer <= 0f)
-                {
-                    if (SceneProtectionBlockedByOverlap())
-                    {
-                        sceneProtectionTimer = 0.1f;
-                        hazardCooldown = Mathf.Max(hazardCooldown, 0.1f);
-                        hurtCooldown = Mathf.Max(hurtCooldown, 0.1f);
-                        TeleportToHornet();
-                    }
-                    else
-                    {
-                        sceneProtectionActive = false;
-                        if (sceneProtectionSuppressingPersistence)
-                        {
-                            ExitPersistenceSuppression();
-                            sceneProtectionSuppressingPersistence = false;
-                        }
-
-                        bool desiredCanTakeDamage = sceneProtectionDesiredDamageState;
-                        if (canTakeDamage != desiredCanTakeDamage)
-                        {
-                            canTakeDamage = desiredCanTakeDamage;
-                            PersistIfChanged();
-                        }
-
-                        PushShadeStatsToHud(suppressDamageAudio: true);
-                    }
-                }
-            }
             ignoreRefreshTimer -= Time.deltaTime;
             if (ignoreRefreshTimer <= 0f)
             {
@@ -196,35 +131,8 @@ public partial class LegacyHelper
                 hurtCooldown = Mathf.Max(hurtCooldown, ReviveIFrameSeconds);
                 hazardCooldown = Mathf.Max(hazardCooldown, ReviveIFrameSeconds);
             }
-            EnsureAggroProxyCollider();
-            if (aggroProxyCollider)
-            {
-                bool proxyActive = !isInactive && isActiveAndEnabled && !assistModeEnabled;
-                bool currentlyEnabled = aggroProxyCollider.enabled;
-                if (currentlyEnabled != proxyActive)
-                {
-                    if (!proxyActive)
-                    {
-                        try { aggroProxyTracker?.ForceExitTrackedRemaskers(); } catch { }
-                    }
-                    aggroProxyCollider.enabled = proxyActive;
 
-                    // "Enemies are ignoring the shade" has three possible causes and they are
-                    // indistinguishable in-game, so name which one it is.
-                    try
-                    {
-                        if (ModConfig.Instance.logShade)
-                        {
-                            LegacyHelper.LogInfo(proxyActive
-                                ? "Shade aggro proxy enabled."
-                                : FormattableString.Invariant($"Shade aggro proxy disabled (inactive={isInactive}, enabled={isActiveAndEnabled}, assistMode={assistModeEnabled})."));
-                        }
-                    }
-                    catch
-                    {
-                    }
-                }
-            }
+            UpdateAggroProxy();
             wasInactive = isInactive;
 
             HandleTeleportChannel();
@@ -255,12 +163,9 @@ public partial class LegacyHelper
             if (hornetControlsLocked && !wasControlsLocked)
             {
                 // Entering the locked state mid-action: drop whatever the Shade was doing rather than
-                // leaving a focus or a channel running through a cutscene.
-                CancelFocus();
-                isCastingSpell = false;
-                EndKnightCastFreeze();
-                isChannelingTeleport = false;
-                teleportChannelTimer = 0f;
+                // leaving a focus or a channel running through a cutscene. The slash is left to
+                // finish, because it is already out and lasts a few frames.
+                AbandonActionsInFlight(destroySlashes: false);
             }
 
             // Before the driver, so an order given this frame is already in the plan it builds.
@@ -326,23 +231,160 @@ public partial class LegacyHelper
             }
         }
 
+        /// <summary>
+        /// Runs down the room-entry invulnerability, and holds it open while the companion is
+        /// standing in something that would hit it the moment the protection lifts.
+        /// </summary>
+        private void UpdateSceneProtection()
+        {
+            if (!sceneProtectionActive)
+            {
+                return;
+            }
+
+            if (sceneProtectionTimer > 0f)
+            {
+                sceneProtectionTimer = Mathf.Max(0f, sceneProtectionTimer - Time.deltaTime);
+            }
+
+            if (canTakeDamage)
+            {
+                canTakeDamage = false;
+                PushShadeStatsToHud(suppressDamageAudio: true);
+                PersistIfChanged();
+            }
+
+            if (sceneProtectionTimer > 0f)
+            {
+                return;
+            }
+
+            if (SceneProtectionBlockedByOverlap())
+            {
+                sceneProtectionTimer = 0.1f;
+                hazardCooldown = Mathf.Max(hazardCooldown, 0.1f);
+                hurtCooldown = Mathf.Max(hurtCooldown, 0.1f);
+                TeleportToHornet();
+                return;
+            }
+
+            sceneProtectionActive = false;
+            if (sceneProtectionSuppressingPersistence)
+            {
+                ExitPersistenceSuppression();
+                sceneProtectionSuppressingPersistence = false;
+            }
+
+            if (canTakeDamage != sceneProtectionDesiredDamageState)
+            {
+                canTakeDamage = sceneProtectionDesiredDamageState;
+                PersistIfChanged();
+            }
+
+            PushShadeStatsToHud(suppressDamageAudio: true);
+        }
+
+        /// <summary>
+        /// Switches the collider that makes enemies notice the companion on and off, and says which
+        /// of the three reasons it is off for - "enemies are ignoring the shade" looks identical
+        /// in-game whichever one it is.
+        /// </summary>
+        private void UpdateAggroProxy()
+        {
+            EnsureAggroProxyCollider();
+            if (!aggroProxyCollider)
+            {
+                return;
+            }
+
+            bool proxyActive = !isInactive && isActiveAndEnabled && !assistModeEnabled;
+            if (aggroProxyCollider.enabled == proxyActive)
+            {
+                return;
+            }
+
+            if (!proxyActive)
+            {
+                try { aggroProxyTracker?.ForceExitTrackedRemaskers(); } catch { }
+            }
+
+            aggroProxyCollider.enabled = proxyActive;
+
+            try
+            {
+                if (ModConfig.Instance.logShade)
+                {
+                    LegacyHelper.LogInfo(proxyActive
+                        ? "Shade aggro proxy enabled."
+                        : FormattableString.Invariant($"Shade aggro proxy disabled (inactive={isInactive}, enabled={isActiveAndEnabled}, assistMode={assistModeEnabled})."));
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>
+        /// Drops the movement state a frame the companion is not being driven on would otherwise
+        /// leave standing: a held direction, a sprint, a leash timer. Shared by the paused and
+        /// downed paths, which differ only in whether the knockback goes with it - a pause has to
+        /// give it back when play resumes.
+        /// </summary>
+        private void ClearMovementState(bool clearKnockback)
+        {
+            capturedMoveInput = Vector2.zero;
+            capturedHorizontalInput = 0f;
+            capturedSprintHeld = false;
+            if (rb)
+            {
+                rb.linearVelocity = Vector2.zero;
+            }
+
+            lastMoveDelta = Vector2.zero;
+            isSprinting = false;
+            sprintDashTimer = 0f;
+            inHardLeash = false;
+            hardLeashTimer = 0f;
+
+            if (clearKnockback)
+            {
+                knockbackVelocity = Vector2.zero;
+                knockbackTimer = 0f;
+            }
+        }
+
+        /// <summary>
+        /// Ends anything the companion had in flight. Used wherever control is taken away
+        /// mid-action, so a focus or a teleport channel does not run on through it.
+        /// </summary>
+        private void AbandonActionsInFlight(bool destroySlashes)
+        {
+            CancelFocus();
+            if (destroySlashes)
+            {
+                DestroyOtherSlashes(null);
+            }
+
+            isCastingSpell = false;
+            EndKnightCastFreeze();
+            isChannelingTeleport = false;
+            teleportChannelTimer = 0f;
+        }
+
         private void FixedUpdate()
         {
             if (hornetTransform == null) return;
-            if (GameIsPaused())
+            if (GameIsPaused() || HornetIsDowned())
             {
                 if (rb)
+                {
                     rb.linearVelocity = Vector2.zero;
+                }
+
                 lastMoveDelta = Vector2.zero;
                 return;
             }
-            if (HornetIsDowned())
-            {
-                if (rb)
-                    rb.linearVelocity = Vector2.zero;
-                lastMoveDelta = Vector2.zero;
-                return;
-            }
+
             HandleMovementAndFacing(Time.fixedDeltaTime);
         }
 
@@ -395,26 +437,23 @@ public partial class LegacyHelper
 
             if (sceneProtectionActive)
             {
+                // Spawn protection owns canTakeDamage until it lifts, so the choice is left for it
+                // to apply rather than being overwritten a frame later.
                 sceneProtectionDesiredDamageState = desiredCanTakeDamage;
-                if (ModConfig.Instance.logShade)
-                {
-                    string assistState = assistModeEnabled ? "enabled" : "disabled";
-                    string suffix = sceneProtectionTimer > 0f ? " (will apply after spawn protection)" : string.Empty;
-                    try { UnityEngine.Debug.Log($"[ShadeDebug] Assist Mode {assistState}{suffix}"); } catch { }
-                }
             }
-            else
+            else if (canTakeDamage != desiredCanTakeDamage)
             {
-                if (canTakeDamage != desiredCanTakeDamage)
-                {
-                    canTakeDamage = desiredCanTakeDamage;
-                    PersistIfChanged();
-                }
-                if (ModConfig.Instance.logShade)
-                {
-                    string assistState = assistModeEnabled ? "enabled" : "disabled";
-                    try { UnityEngine.Debug.Log($"[ShadeDebug] Assist Mode {assistState}"); } catch { }
-                }
+                canTakeDamage = desiredCanTakeDamage;
+                PersistIfChanged();
+            }
+
+            if (ModConfig.Instance.logShade)
+            {
+                string state = assistModeEnabled ? "enabled" : "disabled";
+                string suffix = sceneProtectionActive && sceneProtectionTimer > 0f
+                    ? " (will apply after spawn protection)"
+                    : string.Empty;
+                try { UnityEngine.Debug.Log($"[ShadeDebug] Assist Mode {state}{suffix}"); } catch { }
             }
 
             PushShadeStatsToHud(suppressDamageAudio: true);
@@ -589,8 +628,8 @@ public partial class LegacyHelper
             {
                 var state = CaptureHornetControlState();
                 locked = EvaluateControlsLocked(state);
-                hidden = EvaluateShadeHidden(state);
                 hiddenIsInferred = EvaluateShadeHiddenInferred(state);
+                hidden = EvaluateShadeHiddenNamed(state) || hiddenIsInferred;
             }
             catch
             {
@@ -1155,26 +1194,27 @@ public partial class LegacyHelper
             return Mathf.Max(snapLeashRadius, axisMax);
         }
 
+        /// <summary>
+        /// Rewrites one axis's limits to the room actually available on it. <paramref name="soft"/>
+        /// and <paramref name="hard"/> are outputs: both branches below assign them outright, so
+        /// only the snap distance carries anything of the configured value in.
+        /// </summary>
         private static void ApplyAxisLimit(ref float soft, ref float hard, ref float snap, float available)
         {
-            soft = Mathf.Max(0f, soft);
-            hard = Mathf.Max(0f, hard);
             snap = Mathf.Max(0f, snap);
 
             if (available <= 0f)
             {
                 soft = 0f;
-                hard = Mathf.Min(hard, 0f);
-                snap = Mathf.Max(hard, Mathf.Min(snap, SnapMinWhenNoRoom));
+                hard = 0f;
+                snap = Mathf.Min(snap, SnapMinWhenNoRoom);
                 return;
             }
 
-            float clampedHard = Mathf.Max(0f, available);
-            hard = clampedHard;
-            float desiredSoft = Mathf.Clamp(clampedHard * SoftLimitRatio, 0f, clampedHard);
-            soft = desiredSoft;
-            float desiredSnap = Mathf.Max(clampedHard * SnapExtraMultiplier, clampedHard + SnapExtraMin);
-            snap = Mathf.Max(clampedHard, Mathf.Max(snap, desiredSnap));
+            hard = available;
+            soft = Mathf.Clamp(available * SoftLimitRatio, 0f, available);
+            float desiredSnap = Mathf.Max(available * SnapExtraMultiplier, available + SnapExtraMin);
+            snap = Mathf.Max(available, Mathf.Max(snap, desiredSnap));
         }
 
         private static bool BeyondAxis(float value, float negativeLimit, float positiveLimit)
@@ -1534,11 +1574,20 @@ public partial class LegacyHelper
                 {
                     if (s_sprintBurstMat == null)
                     {
-                        s_sprintBurstMat = new Material(Shader.Find("Sprites/Default"));
-                        s_sprintBurstMat.color = Color.black;
+                        var shader = Shader.Find("Sprites/Default");
+                        if (!shader)
+                        {
+                            // new Material(null) throws, and the catch below would swallow it as
+                            // "no burst" without saying why.
+                            LegacyHelper.LogWarning("Shade sprint burst: no \"Sprites/Default\" shader in this build, so it will not be drawn.");
+                            return;
+                        }
+
+                        s_sprintBurstMat = new Material(shader) { color = Color.black };
+                        s_sprintBurstMat.mainTexture = MakeDotSprite().texture;
                     }
+
                     psr.sharedMaterial = s_sprintBurstMat;
-                    psr.sharedMaterial.mainTexture = MakeDotSprite().texture;
                 }
                 var col = ps.colorOverLifetime;
                 col.enabled = true;

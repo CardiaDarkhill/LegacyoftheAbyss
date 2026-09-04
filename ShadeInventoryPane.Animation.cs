@@ -278,13 +278,9 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             }
         }
 
-        Vector2 center;
-        Vector2 size;
-        Vector2 min;
-        Vector2 max;
-        if (TryCalculateEquippedIconBounds(out center, out size, out min, out max))
+        if (TryCalculateEquippedIconBounds(out var bounds))
         {
-            if (TryConvertEquippedLocalToOverlay(center, out overlayPoint))
+            if (TryConvertEquippedLocalToOverlay(bounds.center, out overlayPoint))
             {
                 return true;
             }
@@ -1077,6 +1073,33 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         }
     }
 
+    /// <summary>
+    /// Where in the grid the cursor is standing, laying the grid out first when it has gone stale.
+    /// <para>
+    /// False when the selection was out of range and had to be corrected instead: the correction is
+    /// itself a move, so the caller has nothing left to do.
+    /// </para>
+    /// </summary>
+    private bool TryResolveGridPosition(out Vector2Int position)
+    {
+        if (entryGridPositions.Count != entries.Count)
+        {
+            LayoutCharmEntries();
+        }
+
+        if (selectedIndex < 0 || selectedIndex >= entries.Count)
+        {
+            SelectIndex(Mathf.Clamp(selectedIndex, 0, entries.Count - 1));
+            position = Vector2Int.zero;
+            return false;
+        }
+
+        position = selectedIndex < entryGridPositions.Count
+            ? entryGridPositions[selectedIndex]
+            : Vector2Int.zero;
+        return true;
+    }
+
     private void MoveSelectionHorizontal(int direction)
     {
         EnsureBuilt();
@@ -1086,20 +1109,17 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             return;
         }
 
-        if (entryGridPositions.Count != entries.Count)
+        if (EquippedRowFocused)
         {
-            LayoutCharmEntries();
-        }
-
-        if (selectedIndex < 0 || selectedIndex >= entries.Count)
-        {
-            SelectIndex(Mathf.Clamp(selectedIndex, 0, entries.Count - 1));
+            MoveWithinEquippedRow(direction);
             return;
         }
 
-        Vector2Int current = selectedIndex < entryGridPositions.Count
-            ? entryGridPositions[selectedIndex]
-            : new Vector2Int(0, 0);
+        if (!TryResolveGridPosition(out Vector2Int current))
+        {
+            return;
+        }
+
         int targetColumn = current.y + direction;
         int row = current.x;
         int candidate = -1;
@@ -1128,22 +1148,32 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             return;
         }
 
-        if (entryGridPositions.Count != entries.Count)
+        if (EquippedRowFocused)
         {
-            LayoutCharmEntries();
-        }
+            // Nothing above the equipped row, so only Down means anything up here.
+            if (direction > 0)
+            {
+                LeaveEquippedRow();
+            }
 
-        if (selectedIndex < 0 || selectedIndex >= entries.Count)
-        {
-            SelectIndex(Mathf.Clamp(selectedIndex, 0, entries.Count - 1));
             return;
         }
 
-        Vector2Int current = selectedIndex < entryGridPositions.Count
-            ? entryGridPositions[selectedIndex]
-            : new Vector2Int(0, 0);
+        if (!TryResolveGridPosition(out Vector2Int current))
+        {
+            return;
+        }
+
         int targetRow = current.x + direction;
-        if (targetRow < 0 || targetRow >= CharmRows)
+        if (targetRow < 0)
+        {
+            // Off the top of the grid, which is where the equipped row is - and where Hollow Knight
+            // puts the cursor so a charm can be taken off without finding it among everything owned.
+            TryFocusEquippedRow();
+            return;
+        }
+
+        if (targetRow >= CharmRows)
         {
             return;
         }
@@ -1219,15 +1249,24 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             return;
         }
 
-        int previousIndex = Mathf.Clamp(selectedIndex, 0, entries.Count - 1);
         selectedIndex = Mathf.Clamp(index, 0, entries.Count - 1);
         var entry = entries[selectedIndex];
-        string entryName = entry.Root != null && entry.Root.gameObject != null
-            ? entry.Root.gameObject.name
-            : "<null>";
         var highlightRect = EnsureHighlightRect();
         RectTransform? entryRoot = entry.Root;
-        if (highlightRect != null && entryRoot != null)
+        bool drawnOnEquippedRow = highlightRect != null && EquippedRowFocused && TryPositionEquippedHighlight(highlightRect);
+        if (EquippedRowFocused && !drawnOnEquippedRow)
+        {
+            // The slot the cursor was standing in has gone - the row was rebuilt underneath it.
+            // Dropped here rather than through LeaveEquippedRow, which would call back into this.
+            ResetEquippedFocus();
+        }
+
+        if (drawnOnEquippedRow)
+        {
+            // Already placed on the slot. The grid entry below is still the selection - it is what
+            // the description and Submit answer for - it just is not where the cursor is drawn.
+        }
+        else if (highlightRect != null && entryRoot != null)
         {
             highlightRect.gameObject.SetActive(true);
             PositionHighlight(highlightRect, entryRoot);

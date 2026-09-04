@@ -160,11 +160,25 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         }
     }
 
-    private void ResetShadeInputState(string? reason = null)
+    /// <summary>
+    /// Drops the pane's own view of the Shade's directional input, and says which caller did it.
+    /// <para>
+    /// Only when there was something to drop. Two of the callers run every frame, so an
+    /// unconditional line would spend the whole log ring saying nothing happened - which is why the
+    /// reason each caller passes had stopped being recorded at all.
+    /// </para>
+    /// </summary>
+    private void ResetShadeInputState(string reason)
     {
+        if (shadeHeldDirection == null && shadeDirectionRepeatTimer == 0f && lastShadeInputFrame == -1)
+        {
+            return;
+        }
+
         shadeHeldDirection = null;
         shadeDirectionRepeatTimer = 0f;
         lastShadeInputFrame = -1;
+        LogMenuEvent("Shade pane input reset: " + reason);
     }
 
     private void Update()
@@ -431,7 +445,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             return;
         }
 
-        Sprite? sprite = null;
+        Sprite? sprite;
         if (!owned)
         {
             sprite = ResolveLockedCharmSprite() ?? definition?.Icon ?? GetFallbackSprite();

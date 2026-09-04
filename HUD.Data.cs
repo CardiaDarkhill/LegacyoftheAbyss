@@ -11,13 +11,9 @@ public partial class SimpleHUD
             shadeHealth = 0;
             shadeLifebloodMax = 0;
             shadeLifeblood = 0;
-            prevHornetMax = 0;
-            prevHornetHealth = 0;
             suppressNextDamageSound = false;
             return;
         }
-        prevHornetMax = playerData.maxHealth;
-        prevHornetHealth = playerData.health;
 
         if (!hasExplicitShadeStats)
         {
@@ -32,11 +28,9 @@ public partial class SimpleHUD
     private void SyncShadeFromPlayer()
     {
         if (playerData == null) return;
-        int newHornetMax = playerData.maxHealth;
-        int newHornet = playerData.health;
         if (!hasExplicitShadeStats)
         {
-            int newMax = ModConfig.ComputeShadeMaskCount(newHornetMax);
+            int newMax = ModConfig.ComputeShadeMaskCount(playerData.maxHealth);
             if (newMax != shadeMax)
             {
                 shadeMax = newMax;
@@ -45,7 +39,6 @@ public partial class SimpleHUD
                 shadeHealth = Mathf.Min(shadeHealth, shadeMax);
             }
         }
-        prevHornetHealth = newHornet; prevHornetMax = newHornetMax;
     }
 }
 

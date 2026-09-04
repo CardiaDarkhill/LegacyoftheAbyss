@@ -91,53 +91,62 @@ namespace LegacyoftheAbyss.Shade.Knight
             var stage = new GameObject("KnightEffectStage");
             stage.SetActive(false);
 
-            GameObject instance;
             try
             {
-                instance = Object.Instantiate(prefab, stage.transform, worldPositionStays: false);
-                instance.name = prefabName;
-                instance.SetActive(true);
-                Strip(instance);
+                GameObject instance;
+                try
+                {
+                    instance = Object.Instantiate(prefab, stage.transform, worldPositionStays: false);
+                    instance.name = prefabName;
+                    instance.SetActive(true);
+                    Strip(instance);
+                }
+                catch
+                {
+                    return null;
+                }
+
+                WakeArt(instance);
+
+                instance.transform.SetParent(parent, worldPositionStays: false);
+                instance.transform.localPosition = Vector3.zero;
+
+                // The prefab's own rotation is kept for the same reason its scale is: the up and
+                // down Grubberfly beams are the sideways one turned a quarter, and resetting to
+                // identity laid them both flat.
+                // Kept when the prefab *is* the art, dropped when it is only a body to play someone
+                // else's clip on - a host's own rotation and scale say nothing about the animation
+                // being played on it, and Shadow Burst's baked 1.92 was what drew the thorns
+                // oversized.
+                if (!keepPrefabTransform)
+                {
+                    instance.transform.localRotation = Quaternion.identity;
+                    instance.transform.localScale = Vector3.one * scale;
+                }
+                else
+                {
+                    instance.transform.localRotation = prefab.transform.localRotation;
+
+                    // Multiplied into the prefab's own scale rather than replacing it. Hollow Knight
+                    // mirrors a lot of its art with a negative x scale on the prefab - the
+                    // left-facing and right-facing beams are the same sprite turned around that way
+                    // - so overwriting it pointed every direction the same way.
+                    Vector3 prefabScale = prefab.transform.localScale;
+                    instance.transform.localScale = new Vector3(
+                        prefabScale.x * scale,
+                        prefabScale.y * scale,
+                        prefabScale.z == 0f ? scale : prefabScale.z * scale);
+                }
+
+                return instance;
             }
-            catch
+            finally
             {
+                // Always, not only on the two paths that used to say so: anything thrown past the
+                // inner catch would otherwise leave the stage - and the instance still parented to
+                // it - in the scene for the rest of the session.
                 Object.Destroy(stage);
-                return null;
             }
-
-            WakeArt(instance);
-
-            instance.transform.SetParent(parent, worldPositionStays: false);
-            instance.transform.localPosition = Vector3.zero;
-
-            // The prefab's own rotation is kept for the same reason its scale is: the up and down
-            // Grubberfly beams are the sideways one turned a quarter, and resetting to identity
-            // laid them both flat.
-            // Kept when the prefab *is* the art, dropped when it is only a body to play someone
-            // else's clip on - a host's own rotation and scale say nothing about the animation
-            // being played on it, and Shadow Burst's baked 1.92 was what drew the thorns oversized.
-            if (!keepPrefabTransform)
-            {
-                instance.transform.localRotation = Quaternion.identity;
-                instance.transform.localScale = Vector3.one * scale;
-            }
-            else
-            {
-                instance.transform.localRotation = prefab.transform.localRotation;
-
-                // Multiplied into the prefab's own scale rather than replacing it. Hollow Knight
-                // mirrors a lot of its art with a negative x scale on the prefab - the left-facing
-                // and right-facing beams are the same sprite turned around that way - so
-                // overwriting it pointed every direction the same way.
-                Vector3 prefabScale = prefab.transform.localScale;
-                instance.transform.localScale = new Vector3(
-                    prefabScale.x * scale,
-                    prefabScale.y * scale,
-                    prefabScale.z == 0f ? scale : prefabScale.z * scale);
-            }
-
-            Object.Destroy(stage);
-            return instance;
         }
 
         /// <summary>

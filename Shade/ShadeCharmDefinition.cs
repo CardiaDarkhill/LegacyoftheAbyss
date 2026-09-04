@@ -8,6 +8,17 @@ using UnityEngine;
 
 namespace LegacyoftheAbyss.Shade
 {
+    /// <summary>
+    /// Every charm the companion can own.
+    /// <para>
+    /// <b>Append only.</b> These are persisted by ordinal, not by name - a save slot records
+    /// <c>Collected</c>, <c>DiscoveredCharmIds</c> and <c>EquippedCharmLoadouts</c> as plain
+    /// integers, so inserting a member anywhere but the end renumbers every charm below it and
+    /// silently hands existing saves the wrong ones. Nothing about that is visible in the diff of a
+    /// reorder, which is why <c>ShadeCharmInventoryTests</c> pins the whole map: adding a charm
+    /// costs one line there, and changing one that already shipped fails the build.
+    /// </para>
+    /// </summary>
     public enum ShadeCharmId
     {
         WaywardCompass,
@@ -42,7 +53,6 @@ namespace LegacyoftheAbyss.Shade
         Hiveblood,
         Kingsoul,
         VoidHeart,
-        // Appended, never reordered: these are persisted by ordinal in existing save slots.
         Weaversong,
         DefendersCrest,
         Flukenest,
@@ -315,6 +325,13 @@ namespace LegacyoftheAbyss.Shade
         public LegacyHelper.ShadeController Controller { get; }
 
         public ShadeCharmLoadoutSnapshot Snapshot { get; }
+
+        // There is deliberately no "was this just equipped" flag here. It cannot be answered from
+        // the controller: the loadout is rebuilt from baseline on every charm change and every
+        // scene change, and the companion is respawned on every scene change, so a fresh controller
+        // sees every charm it is wearing as new. A hook whose effect is a one-off has to decide
+        // from state that survives the respawn - AddMaxHpBonus reads the companion's restored
+        // maximum, which already counts the charm.
     }
 
     internal readonly struct ShadeCharmDamageEvent
@@ -594,15 +611,27 @@ namespace LegacyoftheAbyss.Shade
                     continue;
                 }
 
+                bool known;
+                Sprite? cached;
                 lock (Cache)
                 {
-                    if (Cache.TryGetValue(name, out var cached))
+                    known = Cache.TryGetValue(name, out cached);
+                }
+
+                // ReferenceEquals rather than ==, because Unity's operator reports a *destroyed*
+                // sprite as null too and the two want opposite treatment. A real null is this name
+                // already having been looked for and not found, so the next candidate is tried
+                // without probing the filesystem again - every ShadeCharmInventory builds its own
+                // definitions, so a charm with no icon of its own was re-running the whole candidate
+                // sweep once per companion. A destroyed sprite is a stale entry and is rebuilt.
+                if (known && (ReferenceEquals(cached, null) || cached))
+                {
+                    if (cached)
                     {
-                        if (cached != null)
-                        {
-                            return cached;
-                        }
+                        return cached;
                     }
+
+                    continue;
                 }
 
                 var sprite = LoadIconInternal(name!);
@@ -611,7 +640,7 @@ namespace LegacyoftheAbyss.Shade
                     Cache[name!] = sprite;
                 }
 
-                if (sprite != null)
+                if (sprite)
                 {
                     return sprite;
                 }

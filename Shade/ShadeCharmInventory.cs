@@ -69,7 +69,7 @@ namespace LegacyoftheAbyss.Shade
             get => _notchCapacity;
             set
             {
-                int clamped = Mathf.Clamp(value, 0, 20);
+                int clamped = Mathf.Clamp(value, 0, ShadePersistentState.MaxNotchCapacity);
                 if (_notchCapacity == clamped)
                 {
                     return;
@@ -260,9 +260,9 @@ namespace LegacyoftheAbyss.Shade
 
             bool wasOvercharmed = _isOvercharmed;
             AddEquippedInternal(id);
-            bool overcharmChanged = RecalculateOvercharmed();
+            RecalculateOvercharmed();
 
-            if (_isOvercharmed && (!wasOvercharmed || overcharmChanged))
+            if (_isOvercharmed && !wasOvercharmed)
             {
                 message = $"{definition.DisplayName} equipped. Shade is overcharmed.";
             }
@@ -332,7 +332,7 @@ namespace LegacyoftheAbyss.Shade
             _hivebloodTimer = 0f;
             _hivebloodPendingMaskRestore = false;
 
-            bool changed = false;
+            bool changed;
 
             if (_equipped.Count == 0 && _equippedOrder.Count == 0)
             {
@@ -466,9 +466,20 @@ namespace LegacyoftheAbyss.Shade
             return false;
         }
 
+        /// <summary>
+        /// Clears a charm's "new" marker. Raises the change like every other mutator here: without
+        /// it the marker was only written to the slot if the player happened to also equip
+        /// something, so it came back on the next launch. Fires at most once per charm.
+        /// </summary>
         public bool MarkCharmSeen(ShadeCharmId id)
         {
-            return _newlyDiscovered.Remove(id);
+            if (!_newlyDiscovered.Remove(id))
+            {
+                return false;
+            }
+
+            RaiseStateChanged();
+            return true;
         }
 
         public void LoadState(
@@ -479,7 +490,25 @@ namespace LegacyoftheAbyss.Shade
             IEnumerable<ShadeCharmId>? newlyDiscovered = null)
         {
             _suppressStateChanged = true;
+            try
+            {
+                LoadStateCore(owned, equipped, broken, notchCapacity, newlyDiscovered);
+            }
+            finally
+            {
+                _suppressStateChanged = false;
+            }
 
+            RaiseStateChanged();
+        }
+
+        private void LoadStateCore(
+            IEnumerable<ShadeCharmId>? owned,
+            IEnumerable<ShadeCharmId>? equipped,
+            IEnumerable<ShadeCharmId>? broken,
+            int notchCapacity,
+            IEnumerable<ShadeCharmId>? newlyDiscovered)
+        {
             _owned.Clear();
             _equipped.Clear();
             _equippedOrder.Clear();
@@ -527,16 +556,17 @@ namespace LegacyoftheAbyss.Shade
                 }
             }
 
-            _notchCapacity = Mathf.Clamp(notchCapacity > 0 ? notchCapacity : DefaultNotchCapacity, 0, 20);
+            _notchCapacity = Mathf.Clamp(notchCapacity > 0 ? notchCapacity : DefaultNotchCapacity, 0, ShadePersistentState.MaxNotchCapacity);
+
+            // Set before the trim, not merely recomputed after it: TrimToCapacity stands down when
+            // this is already true, which is what lets a loadout that was saved overcharmed be
+            // restored as it was rather than pruned back to the notch count.
             _isOvercharmed = UsedNotches > _notchCapacity;
             TrimToCapacity();
             RecalculateOvercharmed();
             _overcharmAttemptCounter = 0;
 
             EnsureVoidHeartEquipped();
-
-            _suppressStateChanged = false;
-            RaiseStateChanged();
         }
 
         private IEnumerable<ShadeCharmId> SanitizeIds(IEnumerable<ShadeCharmId> source)

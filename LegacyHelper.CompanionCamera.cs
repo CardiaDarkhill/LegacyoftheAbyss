@@ -305,14 +305,21 @@ public partial class LegacyHelper
         /// The spawned companion the camera should account for, or null. Any character counts - a
         /// Shade is leashed closer than a Knight, so it simply asks for a smaller lean rather than
         /// none at all.
+        /// <para>
+        /// Off <c>ActiveInstances</c>, which is the list kept for per-frame callers, and indexed
+        /// rather than enumerated. This runs every frame; the registry's own <c>All</c> hands back a
+        /// fresh array each time it is asked.
+        /// </para>
         /// </summary>
         private static ShadeController FindSecondPlayer()
         {
-            foreach (var companion in ShadeCompanionRegistry.All)
+            var instances = ShadeController.ActiveInstances;
+            for (int i = 0; i < instances.Count; i++)
             {
-                if (companion.Controller != null)
+                var controller = instances[i];
+                if (controller != null)
                 {
-                    return companion.Controller;
+                    return controller;
                 }
             }
 

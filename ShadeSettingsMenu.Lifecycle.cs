@@ -382,8 +382,6 @@ public static partial class ShadeSettingsMenu
             allScreens.Add(shadeAiAdvancedScreen);
         }
 
-        screen = mainScreen != null ? mainScreen.gameObject : null;
-
         BuildMainMenu(ui, mainScreen, buttonTemplate);
         BuildDifficultyMenu(ui, difficultyScreen, sliderTemplate, buttonTemplate);
         if (IncludeLegacyCharmMenu && charmsScreen != null)
@@ -523,7 +521,7 @@ public static partial class ShadeSettingsMenu
             go.transform.SetSiblingIndex(quitButton.transform.GetSiblingIndex());
         }
         Object.DestroyImmediate(go.GetComponentInChildren<AutoLocalizeTextUI>());
-        bool hasLabel = false;
+        bool hasLabel;
         var txt = go.GetComponentInChildren<Text>(true);
         if (txt != null)
         {
@@ -534,17 +532,7 @@ public static partial class ShadeSettingsMenu
         }
         else
         {
-            var tmpType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
-            if (tmpType != null)
-            {
-                var tmp = go.GetComponentInChildren(tmpType, true);
-                if (tmp != null)
-                {
-                    tmpType.GetProperty("text")?.SetValue(tmp, "Legacy of the Abyss");
-                    tmpType.GetProperty("color")?.SetValue(tmp, Color.white);
-                    hasLabel = true;
-                }
-            }
+            hasLabel = TrySetTmpLabel(go, "Legacy of the Abyss", Color.white) != null;
         }
 
         if (!hasLabel)

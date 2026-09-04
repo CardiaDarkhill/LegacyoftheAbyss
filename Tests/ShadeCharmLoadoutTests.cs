@@ -144,4 +144,41 @@ public class ShadeCharmLoadoutTests
             expected,
             LegacyHelper.ShadeController.ResolveResizeRefill(currentHealth, pausedBaseline));
     }
+
+    /// <summary>
+    /// Fragile Heart healed the companion in full on every room transition.
+    /// <para>
+    /// The charm's loadout is rebuilt from baseline on every charm change <em>and</em> every scene
+    /// change, and the companion is respawned on every scene change too - so its OnApplied runs
+    /// again with the bonus back at zero and a controller that has never seen the charm before.
+    /// Nothing on the controller can tell that from the player putting the charm on. The fill was
+    /// "top up to the new maximum", so every one of those rebuilds restored the companion to full:
+    /// a one-notch charm made it unkillable to anything that could not empty its health inside a
+    /// single room.
+    /// </para>
+    /// <para>
+    /// The tie is broken by the maximum the companion already has, which is restored from the save
+    /// with the charm's masks already counted - so the answer does not depend on spotting a fresh
+    /// equip at all.
+    /// </para>
+    /// </summary>
+    [Theory]
+    // Put on mid-run: the maximum standing is the one without the charm, so its two masks arrive
+    // filled - and nothing beyond them does.
+    [InlineData(5, 7, 5, 2)]
+    // The rebuild after a scene change or a reload. The restored maximum already counts the charm,
+    // so there is nothing left to hand back however many times this runs.
+    [InlineData(5, 7, 7, 0)]
+    // Taken off. The maximum falls; ApplyCharmHealthModifiers clamps into it and no fill is owed.
+    [InlineData(7, 5, 7, 0)]
+    // Joni's converts the maximum to lifeblood, so the same call arrives carrying capacities.
+    [InlineData(7, 10, 7, 3)]
+    [InlineData(7, 10, 10, 0)]
+    public void AMaxHealthCharmOnlyFillsWhatTheStandingMaximumDoesNotCover(
+        int previousMax, int newMax, int currentMax, int expected)
+    {
+        Assert.Equal(
+            expected,
+            LegacyHelper.ShadeController.ResolveMaxHpFill(previousMax, newMax, currentMax));
+    }
 }

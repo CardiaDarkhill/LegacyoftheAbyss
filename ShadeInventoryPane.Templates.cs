@@ -206,15 +206,9 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
 
         int score = 0;
 
-        try
+        if (candidate.transform.parent == template.transform)
         {
-            if (candidate.transform.parent == template.transform)
-            {
-                score += 75;
-            }
-        }
-        catch
-        {
+            score += 75;
         }
 
         if (!string.IsNullOrEmpty(lowerName))
@@ -278,16 +272,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             }
         }
 
-        int childCount = 0;
-        try
-        {
-            childCount = candidate.childCount;
-        }
-        catch
-        {
-            childCount = 0;
-        }
-
+        int childCount = candidate.childCount;
         if (childCount >= 6)
         {
             score += 110;
@@ -301,31 +286,12 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             score += 30;
         }
 
-        bool hasLayoutGroup = false;
-        try
-        {
-            hasLayoutGroup = candidate.GetComponent<LayoutGroup>() != null;
-        }
-        catch
-        {
-            hasLayoutGroup = false;
-        }
-
-        if (hasLayoutGroup)
+        if (candidate.GetComponent<LayoutGroup>() != null)
         {
             score += 60;
         }
 
-        bool hasDirectGrid = false;
-        try
-        {
-            hasDirectGrid = candidate.GetComponent<GridLayoutGroup>() != null;
-        }
-        catch
-        {
-            hasDirectGrid = false;
-        }
-
+        bool hasDirectGrid = candidate.GetComponent<GridLayoutGroup>() != null;
         if (hasDirectGrid)
         {
             score -= 140;
@@ -336,16 +302,10 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             score += 240;
         }
 
-        try
+        Vector2 size = candidate.rect.size;
+        if (Mathf.Abs(size.x) >= 12f && Mathf.Abs(size.y) >= 12f)
         {
-            Vector2 size = candidate.rect.size;
-            if (Mathf.Abs(size.x) >= 12f && Mathf.Abs(size.y) >= 12f)
-            {
-                score += 45;
-            }
-        }
-        catch
-        {
+            score += 45;
         }
 
         return score;
@@ -358,15 +318,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
             return false;
         }
 
-        GridLayoutGroup[]? grids = null;
-        try
-        {
-            grids = candidate.GetComponentsInChildren<GridLayoutGroup>(true);
-        }
-        catch
-        {
-            grids = null;
-        }
+        GridLayoutGroup[]? grids = candidate.GetComponentsInChildren<GridLayoutGroup>(true);
 
         if (grids == null || grids.Length == 0)
         {
@@ -394,16 +346,6 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
     internal static string FormatVector2(Vector2 value)
     {
         return FormattableString.Invariant($"({value.x:0.##}, {value.y:0.##})");
-    }
-
-    private static string FormatRectOffset(RectOffset offset)
-    {
-        if (offset == null)
-        {
-            return "<null>";
-        }
-
-        return FormattableString.Invariant($"(l:{offset.left}, r:{offset.right}, t:{offset.top}, b:{offset.bottom})");
     }
 
     internal static bool HasSufficientRectSize(RectTransform? rect)
@@ -746,6 +688,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         activePane = this;
         labelPulseTimer = 0f;
         isActive = true;
+        ResetEquippedFocus();
         ResetShadeInputState("PaneStart");
         UpdateInventoryBinding(true);
         if (attachedPaneList != null)
@@ -764,6 +707,7 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         ShadeInventoryPaneIntegration.RestoreInputBindings(this);
         UpdateInventoryBinding(false);
         isActive = false;
+        ResetEquippedFocus();
         labelPulseTimer = 0f;
         ResetShadeInputState("PaneEnd");
 
@@ -792,8 +736,6 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         SetTextValue(titleText, titleTextTMP, label);
         UpdateParentListLabel();
     }
-
-    internal string DisplayLabel => displayLabel;
 
     internal static ShadeInventoryPane? ActivePane => activePane;
 
@@ -862,6 +804,13 @@ internal sealed partial class ShadeInventoryPane : InventoryPane
         RefreshEntryStates();
         UpdateNotchMeter();
         UpdateDetailPanel();
+
+        // Taking a charm off shortens the row the cursor may be standing in, so it is re-seated
+        // rather than left pointing at a slot that has closed up.
+        if (success)
+        {
+            RefreshEquippedFocusAfterChange();
+        }
     }
 
     private void HandleInventoryChanged()

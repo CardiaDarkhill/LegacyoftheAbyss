@@ -28,7 +28,6 @@ namespace LegacyoftheAbyss.Shade.Knight
         /// share an orientation and whoever draws them must ask per sprite.
         /// </summary>
         internal const string HiveMaskClip = "Hive Health Idle";
-        internal const string MaskBackboardClip = "Health Empty";
         internal const string FrameClip = "HUD Frame Idle";
         internal const string SoulOrbClip = "Soul Orb Glow";
         /// <summary>

@@ -14,7 +14,11 @@ namespace LegacyoftheAbyss.Shade
     {
         private const int MaxSpellProgress = 6;
         private const int DefaultNotchCapacity = 3;
-        private const int MaxNotchCapacity = 20;
+        /// <summary>
+        /// The ceiling on charm notches. Lives here because this is what actually clamps; everything
+        /// else that has to agree with it reads this.
+        /// </summary>
+        internal const int MaxNotchCapacity = 20;
 
         public int CurrentHP { get; private set; } = -1;
         public int MaxHP { get; private set; } = -1;
@@ -95,7 +99,7 @@ namespace LegacyoftheAbyss.Shade
             if (!CanTakeDamage || (canTakeDamage.HasValue && !canTakeDamage.Value))
             {
                 int previousTotalHp = Mathf.Max(0, previousHp) + Mathf.Max(0, previousLifeblood);
-                invulnerableDrop = previousTotalHp >= 0 && sanitizedTotalHp < previousTotalHp;
+                invulnerableDrop = sanitizedTotalHp < previousTotalHp;
             }
 
             bool baseChanged = baseMaxHp.HasValue && Mathf.Max(0, baseMaxHp.Value) != Mathf.Max(0, previousBaseMax);
@@ -382,6 +386,11 @@ namespace LegacyoftheAbyss.Shade
             return removed;
         }
 
+        /// <summary>
+        /// Replaces the discovered set. Anything currently equipped is kept discovered regardless of
+        /// what is passed: a loadout naming a charm the state says was never found is a state the
+        /// rest of the mod has no way to represent.
+        /// </summary>
         public void SetDiscoveredCharms(IEnumerable<int>? charmIds)
         {
             var sanitized = new HashSet<int>();
@@ -420,26 +429,6 @@ namespace LegacyoftheAbyss.Shade
             {
                 _discoveredCharmIds.Clear();
                 _discoveredCharmIds.UnionWith(sanitized);
-            }
-
-            if (_equippedCharmLoadouts.Count == 0 || sanitized.Count == 0)
-            {
-                return;
-            }
-
-            var loadoutIds = _equippedCharmLoadouts.Keys.ToArray();
-            foreach (var loadoutId in loadoutIds)
-            {
-                if (!_equippedCharmLoadouts.TryGetValue(loadoutId, out var loadout) || loadout == null)
-                {
-                    continue;
-                }
-
-                loadout.RemoveWhere(id => !sanitized.Contains(id));
-                if (loadout.Count == 0)
-                {
-                    _equippedCharmLoadouts.Remove(loadoutId);
-                }
             }
         }
 

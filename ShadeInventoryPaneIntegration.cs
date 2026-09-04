@@ -253,16 +253,12 @@ internal static class ShadeInventoryPaneIntegration
 
         try
         {
-            var textObj = CurrentPaneTextFieldInfo.GetValue(paneList);
-            if (textObj == null)
+            // The field is private, so it is reached reflectively - but what comes back is a
+            // TextMeshPro, so writing it is not. Reflecting for "text" as well only added a lookup
+            // that could fail into a blank tab name.
+            if (CurrentPaneTextFieldInfo.GetValue(paneList) is TMP_Text text)
             {
-                return false;
-            }
-
-            var textProp = textObj.GetType().GetProperty("text");
-            if (textProp != null && textProp.CanWrite)
-            {
-                textProp.SetValue(textObj, label);
+                text.text = label;
                 return true;
             }
         }

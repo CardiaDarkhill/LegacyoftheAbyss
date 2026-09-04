@@ -17,7 +17,6 @@ namespace LegacyoftheAbyss.Shade
         private static ShadeCharmPlacementDefinition[] s_allPlacements = Array.Empty<ShadeCharmPlacementDefinition>();
         private static Dictionary<string, ShadeCharmPlacementDefinition[]> s_exactPlacements = new(StringComparer.OrdinalIgnoreCase);
         private static ShadeCharmPlacementDefinition[] s_containsPlacements = Array.Empty<ShadeCharmPlacementDefinition>();
-        private static string s_sourcePath = string.Empty;
         private static bool s_initialized;
 
         static ShadeCharmPlacementDatabase()
@@ -104,7 +103,6 @@ namespace LegacyoftheAbyss.Shade
                 s_allPlacements = placements.ToArray();
                 s_exactPlacements = exact.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToArray(), StringComparer.OrdinalIgnoreCase);
                 s_containsPlacements = contains.ToArray();
-                s_sourcePath = path;
                 s_initialized = true;
             }
         }

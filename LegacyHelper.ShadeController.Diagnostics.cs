@@ -114,6 +114,17 @@ public partial class LegacyHelper
 
             try
             {
+                var definition = Companion?.CharacterDefinition;
+                state.Character = definition != null
+                    ? definition.DisplayName + " (" + definition.MovesetName + ")"
+                    : "unresolved";
+            }
+            catch
+            {
+            }
+
+            try
+            {
                 state.Skin = ShadeSkinManager.SelectedSkinId;
             }
             catch

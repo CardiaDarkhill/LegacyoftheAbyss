@@ -417,7 +417,7 @@ public partial class LegacyHelper
             }
 
             float horizontal = capturedHorizontalInput;
-            UpdateKnightTimers(dt, horizontal);
+            UpdateKnightTimers(dt);
 
             // Channelling roots the Knight the way it roots Hornet: no jump, no dash, and no walk.
             // Shape of Unn buys back the walk alone, at half speed. Nothing held the Knight before,
@@ -470,7 +470,7 @@ public partial class LegacyHelper
             UpdateKnightAnimation(speed);
         }
 
-        private void UpdateKnightTimers(float dt, float horizontal)
+        private void UpdateKnightTimers(float dt)
         {
             knightCoyoteTimer = knightGrounded ? KnightCoyoteSeconds : Mathf.Max(0f, knightCoyoteTimer - dt);
             knightWallJumpLockTimer = Mathf.Max(0f, knightWallJumpLockTimer - dt);
@@ -916,10 +916,6 @@ public partial class LegacyHelper
         private const float KnightCastFreezeMaxSeconds = 1.5f;
 
         /// <summary>
-        /// Holds the Knight still for a cast. A no-op for the Shade, which floats and has no
-        /// momentum worth cancelling, so the spell routines can call it unguarded.
-        /// </summary>
-        /// <summary>
         /// Five frames at sixty, which is what the report asked for and what the up slash reads as
         /// in Hollow Knight: a swing that connects plants the Knight rather than carrying it along.
         /// </summary>
@@ -1007,6 +1003,10 @@ public partial class LegacyHelper
             knightCastFreezeUntil = Time.time + KnightUpSlashFreezeSeconds;
         }
 
+        /// <summary>
+        /// Holds the Knight still for a cast. A no-op for the Shade, which floats and has no
+        /// momentum worth cancelling, so the spell routines can call it unguarded.
+        /// </summary>
         private void BeginKnightCastFreeze()
         {
             // Not during a balloon launch. The freeze returns before the launch is ticked, so it

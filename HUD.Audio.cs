@@ -4,7 +4,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using System.Reflection;
 
 public partial class SimpleHUD
 {
@@ -16,13 +15,6 @@ public partial class SimpleHUD
     // Negative cache: Resources.FindObjectsOfTypeAll walks every loaded object, so a
     // failed lookup must not re-run on the next hit.
     private bool searchedPinnedHurtClips;
-
-    private const BindingFlags InstanceMembers =
-        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-
-    // GetProperties allocates a fresh array per call; the FSM crawl hits the same
-    // action types repeatedly, so resolve each type once.
-    private static readonly Dictionary<Type, PropertyInfo[]> s_propertyCache = new();
 
     private AudioSource EnsureSfxSource()
     {
@@ -146,19 +138,19 @@ public partial class SimpleHUD
         return score;
     }
 
+    /// <summary>
+    /// Every loaded clip that looks like a hero-damage sound, best first. The fallback for when the
+    /// two clips <see cref="ResolvePinnedHurtClips"/> pins by name are not in this build.
+    /// <para>
+    /// This used to crawl Hornet's PlayMaker FSM first, through a field named <c>HeroFSM</c>. There
+    /// is no such field - the game names them <c>damageEffectFSM</c>, <c>sprintFSM</c> and so on -
+    /// so the crawl resolved to nothing on every build and this scan has always been what answered.
+    /// </para>
+    /// </summary>
     private List<AudioClip> BuildShadeHurtCandidates()
     {
         var list = new List<AudioClip>();
         var seen = new HashSet<AudioClip>();
-
-        try
-        {
-            foreach (var c in FindHurtClipsFromHornetFSM())
-            {
-                if (c != null && seen.Add(c)) list.Add(c);
-            }
-        }
-        catch { }
 
         try
         {
@@ -185,95 +177,6 @@ public partial class SimpleHUD
         catch { }
 
         return list;
-    }
-
-    private static PropertyInfo[] GetCachedProperties(Type type)
-    {
-        if (!s_propertyCache.TryGetValue(type, out var props))
-        {
-            props = type.GetProperties(InstanceMembers);
-            s_propertyCache[type] = props;
-        }
-        return props;
-    }
-
-    /// <summary>
-    /// Walks Hornet's PlayMaker FSM looking for anything that holds an AudioClip.
-    /// </summary>
-    private List<AudioClip> FindHurtClipsFromHornetFSM()
-    {
-        var result = new List<AudioClip>();
-        var seen = new HashSet<AudioClip>();
-
-        void Collect(AudioClip clip)
-        {
-            if (clip != null && seen.Add(clip)) result.Add(clip);
-        }
-
-        try
-        {
-            var hc = HeroController.instance;
-            if (hc == null) return result;
-
-            var fsmVal = hc.GetType().GetField("HeroFSM", InstanceMembers)?.GetValue(hc);
-            if (fsmVal == null) return result;
-
-            var statesProp = fsmVal.GetType().GetProperty("States", InstanceMembers);
-            if (statesProp?.GetValue(fsmVal, null) is not IEnumerable states) return result;
-
-            foreach (var state in states)
-            {
-                if (state == null) continue;
-
-                var actionsProp = state.GetType().GetProperty("Actions", InstanceMembers);
-                if (actionsProp?.GetValue(state, null) is not IEnumerable actions) continue;
-
-                foreach (var action in actions)
-                {
-                    if (action == null) continue;
-                    try
-                    {
-                        CollectClipsFromAction(action, Collect);
-                    }
-                    catch { }
-                }
-            }
-        }
-        catch { }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Pulls any AudioClip reachable from a single FSM action: a direct clip property,
-    /// an AudioSource's clip, or a PlayMaker FsmObject wrapping one.
-    /// </summary>
-    private static void CollectClipsFromAction(object action, Action<AudioClip> collect)
-    {
-        foreach (var p in GetCachedProperties(action.GetType()))
-        {
-            var pt = p.PropertyType;
-            if (pt == null) continue;
-
-            // Each branch reads the property at most once - the type tests come first so GetValue is
-            // not called once per candidate type.
-
-            if (typeof(AudioClip).IsAssignableFrom(pt))
-            {
-                collect(p.GetValue(action, null) as AudioClip);
-            }
-            else if (typeof(AudioSource).IsAssignableFrom(pt))
-            {
-                collect((p.GetValue(action, null) as AudioSource)?.clip);
-            }
-            else if (pt.FullName != null && pt.FullName.StartsWith("HutongGames.PlayMaker.FsmObject", StringComparison.Ordinal))
-            {
-                var wrapper = p.GetValue(action, null);
-                if (wrapper == null) continue;
-                var valueProp = wrapper.GetType().GetProperty("Value", BindingFlags.Instance | BindingFlags.Public);
-                collect(valueProp?.GetValue(wrapper, null) as AudioClip);
-            }
-        }
     }
 }
 #nullable restore

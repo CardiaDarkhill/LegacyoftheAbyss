@@ -90,6 +90,7 @@ that exists purely to keep the nail out of it.
 | `Shade/ShadeSpellDamage.cs` | Hollow Knight's own spell damage, flat, with the hit counts, and why it is not scaled off the nail. |
 | `Shade/UiTextStyle.cs` | The captured typography the settings menu and the inventory pane both restore onto cloned rows. |
 | `Diagnostics/CsvText.cs` | CSV field escaping shared by the event ring and the flight recorder. |
+| `ShadeInventoryPane.EquippedRow.cs` | Moving the charm cursor up out of the grid and into the Equipped row, and back. |
 
 ## Left alone, deliberately
 

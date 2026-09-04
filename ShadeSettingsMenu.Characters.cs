@@ -344,7 +344,7 @@ public static partial class ShadeSettingsMenu
                 return;
 
             LegacyHelper.SetShadeCharacter(companionId, character.Id);
-            RefreshCharacterButtons(companionId);
+            RefreshCharacterButtons();
             HandleCharacterFocused(companionId, character);
 
             // The skin list belongs to the character, so switching character rebuilds the screen.
@@ -358,7 +358,7 @@ public static partial class ShadeSettingsMenu
             RebuildCharactersScreen();
         }
 
-        private void RefreshCharacterButtons(int companionId)
+        private void RefreshCharacterButtons()
         {
             for (int i = characterButtons.Count - 1; i >= 0; i--)
             {
@@ -411,7 +411,7 @@ public static partial class ShadeSettingsMenu
         {
             int companionId = ShadeCompanionRegistry.PrimaryId;
             RefreshButtons();
-            RefreshCharacterButtons(companionId);
+            RefreshCharacterButtons();
 
             var character = ShadeCharacterManager.GetSelected(companionId);
             if (!character.SupportsSkins)
@@ -446,7 +446,7 @@ public static partial class ShadeSettingsMenu
             LegacyHelper.SetShadeSkin(skin.Id);
             focusedSkin = skin;
             RefreshButtons();
-            RefreshCharacterButtons(companionId);
+            RefreshCharacterButtons();
             ShowPreview(skin);
         }
 
@@ -517,10 +517,6 @@ public static partial class ShadeSettingsMenu
     }
 
     /// <summary>
-    /// Rebuilds the Characters screen in place after a character switch, because the skin rows
-    /// beneath belong to the character and are created at build time.
-    /// </summary>
-    /// <summary>
     /// Rebuilds every screen whose contents depend on which character is equipped. The Controls
     /// screen is one of them: the two characters do not share a control scheme, and it is built
     /// once at launch.
@@ -535,6 +531,10 @@ public static partial class ShadeSettingsMenu
         }
     }
 
+    /// <summary>
+    /// Rebuilds the Characters screen in place after a character switch, because the skin rows
+    /// beneath belong to the character and are created at build time.
+    /// </summary>
     private static void RebuildCharactersScreen()
     {
         if (skinsScreen == null || charactersButtonTemplate == null)

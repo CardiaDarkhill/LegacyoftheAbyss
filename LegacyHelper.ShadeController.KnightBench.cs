@@ -84,9 +84,6 @@ public partial class LegacyHelper
         /// <summary>Which side of Hornet, chosen once when she sits and held for the whole rest.</summary>
         private int knightBenchSide;
 
-        /// <summary>True while the Knight is on its way to a bench or sitting at one.</summary>
-        internal bool KnightAtBench => knightBenchActive;
-
         /// <summary>
         /// Sends the Knight to sit beside Hornet whenever she rests.
         /// <para>

@@ -189,10 +189,7 @@ public partial class LegacyHelper
                     if (heroCol.gameObject.layer == s_heroAttackLayer) continue;
                     if (heroCol.GetComponentInParent<NailSlashTerrainThunk>()) continue;
 
-                    long key = PairKey(mc, heroCol);
-                    if (!ignoredColliderPairs.Add(key)) continue;
-
-                    Physics2D.IgnoreCollision(mc, heroCol, true);
+                    TryIgnorePair(mc, heroCol);
                 }
             }
         }
@@ -206,6 +203,15 @@ public partial class LegacyHelper
         /// <summary>Shade is down and cannot be given anything to do or take.</summary>
         internal bool IsInactive => isInactive;
 
+        /// <summary>
+        /// Switches every collider on the companion on or off, for the hard leash.
+        /// <para>
+        /// Queried fresh rather than through <see cref="GetOwnColliders"/>: that cache is only
+        /// rebuilt when one of its entries has been destroyed, so a collider added since - the
+        /// aggro proxy, the Sharp Shadow dash box - would be left switched on. This runs on a leash
+        /// transition, not per frame, so the allocation is not worth the risk.
+        /// </para>
+        /// </summary>
         private void EnableCollisions(bool enable)
         {
             if (bodyCol) bodyCol.enabled = enable;
@@ -238,10 +244,59 @@ public partial class LegacyHelper
             return false;
         }
 
+        /// <summary>
+        /// Says when the body-contact test refused a collider that hurts.
+        /// <para>
+        /// <c>IsTouching</c> consults the layer collision matrix, and the companion's body is put on
+        /// Default rather than the hero layer on purpose - so a damager on a layer that does not
+        /// interact with Default reads as "not touching" however far inside the body it is, and the
+        /// hit is dropped with nothing said. The geometry is measured separately here, because
+        /// <c>Collider2D.Distance</c> is pure geometry and answers the question the guard meant to
+        /// ask: <c>overlapped=True</c> is the matrix refusing a hit that actually landed, which is
+        /// the reading that would justify moving this guard off <c>IsTouching</c>.
+        /// </para>
+        /// <para>
+        /// Only colliders that carry a <c>DamageHero</c> are reported. Every wall the companion
+        /// brushes takes this path too, and naming those would bury the one case worth seeing.
+        /// </para>
+        /// </summary>
+        private void ReportContactRefused(Collider2D col)
+        {
+            try
+            {
+                if (!col || col.GetComponent<DamageHero>() == null)
+                {
+                    return;
+                }
+
+                bool overlapped = false;
+                try
+                {
+                    overlapped = bodyCol.Distance(col).isOverlapped;
+                }
+                catch
+                {
+                }
+
+                LegacyoftheAbyss.Diagnostics.BugReportSystem.RecordEvent(
+                    "shade-contact-refused",
+                    LegacyHelper.DescribeHierarchy(col.transform, 3),
+                    FormattableString.Invariant(
+                        $"bodyLayer={LayerMask.LayerToName(bodyCol.gameObject.layer)} sourceLayer={LayerMask.LayerToName(col.gameObject.layer)} overlapped={overlapped} trigger={col.isTrigger}"));
+            }
+            catch
+            {
+            }
+        }
+
         private void TryProcessDamageHero(Collider2D col)
         {
             if (!col) return;
-            if (bodyCol && !bodyCol.IsTouching(col)) return;
+            if (bodyCol && !bodyCol.IsTouching(col))
+            {
+                ReportContactRefused(col);
+                return;
+            }
             if (col.transform == transform || col.transform.IsChildOf(transform)) return;
 
             // Anything of Hornet's is hers to be hit by, not the Shade's.
@@ -385,43 +440,98 @@ public partial class LegacyHelper
             // touch Hornet was never a hit either; both are "never a damage source" rather than a
             // damage decision worth a record. Logged, they fire per frame per overlap and one boss
             // fight buries the log ring in identical lines.
-            if (ShouldIgnoreDamageSource(source) || ShouldIgnoreDamageSource(dh)) { return; }
-            if (!CouldReachHornet(source) || IsSwitchedOffCollider(source)) { return; }
+            switch (ClassifyDamage(source, dh))
+            {
+                case ShadeDamageVerdict.NotADamager:
+                    return;
 
-            if (!dh.enabled || !dh.CanCauseDamage) { LogShadeDamage(dh, source, false); return; }
-            int dmg = GetDamageAmount(dh);
-            var hz = GetHazardType(dh);
-            if (hz == GlobalEnums.HazardType.STEAM && dmg <= 0)
-            {
-                LogShadeDamage(dh, source, false);
-                return;
-            }
-            if (IsTerrainHazard(hz))
-            {
-                if (dmg <= 0)
-                {
+                case ShadeDamageVerdict.Harmless:
                     LogShadeDamage(dh, source, false);
                     return;
-                }
 
-                LogShadeDamage(dh, source, canTakeDamage);
-                OnShadeHitHazard();
-                return;
-            }
-            if (dmg > 0)
-            {
-                bool preventedByVoidHeart = IsVoidHeartEvading();
-                LogShadeDamage(dh, source, canTakeDamage && !preventedByVoidHeart);
-                if (preventedByVoidHeart)
-                {
-                    int attempted = ApplyOvercharmPenalty(dmg);
-                    HandleVoidHeartEvadePreventedHit(attempted);
+                case ShadeDamageVerdict.Hazard:
+                    LogShadeDamage(dh, source, canTakeDamage);
+                    OnShadeHitHazard();
                     return;
-                }
 
-                OnShadeHitEnemy(dh);
+                default:
+                    bool preventedByVoidHeart = IsVoidHeartEvading();
+                    LogShadeDamage(dh, source, canTakeDamage && !preventedByVoidHeart);
+                    if (preventedByVoidHeart)
+                    {
+                        HandleVoidHeartEvadePreventedHit(ApplyOvercharmPenalty(GetDamageAmount(dh)));
+                        return;
+                    }
+
+                    OnShadeHitEnemy(dh);
+                    return;
             }
-            else { LogShadeDamage(dh, source, false); }
+        }
+
+        /// <summary>What a collider and its <see cref="DamageHero"/> amount to, once every rule has been applied.</summary>
+        private enum ShadeDamageVerdict
+        {
+            /// <summary>Never a damage source. Not worth recording - see <see cref="ApplyDamageHero"/>.</summary>
+            NotADamager,
+
+            /// <summary>A damager that deals nothing right now. Worth recording as a hit that did not land.</summary>
+            Harmless,
+
+            /// <summary>Terrain: spikes, acid. Handled by <see cref="OnShadeHitHazard"/>.</summary>
+            Hazard,
+
+            /// <summary>An ordinary damaging hit. Handled by <see cref="OnShadeHitEnemy"/>.</summary>
+            Enemy
+        }
+
+        /// <summary>
+        /// The one place that decides whether something touching the companion is a hit.
+        /// <para>
+        /// Three call sites ask: the collision and trigger messages, the body's own overlap sweep,
+        /// and the scene-transition check that holds a room-entry invulnerability open while the
+        /// companion is standing in something. They had grown three copies of the same cascade and
+        /// the third was missing two of the guards, so a switched-off collider left over from a
+        /// finished fight read as a live hazard - which teleported the companion back to Hornet
+        /// every tenth of a second and never gave it its damage back.
+        /// </para>
+        /// </summary>
+        private static ShadeDamageVerdict ClassifyDamage(Collider2D source, DamageHero dh)
+        {
+            if (dh == null)
+            {
+                return ShadeDamageVerdict.NotADamager;
+            }
+
+            if (ShouldIgnoreDamageSource(source) || ShouldIgnoreDamageSource(dh))
+            {
+                return ShadeDamageVerdict.NotADamager;
+            }
+
+            if (!CouldReachHornet(source) || IsSwitchedOffCollider(source))
+            {
+                return ShadeDamageVerdict.NotADamager;
+            }
+
+            bool canDamage = false;
+            try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
+            if (!canDamage)
+            {
+                return ShadeDamageVerdict.Harmless;
+            }
+
+            int damage = GetDamageAmount(dh);
+            var hazard = GetHazardType(dh);
+            if (hazard == GlobalEnums.HazardType.STEAM && damage <= 0)
+            {
+                return ShadeDamageVerdict.Harmless;
+            }
+
+            if (IsTerrainHazard(hazard))
+            {
+                return damage > 0 ? ShadeDamageVerdict.Hazard : ShadeDamageVerdict.Harmless;
+            }
+
+            return damage > 0 ? ShadeDamageVerdict.Enemy : ShadeDamageVerdict.Harmless;
         }
 
         /// <summary>
@@ -446,21 +556,6 @@ public partial class LegacyHelper
         private static int s_heroBoxLayer = -1;
 
         /// <summary>
-        /// Whether a damager could actually have reached Hornet, judged by the physics layer matrix.
-        /// <para>
-        /// The Shade finds hazards with a maskless <c>Collider2D.Overlap</c>, which returns everything
-        /// geometrically overlapping it whether or not those layers interact; Hornet's damage arrives
-        /// the opposite way, by something physically touching her <c>HeroBox</c>, already filtered by
-        /// the matrix. Without this the Shade is hit by colliders that cannot touch Hornet at all -
-        /// a telegraph circle being the clearest case, drawn on a different layer to the hitbox that
-        /// follows it.
-        /// </para>
-        /// <para>
-        /// Fails open: an unanswerable question means the hit stands, which is the direction damage
-        /// should err in.
-        /// </para>
-        /// </summary>
-        /// <summary>
         /// Whether this collider has been parked on the layer the game uses for things it is done
         /// with.
         /// <para>
@@ -476,6 +571,21 @@ public partial class LegacyHelper
         private static bool IsSwitchedOffCollider(Collider2D collider)
             => collider && collider.gameObject.layer == (int)GlobalEnums.PhysLayers.IGNORE_RAYCAST;
 
+        /// <summary>
+        /// Whether a damager could actually have reached Hornet, judged by the physics layer matrix.
+        /// <para>
+        /// The Shade finds hazards with a maskless <c>Collider2D.Overlap</c>, which returns everything
+        /// geometrically overlapping it whether or not those layers interact; Hornet's damage arrives
+        /// the opposite way, by something physically touching her <c>HeroBox</c>, already filtered by
+        /// the matrix. Without this the Shade is hit by colliders that cannot touch Hornet at all -
+        /// a telegraph circle being the clearest case, drawn on a different layer to the hitbox that
+        /// follows it.
+        /// </para>
+        /// <para>
+        /// Fails open: an unanswerable question means the hit stands, which is the direction damage
+        /// should err in.
+        /// </para>
+        /// </summary>
         private static bool CouldReachHornet(Collider2D damager)
         {
             if (!damager)
@@ -850,40 +960,10 @@ public partial class LegacyHelper
                         continue;
                     }
 
-                    var dh = ResolveDamager(c);
-                    if (dh == null)
-                    {
-                        continue;
-                    }
-
-                    if (ShouldIgnoreDamageSource(c) || ShouldIgnoreDamageSource(dh))
-                    {
-                        continue;
-                    }
-
-                    if (!dh.enabled || !dh.CanCauseDamage)
-                    {
-                        continue;
-                    }
-
-                    int dmg = GetDamageAmount(dh);
-                    var hz = GetHazardType(dh);
-                    if (hz == GlobalEnums.HazardType.STEAM && dmg <= 0)
-                    {
-                        continue;
-                    }
-
-                    if (IsTerrainHazard(hz))
-                    {
-                        if (dmg <= 0)
-                        {
-                            continue;
-                        }
-
-                        return true;
-                    }
-
-                    if (dmg > 0)
+                    // Silent: this runs every frame the protection is trying to expire, so it asks
+                    // the shared question without writing a line for each answer.
+                    var verdict = ClassifyDamage(c, ResolveDamager(c));
+                    if (verdict == ShadeDamageVerdict.Hazard || verdict == ShadeDamageVerdict.Enemy)
                     {
                         return true;
                     }
@@ -950,38 +1030,24 @@ public partial class LegacyHelper
                 if (c.transform == transform || c.transform.IsChildOf(transform)) continue;
                 if (hornetTransform && c.transform.root == hornetTransform.root) continue;
                 var dh = ResolveDamager(c);
-                if (dh != null)
+                switch (ClassifyDamage(c, dh))
                 {
-                    if (ShouldIgnoreDamageSource(c) || ShouldIgnoreDamageSource(dh)) { continue; }
+                    case ShadeDamageVerdict.NotADamager:
+                        continue;
 
-                    // The same two guards the trigger path uses. This one is the body's own overlap
-                    // sweep and had neither, which is how a switched-off collider reached it.
-                    if (!CouldReachHornet(c) || IsSwitchedOffCollider(c)) { continue; }
-
-                    bool canDamage = false;
-                    try { canDamage = dh.enabled && dh.CanCauseDamage; } catch { }
-                    if (!canDamage) { LogShadeDamage(dh, c, false); continue; }
-                    int dmg = GetDamageAmount(dh);
-                    var hz = GetHazardType(dh);
-                    if (hz == GlobalEnums.HazardType.STEAM && dmg <= 0)
-                    {
+                    case ShadeDamageVerdict.Harmless:
                         LogShadeDamage(dh, c, false);
                         continue;
-                    }
-                    if (IsTerrainHazard(hz))
-                    {
-                        if (dmg <= 0)
-                        {
-                            LogShadeDamage(dh, c, false);
-                            continue;
-                        }
 
+                    case ShadeDamageVerdict.Hazard:
                         LogShadeDamage(dh, c, canTakeDamage);
                         OnShadeHitHazard();
                         return;
-                    }
-                    if (dmg > 0) { LogShadeDamage(dh, c, canTakeDamage); OnShadeHitEnemy(dh); return; }
-                    LogShadeDamage(dh, c, false);
+
+                    default:
+                        LogShadeDamage(dh, c, canTakeDamage);
+                        OnShadeHitEnemy(dh);
+                        return;
                 }
             }
         }

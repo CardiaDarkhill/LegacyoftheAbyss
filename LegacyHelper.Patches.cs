@@ -772,7 +772,7 @@ public partial class LegacyHelper
     [HarmonyPatch(typeof(GameManager), nameof(GameManager.PlayerDead))]
     private class GameManager_PlayerDead_Patch
     {
-        private static void Postfix(GameManager __instance)
+        private static void Postfix()
         {
             try
             {

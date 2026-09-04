@@ -565,20 +565,7 @@ public partial class LegacyHelper
 
                 var prefix = new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ShadeGrabRetargeting), nameof(GatePrefix)));
 
-                int patched = 0;
-                int failed = 0;
-                foreach (var method in GateMethods())
-                {
-                    try
-                    {
-                        harmony.Patch(method, prefix);
-                        patched++;
-                    }
-                    catch
-                    {
-                        failed++;
-                    }
-                }
+                var (patched, failed) = PatchEachTolerantly(harmony, GateMethods(), prefix);
 
                 LogInfo(FormattableString.Invariant(
                     $"Shade attack sharing: patched {patched} gate action(s), {failed} failed"));

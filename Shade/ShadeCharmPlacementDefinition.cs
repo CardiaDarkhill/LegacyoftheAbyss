@@ -165,9 +165,6 @@ namespace LegacyoftheAbyss.Shade
 
         [JsonProperty("targetName")]
         public string? TargetName { get; init; }
-
-        [JsonProperty("replaceExistingItem")]
-        public bool? ReplaceExistingItem { get; init; }
     }
 
     internal sealed class ShadeCharmPlacementShopData
@@ -190,9 +187,6 @@ namespace LegacyoftheAbyss.Shade
         [JsonProperty("delayPurchase")]
         public bool? DelayPurchase { get; init; }
 
-        [JsonProperty("closeOnPurchase")]
-        public bool? CloseOnPurchase { get; init; }
-
         [JsonProperty("requireCollected")]
         public ShadeCharmId[]? RequireCollected { get; init; }
 
@@ -210,9 +204,6 @@ namespace LegacyoftheAbyss.Shade
 
         [JsonProperty("targetPath")]
         public string? TargetPath { get; init; }
-
-        [JsonProperty("spawnPointPath")]
-        public string? SpawnPointPath { get; init; }
 
         [JsonProperty("clearExistingDrops")]
         public bool? ClearExistingDrops { get; init; }

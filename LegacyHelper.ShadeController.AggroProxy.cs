@@ -22,13 +22,27 @@ public partial class LegacyHelper
             /// <summary>Ancestors named in a recorded path. Enough to identify the boss, not the whole scene.</summary>
             private const int ProxyEntryPathDepth = 2;
 
+            /// <summary>
+            /// When each collider was last recorded, so the same hitbox does not fill the event ring.
+            /// <para>
+            /// Pruned rather than kept: the companion's body survives room changes, so this would
+            /// otherwise hold one entry - and one live reference to a by-then destroyed collider -
+            /// for every hitbox and detection range that had ever touched the proxy in the session.
+            /// </para>
+            /// </summary>
             private readonly Dictionary<Collider2D, float> _lastProxyEntryTimes = new Dictionary<Collider2D, float>();
+
+            /// <summary>How many entries to carry before dropping the ones that can no longer suppress anything.</summary>
+            private const int ProxyEntryMemoryCap = 64;
+
+            private static readonly List<Collider2D> ProxyEntryPruneBuffer = new List<Collider2D>();
 
             internal void Attach(ShadeController shade, Collider2D collider)
             {
                 owner = shade;
                 proxyCollider = collider;
                 remaskersInside.Clear();
+                _lastProxyEntryTimes.Clear();
             }
 
             internal bool IsEligibleForAggro => owner != null && owner.IsAggroEligible;
@@ -123,6 +137,10 @@ public partial class LegacyHelper
                     }
 
                     _lastProxyEntryTimes[other] = now;
+                    if (_lastProxyEntryTimes.Count > ProxyEntryMemoryCap)
+                    {
+                        PruneProxyEntryTimes(now);
+                    }
 
                     // Self and ancestor are reported separately, and the distinction matters: an
                     // ancestor DamageHero is just "this belongs to something that can hurt you",
@@ -146,6 +164,29 @@ public partial class LegacyHelper
                 }
             }
 
+            /// <summary>
+            /// Drops every entry that can no longer suppress a record: one older than the throttle,
+            /// or one whose collider has been destroyed.
+            /// </summary>
+            private void PruneProxyEntryTimes(float now)
+            {
+                ProxyEntryPruneBuffer.Clear();
+                foreach (var entry in _lastProxyEntryTimes)
+                {
+                    if (!entry.Key || now - entry.Value >= ProxyEntryThrottleSeconds)
+                    {
+                        ProxyEntryPruneBuffer.Add(entry.Key);
+                    }
+                }
+
+                foreach (var stale in ProxyEntryPruneBuffer)
+                {
+                    _lastProxyEntryTimes.Remove(stale);
+                }
+
+                ProxyEntryPruneBuffer.Clear();
+            }
+
             private void TrackRemasker(Collider2D other, bool entering)
             {
                 if (!other)
@@ -153,18 +194,10 @@ public partial class LegacyHelper
                     return;
                 }
 
-                Remasker remasker = null;
-                try
+                var remasker = other.GetComponent<Remasker>();
+                if (!remasker)
                 {
-                    remasker = other.GetComponent<Remasker>();
-                    if (!remasker)
-                    {
-                        remasker = other.GetComponentInParent<Remasker>();
-                    }
-                }
-                catch
-                {
-                    remasker = null;
+                    remasker = other.GetComponentInParent<Remasker>();
                 }
 
                 if (!remasker)

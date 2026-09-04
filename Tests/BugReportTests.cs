@@ -472,6 +472,7 @@ public class BugReportTests
                 X = 12.9f,
                 Y = -9.5f,
                 Flags = "teleporting|focusing",
+                Character = "The Knight (Knight Moveset)",
                 Hp = 2,
                 MaxHp = 4,
                 EquippedCharms = new[] { "SteadyBody", "SharpShadow" }
@@ -492,6 +493,10 @@ public class BugReportTests
         Assert.Contains("Bone_East_01", markdown, StringComparison.Ordinal);
         Assert.Contains("Bone_01 -> Bone_East_01", markdown, StringComparison.Ordinal);
         Assert.Contains("teleporting|focusing".Replace("|", "\\|"), markdown, StringComparison.Ordinal);
+
+        // Which body it was decides how everything below it reads: the Shade flies and the
+        // Knight walks, and nothing else in a report tells them apart.
+        Assert.Contains("The Knight (Knight Moveset)", markdown, StringComparison.Ordinal);
         Assert.Contains("SteadyBody, SharpShadow", markdown, StringComparison.Ordinal);
         Assert.Contains(BugReportStore.FlightFileName, markdown, StringComparison.Ordinal);
         Assert.Contains(BugReportStore.EventFileName, markdown, StringComparison.Ordinal);

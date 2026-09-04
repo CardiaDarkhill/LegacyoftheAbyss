@@ -800,14 +800,7 @@ namespace LegacyoftheAbyss.Shade
 
             public Sprite GetIcon()
             {
-                try
-                {
-                    return ShadeCharmSavedItem.ResolveCharmSprite(_definition.CharmId, out _);
-                }
-                catch
-                {
-                    return ShadeCharmSavedItem.ResolveCharmSprite(_definition.CharmId, out _);
-                }
+                return ShadeCharmSavedItem.ResolveCharmSprite(_definition.CharmId, out _);
             }
 
             public int GetCost()

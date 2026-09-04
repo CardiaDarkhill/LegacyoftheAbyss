@@ -338,6 +338,21 @@ public partial class LegacyHelper
             }
         }
 
+        /// <summary>
+        /// Rebuilds every charm-derived stat for <paramref name="loadout"/>.
+        /// <para>
+        /// The order of the three steps is load-bearing. A charm that has left runs its
+        /// <c>OnRemoved</c> <em>first</em>, while the arithmetic it is undoing is still standing:
+        /// those hooks divide out a multiplier or subtract a bonus, so run after the reset they
+        /// apply the inverse to a clean baseline instead - taking Mark of Pride off left the nail
+        /// at 0.8x its bare length, and Fragile Heart off left the companion two masks below its
+        /// own maximum, until the next recompute happened to clear it.
+        /// </para>
+        /// <para>
+        /// Then the reset, which is what actually removes a charm's effect, and only then the
+        /// <c>OnApplied</c> hooks for what is still worn.
+        /// </para>
+        /// </summary>
         internal void ApplyCharmLoadout(IEnumerable<ShadeCharmDefinition> loadout)
         {
             var previousSnapshot = charmSnapshot;
@@ -357,21 +372,31 @@ public partial class LegacyHelper
                 }
             }
 
+            if (previousEquipped.Length > 0)
+            {
+                var stillWorn = new HashSet<ShadeCharmDefinition>(sanitized);
+                var departed = previousEquipped.Where(charm => charm != null && !stillWorn.Contains(charm)).ToArray();
+                if (departed.Length > 0)
+                {
+                    var removedContext = new ShadeCharmContext(this, previousSnapshot);
+                    foreach (var removed in departed)
+                    {
+                        // One charm's hook must not abort the rest of the loadout, so each is
+                        // isolated and its failure named - a charm that silently stops applying is
+                        // indistinguishable from one whose effect is simply subtle.
+                        try { removed.Hooks.OnRemoved?.Invoke(removedContext); }
+                        catch (Exception ex) { LegacyHelper.LogWarning($"Charm '{removed.Id}' OnRemoved failed: {ex}"); }
+                    }
+                }
+            }
+
+            ResetStatsToBaseline();
+
             charmSnapshot = ShadeCharmCalculator.BuildSnapshot(s_defaultCharmStats, sanitized);
             abilityOverrides = charmSnapshot.AbilityOverrides;
 
             equippedCharms.Clear();
             equippedCharms.AddRange(charmSnapshot.Definitions);
-
-            var currentDefinitions = charmSnapshot.Definitions;
-            ShadeCharmDefinition[] removedCharms = Array.Empty<ShadeCharmDefinition>();
-            if (previousEquipped.Length > 0)
-            {
-                var currentSet = new HashSet<ShadeCharmDefinition>(currentDefinitions);
-                removedCharms = previousEquipped
-                    .Where(charm => charm != null && !currentSet.Contains(charm))
-                    .ToArray();
-            }
 
             charmUpdateCallbacks.Clear();
             charmDamageCallbacks.Clear();
@@ -415,37 +440,15 @@ public partial class LegacyHelper
                 PushSoulToHud();
             }
 
-            bool previousApplyingLoadout = applyingCharmLoadout;
-            applyingCharmLoadout = true;
-            try
+            if (equippedCharms.Count > 0)
             {
-                // One charm's hook must not abort the rest of the loadout, so each is isolated and
-                // its failure named - a charm that silently stops applying is indistinguishable from
-                // one whose effect is simply subtle.
-                if (removedCharms.Length > 0)
+                var appliedContext = new ShadeCharmContext(this, charmSnapshot);
+                foreach (var applied in equippedCharms)
                 {
-                    var removedContext = new ShadeCharmContext(this, previousSnapshot);
-                    foreach (var removed in removedCharms)
-                    {
-                        try { removed.Hooks.OnRemoved?.Invoke(removedContext); }
-                        catch (Exception ex) { LegacyHelper.LogWarning($"Charm '{removed.Id}' OnRemoved failed: {ex}"); }
-                    }
+                    // Isolated for the same reason the removals above are.
+                    try { applied.Hooks.OnApplied?.Invoke(appliedContext); }
+                    catch (Exception ex) { LegacyHelper.LogWarning($"Charm '{applied.Id}' OnApplied failed: {ex}"); }
                 }
-
-                if (equippedCharms.Count > 0)
-                {
-                    var appliedContext = new ShadeCharmContext(this, charmSnapshot);
-                    foreach (var applied in equippedCharms)
-                    {
-                        try { applied.Hooks.OnApplied?.Invoke(appliedContext); }
-                        catch (Exception ex) { LegacyHelper.LogWarning($"Charm '{applied.Id}' OnApplied failed: {ex}"); }
-                    }
-                }
-
-            }
-            finally
-            {
-                applyingCharmLoadout = previousApplyingLoadout;
             }
 
             if (pendingRestoredLifebloodMax >= 0)
@@ -763,25 +766,6 @@ public partial class LegacyHelper
                     animTimer = 0f;
                 }
             }
-        }
-
-        private static bool TryLoadImage(Texture2D tex, byte[] bytes, bool markNonReadable = true)
-        {
-            try
-            {
-                var t = System.Type.GetType("UnityEngine.ImageConversion, UnityEngine.ImageConversionModule");
-                if (t != null)
-                {
-                    var m = t.GetMethod("LoadImage", BindingFlags.Public | BindingFlags.Static, null, new System.Type[] { typeof(Texture2D), typeof(byte[]), typeof(bool) }, null);
-                    // markNonReadable defaults to true - nothing reads these pixels back after
-                    // Sprite.Create, and keeping them readable holds a full second copy of every
-                    // sheet in managed memory for the lifetime of the texture. The smoothing path
-                    // in LoadSpriteStrip is the one caller that does need the pixels back.
-                    if (m != null) { m.Invoke(null, new object[] { tex, bytes, markNonReadable }); return true; }
-                }
-            }
-            catch { }
-            return false;
         }
 
         private void EnsureInactivePulse()

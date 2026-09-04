@@ -75,7 +75,6 @@ public partial class SimpleHUD
         {
             var maskPath = ModPaths.GetAssetPath("select_game_HUD_0001_health.png");
             var framePath = ModPaths.GetAssetPath("select_game_HUD_0002_health_frame.png");
-            var slashPath = ModPaths.GetAssetPath("The Knight spells and items - atlas0 #00000309.png");
             var soulOrbPath = ModPaths.GetAssetPath("soul_orb_glow0000.png");
             var overcharmBackdropPath = ModPaths.GetAssetPath("overcharm_backboard.png");
             // Hollow Knight's own HUD art first, out of the Knight bundle. It is the companion's
@@ -83,7 +82,6 @@ public partial class SimpleHUD
             // than twice the resolution of the still we were shipping (70x57 against 33x41).
             maskSprite = KnightAssets.TryBuildSprite(KnightHud.MaskClip, 0);
             maskSpriteRotated = maskSprite != null && KnightAssets.IsSpriteRotated(KnightHud.MaskClip, 0);
-            maskBackboardSprite = KnightAssets.TryBuildSprite(KnightHud.MaskBackboardClip, 0);
             frameSprite = KnightAssets.TryBuildSprite(KnightHud.FrameClip, 0);
 
             // After the build, never before it. KnightAssets records a frame's packing while it is
@@ -115,7 +113,6 @@ public partial class SimpleHUD
             }
             if (frameSprite == null) frameSprite = LoadSprite(framePath);
             if (frameSprite == null) frameSprite = FindSpriteInGame("select_game_HUD_0002_health_frame");
-            slashFrames = LoadSpriteSheet(slashPath, 8, 8);
             if (soulOrbSprite == null) soulOrbSprite = LoadSprite(soulOrbPath);
             if (soulOrbFillSprite == null) soulOrbFillSprite = soulOrbSprite;
             overcharmBackdropSprite = LoadSprite(overcharmBackdropPath);
@@ -211,26 +208,9 @@ public partial class SimpleHUD
         if (!File.Exists(path)) return null;
         var bytes = File.ReadAllBytes(path);
         var tex = new Texture2D(2, 2, TextureFormat.ARGB32, false);
-        TryLoadImage(tex, bytes);
+        LegacyHelper.TryLoadImage(tex, bytes, markNonReadable: false);
         tex.filterMode = FilterMode.Point;
         return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
-    }
-
-    private Sprite[] LoadSpriteSheet(string path, int cols, int rows)
-    {
-        if (!File.Exists(path)) return Array.Empty<Sprite>();
-        var bytes = File.ReadAllBytes(path);
-        var tex = new Texture2D(2, 2, TextureFormat.ARGB32, false);
-        TryLoadImage(tex, bytes);
-        tex.filterMode = FilterMode.Point;
-        int w = tex.width / cols;
-        int h = tex.height / rows;
-        var sprites = new Sprite[cols * rows];
-        int idx = 0;
-        for (int y = rows - 1; y >= 0; y--)
-            for (int x = 0; x < cols; x++)
-                sprites[idx++] = Sprite.Create(tex, new Rect(x * w, y * h, w, h), new Vector2(0.5f, 0.5f));
-        return sprites;
     }
 
     private Sprite BuildCircleSprite()
@@ -266,10 +246,6 @@ public partial class SimpleHUD
         return best;
     }
 
-    private static bool TryLoadImage(Texture2D tex, byte[] bytes)
-    {
-        return ImageConversion.LoadImage(tex, bytes, false);
-    }
 }
 
 #nullable restore

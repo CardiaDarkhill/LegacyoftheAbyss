@@ -121,6 +121,17 @@ namespace LegacyoftheAbyss.Shade
             TypeNameHandling = TypeNameHandling.None,
             NullValueHandling = NullValueHandling.Ignore
         };
+        /// <summary>
+        /// The JSON last written for each slot, so an unchanged slot is not rewritten.
+        /// <para>
+        /// Every scene transition re-asserts the active slot, which flushes the whole inventory -
+        /// so without this the save file was serialised and replaced on disk on every room change,
+        /// almost always with byte-identical content. Keyed by slot and dropped when the file is
+        /// deleted; a miss simply writes, so nothing depends on it being warm.
+        /// </para>
+        /// </summary>
+        private readonly Dictionary<int, string> _lastWritten = new Dictionary<int, string>();
+
         private bool _suppressPersistence;
 
         private const string SlotFilePrefix = "shade_slot_";
@@ -507,6 +518,35 @@ namespace LegacyoftheAbyss.Shade
             return false;
         }
 
+        /// <summary>
+        /// Runs several slot writes and saves the file once at the end.
+        /// <para>
+        /// Every setter here persists on its own, which is right for a single change and wrong for
+        /// the inventory flush: that touches five collections, so one charm toggle was rewriting the
+        /// slot file five times.
+        /// </para>
+        /// </summary>
+        public void WriteBatch(int slot, Action write)
+        {
+            if (!IsValidSlot(slot) || write == null)
+            {
+                return;
+            }
+
+            bool previous = _suppressPersistence;
+            _suppressPersistence = true;
+            try
+            {
+                write();
+            }
+            finally
+            {
+                _suppressPersistence = previous;
+            }
+
+            PersistSlot(slot);
+        }
+
         public void SetCollectedCharms(int slot, IEnumerable<ShadeCharmId>? charms)
         {
             if (!IsValidSlot(slot))
@@ -525,27 +565,9 @@ namespace LegacyoftheAbyss.Shade
                 }
             }
 
-            var discoveredIds = new HashSet<int>(record.CollectedCharms
-                .Select(charm => (int)charm));
-
-            var loadouts = record.State.GetEquippedCharmLoadouts();
-            foreach (var loadout in loadouts.Values)
-            {
-                if (loadout == null)
-                {
-                    continue;
-                }
-
-                foreach (var charmId in loadout)
-                {
-                    if (charmId >= 0)
-                    {
-                        discoveredIds.Add(charmId);
-                    }
-                }
-            }
-
-            record.State.SetDiscoveredCharms(discoveredIds);
+            // SetDiscoveredCharms keeps anything equipped discovered, so the loadouts need no
+            // separate pass here.
+            record.State.SetDiscoveredCharms(record.CollectedCharms.Select(charm => (int)charm));
 
             PersistSlot(slot);
         }
@@ -768,8 +790,9 @@ namespace LegacyoftheAbyss.Shade
                     _suppressPersistence = false;
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Warn($"Shade save slot {slot + 1} could not be read: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -810,13 +833,38 @@ namespace LegacyoftheAbyss.Shade
             string path = GetSlotFilePath(slot);
             try
             {
-                Directory.CreateDirectory(_storageRoot);
                 string json = JsonConvert.SerializeObject(data, _jsonSettings);
-                File.WriteAllText(path, json);
+
+                // Serialising is cheap next to replacing the file, and the file is what a room
+                // transition would otherwise rewrite unchanged. The path is checked too, so a slot
+                // whose file has been deleted underneath us is written again rather than skipped.
+                if (_lastWritten.TryGetValue(slot, out var previous)
+                    && string.Equals(previous, json, StringComparison.Ordinal)
+                    && File.Exists(path))
+                {
+                    return;
+                }
+
+                Directory.CreateDirectory(_storageRoot);
+                ModPaths.WriteFileAtomically(path, json);
+                _lastWritten[slot] = json;
             }
-            catch
+            catch (Exception ex)
             {
+                _lastWritten.Remove(slot);
+                Warn($"Shade save slot {slot + 1} could not be written: {ex.GetType().Name}: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Says a save problem out loud. Losing a slot silently is indistinguishable from never
+        /// having had one, which is the difference between a bug report and a shrug.
+        /// </summary>
+        private static void Warn(string message)
+        {
+            // The logger reaches through LegacyHelper, whose static initialiser needs a player loop.
+            try { LegacyHelper.LogInfo(message); }
+            catch { }
         }
 
         private bool IsRecordEmpty(ShadeSaveSlotRecord record)
@@ -875,6 +923,7 @@ namespace LegacyoftheAbyss.Shade
 
         private void DeleteSlotFile(int slot)
         {
+            _lastWritten.Remove(slot);
             string path = GetSlotFilePath(slot);
             try
             {

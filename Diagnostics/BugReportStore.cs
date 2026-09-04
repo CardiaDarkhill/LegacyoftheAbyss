@@ -428,6 +428,9 @@ namespace LegacyoftheAbyss.Diagnostics
             {
                 builder.AppendLine("| Field | Value |");
                 builder.AppendLine("| --- | --- |");
+                // Ahead of everything else: which body it was is what decides whether the rest of
+                // this table is read against flight or against a platformer.
+                Row(builder, "Character", shade.Character);
                 Row(builder, "Position", Coordinate(shade.X, shade.Y));
                 Row(builder, "Velocity", Coordinate(shade.VelocityX, shade.VelocityY));
                 Row(builder, "Flags", shade.Flags);

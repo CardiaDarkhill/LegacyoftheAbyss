@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using InControl;
@@ -159,7 +160,7 @@ public static class HornetInput
 
         try
         {
-            return Object.FindFirstObjectByType<InputHandler>();
+            return UnityEngine.Object.FindFirstObjectByType<InputHandler>();
         }
         catch
         {
@@ -649,6 +650,59 @@ public static class HornetInput
         }
     }
 
+    /// <summary>
+    /// One row of the left-side keyboard preset: the key, where it is saved, and the live action it
+    /// drives.
+    /// <para>
+    /// A single table because these were two hand-written lists of the same eighteen keys - one
+    /// writing <c>gameSettings</c>, one binding the actions - and the number row had already drifted
+    /// between them once, so every inventory shortcut but the first opened a different tab from the
+    /// one its position on the number row promised.
+    /// </para>
+    /// </summary>
+    internal readonly struct KeyboardPresetRow
+    {
+        internal KeyboardPresetRow(Key key, Action<GameSettings, string> save, Func<HeroActions, PlayerAction?> resolve)
+        {
+            Key = key;
+            Save = save;
+            Resolve = resolve;
+        }
+
+        internal Key Key { get; }
+
+        internal Action<GameSettings, string> Save { get; }
+
+        internal Func<HeroActions, PlayerAction?> Resolve { get; }
+    }
+
+    /// <summary>
+    /// The preset itself. The number keys are in <c>InventoryPaneList.PaneTypes</c> order - the
+    /// left-to-right tab order a player pressing key N expects - rather than the order the settings
+    /// fields happen to be declared in.
+    /// </summary>
+    internal static readonly KeyboardPresetRow[] LeftSideLayout =
+    {
+        new KeyboardPresetRow(Key.Space, (s, v) => s.jumpKey = v, a => a.Jump),
+        new KeyboardPresetRow(Key.F, (s, v) => s.attackKey = v, a => a.Attack),
+        new KeyboardPresetRow(Key.LeftShift, (s, v) => s.dashKey = v, a => a.Dash),
+        new KeyboardPresetRow(Key.Q, (s, v) => s.castKey = v, a => a.Cast),
+        new KeyboardPresetRow(Key.E, (s, v) => s.superDashKey = v, a => a.SuperDash),
+        new KeyboardPresetRow(Key.R, (s, v) => s.dreamNailKey = v, a => a.DreamNail),
+        new KeyboardPresetRow(Key.Tab, (s, v) => s.quickMapKey = v, a => a.QuickMap),
+        new KeyboardPresetRow(Key.Key1, (s, v) => s.inventoryKey = v, a => a.OpenInventory),
+        new KeyboardPresetRow(Key.Key2, (s, v) => s.inventoryToolsKey = v, a => a.OpenInventoryTools),
+        new KeyboardPresetRow(Key.Key3, (s, v) => s.inventoryQuestsKey = v, a => a.OpenInventoryQuests),
+        new KeyboardPresetRow(Key.Key4, (s, v) => s.inventoryJournalKey = v, a => a.OpenInventoryJournal),
+        new KeyboardPresetRow(Key.Key5, (s, v) => s.inventoryMapKey = v, a => a.OpenInventoryMap),
+        new KeyboardPresetRow(Key.G, (s, v) => s.quickCastKey = v, a => a.QuickCast),
+        new KeyboardPresetRow(Key.C, (s, v) => s.tauntKey = v, a => a.Taunt),
+        new KeyboardPresetRow(Key.W, (s, v) => s.upKey = v, a => a.Up),
+        new KeyboardPresetRow(Key.S, (s, v) => s.downKey = v, a => a.Down),
+        new KeyboardPresetRow(Key.A, (s, v) => s.leftKey = v, a => a.Left),
+        new KeyboardPresetRow(Key.D, (s, v) => s.rightKey = v, a => a.Right),
+    };
+
     private static void ApplyLeftSideLayout(InputHandler handler)
     {
         if (handler == null)
@@ -658,29 +712,11 @@ public static class HornetInput
         var settings = gm != null ? gm.gameSettings : null;
         if (settings != null)
         {
-            settings.jumpKey = Key.Space.ToString();
-            settings.attackKey = Key.F.ToString();
-            settings.dashKey = Key.LeftShift.ToString();
-            settings.castKey = Key.Q.ToString();
-            settings.superDashKey = Key.E.ToString();
-            settings.dreamNailKey = Key.R.ToString();
-            settings.quickMapKey = Key.Tab.ToString();
-            // Number-key order matches InventoryPaneList.PaneTypes (Inv, Tools, Quests, Journal,
-            // Map), i.e. left-to-right tab order, not the order these fields happen to be declared
-            // in. A player pressing key N expects the Nth visible tab to open; the previous ordering
-            // (1=Inv, 2=Map, 3=Journal, 4=Tools, 5=Quests) silently scrambled that, so every shortcut
-            // except 1 opened a different tab than its position on the number row suggested.
-            settings.inventoryKey = Key.Key1.ToString();
-            settings.inventoryToolsKey = Key.Key2.ToString();
-            settings.inventoryQuestsKey = Key.Key3.ToString();
-            settings.inventoryJournalKey = Key.Key4.ToString();
-            settings.inventoryMapKey = Key.Key5.ToString();
-            settings.quickCastKey = Key.G.ToString();
-            settings.tauntKey = Key.C.ToString();
-            settings.upKey = Key.W.ToString();
-            settings.downKey = Key.S.ToString();
-            settings.leftKey = Key.A.ToString();
-            settings.rightKey = Key.D.ToString();
+            foreach (var row in LeftSideLayout)
+            {
+                row.Save(settings, row.Key.ToString());
+            }
+
             try { settings.SaveKeyboardSettings(); } catch { }
         }
 
@@ -688,35 +724,20 @@ public static class HornetInput
         if (actions == null)
             return;
 
-        static void Bind(PlayerAction action, Key key)
+        foreach (var row in LeftSideLayout)
         {
+            var action = row.Resolve(actions);
             if (action == null)
-                return;
+            {
+                continue;
+            }
+
             action.ClearBindings();
-            action.AddBinding(new KeyBindingSource(new[] { key }));
+            action.AddBinding(new KeyBindingSource(new[] { row.Key }));
         }
 
-        Bind(actions.Jump, Key.Space);
-        Bind(actions.Attack, Key.F);
-        Bind(actions.Dash, Key.LeftShift);
-        Bind(actions.Cast, Key.Q);
-        Bind(actions.SuperDash, Key.E);
-        Bind(actions.DreamNail, Key.R);
-        Bind(actions.QuickMap, Key.Tab);
-        Bind(actions.OpenInventory, Key.Key1);
-        Bind(actions.OpenInventoryTools, Key.Key2);
-        Bind(actions.OpenInventoryQuests, Key.Key3);
-        Bind(actions.OpenInventoryJournal, Key.Key4);
-        Bind(actions.OpenInventoryMap, Key.Key5);
-        Bind(actions.QuickCast, Key.G);
-        Bind(actions.Taunt, Key.C);
-        Bind(actions.Up, Key.W);
-        Bind(actions.Down, Key.S);
-        Bind(actions.Left, Key.A);
-        Bind(actions.Right, Key.D);
-
         // The controller is fully free for the Shade in this preset (Hornet is on keyboard, and
-        // hornetControllerEnabled was just set false above), but Bind()'s ClearBindings() just wiped
+        // hornetControllerEnabled was just set false above), but the ClearBindings above just wiped
         // whatever controller binding OpenInventory had. Restore one.
         EnsureShadeInventoryBindings(actions);
         LogBindings("ApplyKeyboardDefaults: OpenInventory", actions.OpenInventory);

@@ -139,11 +139,17 @@ public partial class LegacyHelper
         private const float BaldurShellFrameTime = 0.08f;
         private Vector2 lastMoveDelta;
         private SpriteRenderer[] shadeLightRenderers = System.Array.Empty<SpriteRenderer>();
+
+        /// <summary>
+        /// Per entry in <see cref="shadeLightRenderers"/>: whether it is the glow a player actually
+        /// sees, rather than a copy of whatever Hornet puts on the darkness camera's layers. The two
+        /// are cloned together and have to be driven apart - see SyncShadeLight.
+        /// </summary>
+        private bool[] shadeLightIsGlow = System.Array.Empty<bool>();
         private SpriteRenderer[] shadeLightSourceRenderers = System.Array.Empty<SpriteRenderer>();
         private Transform[] shadeLightRoots = System.Array.Empty<Transform>();
         private Vector3[] shadeLightRootBaseScales = System.Array.Empty<Vector3>();
         private float heroLightRadius;
-        private Vector3 shadeLightBaseScale = Vector3.one;
         private static Texture2D s_simpleLightTex;
         private static Material s_simpleAdditiveMat;
         private static Mesh s_simpleQuadMesh;
@@ -486,6 +492,5 @@ public partial class LegacyHelper
         private int persistenceSuppressionDepth;
         private bool pendingDeferredHealthSync;
         private bool pendingDeferredHealthSuppressDamage;
-        private bool applyingCharmLoadout;
     }
 }

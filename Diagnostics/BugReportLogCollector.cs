@@ -21,8 +21,6 @@ namespace LegacyoftheAbyss.Diagnostics
             _ring = ring ?? throw new ArgumentNullException(nameof(ring));
         }
 
-        internal BugReportLogRing Ring => _ring;
-
         public LogLevel LogLevelFilter => LogLevel.All;
 
         public void LogEvent(object sender, LogEventArgs eventArgs)

@@ -285,6 +285,15 @@ public partial class LegacyHelper
             var go = collider.gameObject;
             var layer = (PhysLayers)go.layer;
 
+            // Ignore Raycast is the game's switched-off layer - HeroController moves itself there on
+            // death and enemies are parked there once a fight is over. The damage path already
+            // refuses it; without the same refusal here the Knight bounces off a corpse's collider,
+            // because the HealthManager test below does not care that the fight has ended.
+            if (layer == PhysLayers.IGNORE_RAYCAST)
+            {
+                return KnightPogoKind.None;
+            }
+
             // The bouncer family is asked about before NonBouncer, because they carry one - a
             // BouncePod adds one to itself in Awake, and HeroDownAttack names BounceBalloon
             // alongside NonBouncer in its own refusal. That is not "do not bounce off this", it is

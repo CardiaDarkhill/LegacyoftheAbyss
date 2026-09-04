@@ -1,4 +1,5 @@
-﻿using InControl;
+﻿using System.IO;
+using InControl;
 using UnityEngine;
 using Xunit;
 
@@ -119,10 +120,6 @@ public class ModConfigTests
     }
 
     /// <summary>
-    /// The presets have to be distinguishable from each other, or stepping through them would show
-    /// the wrong name for values that are genuinely different.
-    /// </summary>
-    /// <summary>
     /// The rename promise: a run already being played at what used to be Abyss keeps those values
     /// and simply reads as Hard, rather than being quietly retuned to the new Abyss.
     /// </summary>
@@ -150,8 +147,8 @@ public class ModConfigTests
     [Fact]
     public void AbyssIsHarderThanHard()
     {
-        var hard = DifficultyPreset.HardPreset;
-        var abyss = DifficultyPreset.AbyssPreset;
+        var hard = DifficultyPreset.HardPreset.Values;
+        var abyss = DifficultyPreset.AbyssPreset.Values;
 
         Assert.True(abyss.HornetNeedleDamage < hard.HornetNeedleDamage);
         Assert.True(abyss.HornetSilkSkillDamage < hard.HornetSilkSkillDamage);
@@ -174,7 +171,7 @@ public class ModConfigTests
     [Fact]
     public void AbyssStillLetsTheCompanionHealAndBeRevived()
     {
-        var abyss = DifficultyPreset.AbyssPreset;
+        var abyss = DifficultyPreset.AbyssPreset.Values;
 
         Assert.True(abyss.BindShadeHeal >= 1, "Hornet's Bind must still revive and heal the companion.");
         Assert.True(abyss.FocusShadeHeal >= 1, "The companion must still be able to heal itself.");
@@ -182,6 +179,10 @@ public class ModConfigTests
         Assert.True(abyss.ShadeFocusAtFullMasks, "On one mask, Focus is only useful if it works at full health.");
     }
 
+    /// <summary>
+    /// The presets have to be distinguishable from each other, or stepping through them would show
+    /// the wrong name for values that are genuinely different.
+    /// </summary>
     [Fact]
     public void DifficultyPresetsAreDistinct()
     {
@@ -421,5 +422,31 @@ public class ModConfigTests
         Assert.Equal(ShadeBindingOptionType.Controller, focus.secondary.type);
         Assert.Equal(InputControlType.RightTrigger, focus.secondary.control);
         Assert.Equal(-1, focus.secondary.controllerDevice);
+    }
+
+    /// <summary>
+    /// The config and the save slots are rewritten on ordinary play events, so the write has to
+    /// leave either the old file or the new one - never a half of either.
+    /// </summary>
+    [Fact]
+    public void AtomicWriteCreatesAndThenReplacesWithoutLeavingStagingBehind()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "LegacyAbyssAtomicWrite", System.Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string path = Path.Combine(root, "settings.json");
+        try
+        {
+            ModPaths.WriteFileAtomically(path, "first");
+            Assert.Equal("first", File.ReadAllText(path));
+
+            ModPaths.WriteFileAtomically(path, "second");
+            Assert.Equal("second", File.ReadAllText(path));
+
+            Assert.Equal(new[] { path }, Directory.GetFiles(root));
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch { }
+        }
     }
 }

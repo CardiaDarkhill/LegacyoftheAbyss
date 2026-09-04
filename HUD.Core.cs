@@ -29,9 +29,6 @@ public partial class SimpleHUD : MonoBehaviour
     /// <summary>The orb's filled interior, drawn under the mask. Hollow Knight draws these separately.</summary>
     private Sprite soulOrbFillSprite;
 
-    /// <summary>The dark plate a mask sits on when it is empty.</summary>
-    private Sprite maskBackboardSprite;
-
     /// <summary>Set when the mask art came out of the atlas on its side. See KnightAssets.IsSpriteRotated.</summary>
     private bool maskSpriteRotated;
 
@@ -57,7 +54,6 @@ public partial class SimpleHUD : MonoBehaviour
 
     // Fallback/legacy assets
     private Sprite frameSprite;
-    private Sprite[] slashFrames;
 
     // Shade health state
     private int shadeMax;
@@ -65,8 +61,6 @@ public partial class SimpleHUD : MonoBehaviour
     private int shadeLifebloodMax;
     private int shadeLifeblood;
     private int previousShadeTotalHealth;
-    private int prevHornetHealth;
-    private int prevHornetMax;
     private bool hasExplicitShadeStats;
     private bool shadeOvercharmed;
     private bool shadeAssistModeActive;
@@ -191,114 +185,114 @@ public partial class SimpleHUD : MonoBehaviour
     {
         if (!ModConfig.Instance.debugKeysEnabled) return;
 
-            // Debug: Shade HP adjust. Applied to the companions, exactly as the soul keys below
-            // are - writing the HUD field here made the damage cosmetic, so it came back on the
-            // next scene and focus could not heal it. The masks follow from the push.
-            if (ShadeInput.WasActionPressed(ShadeAction.DebugDamageShade))
+        // Debug: Shade HP adjust. Applied to the companions, exactly as the soul keys below
+        // are - writing the HUD field here made the damage cosmetic, so it came back on the
+        // next scene and focus could not heal it. The masks follow from the push.
+        if (ShadeInput.WasActionPressed(ShadeAction.DebugDamageShade))
+        {
+            foreach (var sc in LegacyHelper.ShadeController.ActiveInstances)
+            {
+                if (sc != null) sc.DebugAdjustHealth(-1);
+            }
+
+            if (ModConfig.Instance.logHud)
+            {
+                Debug.Log("[SimpleHUD] Debug: Shade HP -1");
+            }
+        }
+        if (ShadeInput.WasActionPressed(ShadeAction.DebugHealShade))
+        {
+            foreach (var sc in LegacyHelper.ShadeController.ActiveInstances)
+            {
+                if (sc != null) sc.DebugAdjustHealth(1);
+            }
+
+            if (ModConfig.Instance.logHud)
+            {
+                Debug.Log("[SimpleHUD] Debug: Shade HP +1");
+            }
+        }
+
+        // Debug soul controls (UI or Shade override)
+        float sMax = shadeSoulOverride ? Mathf.Max(1f, shadeSoulMax) : Mathf.Max(1f, playerData.silkMax);
+        float step = Mathf.Max(1f, sMax * 0.1f);
+        if (ShadeInput.WasActionPressed(ShadeAction.DebugSoulIncrease))
+        {
+            if (shadeSoulOverride)
             {
                 foreach (var sc in LegacyHelper.ShadeController.ActiveInstances)
                 {
-                    if (sc != null) sc.DebugAdjustHealth(-1);
+                    // Through the real gain, so the key fills the vessels once the meter is
+                    // full rather than stopping at it - a debug key that does not exercise
+                    // what is being debugged is worse than no key at all.
+                    if (sc != null) sc.AddSoul(11);
                 }
-
+                shadeSoul = Mathf.Min(shadeSoul + 11f, Mathf.Max(1f, shadeSoulMax));
                 if (ModConfig.Instance.logHud)
                 {
-                    Debug.Log("[SimpleHUD] Debug: Shade HP -1");
+                    Debug.Log("[SimpleHUD] Debug: Shade Soul +11");
                 }
             }
-            if (ShadeInput.WasActionPressed(ShadeAction.DebugHealShade))
+            else
+            {
+                float baseVal = debugUseCustomSilk ? debugSilk : playerData.silk;
+                debugUseCustomSilk = true;
+                debugSilk = Mathf.Min(baseVal + step, sMax);
+                if (ModConfig.Instance.logHud)
+                {
+                    Debug.Log("[SimpleHUD] Debug: Hornet Silk +step");
+                }
+            }
+        }
+        if (ShadeInput.WasActionPressed(ShadeAction.DebugSoulDecrease))
+        {
+            if (shadeSoulOverride)
             {
                 foreach (var sc in LegacyHelper.ShadeController.ActiveInstances)
                 {
-                    if (sc != null) sc.DebugAdjustHealth(1);
+                    if (sc != null) sc.DebugSpendSoul(11);
                 }
-
+                shadeSoul = Mathf.Max(shadeSoul - 11f, 0f);
                 if (ModConfig.Instance.logHud)
                 {
-                    Debug.Log("[SimpleHUD] Debug: Shade HP +1");
+                    Debug.Log("[SimpleHUD] Debug: Shade Soul -11");
                 }
             }
-
-            // Debug soul controls (UI or Shade override)
-            float sMax = shadeSoulOverride ? Mathf.Max(1f, shadeSoulMax) : Mathf.Max(1f, playerData.silkMax);
-            float step = Mathf.Max(1f, sMax * 0.1f);
-            if (ShadeInput.WasActionPressed(ShadeAction.DebugSoulIncrease))
+            else
             {
-                if (shadeSoulOverride)
+                float baseVal = debugUseCustomSilk ? debugSilk : playerData.silk;
+                debugUseCustomSilk = true;
+                debugSilk = Mathf.Max(baseVal - step, 0f);
+                if (ModConfig.Instance.logHud)
                 {
-                    foreach (var sc in LegacyHelper.ShadeController.ActiveInstances)
-                    {
-                        // Through the real gain, so the key fills the vessels once the meter is
-                        // full rather than stopping at it - a debug key that does not exercise
-                        // what is being debugged is worse than no key at all.
-                        if (sc != null) sc.AddSoul(11);
-                    }
-                    shadeSoul = Mathf.Min(shadeSoul + 11f, Mathf.Max(1f, shadeSoulMax));
-                    if (ModConfig.Instance.logHud)
-                    {
-                        Debug.Log("[SimpleHUD] Debug: Shade Soul +11");
-                    }
-                }
-                else
-                {
-                    float baseVal = debugUseCustomSilk ? debugSilk : playerData.silk;
-                    debugUseCustomSilk = true;
-                    debugSilk = Mathf.Min(baseVal + step, sMax);
-                    if (ModConfig.Instance.logHud)
-                    {
-                        Debug.Log("[SimpleHUD] Debug: Hornet Silk +step");
-                    }
+                    Debug.Log("[SimpleHUD] Debug: Hornet Silk -step");
                 }
             }
-            if (ShadeInput.WasActionPressed(ShadeAction.DebugSoulDecrease))
+        }
+        if (ShadeInput.WasActionPressed(ShadeAction.DebugSoulReset))
+        {
+            if (shadeSoulOverride)
             {
-                if (shadeSoulOverride)
+                foreach (var sc in LegacyHelper.ShadeController.ActiveInstances)
                 {
-                    foreach (var sc in LegacyHelper.ShadeController.ActiveInstances)
-                    {
-                        if (sc != null) sc.DebugSpendSoul(11);
-                    }
-                    shadeSoul = Mathf.Max(shadeSoul - 11f, 0f);
-                    if (ModConfig.Instance.logHud)
-                    {
-                        Debug.Log("[SimpleHUD] Debug: Shade Soul -11");
-                    }
+                    if (sc != null) sc.shadeSoul = 0;
                 }
-                else
+                shadeSoul = 0f;
+                if (ModConfig.Instance.logHud)
                 {
-                    float baseVal = debugUseCustomSilk ? debugSilk : playerData.silk;
-                    debugUseCustomSilk = true;
-                    debugSilk = Mathf.Max(baseVal - step, 0f);
-                    if (ModConfig.Instance.logHud)
-                    {
-                        Debug.Log("[SimpleHUD] Debug: Hornet Silk -step");
-                    }
+                    Debug.Log("[SimpleHUD] Debug: Shade Soul reset");
                 }
             }
-            if (ShadeInput.WasActionPressed(ShadeAction.DebugSoulReset))
+            else
             {
-                if (shadeSoulOverride)
+                debugUseCustomSilk = false;
+                debugSilk = playerData.silk;
+                if (ModConfig.Instance.logHud)
                 {
-                    foreach (var sc in LegacyHelper.ShadeController.ActiveInstances)
-                    {
-                        if (sc != null) sc.shadeSoul = 0;
-                    }
-                    shadeSoul = 0f;
-                    if (ModConfig.Instance.logHud)
-                    {
-                        Debug.Log("[SimpleHUD] Debug: Shade Soul reset");
-                    }
-                }
-                else
-                {
-                    debugUseCustomSilk = false;
-                    debugSilk = playerData.silk;
-                    if (ModConfig.Instance.logHud)
-                    {
-                        Debug.Log("[SimpleHUD] Debug: Hornet Silk reset");
-                    }
+                    Debug.Log("[SimpleHUD] Debug: Hornet Silk reset");
                 }
             }
+        }
     }
 
     private void UpdatePauseFade()

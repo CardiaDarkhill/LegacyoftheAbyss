@@ -24,14 +24,6 @@ public partial class LegacyHelper
         private static readonly FieldInfo s_nailTravelHeroField = typeof(NailSlashTravel).GetField("hc", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly MethodInfo s_travelOnHeroFlipped = typeof(NailSlashTravel).GetMethod("OnHeroFlipped", BindingFlags.Instance | BindingFlags.NonPublic);
 
-        // The crest's slash prefabs are only reachable through these two arrays; nothing public
-        // exposes a ConfigGroup by its Config.
-        private static readonly FieldInfo[] s_heroConfigGroupFields = new[]
-        {
-            typeof(HeroController).GetField("configs", BindingFlags.Instance | BindingFlags.NonPublic),
-            typeof(HeroController).GetField("specialConfigs", BindingFlags.Instance | BindingFlags.NonPublic)
-        };
-
         private const BindingFlags DamageEnemiesFlags =
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
@@ -886,8 +878,25 @@ public partial class LegacyHelper
             return shadeHP >= shadeMaxHP || furyModeActive;
         }
 
-        private Sprite MakeDotSprite()
+        private static Sprite s_dotSprite;
+
+        /// <summary>
+        /// A soft 8x8 dot, for the particle materials that want one.
+        /// <para>
+        /// Built once and kept. It carries no per-instance state, and it was previously made afresh
+        /// on every call - four call sites, each running per companion spawn - leaving a Texture2D
+        /// and a Sprite behind every time that nothing ever destroyed. Marked HideAndDontSave so a
+        /// scene load's asset sweep cannot take it, and re-checked with Unity's own null so that a
+        /// sweep which somehow did would rebuild rather than hand back a destroyed sprite.
+        /// </para>
+        /// </summary>
+        private static Sprite MakeDotSprite()
         {
+            if (s_dotSprite)
+            {
+                return s_dotSprite;
+            }
+
             const int size = 8;
             var tex = new Texture2D(size, size, TextureFormat.ARGB32, false);
             tex.filterMode = FilterMode.Bilinear;
@@ -912,7 +921,11 @@ public partial class LegacyHelper
                 }
             }
             tex.Apply();
-            return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 16f);
+            tex.hideFlags = HideFlags.HideAndDontSave;
+
+            s_dotSprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 16f);
+            s_dotSprite.hideFlags = HideFlags.HideAndDontSave;
+            return s_dotSprite;
         }
 
     }

@@ -43,7 +43,17 @@ namespace LegacyoftheAbyss.Shade.Ai
         };
 
         /// <summary>
-        /// The Shade's own gameplay controls, which do nothing at all while an AI is driving it.
+        /// Actions the AI drives that it does not itself supply. Teleport is the whole list: the AI
+        /// never asks for one, and a player pressing it would drag the Shade out from under the plan
+        /// in flight.
+        /// </summary>
+        private static readonly ShadeAction[] LockedButNotDriven = { ShadeAction.Teleport };
+
+        /// <summary>
+        /// The Shade's own gameplay controls, which do nothing at all while an AI is driving it -
+        /// everything the AI supplies, plus <see cref="LockedButNotDriven"/>. Derived rather than
+        /// written out, because two hand-written lists of the same actions is how the two came to
+        /// disagree about which ones the AI owns.
         /// <para>
         /// This replaced a "player takes over for a moment" rule, which stopped making sense the
         /// moment Hornet was allowed both devices again: the Shade's bindings then share a pad with
@@ -51,30 +61,41 @@ namespace LegacyoftheAbyss.Shade.Ai
         /// them out is also what was asked for - there is no second player to take over.
         /// </para>
         /// <para>
-        /// Deliberately not on this list: the command reticle, which is how the player steers the
-        /// AI rather than the Shade, and the developer keys. Charm-menu
-        /// navigation reuses the movement actions, so the lockout stands down whenever a Shade menu
-        /// is open - see <see cref="Suppressed"/>.
+        /// Deliberately not locked: the command reticle, which is how the player steers the AI
+        /// rather than the Shade, and the developer keys. Charm-menu navigation reuses the movement
+        /// actions, so the lockout stands down whenever a Shade menu is open - see
+        /// <see cref="Suppressed"/>.
         /// </para>
         /// </summary>
-        private static readonly ShadeAction[] LockedWhileDriving =
-        {
-            ShadeAction.MoveLeft,
-            ShadeAction.MoveRight,
-            ShadeAction.MoveUp,
-            ShadeAction.MoveDown,
-            ShadeAction.Fire,
-            ShadeAction.Nail,
-            ShadeAction.NailUp,
-            ShadeAction.NailDown,
-            ShadeAction.Sprint,
-            ShadeAction.Focus,
-            ShadeAction.Teleport
-        };
+        private static readonly bool[] LockedWhileDriving = BuildLockedTable();
+
+        private static readonly bool[] DrivenTable = BuildTable(Driven);
 
         private static readonly float[] Values = new float[ActionCount];
         private static readonly bool[] Pressed = new bool[ActionCount];
         private static int publishedFrame = -1;
+
+        private static bool[] BuildTable(ShadeAction[] actions)
+        {
+            var table = new bool[ActionCount];
+            foreach (var action in actions)
+            {
+                table[(int)action] = true;
+            }
+
+            return table;
+        }
+
+        private static bool[] BuildLockedTable()
+        {
+            var table = BuildTable(Driven);
+            foreach (var action in LockedButNotDriven)
+            {
+                table[(int)action] = true;
+            }
+
+            return table;
+        }
 
         /// <summary>True while a plan published this frame is standing in for the player.</summary>
         internal static bool Active => publishedFrame == Time.frameCount;
@@ -219,28 +240,14 @@ namespace LegacyoftheAbyss.Shade.Ai
 
         private static bool IsLockedWhileDriving(ShadeAction action)
         {
-            for (int i = 0; i < LockedWhileDriving.Length; i++)
-            {
-                if (LockedWhileDriving[i] == action)
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            int index = (int)action;
+            return index >= 0 && index < LockedWhileDriving.Length && LockedWhileDriving[index];
         }
 
         private static bool IsDriven(ShadeAction action)
         {
-            for (int i = 0; i < Driven.Length; i++)
-            {
-                if (Driven[i] == action)
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            int index = (int)action;
+            return index >= 0 && index < DrivenTable.Length && DrivenTable[index];
         }
 
         private static void Set(ShadeAction action, float value)

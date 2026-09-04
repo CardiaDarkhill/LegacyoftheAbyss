@@ -148,7 +148,7 @@ public partial class SimpleHUD
         soulImgRect.anchoredPosition = Vector2.zero;
         soulImgRect.sizeDelta = soulOrbRoot.sizeDelta;
 
-        BuildHudFrame(canvas, uiScale);
+        BuildHudFrame(canvas);
 
         // Health masks container
         healthContainer = new GameObject("HealthContainer");
@@ -642,7 +642,7 @@ public partial class SimpleHUD
     /// lives in the top left.
     /// </para>
     /// </summary>
-    private void BuildHudFrame(Canvas canvas, float uiScale)
+    private void BuildHudFrame(Canvas canvas)
     {
         if (frameSprite == null || soulOrbRoot == null)
         {

@@ -40,8 +40,12 @@ public partial class LegacyHelper
         /// <summary>
         /// Whether an AI is actually driving this companion. The Knight is excluded outright: the
         /// AI steers by synthesising input, which works for a Shade because it flies anywhere in a
-        /// straight line, and a walking body needs jump planning the brain does not have. The
-        /// player's setting is kept rather than cleared, so it returns when the Shade does.
+        /// straight line, and a walking body needs jump planning the brain does not have.
+        /// <para>
+        /// Belt as well as braces. Choosing the Knight also switches the setting off outright - see
+        /// <c>ShadeCharacterManager.DisableAiForCharactersItCannotDrive</c> - so this is only here
+        /// to stop a walking body being driven should the two ever disagree.
+        /// </para>
         /// </summary>
         internal bool ShadeAiEnabled => aiEnabled && !UsesGroundedMovement;
 

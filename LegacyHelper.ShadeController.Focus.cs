@@ -91,17 +91,9 @@ public partial class LegacyHelper
                 // Spore Shroom bursts on the channel completing, whether or not it healed.
                 OnFocusCompletedCharmEffects();
 
-                // End channel regardless of success
-                isFocusing = false;
-                isCastingSpell = false;
-                focusDamageShieldAbsorbedThisChannel = false;
-                SetSpriteAlpha(SpriteAlphaIdle);
-                if (focusAuraRenderer) focusAuraRenderer.enabled = false;
-                StopFocusChargeSfx();
-                focusSoulAccumulator = 0f;
-                focusSoulDrainedThisChannel = 0;
+                // End channel regardless of success.
+                EndFocusChannel();
                 PersistIfChanged();
-                RefreshBaldurShellFocusState();
                 return;
             }
 
@@ -129,18 +121,28 @@ public partial class LegacyHelper
             RefreshBaldurShellFocusState();
         }
 
-        private void CancelFocus()
+        /// <summary>
+        /// Puts the companion back to idle after a channel, however it ended. The completion path
+        /// and the cancel path had grown separate copies of the same nine statements, differing
+        /// only in the order two of them ran in.
+        /// </summary>
+        private void EndFocusChannel()
         {
-            if (!isFocusing) return;
             isFocusing = false;
             isCastingSpell = false;
+            focusDamageShieldAbsorbedThisChannel = false;
             SetSpriteAlpha(SpriteAlphaIdle);
             if (focusAuraRenderer) focusAuraRenderer.enabled = false;
             StopFocusChargeSfx();
             focusSoulAccumulator = 0f;
             focusSoulDrainedThisChannel = 0;
-            focusDamageShieldAbsorbedThisChannel = false;
             RefreshBaldurShellFocusState();
+        }
+
+        private void CancelFocus()
+        {
+            if (!isFocusing) return;
+            EndFocusChannel();
         }
 
         /// <summary>Opacity the Shade sits at whenever it is not channelling something.</summary>

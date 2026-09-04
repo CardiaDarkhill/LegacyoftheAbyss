@@ -334,7 +334,7 @@ public static partial class ShadeSettingsMenu
             + $"slot {newGameSlot} {(newGameSlotHasProgress ? "has" : "has no")} progress");
 
         ApplyPreferredFont(FindFontInObject(buttonTemplate.gameObject));
-        PopulateNewGameScreen(ui, content, buttonTemplate);
+        PopulateNewGameScreen(content, buttonTemplate);
         ConfigureNewGameBackButton();
 
         Object.Destroy(buttonTemplate.gameObject);
@@ -415,7 +415,7 @@ public static partial class ShadeSettingsMenu
         return fallback;
     }
 
-    private static void PopulateNewGameScreen(UIManager ui, RectTransform content, MenuButton buttonTemplate)
+    private static void PopulateNewGameScreen(RectTransform content, MenuButton buttonTemplate)
     {
         var contentLayout = content.GetComponent<VerticalLayoutGroup>();
         if (contentLayout != null)

@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using UnityEngine;
 
 namespace LegacyoftheAbyss.Shade
@@ -39,6 +38,14 @@ namespace LegacyoftheAbyss.Shade
         private static CharmInventorySnapshot? s_debugCharmSnapshot;
         private static bool s_debugUnlockAllCharmsActive;
         private static bool s_syncingInventoryFromSlot;
+
+        /// <summary>The charms a death breaks and a bench mends. One list, so the two cannot drift.</summary>
+        private static readonly ShadeCharmId[] s_fragileCharms =
+        {
+            ShadeCharmId.FragileStrength,
+            ShadeCharmId.FragileHeart,
+            ShadeCharmId.FragileGreed
+        };
 
         private static readonly (int Progress, string Key, string Message)[] s_spellMilestones = new[]
         {
@@ -174,9 +181,14 @@ namespace LegacyoftheAbyss.Shade
             QueueSpellNotificationsBetween(previous, s_persistentState.SpellProgress);
         }
 
+        /// <summary>
+        /// Corrects the stored track to what Hornet's flags actually say. Deliberately silent: this
+        /// runs whenever the count is read, so announcing the difference would fire every milestone
+        /// at once the first time an existing save is opened with the mod installed.
+        /// <see cref="NotifyHornetSpellUnlocked"/> is the one that announces.
+        /// </summary>
         public static void SyncSpellProgress(int progress)
         {
-            int previous = s_persistentState.SpellProgress;
             s_persistentState.SetSpellProgress(progress);
         }
 
@@ -478,11 +490,14 @@ namespace LegacyoftheAbyss.Shade
             var equipped = s_charmInventory.GetEquipped().Select(id => (int)id);
             var newlyDiscovered = s_charmInventory.GetNewlyDiscovered();
 
-            s_saveSlots.SetCollectedCharms(slot, owned);
-            s_saveSlots.SetBrokenCharms(slot, broken);
-            s_saveSlots.SetNotchCapacity(slot, s_charmInventory.NotchCapacity);
-            s_saveSlots.SetEquippedCharms(slot, 0, equipped);
-            s_saveSlots.SetNewlyDiscoveredCharms(slot, newlyDiscovered);
+            s_saveSlots.WriteBatch(slot, () =>
+            {
+                s_saveSlots.SetCollectedCharms(slot, owned);
+                s_saveSlots.SetBrokenCharms(slot, broken);
+                s_saveSlots.SetNotchCapacity(slot, s_charmInventory.NotchCapacity);
+                s_saveSlots.SetEquippedCharms(slot, 0, equipped);
+                s_saveSlots.SetNewlyDiscoveredCharms(slot, newlyDiscovered);
+            });
         }
 
         internal static bool ToggleDebugUnlockAllCharms()
@@ -496,21 +511,13 @@ namespace LegacyoftheAbyss.Shade
             }
 
             var snapshot = CaptureCharmInventorySnapshot();
-            var allOwned = s_charmInventory.AllCharms
-                .Select(def => def.EnumId)
-                .Where(id => id.HasValue)
-                .Select(id => id!.Value)
-                .ToArray();
 
             s_debugUnlockAllCharmsActive = true;
             try
             {
-                int slotNotchCapacity = Mathf.Clamp(s_saveSlots.GetNotchCapacity(s_activeSlot), 0, 20);
-                int debugNotchCapacity = slotNotchCapacity > 0
-                    ? slotNotchCapacity
-                    : Mathf.Clamp(snapshot.NotchCapacity, 0, 20);
+                int debugNotchCapacity = ResolveDebugNotchCapacity(snapshot.NotchCapacity);
 
-                s_charmInventory.LoadState(allOwned, snapshot.Equipped, snapshot.Broken, debugNotchCapacity, snapshot.NewlyDiscovered);
+                s_charmInventory.LoadState(AllKnownCharmIds(), snapshot.Equipped, snapshot.Broken, debugNotchCapacity, snapshot.NewlyDiscovered);
                 s_debugCharmSnapshot = snapshot;
                 s_saveSlots.SetDebugUnlockState(
                     s_activeSlot,
@@ -574,9 +581,11 @@ namespace LegacyoftheAbyss.Shade
             }
 
             bool brokeCharm = false;
-            brokeCharm |= TryBreakFragileCharm(ShadeCharmId.FragileStrength, string.Empty);
-            brokeCharm |= TryBreakFragileCharm(ShadeCharmId.FragileHeart, string.Empty);
-            brokeCharm |= TryBreakFragileCharm(ShadeCharmId.FragileGreed, string.Empty);
+            foreach (var charmId in s_fragileCharms)
+            {
+                brokeCharm |= TryBreakFragileCharm(charmId);
+            }
+
             return brokeCharm;
         }
 
@@ -590,9 +599,11 @@ namespace LegacyoftheAbyss.Shade
             // Baldur Shell mends here too, and silently: it never announced breaking, so it has
             // nothing to announce mending either.
             bool repaired = s_charmInventory.RefillBaldurShellCharges();
-            repaired |= TryRepairFragileCharm(ShadeCharmId.FragileStrength, string.Empty);
-            repaired |= TryRepairFragileCharm(ShadeCharmId.FragileHeart, string.Empty);
-            repaired |= TryRepairFragileCharm(ShadeCharmId.FragileGreed, string.Empty);
+            foreach (var charmId in s_fragileCharms)
+            {
+                repaired |= TryRepairFragileCharm(charmId);
+            }
+
             return repaired;
         }
 
@@ -620,7 +631,7 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
-        private static bool TryBreakFragileCharm(ShadeCharmId charmId, string message)
+        private static bool TryBreakFragileCharm(ShadeCharmId charmId)
         {
             if (!s_charmInventory.IsEquipped(charmId) || s_charmInventory.IsBroken(charmId))
             {
@@ -637,13 +648,13 @@ namespace LegacyoftheAbyss.Shade
             Sprite? icon = definition.BrokenIcon ?? definition.Icon;
             EnqueueNotification(
                 $"shade::fragile_{charmId.ToString().ToLowerInvariant()}_broken::{Guid.NewGuid():N}",
-                string.IsNullOrWhiteSpace(message) ? displayName + " broken!" : message,
+                displayName + " broken!",
                 ShadeUnlockNotificationType.Charm,
                 icon: icon);
             return true;
         }
 
-        private static bool TryRepairFragileCharm(ShadeCharmId charmId, string message)
+        private static bool TryRepairFragileCharm(ShadeCharmId charmId)
         {
             if (!s_charmInventory.IsBroken(charmId))
             {
@@ -660,7 +671,7 @@ namespace LegacyoftheAbyss.Shade
             Sprite? icon = definition.Icon;
             EnqueueNotification(
                 $"shade::fragile_{charmId.ToString().ToLowerInvariant()}_repaired::{Guid.NewGuid():N}",
-                string.IsNullOrWhiteSpace(message) ? displayName + " repaired!" : message,
+                displayName + " repaired!",
                 ShadeUnlockNotificationType.Charm,
                 icon: icon);
             return true;
@@ -858,21 +869,11 @@ namespace LegacyoftheAbyss.Shade
                 data.NewlyDiscovered,
                 data.NotchCapacity);
 
-            var allOwned = s_charmInventory.AllCharms
-                .Select(def => def.EnumId)
-                .Where(id => id.HasValue)
-                .Select(id => id!.Value)
-                .ToArray();
-
-            int slotNotchCapacity = Mathf.Clamp(s_saveSlots.GetNotchCapacity(s_activeSlot), 0, 20);
-            int debugNotchCapacity = slotNotchCapacity > 0
-                ? slotNotchCapacity
-                : Mathf.Clamp(s_debugCharmSnapshot.Value.NotchCapacity, 0, 20);
             s_charmInventory.LoadState(
-                allOwned,
+                AllKnownCharmIds(),
                 s_debugCharmSnapshot.Value.Equipped,
                 s_debugCharmSnapshot.Value.Broken,
-                debugNotchCapacity,
+                ResolveDebugNotchCapacity(s_debugCharmSnapshot.Value.NotchCapacity),
                 s_debugCharmSnapshot.Value.NewlyDiscovered);
         }
 
@@ -885,6 +886,28 @@ namespace LegacyoftheAbyss.Shade
                     yield return (ShadeCharmId)value;
                 }
             }
+        }
+
+        /// <summary>Every charm the inventory knows about, which is what debug unlock grants.</summary>
+        private static ShadeCharmId[] AllKnownCharmIds()
+        {
+            return s_charmInventory.AllCharms
+                .Select(def => def.EnumId)
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)
+                .ToArray();
+        }
+
+        /// <summary>
+        /// How many notches debug unlock plays with: the slot's own, or the snapshot's when the slot
+        /// has none. Granting every charm must not also grant the room to wear them.
+        /// </summary>
+        private static int ResolveDebugNotchCapacity(int snapshotCapacity)
+        {
+            int slotCapacity = Mathf.Clamp(s_saveSlots.GetNotchCapacity(s_activeSlot), 0, ShadePersistentState.MaxNotchCapacity);
+            return slotCapacity > 0
+                ? slotCapacity
+                : Mathf.Clamp(snapshotCapacity, 0, ShadePersistentState.MaxNotchCapacity);
         }
 
         private static CharmInventorySnapshot CaptureCharmInventorySnapshot()
@@ -929,109 +952,30 @@ namespace LegacyoftheAbyss.Shade
             }
         }
 
+        /// <summary>
+        /// Which save slot a <see cref="GameManager"/> is playing, zero-based.
+        /// <para>
+        /// Both fields read here are plain public ints on types this assembly is compiled against,
+        /// so a reflective fallback for them could only ever re-read the same value that just
+        /// tested as unset.
+        /// </para>
+        /// </summary>
         private static int TryGetProfileId(GameManager? gameManager)
         {
-            try
+            if (gameManager == null)
             {
-                if (gameManager == null)
-                {
-                    return s_hasActiveSlot ? s_activeSlot : 0;
-                }
-
-                if (gameManager.profileID > 0)
-                {
-                    return NormalizeSlotIndex(gameManager.profileID);
-                }
-
-                if (gameManager.playerData != null && gameManager.playerData.profileID > 0)
-                {
-                    return NormalizeSlotIndex(gameManager.playerData.profileID);
-                }
-
-                const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-                var type = gameManager.GetType();
-
-                var field = type.GetField("profileID", flags)
-                    ?? type.GetField("profileId", flags)
-                    ?? type.GetField("ProfileID", flags)
-                    ?? type.GetField("ProfileId", flags);
-
-                if (field != null && field.FieldType == typeof(int))
-                {
-                    var value = field.GetValue(gameManager);
-                    if (value is int intField)
-                    {
-                        return NormalizeSlotIndex(intField);
-                    }
-                }
-
-                var property = type.GetProperty("profileID", flags)
-                    ?? type.GetProperty("profileId", flags)
-                    ?? type.GetProperty("ProfileID", flags)
-                    ?? type.GetProperty("ProfileId", flags);
-
-                if (property != null && property.PropertyType == typeof(int) && property.GetIndexParameters().Length == 0)
-                {
-                    var propertyValue = property.GetValue(gameManager);
-                    if (propertyValue is int intProperty)
-                    {
-                        return NormalizeSlotIndex(intProperty);
-                    }
-                }
-
-                MemberInfo? playerDataMember = (MemberInfo?)type.GetField("playerData", flags)
-                    ?? (MemberInfo?)type.GetProperty("playerData", flags)
-                    ?? (MemberInfo?)type.GetField("PlayerData", flags)
-                    ?? (MemberInfo?)type.GetProperty("PlayerData", flags);
-
-                object? playerData = null;
-                switch (playerDataMember)
-                {
-                    case FieldInfo playerDataField:
-                        playerData = playerDataField.GetValue(gameManager);
-                        break;
-                    case PropertyInfo playerDataProperty when playerDataProperty.GetIndexParameters().Length == 0:
-                        playerData = playerDataProperty.GetValue(gameManager);
-                        break;
-                }
-
-                if (playerData != null)
-                {
-                    var playerDataType = playerData.GetType();
-                    var profileField = playerDataType.GetField("profileID", flags)
-                        ?? playerDataType.GetField("profileId", flags)
-                        ?? playerDataType.GetField("ProfileID", flags)
-                        ?? playerDataType.GetField("ProfileId", flags);
-
-                    if (profileField != null && profileField.FieldType == typeof(int))
-                    {
-                        var profileValue = profileField.GetValue(playerData);
-                        if (profileValue is int playerDataFieldValue)
-                        {
-                            return NormalizeSlotIndex(playerDataFieldValue);
-                        }
-                    }
-
-                    var profileProperty = playerDataType.GetProperty("profileID", flags)
-                        ?? playerDataType.GetProperty("profileId", flags)
-                        ?? playerDataType.GetProperty("ProfileID", flags)
-                        ?? playerDataType.GetProperty("ProfileId", flags);
-
-                    if (profileProperty != null
-                        && profileProperty.PropertyType == typeof(int)
-                        && profileProperty.GetIndexParameters().Length == 0)
-                    {
-                        var profilePropertyValue = profileProperty.GetValue(playerData);
-                        if (profilePropertyValue is int playerDataPropertyValue)
-                        {
-                            return NormalizeSlotIndex(playerDataPropertyValue);
-                        }
-                    }
-                }
+                return s_hasActiveSlot ? s_activeSlot : 0;
             }
-            catch
+
+            if (gameManager.profileID > 0)
             {
-                // Ignore reflection failures and fall back to default slot.
+                return NormalizeSlotIndex(gameManager.profileID);
+            }
+
+            var playerData = gameManager.playerData;
+            if (playerData != null && playerData.profileID > 0)
+            {
+                return NormalizeSlotIndex(playerData.profileID);
             }
 
             return 0;
@@ -1060,7 +1004,7 @@ namespace LegacyoftheAbyss.Shade
                 Equipped = equipped ?? Array.Empty<ShadeCharmId>();
                 Broken = broken ?? Array.Empty<ShadeCharmId>();
                 NewlyDiscovered = newlyDiscovered ?? Array.Empty<ShadeCharmId>();
-                NotchCapacity = Mathf.Clamp(notchCapacity, 0, 20);
+                NotchCapacity = Mathf.Clamp(notchCapacity, 0, ShadePersistentState.MaxNotchCapacity);
             }
 
             public ShadeCharmId[] Owned { get; }

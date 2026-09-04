@@ -118,8 +118,22 @@ public partial class LegacyHelper
         /// <summary>Terrain and soft terrain, for anything of ours that must not pass through walls.</summary>
         internal static int TerrainMask() => KnightTerrainMask();
 
+        /// <summary>
+        /// Resolved once. Layers do not change during a session, and this is asked several times a
+        /// frame by the probes and the swept collision - each ask being two string lookups into the
+        /// engine.
+        /// </summary>
+        private static int s_knightTerrainMask;
+
         private static int KnightTerrainMask()
         {
+            // Never legitimately zero: with neither layer present this falls back to every layer,
+            // so zero is a safe "not resolved yet".
+            if (s_knightTerrainMask != 0)
+            {
+                return s_knightTerrainMask;
+            }
+
             int terrain = LayerMask.NameToLayer("Terrain");
             int mask = terrain >= 0 ? 1 << terrain : 0;
 
@@ -129,7 +143,8 @@ public partial class LegacyHelper
                 mask |= 1 << soft;
             }
 
-            return mask != 0 ? mask : Physics2D.AllLayers;
+            s_knightTerrainMask = mask != 0 ? mask : Physics2D.AllLayers;
+            return s_knightTerrainMask;
         }
 
         /// <summary>How far a sweep stops short of what it hits, so the body never rests inside it.</summary>

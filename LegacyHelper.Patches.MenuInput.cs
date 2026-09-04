@@ -866,7 +866,7 @@ public partial class LegacyHelper
     [HarmonyPatch(typeof(InputHandler), "GetKeyBindingForActionBinding")]
     private class InputHandler_GetKeyBindingForActionBinding_MenuInputBridge
     {
-        private static bool Prefix(PlayerAction action, BindingSource bindingSource, ref InputHandler.KeyOrMouseBinding __result)
+        private static bool Prefix(BindingSource bindingSource, ref InputHandler.KeyOrMouseBinding __result)
         {
             try
             {

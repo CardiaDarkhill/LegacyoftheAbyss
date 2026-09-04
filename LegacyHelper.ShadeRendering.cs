@@ -125,6 +125,31 @@ public partial class LegacyHelper
     }
 
     /// <summary>
+    /// Decodes a PNG or JPEG into <paramref name="texture"/>.
+    /// <para>
+    /// <paramref name="markNonReadable"/> defaults to true: nothing reads these pixels back once
+    /// <c>Sprite.Create</c> has them, and keeping them readable holds a second full copy of every
+    /// sheet in managed memory for the life of the texture. The one caller that does read them back
+    /// is the sprite-smoothing path, which passes false.
+    /// </para>
+    /// <para>
+    /// A direct call, not reflection. Two of the three copies this replaced looked
+    /// <c>UnityEngine.ImageConversion</c> up by name at runtime, which cannot fail any way the
+    /// compiler would not have caught first - and if it somehow did, it returned false and the art
+    /// simply never appeared.
+    /// </para>
+    /// </summary>
+    internal static bool TryLoadImage(Texture2D texture, byte[] bytes, bool markNonReadable = true)
+    {
+        if (texture == null || bytes == null || bytes.Length == 0)
+        {
+            return false;
+        }
+
+        return ImageConversion.LoadImage(texture, bytes, markNonReadable);
+    }
+
+    /// <summary>
     /// Puts <paramref name="sr"/> on the Shade's configured sorting layer and gives it Hornet's
     /// material. Safe to call repeatedly - it is re-run on every spawn and on every scene
     /// transition, which is what picks up a config edit made between launches.
@@ -137,7 +162,10 @@ public partial class LegacyHelper
         }
 
         var config = ModConfig.Instance;
-        shadeDefaultSpriteMaterial ??= sr.sharedMaterial;
+        if (!shadeDefaultSpriteMaterial)
+        {
+            shadeDefaultSpriteMaterial = sr.sharedMaterial;
+        }
 
         var hero = ResolveHeroController();
         var heroRenderer = ResolveHornetBodyRenderer(hero);
@@ -165,7 +193,18 @@ public partial class LegacyHelper
     private static void ApplyShadeSpriteMaterial(SpriteRenderer sr, Renderer heroRenderer, ModConfig config)
     {
         Material resolved = config.shadeUseHornetMaterial ? ResolveShadeSpriteMaterial(heroRenderer) : null;
-        sr.sharedMaterial = resolved ?? shadeDefaultSpriteMaterial;
+        if (!resolved)
+        {
+            resolved = shadeDefaultSpriteMaterial;
+        }
+
+        // Unity's null, not ??: a destroyed material is not null to the operator, and assigning one
+        // - or assigning nothing, when the cached default never resolved - draws the companion as a
+        // magenta block. Leaving the renderer on what it already has is always the better failure.
+        if (resolved)
+        {
+            sr.sharedMaterial = resolved;
+        }
     }
 
     private static Material ResolveShadeSpriteMaterial(Renderer heroRenderer)
@@ -389,8 +428,9 @@ public partial class LegacyHelper
             var baseScales = new List<Vector3>();
             var sourceRenderers = new List<SpriteRenderer>();
             var cloneRenderers = new List<SpriteRenderer>();
+            var glowFlags = new List<bool>();
 
-            CloneLightPart(source.gameObject, "ShadeHeroLight", roots, baseScales, sourceRenderers, cloneRenderers);
+            CloneLightPart(source.gameObject, "ShadeHeroLight", true, roots, baseScales, sourceRenderers, cloneRenderers, glowFlags);
 
             // Whatever of Hornet's the darkness camera renders is the cutout source, and a copy of
             // it at the Shade is what cuts darkness there. Without this the Shade carries a glow
@@ -411,7 +451,7 @@ public partial class LegacyHelper
                         continue;
                     }
 
-                    CloneLightPart(candidate.gameObject, "ShadeDarknessCutout", roots, baseScales, sourceRenderers, cloneRenderers);
+                    CloneLightPart(candidate.gameObject, "ShadeDarknessCutout", false, roots, baseScales, sourceRenderers, cloneRenderers, glowFlags);
                 }
             }
 
@@ -427,6 +467,7 @@ public partial class LegacyHelper
             shadeLightRootBaseScales = baseScales.ToArray();
             shadeLightSourceRenderers = sourceRenderers.ToArray();
             shadeLightRenderers = cloneRenderers.ToArray();
+            shadeLightIsGlow = glowFlags.ToArray();
 
             if (ModConfig.Instance.logShade)
             {
@@ -443,10 +484,12 @@ public partial class LegacyHelper
         private void CloneLightPart(
             GameObject sourceObject,
             string name,
+            bool isGlow,
             List<Transform> roots,
             List<Vector3> baseScales,
             List<SpriteRenderer> sourceRenderers,
-            List<SpriteRenderer> cloneRenderers)
+            List<SpriteRenderer> cloneRenderers,
+            List<bool> glowFlags)
         {
             var originals = sourceObject.GetComponentsInChildren<SpriteRenderer>(true);
             if (originals.Length == 0)
@@ -495,6 +538,10 @@ public partial class LegacyHelper
 
             sourceRenderers.AddRange(originals);
             cloneRenderers.AddRange(copies);
+            for (int i = 0; i < copies.Length; i++)
+            {
+                glowFlags.Add(isGlow);
+            }
         }
 
         private static float SafeScaleRatio(float source, float parent)
@@ -555,6 +602,15 @@ public partial class LegacyHelper
             float intensity = maxIntensity * intensityT;
             float radius = maxRadius * radiusT;
 
+            // The glow is held to its own ceiling, because the two halves of this clone want
+            // different things from the same number. The cutout is a mask fed to the darkness
+            // shader, and driving it hard is how a companion lights a dark room away from Hornet.
+            // The glow is a soft sprite drawn on "Over", above everything including the companion -
+            // so the same multiplier saturates it into a white disc laid over the body, growing
+            // with separation exactly as the light does. That is a companion appearing to fade out
+            // the further it walks from her.
+            float glowIntensity = Mathf.Min(intensity, Mathf.Max(0f, config.shadeLightGlowIntensityCap));
+
             // Follows whatever actually draws this companion, which is what
             // ApplyScriptedHoldVisibility turns off, so a scripted hold takes the light with it.
             // The Knight draws through its rig rather than the sheet renderer, and keying this on
@@ -572,8 +628,10 @@ public partial class LegacyHelper
 
                 target.enabled = visible && origin.enabled;
 
+                bool isGlow = i < shadeLightIsGlow.Length && shadeLightIsGlow[i];
+
                 Color color = origin.color;
-                color.a = Mathf.Clamp01(color.a * intensity);
+                color.a = Mathf.Clamp01(color.a * (isGlow ? glowIntensity : intensity));
                 target.color = color;
             }
 
@@ -673,6 +731,7 @@ public partial class LegacyHelper
             shadeLightRootBaseScales = Array.Empty<Vector3>();
             shadeLightRenderers = Array.Empty<SpriteRenderer>();
             shadeLightSourceRenderers = Array.Empty<SpriteRenderer>();
+            shadeLightIsGlow = Array.Empty<bool>();
         }
     }
 }

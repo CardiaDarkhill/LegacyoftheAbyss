@@ -29,6 +29,15 @@ namespace LegacyoftheAbyss.Diagnostics
         public bool AssistMode;
         public int Facing;
         public string? Flags;
+
+        /// <summary>
+        /// Which character the companion was wearing. The first thing any report about it has to
+        /// answer: the Shade flies and the Knight walks, they share no movement code, and nothing
+        /// else in a report distinguishes them - <see cref="Skin"/> is the Shade's sprite sheet, not
+        /// the body.
+        /// </summary>
+        public string? Character;
+
         public string? Skin;
         public string[]? EquippedCharms;
         public int NotchesUsed;
