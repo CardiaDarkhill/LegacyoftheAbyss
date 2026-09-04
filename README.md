@@ -1,8 +1,9 @@
 # Legacy of the Abyss
 
 A full co-op experience for Hollow Knight: Silksong. One player controls Hornet (controller by
-default) while the other controls **the Shade** (mouse and keyboard by default) — a second
-playable character with its own flight-based moveset, spells, charms and HUD.
+default) while the other controls a second playable character (mouse and keyboard by default):
+**the Shade**, who flies, or **the Knight** of Hallownest, who platforms. They share a spell set,
+charms and HUD, and you can swap between them at any point.
 
 ## Documentation
 
@@ -10,7 +11,7 @@ playable character with its own flight-based moveset, spells, charms and HUD.
 
 | | |
 | --- | --- |
-| **Players** | [Installation](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Installation) · [Playing the Shade](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Playing-the-Shade) · [Controls](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Controls-and-Bindings) · [Charms](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Shade-Charms) · [Skins](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Skins) · [Config reference](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Configuration-Reference) · [FAQ](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/FAQ) |
+| **Players** | [Installation](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Installation) · [Playing the Shade](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Playing-the-Shade) · [Controls](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Controls-and-Bindings) · [Charms](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Shade-Charms) · [Characters](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Characters) · [Config reference](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Configuration-Reference) · [FAQ](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/FAQ) |
 | **Contributors** | [Developer setup](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Developer-Setup) · [Building and testing](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Building-and-Testing) · [Architecture](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Architecture-Overview) · [Code map](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Code-Map) · [Roadmap](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Roadmap) · [Publishing](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Publishing-a-Release) · [Contributing](https://github.com/CardiaDarkhill/LegacyoftheAbyss/wiki/Contributing) |
 
 The text shipped with the released package is
@@ -27,7 +28,7 @@ Requires [BepInExPack for Silksong](https://thunderstore.io/c/hollow-knight-silk
 ## Building from source
 
 ```
-dotnet build LegacyoftheAbyss.csproj -c Release -p:Version=1.1.0
+dotnet build LegacyoftheAbyss.csproj -c Release -p:Version=2.0.0
 ```
 
 The repo is designed to be checked out directly inside `BepInEx/plugins/`, so build output is

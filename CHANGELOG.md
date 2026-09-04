@@ -103,7 +103,8 @@ visible, and Vengeful Spirit rides over uneven ground instead of bursting on it.
   before, and you can place every piece of it from `config.json` with **Ctrl+F5** to reread it live.
 - The mod's menus fill the screen properly, explain whichever row is highlighted, follow the mouse,
   and hopefully stop throwing the highlight back to the top when you press something.
-- **Wayward Compass** marks rooms holding mod charms and notches you haven't picked up yet.
+- **Wayward Compass** is now the **Abyssal Compass**, with new art, and marks rooms holding mod
+  charms and notches you haven't picked up yet.
 - The charm grid scales to fit the bigger roster, and draws at the right size on high resolution
   displays.
 - Shadow wisps gather around the Shade as their SOUL fills, in the style of the first game. They

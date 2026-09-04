@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -29,7 +29,7 @@ namespace LegacyoftheAbyss.Shade
 
             definitions.Add(new ShadeCharmDefinition(
                 nameof(ShadeCharmId.WaywardCompass),
-                displayName: "Wayward Compass",
+                displayName: "Abyssal Compass",
                 description: "Whispers of relics still lost to the dark. Marks the rooms holding treasures of the abyss the bearer has yet to claim, on any map they carry.",
                 notchCost: 1,
                 fallbackTint: new Color(0.74f, 0.77f, 0.83f),

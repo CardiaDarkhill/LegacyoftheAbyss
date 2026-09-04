@@ -453,7 +453,7 @@ public class ModConfig
     public bool shadeUseHornetMaterial = true;
     /// <summary>
     /// Marks pickups on the map that have already been collected, as well as the ones that have
-    /// not. Wayward Compass still has to be equipped for any of it to draw.
+    /// not. The Abyssal Compass still has to be equipped for any of it to draw.
     /// <para>
     /// A surveying tool rather than a gameplay one: placing a charm well means seeing where all the
     /// existing pickups are at once, which is exactly what a compass that hides the collected ones

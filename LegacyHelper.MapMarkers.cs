@@ -8,7 +8,7 @@ using UnityEngine;
 public partial class LegacyHelper
 {
     /// <summary>
-    /// Marks every uncollected Legacy of the Abyss pickup on the map while Wayward Compass is
+    /// Marks every uncollected Legacy of the Abyss pickup on the map while the Abyssal Compass is
     /// equipped.
     /// <para>
     /// A pin is a child of the room's own <see cref="GameMapScene"/> object, the way the game's own
@@ -54,7 +54,7 @@ public partial class LegacyHelper
                 if (!loggedMissingSprite)
                 {
                     loggedMissingSprite = true;
-                    LogWarning("Shade_Pin.png could not be loaded; Wayward Compass will not mark pickups on the map.");
+                    LogWarning("Shade_Pin.png could not be loaded; the Abyssal Compass will not mark pickups on the map.");
                 }
 
                 return;
@@ -101,7 +101,7 @@ public partial class LegacyHelper
 
             if (ModConfig.Instance.logGeneral)
             {
-                LogInfo($"Wayward Compass: {placed} pickup pin(s) placed across {perRoom.Count} mapped rooms"
+                LogInfo($"Abyssal Compass: {placed} pickup pin(s) placed across {perRoom.Count} mapped rooms"
                     + (showCollected ? ", collected ones included." : "."));
             }
         }
