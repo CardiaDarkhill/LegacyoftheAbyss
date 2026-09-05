@@ -27,6 +27,21 @@ jobs:
       - name: Check out repo
         uses: actions/checkout@v4
 
+      # workflow_dispatch defaults to the DEFAULT branch, not whatever you were working on, and
+      # nothing downstream notices: the version label comes from the inputs below, never from the
+      # code, so a build of the wrong ref is packaged and published under the number you typed. That
+      # shipped 1.1.0's code to both stores labelled 2.0.0. The changelog is the cheapest thing that
+      # can only be true on the right ref.
+      - name: Verify this ref is the release
+        shell: pwsh
+        run: |
+          $v = "${{ inputs.version }}"
+          if (-not (Select-String -Path CHANGELOG.md -SimpleMatch "## $v" -Quiet)) {
+            $heads = (Select-String -Path CHANGELOG.md -Pattern '^## ' | Select-Object -First 3 | ForEach-Object { $_.Line }) -join ', '
+            throw "CHANGELOG.md on ref '$env:GITHUB_REF_NAME' has no '## $v' heading (it has: $heads). Either this is the wrong branch, or the changelog was not updated for $v. Pick the release branch in the Run workflow dropdown."
+          }
+          Write-Host "CHANGELOG.md on '$env:GITHUB_REF_NAME' documents $v."
+
       - name: Set up .NET SDK
         uses: actions/setup-dotnet@v4
         with:

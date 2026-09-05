@@ -12,7 +12,11 @@ Three things about how this file is written, because they are easy to get wrong:
 - Keep it casual, and don't oversell. If something is probably fixed rather than definitely fixed,
   say so.
 
-## 2.0.0
+## 2.0.1
+
+2.0.0 went out built from the wrong branch, so it was 1.1.0's code wearing a 2.0.0 label. If you
+grabbed that one, sorry, this is the release it was meant to be. Nothing below is new to 2.0.1, it
+just never actually shipped in 2.0.0.
 
 The big one. There's a second playable character, the Shade can fight on their own, ten more charms,
 and a lot of tidying up of things that were already here.

@@ -7,7 +7,7 @@ name = "LegacyoftheAbyss"
 # Fallback only. The publish workflow passes --package-version, which overrides this, so a
 # stale value here cannot ship the wrong version number from CI. Kept in sync anyway so that
 # a bare local `tcli build` (used to eyeball the zip before releasing) produces the right name.
-versionNumber = "2.0.0"
+versionNumber = "2.0.1"
 description = "Legacy of the Abyss is a full co-op experience for Silksong, with a second playable character: the Shade, or the Knight of Hallownest."
 websiteUrl = "https://github.com/CardiaDarkhill/LegacyoftheAbyss"
 containsNsfwContent = false
